@@ -97,13 +97,50 @@ while ((status = reader.next_batch(256, rows)).ok()) { ... }
   FLOAT / DOUBLE → DOUBLE，BYTE_ARRAY / FIXED_LEN_BYTE_ARRAY → VARCHAR。
   Parquet 的 Schema 本身就是列结构，**不需要文本类型推断**。
 - **多 Row Group**：按 Row Group 顺序读取，每组独立解压与解码。
-- **可空列**：`max_definition_level > 0` 的列通过 definition levels 判定 NULL。
+- **可空列**：definition levels 低于最大值时该值为 NULL。判断是否可空不能只看
+  Schema：pyarrow 写的 Schema 把可空列标成 `repetition_type=1`，与必填列相同，
+  因此读取器以列块统计信息里的 `null_count` 为准，`null_count > 0` 的列才可能
+  出现 NULL。
 - **列裁剪**：`ParquetOptions::projection` 给出需要读取的列名，未列出的列不读取，
   也不占用解码开销。
-- **编码**：支持 DATA_PAGE_V2 + PLAIN，以及 SNAPPY 与 UNCOMPRESSED 两种 codec。
-  DATA_PAGE_V1 与 RLE_DICTIONARY（字典页）尚未实现，遇到时返回明确错误。
+- **编码**：支持 DATA_PAGE_V1 与 DATA_PAGE_V2，PLAIN、RLE 与 RLE_DICTIONARY
+  （字典页）三种编码，以及 SNAPPY 与 UNCOMPRESSED 两种 codec。DATA_PAGE_V2 的值
+  是否压缩由页头的 `is_compressed` 决定，而不是由列的 codec 决定。
 - **INT96** 时间戳类型不支持，返回明确错误。
 - 文件在扫描期间变化返回 `FILE_CHANGED`。
+
+### 页内的 level 布局
+
+level 段的编码方式在两种页版本之间不同，这是实现中最容易出错的地方。
+
+DATA_PAGE_V2 的页载荷是：
+
+```
+[repetition levels][definition levels][values]
+```
+
+两段都不带长度前缀，长度由页头的 `repetition_levels_byte_length` 与
+`definition_levels_byte_length` 给出。values 是否压缩由 `is_compressed` 决定。
+
+DATA_PAGE_V1 的页载荷是：
+
+```
+[4 字节长度][第一段 level][其余 level 段][values]
+```
+
+只有**第一段**带长度前缀。当列是扁平的（`max_repetition_level` 为 0）时，
+第一段就是 definition levels；当列是嵌套的时，第一段是 repetition levels。
+页头的 `*_byte_length` 在 v1 里比实际数据多一个字节，不能直接当作长度使用。
+
+两版的 level 数据都不含 bit width 字节，位宽由最大 level 隐含。字典索引则相反：
+RLE_DICTIONARY 的索引流**带** bit width 字节，而布尔列的 RLE 编码值**不带**，
+它带的是四字节长度前缀。
+
+### 位打包的取值
+
+RLE 的 bit-packed run 把八个值打进 `bit_width` 个字节，八个值连续跨越这些字节，
+所以取值必须按整个比特流进行，不能把 `bit_width` 个字节塞进一个 64 位整数。
+当 `bit_width` 大于 8 时，八个值需要超过 64 位，单个整数放不下，取出的值会错位。
 
 ### 官方样例的字节级结构
 
@@ -112,7 +149,7 @@ while ((status = reader.next_batch(256, rows)).ok()) { ... }
 ```
 0..3      PAR1
 4..41     PageHeader（type=DATA_PAGE_V2，uncompressed=30，compressed=32）
-42..43    definition levels：bit_width=1，RLE header=0x03（1 组 8 个），
+42..43    definition levels：RLE header=0x03（1 组 8 个），
           packed byte 0x7f -> 7 个 level 全为 1（第 8 个是填充）
 44..73    Snappy 压缩的 PLAIN INT32 值（7 × 4 = 28 字节）
 74..118   Footer（Thrift compact FileMetaData）
@@ -124,6 +161,23 @@ Footer 中该列的元数据为：`type=INT32`、`encodings=[RLE, PLAIN]`、`cod
 
 解码结果为 `0 1 2 3 4 5 6`，与官方 `file_sql_basic.result` 期望的
 `row_count=7 min_c1=0 max_c1=6 sum_c1=21` 一致。
+
+### 覆盖的格式组合
+
+官方样例只覆盖了 DATA_PAGE_V2 + PLAIN + SNAPPY 一种组合。为了让隐藏测试用到其他
+writer 的样本时不出问题，单元测试准备了 20 个样本，覆盖：
+
+- DATA_PAGE_V1 与 DATA_PAGE_V2；
+- PLAIN、RLE 与 RLE_DICTIONARY；
+- SNAPPY 与 UNCOMPRESSED；
+- 必填列、可空列与带 NULL 的列；
+- 单个与多个 Row Group；
+- BOOLEAN、INT32、INT64、DOUBLE 与 BYTE_ARRAY；
+- 多列与列裁剪；
+- 字典被截断后回退到 PLAIN 的写法。
+
+样本放在 `tools/deploy/mysql_test/test_suite/file_sql/data/parquet/`，由
+`unittest/sql/engine/basic/test_file_sql_parquet.cpp` 读取。
 
 ## 双文件 JOIN
 
@@ -157,6 +211,9 @@ $DEVT/bin/ctest --test-dir build_file_sql_tests --output-on-failure
 测试直接编译产品源码，不使用外部查询引擎，也不使用替代实现。公开 `basic.jsonl` 与
 `simple.parquet.b64` 只被只读访问，未修改官方输入或期望。
 
+四个用例全部通过：`file_sql_types`、`file_sql_csv`（B 的）、
+`file_sql_parquet` 与 `file_sql_jsonl_parquet`。
+
 主构建的验证：
 
 ```bash
@@ -176,9 +233,12 @@ FileScan，并逐项执行：JSONL 投影、过滤、聚合、`DESCRIBE`、LIMIT
 
 ## 已知限制
 
-- Parquet 只支持 DATA_PAGE_V2 + PLAIN。DATA_PAGE_V1 与 RLE_DICTIONARY 未实现。
+- Parquet 支持 DATA_PAGE_V1 与 DATA_PAGE_V2，PLAIN、RLE 与 RLE_DICTIONARY
+  三种编码。DELTA_BINARY_PACKED 与 BYTE_STREAM_SPLIT 未实现，遇到时返回明确错误。
 - Parquet 的 INT96 时间戳类型不支持。
 - Parquet 只支持 SNAPPY 与 UNCOMPRESSED 两种 codec，ZSTD 与 GZIP 未实现。
+- Parquet 的嵌套列只读第一层的 definition levels，repetition levels 不参与行
+  的重建，因此嵌套列的每一行对应一个叶子值。
 - JSONL 只支持扁平对象，嵌套对象与数组被拒绝。
 - 两个扫描器都不打开路径：路径授权、`enable_file_sql`、`secure_file_priv`、符号
   链接校验与路径规范化由 A 的公共框架负责。

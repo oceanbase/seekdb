@@ -14,7 +14,6 @@
 #include "file_sql_types.h"
 
 #include <cstdio>
-#include <memory>
 #include <sys/stat.h>
 #include <vector>
 
@@ -29,6 +28,7 @@ struct ParquetColumn
   ParquetType type = ParquetType::BYTE_ARRAY;
   int type_length = 0;      // only for FIXED_LEN_BYTE_ARRAY
   int max_definition_level = 0;
+  int max_repetition_level = 0;
   bool optional = false;
 };
 
@@ -38,7 +38,13 @@ struct ParquetColumnChunk
   int64_t codec = 0;             // 0 UNCOMPRESSED, 1 SNAPPY
   int64_t num_values = 0;
   int64_t data_page_offset = 0;
+  int64_t dictionary_page_offset = 0;
   int64_t total_compressed_size = 0;
+  // The number of null values that the statistics of the chunk report. A
+  // chunk without statistics leaves it at zero, which means that the column
+  // may still be nullable.
+  int64_t null_count = 0;
+  bool has_statistics = false;
 };
 
 struct ParquetRowGroup
@@ -58,6 +64,10 @@ struct ParquetOptions
 
 // Reads a Parquet file and produces rows typed with the shared ScalarValue.
 // The reader never opens a path: the caller must authorize it first.
+//
+// The reader supports the data page v1 and the data page v2, the PLAIN and
+// the dictionary encodings, the uncompressed and the snappy codecs, several
+// row groups and the column pruning.
 class ParquetReader
 {
 public:
@@ -76,6 +86,21 @@ private:
   FileStatus build_schema();
   FileStatus read_row_group(uint64_t group_index);
   FileStatus read_column_chunk(uint64_t group_index, size_t column_index);
+  FileStatus read_dictionary_page(const ParquetColumnChunk &chunk,
+                                  const ParquetColumn &column,
+                                  std::vector<ScalarValue> &dictionary);
+  FileStatus read_payload(uint64_t offset, uint64_t size, std::string &payload);
+  FileStatus decompress(int64_t codec, const std::string &payload, std::string &plain);
+  FileStatus decode_plain_values(const ParquetColumn &column, const std::string &plain,
+                                 int64_t num_values, std::vector<ScalarValue> &values);
+  FileStatus decode_rle_values(const ParquetColumn &column, const std::string &plain,
+                               int64_t num_values, int64_t present_values,
+                               std::vector<ScalarValue> &values);
+  FileStatus decode_dictionary_values(const ParquetColumn &column, const std::string &plain,
+                                     int64_t num_values, int64_t present_values,
+                                     int64_t encoding,
+                                     const std::vector<ScalarValue> &dictionary,
+                                     std::vector<ScalarValue> &values);
   bool is_projected(size_t column_index) const;
   FILE *input_ = nullptr;
   ParquetOptions options_;

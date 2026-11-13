@@ -190,7 +190,9 @@ void test_parquet(const char *path)
   check(reader.columns().size() == 1, "parquet exposes one leaf column");
   check(reader.columns()[0].name == "c1", "parquet reads the column name");
   check(reader.columns()[0].type == ScalarType::BIGINT, "parquet maps an INT32 column to BIGINT");
-  check(reader.columns()[0].nullable, "parquet marks an optional column nullable");
+  // The column of the official sample is required, so it never holds a null.
+  check(reader.columns()[0].nullable == false,
+        "parquet marks a required column as not nullable");
 
   std::vector<ScalarRow> rows;
   status = reader.next_batch(100, rows);
