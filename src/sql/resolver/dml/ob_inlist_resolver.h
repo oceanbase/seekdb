@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SRC_SQL_RESOLVER_DML_OB_INLIST_RESOLVER_H_
 #define OCEANBASE_SRC_SQL_RESOLVER_DML_OB_INLIST_RESOLVER_H_
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 
 namespace oceanbase
@@ -77,6 +78,38 @@ public:
   ObInListResolver(ObDMLResolver *cur_resolver)
     : cur_resolver_(cur_resolver) {}
   virtual ~ObInListResolver() {}
+  static int check_inlist_rewrite_threshold(const ParseNode &in_list,
+                                            const int64_t column_cnt,
+                                            const bool is_prepare_stmt,
+                                            const int64_t threshold,
+                                            bool &is_enable)
+  {
+    is_enable = in_list.num_child_ >= threshold;
+    if (is_enable && 1 == column_cnt && !is_prepare_stmt && threshold > 1
+        && NULL != in_list.children_) {
+      hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> distinct_values;
+      if (OB_SUCCESS == distinct_values.create(threshold, ObModIds::OB_SQL_COMPILE,
+                                                ObModIds::OB_SQL_COMPILE)) {
+        bool is_supported = true;
+        for (int64_t i = 0; is_supported && distinct_values.size() < threshold
+                             && i < in_list.num_child_; ++i) {
+          const ParseNode *node = in_list.children_[i];
+          if (NULL == node || T_INT != node->type_ || 0 != node->flag_) {
+            is_supported = false;
+          } else {
+            const int hash_ret = distinct_values.set_refactored(node->value_, 0);
+            if (OB_HASH_EXIST != hash_ret && OB_SUCCESS != hash_ret) {
+              is_supported = false;
+            }
+          }
+        }
+        if (is_supported && distinct_values.size() < threshold) {
+          is_enable = false;
+        }
+      }
+    }
+    return OB_SUCCESS;
+  }
   static int check_inlist_rewrite_enable(const ParseNode &in_list,
                                          const ObItemType op_type,
                                          const ObRawExpr &left_expr,
