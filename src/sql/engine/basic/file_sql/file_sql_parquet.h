@@ -59,7 +59,12 @@ struct ParquetOptions
   std::vector<std::string> projection;
   size_t max_row_groups = 4096;
   size_t max_rows = 64 * 1024 * 1024;
+  // The limit of the size of a batch of rows. It bounds how many rows are
+  // returned at a time, not how big a page of the file is.
   size_t max_batch_bytes = 32 * 1024 * 1024;
+  // The limit of the size of a decompressed page. A page of the file can be
+  // larger than a batch of rows, so the two limits are apart.
+  size_t max_page_bytes = 64 * 1024 * 1024;
 };
 
 // Reads a Parquet file and produces rows typed with the shared ScalarValue.

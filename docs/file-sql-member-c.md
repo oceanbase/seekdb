@@ -109,6 +109,13 @@ while ((status = reader.next_batch(256, rows)).ok()) { ... }
 - **初始化失败后不可再用**：读取器只有在 schema 建好之后才处于可用状态。
   `init` 失败后再调用 `next_batch` 会返回错误而不是继续用一个建了一半的读取器
   （之前会段错误）。
+- **资源上限**：`max_row_groups`、`max_rows`、`max_columns` 与 `max_line_bytes`
+  超出时返回 `RESOURCE_LIMIT`。`max_batch_bytes` 只限制一次返回多少行，
+  **解压后单页的大小由 `max_page_bytes` 单独限制**——文件的一页可以比一批行大，
+  两者混用会让任何 snappy 文件在批次上限调小之后就读不出来。
+- **读到一个 Row Group 的中间失败**：读取器不再带着这个只读了一半的 Row Group
+  继续（之前下一次调用会去读一个根本没填过的列块，越界崩溃）。失败后
+  `next_batch` 返回错误，`rescan` 之后从头再来。
 - **编码**：支持 DATA_PAGE_V1 与 DATA_PAGE_V2，PLAIN、RLE 与 RLE_DICTIONARY
   （字典页）三种编码，以及 SNAPPY 与 UNCOMPRESSED 两种 codec。DATA_PAGE_V2 的值
   是否压缩由页头的 `is_compressed` 决定，而不是由列的 codec 决定。

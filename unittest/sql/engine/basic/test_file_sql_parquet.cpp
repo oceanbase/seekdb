@@ -341,6 +341,42 @@ void test_unknown_projection(const std::string &dir)
   fclose(input);
 }
 
+
+// A file whose page cannot be decoded fails in the middle of a row group.
+// The reader has to stop there and must not go on with the row group, or the
+// next call reads the values of a chunk that was never filled and crashes.
+void test_failure_inside_a_row_group(const std::string &dir)
+{
+  const std::string path = dir + "/unsupported_encoding.parquet";
+  ParquetReader reader;
+  FILE *input = fopen(path.c_str(), "rb");
+  if (input == nullptr) {
+    std::printf("FAIL cannot open %s\n", path.c_str());
+    ++g_failures;
+    return;
+  }
+  const FileStatus status = reader.init(input, ParquetOptions());
+  check(status.ok(), "the reader is initialized");
+  if (status.ok()) {
+    std::vector<ScalarRow> rows;
+    const FileStatus first = reader.next_batch(100, rows);
+    check(!first.ok(), "the scan of a page that cannot be decoded fails");
+    check(rows.empty(), "the failed scan produces no row");
+
+    // The reader must not go on with the half read row group.
+    const FileStatus second = reader.next_batch(100, rows);
+    check(!second.ok(), "the second call fails as well");
+    check(rows.empty(), "the second call produces no row");
+
+    // A rescan has to bring the reader back to the beginning.
+    check(reader.rescan().ok(), "the reader is rescaned");
+    const FileStatus third = reader.next_batch(100, rows);
+    check(!third.ok(), "the scan after the rescan fails as well");
+    check(rows.empty(), "the scan after the rescan produces no row");
+  }
+  fclose(input);
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -389,6 +425,9 @@ int main(int argc, char **argv)
   std::printf("--- several columns and the column pruning ---\n");
   test_multi_column(dir, "multi_column.parquet");
   test_multi_column(dir, "multi_column_v2.parquet");
+
+  std::printf("--- a failure inside a row group ---\n");
+  test_failure_inside_a_row_group(dir);
 
   std::printf("--- an unknown projection ---\n");
   test_unknown_projection(dir);

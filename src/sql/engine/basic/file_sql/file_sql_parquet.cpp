@@ -828,7 +828,7 @@ FileStatus ParquetReader::decompress(int64_t codec, const std::string &payload, 
   }
   if (codec == 1) {  // SNAPPY
     if (!snappy_decompress(reinterpret_cast<const uint8_t *>(payload.data()),
-                            payload.size(), plain, options_.max_batch_bytes)) {
+                            payload.size(), plain, options_.max_page_bytes)) {
       return fail(FileCode::INVALID_DATA,0,"cannot decompress the parquet page values");
     }
     return {};
@@ -1215,8 +1215,16 @@ FileStatus ParquetReader::read_row_group(uint64_t group_index)
   for (size_t i = 0; i < parquet_columns_.size(); ++i) {
     if (!is_projected(i)) { continue; }
     const FileStatus status = read_column_chunk(group_index, i);
-    if (!status.ok()) { return status; }
+    if (!status.ok()) {
+      // The group is only half read. The reader must not go on with it, or
+      // the next call would read the values of a chunk that is not there.
+      group_rows_ = 0;
+      group_values_.clear();
+      return status;
+    }
     if (group_values_[i].size() != group_rows_) {
+      group_rows_ = 0;
+      group_values_.clear();
       return fail(FileCode::INVALID_DATA,i,"parquet column chunk does not match the row group size");
     }
   }
