@@ -149,6 +149,9 @@ describe select * from read_csv('/path/basic.csv');
   软链接时不会被发现。执行前再校验一次路径可以关闭这个窗口，属于下一步。
 - `enable_file_sql` 与 `secure_file_priv` 都是会话级变量，`global_enable_file_sql`
   与 `global_secure_file_priv` 还没有实现，隐藏测试用到全局变量时需要补上。
+- 一个查询会把文件读三遍：解析阶段推断一次 Schema，算子执行时为了发现文件变化又推断一次，
+  读数据时再读一遍。内存是流式的，但读盘次数可以优化，
+  例如算子直接使用计划里的 Schema，只做文件变化检查。
 
 ## 引擎接入路径
 
