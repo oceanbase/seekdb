@@ -18,6 +18,7 @@
 #include "rust/config.h"
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
 #include "share/ob_share_util.h"
+#include "query/session/ob_command_cancellation.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h" //ObInnerConnectionLockUtil
 
 using namespace oceanbase::lib;
@@ -96,7 +97,7 @@ int ObDDLHelperUtils::wait_ddl_trans(ObDDLTransController *controller,
   if (OB_ISNULL(controller)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TS))) {
-  } else if (OB_FAIL(controller->wait_task_ready(task_id, ctx.get_timeout()))) {
+  } else if (OB_FAIL(controller->wait_task_ready(task_id, ctx.get_timeout(), query::CommandCancellationScope::check_current))) {
   }
   RS_TRACE(wait_ddl_trans);
   return ret;
@@ -359,12 +360,13 @@ ObDDLSQLTransaction *ObDDLHelper::get_external_trans_()
 
 int ObDDLHelper::execute()
 {
-  int ret = OB_SUCCESS;
+  query::CommandCancellationScope cancellation(get_trans_());
+  int ret = cancellation.check_status();
   RS_TRACE(parallel_ddl_begin);
   /*
    * Implement of parallel ddl should has following actions:
    */
-  if (OB_FAIL(check_inner_stat_())) {
+  if (OB_SUCC(ret) && OB_FAIL(check_inner_stat_())) {
   }
   /* ----------------------------------------------
    * 0. init
@@ -443,6 +445,7 @@ int ObDDLHelper::execute()
     if (OB_FAIL(ObDDLHelperUtils::wait_and_end_ddl_trans(ret, schema_service_, ddl_trans_controller_, task_id_, get_trans_(), need_clean_failed))) { // won't overwrite ret
       if (need_clean_failed) {
         int tmp_ret = OB_SUCCESS;
+        query::CommandCancellationMask cancellation_mask;
         if (OB_TMP_FAIL(clean_on_fail_commit_())) {
         }
       }

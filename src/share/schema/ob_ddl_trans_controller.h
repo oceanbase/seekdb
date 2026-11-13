@@ -58,7 +58,8 @@ public:
   int create_task_and_assign_schema_version(const uint64_t schema_version_count,
       int64_t &task_id,
       ObIArray<int64_t> &schema_version_res);
-  int wait_task_ready(const int64_t task_id, const int64_t wait_us);
+  int wait_task_ready(const int64_t task_id, const int64_t wait_us,
+                      int (*check_cancel)() = nullptr);
   int remove_task(const int64_t task_id);
   int reserve_schema_version(const uint64_t schema_version_count);
 private:
