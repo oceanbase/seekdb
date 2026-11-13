@@ -179,6 +179,11 @@ writer 的样本时不出问题，单元测试准备了 20 个样本，覆盖：
 样本放在 `tools/deploy/mysql_test/test_suite/file_sql/data/parquet/`，由
 `unittest/sql/engine/basic/test_file_sql_parquet.cpp` 读取。
 
+样本是二进制文件，一次复制丢掉一个字节就会让它们变得不可用，而这种损坏不会
+影响文件的 magic 与 footer，读取器无法分辨。样本目录里放了一个检查脚本
+`check_fixtures.py`，它不依赖第三方包，读取 footer 中的 Row Group 元数据，
+遍历页头并验证页能无缝覆盖文件。丢字节的样本会报出页的偏移与它声称的长度。
+
 ## 双文件 JOIN
 
 ⑦ 的计划明确要求"使用 seekdb 原生执行计划"，因此 JOIN 不由本模块实现：两个格式的
