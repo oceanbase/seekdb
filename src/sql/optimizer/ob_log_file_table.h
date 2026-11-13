@@ -27,7 +27,11 @@ class ObLogFileTable : public ObLogicalOperator
 {
 public:
   ObLogFileTable(ObLogPlan &plan)
-      : ObLogicalOperator(plan), table_id_(OB_INVALID_ID), table_name_(), file_def_(NULL) {}
+      : ObLogicalOperator(plan),
+        table_id_(OB_INVALID_ID),
+        table_name_(),
+        file_def_(NULL),
+        access_exprs_() {}
   virtual ~ObLogFileTable() {}
   void set_table_id(uint64_t table_id) { table_id_ = table_id; }
   uint64_t get_table_id() const { return table_id_; }
@@ -36,11 +40,17 @@ public:
   void set_file_def(const ObFileTableDef *file_def) { file_def_ = file_def; }
   const ObFileTableDef *get_file_def() const { return file_def_; }
   virtual uint64_t hash(uint64_t seed) const override;
+  // The columns of the file are the columns of the table item, the operator
+  // produces their values.
+  int generate_access_exprs();
+  virtual int allocate_expr_post(ObAllocExprContext &ctx) override;
+  virtual int get_op_exprs(common::ObIArray<ObRawExpr *> &all_exprs) override;
 private:
   uint64_t table_id_;
   common::ObString table_name_;
   // The definition belongs to the table item of the statement.
   const ObFileTableDef *file_def_;
+  common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> access_exprs_;
   DISALLOW_COPY_AND_ASSIGN(ObLogFileTable);
 };
 

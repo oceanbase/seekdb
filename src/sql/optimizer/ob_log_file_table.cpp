@@ -17,6 +17,51 @@ namespace oceanbase
 namespace sql
 {
 
+int ObLogFileTable::generate_access_exprs()
+{
+  int ret = OB_SUCCESS;
+  const ObDMLStmt *stmt = get_stmt();
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_column_size(); ++i) {
+      const ColumnItem *col_item = stmt->get_column_item(i);
+      if (OB_ISNULL(col_item) || OB_ISNULL(col_item->expr_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (col_item->table_id_ == table_id_ &&
+                 col_item->expr_->is_explicited_reference() &&
+                 OB_FAIL(access_exprs_.push_back(col_item->expr_))) {
+      } else { /* do nothing */ }
+    }
+  }
+  return ret;
+}
+
+int ObLogFileTable::allocate_expr_post(ObAllocExprContext &ctx)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < access_exprs_.count(); ++i) {
+    ObRawExpr *value_col = access_exprs_.at(i);
+    if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
+    } else if (!is_plan_root() && OB_FAIL(add_var_to_array_no_dup(output_exprs_, value_col))) {
+    } else { /* do nothing */ }
+  }
+  if (OB_SUCC(ret)) {
+    ret = ObLogicalOperator::allocate_expr_post(ctx);
+  }
+  return ret;
+}
+
+int ObLogFileTable::get_op_exprs(common::ObIArray<ObRawExpr *> &all_exprs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(generate_access_exprs())) {
+  } else if (OB_FAIL(append(all_exprs, access_exprs_))) {
+  } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
+  }
+  return ret;
+}
+
 uint64_t ObLogFileTable::hash(uint64_t seed) const
 {
   seed = do_hash(table_name_, seed);
