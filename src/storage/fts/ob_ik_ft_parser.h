@@ -43,10 +43,8 @@ public:
         segmenters_(allocator_),
         cache_main_(allocator),
         cache_quan_(allocator),
-        cache_stop_(allocator),
         dict_main_(nullptr),
-        dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_quan_(nullptr)
   {
   }
 
@@ -101,11 +99,9 @@ private:
   // For now there's no change of dict in one query, so we can pin dict this level.
   ObFTCacheRangeContainer cache_main_;
   ObFTCacheRangeContainer cache_quan_;
-  ObFTCacheRangeContainer cache_stop_;
 
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
-  ObIFTDict *dict_stop_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
