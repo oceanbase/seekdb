@@ -1,0 +1,24 @@
+src/pl/sys_package/ob_dbms_stats.cpp
+  s_c1726ac37da477::t_ba0fbd8d8ed539 135-151,522-532
+src/oblib/lib/profile/ob_trace_id.h
+  s_c1726ac37da477::t_e6d78e0cc9b50a 310-349
+src/observer/ob_inner_sql_connection.cpp
+  s_c1726ac37da477::t_e6d78e0cc9b50a 38,207-293
+  s_c1726ac37da477::t_ba0fbd8d8ed539 374-416,2292-2310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "47b70e142b94b2b96b441c75bc55e7fbe351084b",
+  "prompts": {},
+  "sessions": {
+    "s_c1726ac37da477": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c9b8-d9ec-7e81-bc9f-4f6259e85576",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}
