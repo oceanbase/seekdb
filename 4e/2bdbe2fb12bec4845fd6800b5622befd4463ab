@@ -1,0 +1,30 @@
+.github/packaging.json
+  s_99bd9318300c1c::t_ffdcc9fadf9838 29-30
+.github/scripts/package.py
+  s_99bd9318300c1c::t_ffdcc9fadf9838 59-65,73,94,103-111,113-117,150-154,171-180,191,194-198,200,202-206,225-229,242-251,295-296
+  s_99bd9318300c1c::t_b4ee9d4ace3022 112
+package/ios/distribution.py
+  s_99bd9318300c1c::t_b4ee9d4ace3022 130-131,162
+  s_99bd9318300c1c::t_6fd0145308fd95 1-129,132-161,163-228
+package/README.md
+  s_99bd9318300c1c::t_497b54429f01a3 9,14,21-27,57-59,94-99,101,109-110,114-118
+.github/workflows/package.yml
+  s_99bd9318300c1c::t_57d0c0188b6aa1 11,53,90,166,168-169,176,191,216-243
+  s_99bd9318300c1c::t_dbbe69570d0792 244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4e2bdbe2fb12bec4845fd6800b5622befd4463ab",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}
