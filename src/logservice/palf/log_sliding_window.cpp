@@ -190,7 +190,7 @@ bool LogSlidingWindow::can_submit_larger_log_(const int64_t log_id) const
       || log_id >= sw_end_log_id) {
     // The local sliding window is full.
     bool_ret = false;
-    PALF_LOG_RET(WARN, OB_EAGAIN, "SEEK1402_DIAGNOSTIC window snapshot", K_(self),
+    PALF_LOG_RET(INFO, OB_EAGAIN, "SEEK1402_DIAGNOSTIC window snapshot", K_(self),
         K(start_log_id), K(sw_end_log_id), K(log_id));
     if (palf_reach_time_interval(5 * 1000 * 1000, larger_log_warn_time_)) {
       PALF_LOG(INFO, "sw is full, cannot submit larger log", K_(self), K(start_log_id), \
@@ -229,7 +229,7 @@ bool LogSlidingWindow::can_submit_new_log_(const int64_t valid_log_size, LSN &ls
     bool_ret = true;
   }
   if (!bool_ret) {
-    PALF_LOG_RET(WARN, OB_EAGAIN, "SEEK1402_DIAGNOSTIC space snapshot", K_(self), K(tmp_ret),
+    PALF_LOG_RET(INFO, OB_EAGAIN, "SEEK1402_DIAGNOSTIC space snapshot", K_(self), K(tmp_ret),
         K(valid_log_size), K(curr_end_lsn), K(curr_committed_end_lsn),
         K(buffer_reuse_lsn), K(group_buffer_size), K(reuse_base_lsn), K(lsn_upper_bound));
   }
@@ -295,7 +295,7 @@ int LogSlidingWindow::submit_log(const char *buf,
              || (diagnostic_window_checked = true,
                  !(diagnostic_window_allowed = can_submit_larger_log_(get_max_log_id() + 1)))) {
     ret = OB_EAGAIN;
-    PALF_LOG(WARN, "SEEK1402_DIAGNOSTIC admission rejected", K(ret), K_(self),
+    PALF_LOG(INFO, "SEEK1402_DIAGNOSTIC admission rejected", K(ret), K_(self),
         K(diagnostic_space_allowed), K(diagnostic_window_checked), K(diagnostic_window_allowed),
         K(valid_log_size), K(lsn_upper_bound), K(start_log_id), K(log_id_upper_bound));
     if (REACH_TIME_INTERVAL(1000 * 1000)) {

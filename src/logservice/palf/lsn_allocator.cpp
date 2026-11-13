@@ -491,7 +491,7 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
         new_max_lsn.val_ = next.lsn_val_;
         if (new_log_id > log_id_upper_bound || new_max_lsn > lsn_upper_bound) {
           ret = OB_EAGAIN;
-          PALF_LOG(WARN, "SEEK1402_DIAGNOSTIC allocator rejected", K(ret), K(size),
+          PALF_LOG(INFO, "SEEK1402_DIAGNOSTIC allocator rejected", K(ret), K(size),
               "log_id_rejected", new_log_id > log_id_upper_bound,
               "lsn_rejected", new_max_lsn > lsn_upper_bound,
               K(new_log_id), K(log_id_upper_bound), K(new_max_lsn), K(lsn_upper_bound));

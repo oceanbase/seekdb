@@ -1461,7 +1461,7 @@ int ObTxCtx::compensate_abort_log_()
     TRANS_LOG(WARN, "submit abort log failed", KR(submit_ret), KR(ret), K(*this));
   } else {
   }
-  TRANS_LOG(WARN, "SEEK1402_DIAGNOSTIC abort retry outcome", K(ret), KPC(this));
+  TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC abort retry outcome", K(ret), KPC(this));
   TRANS_LOG(INFO, "compensate abort log", K(ret), KPC(this));
   return ret;
 }
@@ -1604,7 +1604,7 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
     // allow fill redo concurrently with log callback
     CtxLockGuard guard(lock_, is_committing_() ? CtxLockGuard::MODE::ALL : CtxLockGuard::MODE::CTX);
     if (NULL != log_cb && ObTxLogType::TX_ABORT_LOG == log_cb->get_last_log_type()) {
-      TRANS_LOG(WARN, "SEEK1402_DIAGNOSTIC abort durable callback entered", KPC(log_cb), KPC(this));
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC abort durable callback entered", KPC(log_cb), KPC(this));
     }
 
 
@@ -4138,7 +4138,7 @@ int ObTxCtx::replay_abort(const ObTxAbortLog &abort_log,
   if (OB_SUCC(ret)) {
     runtime_state_.set_state_log_submitted();
   }
-  TRANS_LOG(WARN, "SEEK1402_DIAGNOSTIC replay abort outcome", K(ret), K(offset), K(timestamp), KPC(this));
+  TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC replay abort outcome", K(ret), K(offset), K(timestamp), KPC(this));
   const int64_t used_time = timeguard.get_diff();
   REC_TRANS_TRACE_EXT2(tlog_, replay_abort, OB_ID(ret), ret, OB_ID(used),
                        used_time, OB_ID(offset), offset.val_,
@@ -5811,7 +5811,7 @@ int ObTxCtx::on_local_abort_tx_()
     set_exiting_();
   }
 
-  TRANS_LOG(WARN, "SEEK1402_DIAGNOSTIC local abort final outcome", K(ret), KPC(this));
+  TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC local abort final outcome", K(ret), KPC(this));
   return ret;
 }
 
