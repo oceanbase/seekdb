@@ -129,11 +129,22 @@ describe select * from read_csv('/path/basic.csv');
 | SQL 语法 | 已完成 | `table_factor` 增加表函数产生式，bison 2.4.1 `-Werror` 无冲突 |
 | 解析与 Schema 推断 | 已完成 | 生成表项与列项，列类型来自推断结果 |
 | 值转换 | 已完成 | `file_sql_scan` 把推断类型映射为列类型，把扫描值写入 ObDatum |
-| 计划与执行算子 | **未完成** | 见下节的落点清单 |
+| 计划与执行算子 | 已完成 | `ObLogFileTable` + `ObFileTableOp`，按批次流式读取 |
+| 列的可见性 | 已完成 | `SELECT *` 展开与 `f.col` 限定列解析 |
 | `glob`、`DESCRIBE`、`COPY` | **未完成** | 属于后续评分项 |
 
-未完成的计划与算子部分意味着 `read_csv` 目前还不能真正执行，
-本分支只到解析与 Schema 推断为止，不得当作 Lab 2 的可运行实现。
+`read_csv` 的读取路径已经打通：`read_csv(path)` 会被解析成表项，
+解析阶段推断 Schema 并检查路径，执行算子按批次读取文件并写入列。
+本分支还没有 `glob`、`DESCRIBE` 与 `COPY`，也没有 JSONL 与 Parquet 的读取器，
+不得当作 Lab 2 的完整实现。
+
+还没有验证的部分：
+
+- 完整的 `file_sql_basic.test` 还没有跑通，`read_csv` 的端到端行为需要在集成机上验证。
+- 文件在计划期与执行期各打开一次，两次之间文件发生变化时算子会报错，
+  这个路径还没有测试覆盖。
+- 表函数的语句目前不可比较，计划缓存不会复用文件表语句的计划，
+  每次执行都会重新推断 Schema。
 
 ## 引擎接入路径
 
