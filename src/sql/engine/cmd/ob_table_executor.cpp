@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "rust/config.h"
+#include <algorithm>
 #include <inttypes.h>
 #include "common/ob_timeout_ctx.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -1562,8 +1563,14 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
           int64_t start_time = ObTimeUtility::current_time();
           obcall::ObDropTableRes res;
           ObTimeoutCtx timeout_ctx;
+          const int64_t worker_deadline = THIS_WORKER.get_timeout_ts();
+          const int64_t timeout_ts = std::min(worker_deadline,
+              timeout_ctx.get_abs_timeout(worker_deadline));
           tmp_arg.is_parallel_ = true;
-          if (OB_FAIL(timeout_ctx.set_timeout(OB_DEFAULT_RPC_TIMEOUT))) {
+          // The local call shares the query deadline and any earlier inherited limit.
+          if (OB_UNLIKELY(timeout_ts <= ObTimeUtility::current_time())) {
+            ret = OB_TIMEOUT;
+          } else if (OB_FAIL(timeout_ctx.set_abs_timeout(timeout_ts))) {
           } else if (OB_FAIL(ctx.root_command_service().parallel_drop_table(drop_table_arg, res))) {
           } else {
             int64_t refresh_time = ObTimeUtility::current_time();
