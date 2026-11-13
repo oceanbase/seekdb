@@ -12,8 +12,6 @@
  */
 #include "file_sql_parquet.h"
 
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -1115,7 +1113,6 @@ FileStatus ParquetReader::read_column_chunk(uint64_t group_index, size_t column_
       // The values are stored as they are.
       values_data = payload.substr(level_offset);
     }
-
     std::vector<ScalarValue> page_values;
     const bool is_dictionary = (info.encoding == ENCODING_RLE_DICTIONARY
                                 || info.encoding == ENCODING_PLAIN_DICTIONARY);
