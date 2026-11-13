@@ -1654,8 +1654,13 @@ int ObPluginVectorIndexUtils::get_vector_index_prefix_inner(const ObTableSchema 
       LOG_WARN("unexpected vector index type", K(ret), K(index_schema.get_index_type()),
                K(index_schema.get_table_name_str()));
     }
-    if (OB_SUCC(ret)) {
-      prefix.assign_ptr(index_name.ptr(), table_name_len - strlen(suffix));
+    const int64_t suffix_len = OB_NOT_NULL(suffix) ? static_cast<int64_t>(strlen(suffix)) : 0;
+    if (OB_SUCC(ret) && OB_UNLIKELY(table_name_len < suffix_len)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index name is shorter than its aux suffix", K(ret), K(index_name),
+               K(index_schema.get_index_type()), K(suffix_len));
+    } else if (OB_SUCC(ret)) {
+      prefix.assign_ptr(index_name.ptr(), table_name_len - suffix_len);
       LOG_INFO("get_index_prefix", K(prefix), K(index_name));
     }
   }

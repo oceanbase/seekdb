@@ -2134,6 +2134,10 @@ int ObVectorIndexUtil::get_vector_index_tid(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
   } else {
+    // An ivf rebuild exposes both the old and the new domain index through
+    // simple_index_infos. Keep the version across the whole scan so the newest
+    // generation wins; a per-table variable always accepts its first column.
+    int64_t last_ivf_schema_version = OB_INVALID_ID;
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
       if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
@@ -2153,7 +2157,6 @@ int ObVectorIndexUtil::get_vector_index_tid(
       } else if (is_local_vec_ivf_index(index_type)) {
         // when rebuild ivf index, simple_index_infos inclue both new/old index info, we should know by schema version
         // so do not use tid == OB_INVALID_ID as a condition to stop the for loop
-        int64_t last_shcema_version = OB_INVALID_ID;
         bool has_same_col_id = false;
         for (int64_t j = 0; OB_SUCC(ret) && j < index_table_schema->get_column_count(); j++) {
           const ObColumnSchemaV2 *col_schema = nullptr;
@@ -2169,10 +2172,10 @@ int ObVectorIndexUtil::get_vector_index_tid(
             // only need vec_vector column, here skip other column
           } else if (OB_FAIL(has_same_cascaded_col_id(data_table_schema, *col_schema, col_id, has_same_col_id))) {
           } else if (has_same_col_id &&
-                    (last_shcema_version == OB_INVALID_ID ||
-                      index_table_schema->get_schema_version() > last_shcema_version)) {
+                    (last_ivf_schema_version == OB_INVALID_ID ||
+                      index_table_schema->get_schema_version() > last_ivf_schema_version)) {
             tid = simple_index_infos.at(i).table_id_;
-            last_shcema_version = index_table_schema->get_schema_version();
+            last_ivf_schema_version = index_table_schema->get_schema_version();
           }
         }
       } else { // delta buffer, index id, index snapshot, we should check cascaded_column by vec_vector col
@@ -2579,12 +2582,17 @@ int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_ivf(
     }
 
     // 2. pick the newest generation whose aux tables are all readable
-    for (int64_t idx = 0;
-         OB_SUCC(ret) && idx < centroid_tid_heap.count()
-         && (OB_INVALID_ID == centroid_tid || OB_INVALID_ID == cid_rowkey_tid || OB_INVALID_ID == rowkey_cid_tid);
-         ++idx) {
-      ObString &current_index_prefix = centroid_tid_heap.at(idx).index_prefix_;
-      centroid_tid = centroid_tid_heap.at(idx).inc_tid_;
+    while (OB_SUCC(ret) && !centroid_tid_heap.empty()
+           && (OB_INVALID_ID == centroid_tid
+               || OB_INVALID_ID == cid_rowkey_tid
+               || OB_INVALID_ID == rowkey_cid_tid
+               || (ObVectorIndexAlgorithmType::VIAT_IVF_FLAT != type
+                   && OB_INVALID_ID == extra_tid))) {
+      // The heap only orders its root, so pop it to visit candidates by
+      // descending schema version instead of raw heap-array order.
+      const ObVecTidCandidate candidate = centroid_tid_heap.top();
+      ObString current_index_prefix = candidate.index_prefix_;
+      centroid_tid = candidate.inc_tid_;
       cid_rowkey_tid = OB_INVALID_ID;
       rowkey_cid_tid = OB_INVALID_ID;
       extra_tid = OB_INVALID_ID;
@@ -2641,6 +2649,24 @@ int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_ivf(
           }
         }
       }
+      centroid_tid_heap.pop();
+    }
+
+    // The caller treats a non-invalid centroid tid as a usable generation, so
+    // never return a partially filled tuple. If the heap is exhausted before
+    // all aux tables of one generation are found, report no generation at all.
+    if (OB_SUCC(ret)
+        && OB_INVALID_ID != centroid_tid
+        && (OB_INVALID_ID == cid_rowkey_tid
+            || OB_INVALID_ID == rowkey_cid_tid
+            || (ObVectorIndexAlgorithmType::VIAT_IVF_FLAT != type
+                && OB_INVALID_ID == extra_tid))) {
+      LOG_DEBUG("[VEC_INDEX][IVF_PLAN] no complete ivf index generation",
+                K(type), K(centroid_tid), K(cid_rowkey_tid), K(rowkey_cid_tid), K(extra_tid));
+      centroid_tid = OB_INVALID_ID;
+      cid_rowkey_tid = OB_INVALID_ID;
+      rowkey_cid_tid = OB_INVALID_ID;
+      extra_tid = OB_INVALID_ID;
     }
   }
 
@@ -4538,97 +4564,6 @@ int ObVectorIndexUtil::check_vec_aux_index_deleted(
     }
   }
   LOG_INFO("check_vec_aux_index_deleted", K(ret), K(is_all_deleted));
-  return ret;
-}
-
-int ObVectorIndexUtil::get_ivf_aux_table_id(
-    ObSchemaGetterGuard &schema_guard,
-    const schema::ObTableSchema &ivf_domain_index_schema,
-    const schema::ObIndexType aux_index_type,
-    uint64_t &aux_table_id)
-{
-  int ret = OB_SUCCESS;
-  aux_table_id = OB_INVALID_ID;
-  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-  const ObTableSchema *aux_index_schema = nullptr;
-  if (OB_UNLIKELY(!ivf_domain_index_schema.is_vec_domain_index() ||
-                  !is_local_vec_ivf_index(aux_index_type) ||
-                  !is_local_vec_ivf_index(ivf_domain_index_schema.get_index_type()))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(
-                 schema_guard,
-                 ivf_domain_index_schema.get_database_id(),
-                 ivf_domain_index_schema.get_table_name_str(),
-                 aux_index_type,
-                 &allocator,
-                 aux_index_schema))) {
-  } else if (OB_NOT_NULL(aux_index_schema)) {
-    aux_table_id = aux_index_schema->get_table_id();
-  }
-  return ret;
-}
-
-int ObVectorIndexUtil::check_ivf_index_readable(
-    ObSchemaGetterGuard &schema_guard,
-    const schema::ObTableSchema &ivf_domain_index_schema,
-    bool &is_readable)
-{
-  int ret = OB_SUCCESS;
-  is_readable = false;
-  const ObIndexType index_type = ivf_domain_index_schema.get_index_type();
-  ObSEArray<ObIndexType, 4> aux_index_types;
-  if (OB_UNLIKELY(!ivf_domain_index_schema.is_vec_domain_index() ||
-                  !is_local_vec_ivf_index(index_type))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (!ivf_domain_index_schema.can_read_index() ||
-             !ivf_domain_index_schema.is_index_visible()) {
-    // the domain index table is still being built, aux tables can not be read either
-  } else {
-    if (is_vec_ivfflat_index(index_type)) {
-      ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFFLAT_CID_VECTOR_LOCAL);
-      if (OB_SUCC(ret)) {
-        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFFLAT_ROWKEY_CID_LOCAL);
-      }
-    } else if (is_vec_ivfsq8_index(index_type)) {
-      ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFSQ8_META_LOCAL);
-      if (OB_SUCC(ret)) {
-        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFSQ8_CID_VECTOR_LOCAL);
-      }
-      if (OB_SUCC(ret)) {
-        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFSQ8_ROWKEY_CID_LOCAL);
-      }
-    } else {
-      ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFPQ_PQ_CENTROID_LOCAL);
-      if (OB_SUCC(ret)) {
-        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFPQ_CODE_LOCAL);
-      }
-      if (OB_SUCC(ret)) {
-        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFPQ_ROWKEY_CID_LOCAL);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      is_readable = true;
-      for (int64_t i = 0; is_readable && i < aux_index_types.count(); ++i) {
-        uint64_t aux_table_id = OB_INVALID_ID;
-        const ObTableSchema *aux_index_schema = nullptr;
-        if (OB_FAIL(get_ivf_aux_table_id(schema_guard,
-                                         ivf_domain_index_schema,
-                                         aux_index_types.at(i),
-                                         aux_table_id))) {
-        } else if (OB_INVALID_ID == aux_table_id ||
-                   OB_FAIL(schema_guard.get_table_schema(aux_table_id, aux_index_schema))) {
-          is_readable = false;
-        } else if (OB_ISNULL(aux_index_schema) ||
-                   !aux_index_schema->can_read_index() ||
-                   !aux_index_schema->is_index_visible()) {
-          is_readable = false;
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret) && !is_readable) {
-    LOG_INFO("ivf index is not readable", K(index_type), K(ivf_domain_index_schema.get_table_name_str()));
-  }
   return ret;
 }
 
