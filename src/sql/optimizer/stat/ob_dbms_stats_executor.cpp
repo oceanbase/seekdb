@@ -34,6 +34,9 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/session/ob_inner_sql_connection.h"
+#include <chrono>
+#include <optional>
+#include <thread>
 
 namespace oceanbase {
 using namespace pl;
@@ -41,6 +44,126 @@ namespace common {
 ERRSIM_POINT_DEF(ERRSIM_RANDOM_GATHER_STATS_OPTION);
 ERRSIM_POINT_DEF(ERRSIM_FAILED_ANALYZE_TABLE_STATS);
 ERRSIM_POINT_DEF(ERRSIM_FAILED_ANALYZE_TIMEOUT);
+
+namespace {
+class GatherChildDiagnostic
+{
+public:
+  enum Phase { OTHER, GATHER_IMPL, SPLIT_WRITE, LOCAL_CLEANUP, PHASE_COUNT };
+
+  GatherChildDiagnostic(const uint64_t epoch, const ObOptStatGatherParam &param, const int &ret)
+    : epoch_(epoch), table_id_(param.table_id_), param_(param), ret_(ret),
+      thread_(std::this_thread::get_id()), wall_start_us_(0), mono_before_us_(0),
+      start_us_(0), stamp_us_(0), phase_(OTHER), valid_(std::chrono::steady_clock::is_steady),
+      phase_us_{}, phase_entries_{}, phase_first_ret_{}
+  {
+    mono_before_us_ = monotonic_us();
+    wall_start_us_ = ObTimeUtility::current_time();
+    start_us_ = stamp_us_ = monotonic_us();
+    phase_entries_[OTHER] = 1;
+  }
+
+  GatherChildDiagnostic(const GatherChildDiagnostic &) = delete;
+  GatherChildDiagnostic &operator=(const GatherChildDiagnostic &) = delete;
+
+  ~GatherChildDiagnostic() { finish(); }
+
+  void enter(const Phase next)
+  {
+    if (next != phase_) {
+      account();
+      phase_ = next;
+      if (phase_entries_[next] == INT64_MAX) { valid_ = false; }
+      else { ++phase_entries_[next]; }
+    }
+  }
+
+  template<class Operation> int call(const Phase phase, Operation &&operation)
+  {
+    const Phase previous = phase_;
+    enter(phase);
+    const int ret = operation();
+    if (ret != OB_SUCCESS && phase_first_ret_[phase] == OB_SUCCESS) {
+      phase_first_ret_[phase] = ret;
+    }
+    enter(previous);
+    return ret;
+  }
+
+private:
+  static int64_t monotonic_us()
+  {
+    return std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+  }
+
+  void account()
+  {
+    const int64_t now = monotonic_us();
+    if (now < 0 || stamp_us_ < 0 || now < stamp_us_) { valid_ = false; }
+    else {
+      const int64_t delta = now - stamp_us_;
+      if (phase_us_[phase_] > INT64_MAX - delta) { valid_ = false; }
+      else { phase_us_[phase_] += delta; }
+    }
+    stamp_us_ = now;
+  }
+
+  void finish()
+  {
+    account();
+    const int64_t diagnostic_start_us = wall_start_us_;
+    const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+    const int64_t mono_after_us = monotonic_us();
+    const bool anchor_order_valid = mono_before_us_ >= 0 && start_us_ >= mono_before_us_
+        && stamp_us_ >= start_us_ && mono_after_us >= stamp_us_;
+    const int64_t total_us = anchor_order_valid ? stamp_us_ - start_us_ : -1;
+    const int64_t wall_span_us = diagnostic_start_us >= 0 && diagnostic_end_us >= diagnostic_start_us
+        ? diagnostic_end_us - diagnostic_start_us : -1;
+    const int64_t max_anchor_span_us = anchor_order_valid ? mono_after_us - mono_before_us_ : -1;
+    const int64_t wall_quantization_us = 2;
+    const bool wall_mapping_valid = anchor_order_valid && wall_span_us >= 0
+        && (wall_span_us >= total_us || total_us - wall_span_us <= wall_quantization_us)
+        && (wall_span_us <= max_anchor_span_us || wall_span_us - max_anchor_span_us <= wall_quantization_us);
+    int64_t accounted_us = 0;
+    for (int64_t i = 0; i < PHASE_COUNT; ++i) {
+      if (phase_us_[i] < 0 || phase_us_[i] > INT64_MAX - accounted_us) { valid_ = false; }
+      else { accounted_us += phase_us_[i]; }
+    }
+    const bool same_thread = thread_ == std::this_thread::get_id();
+    const bool same_request = same_thread && epoch_ != 0
+        && epoch_ == ::oceanbase::common::seek1381::request_epoch();
+    const bool same_table = table_id_ == param_.table_id_;
+    const bool accounting_valid = valid_ && same_request && same_table && anchor_order_valid
+        && phase_ == LOCAL_CLEANUP && total_us >= 0 && accounted_us == total_us;
+    const int64_t accounting_error_us = accounting_valid ? total_us - accounted_us : -1;
+    const uint64_t diagnostic_epoch = epoch_, diagnostic_table_id = table_id_;
+    const int ret = ret_, child_schema_version = 1, child_phase_count = PHASE_COUNT;
+    const bool monotonic_clock_steady = std::chrono::steady_clock::is_steady;
+    int64_t mono_us[] = {mono_before_us_, start_us_, stamp_us_, mono_after_us};
+    ObArrayWrap<int64_t> child_mono_us(mono_us, 4);
+    ObArrayWrap<int64_t> child_us(phase_us_, PHASE_COUNT);
+    ObArrayWrap<int64_t> child_entries(phase_entries_, PHASE_COUNT);
+    ObArrayWrap<int> child_first_ret(phase_first_ret_, PHASE_COUNT);
+    LOG_INFO("seek1381 gather child summary", K(child_schema_version), K(child_phase_count),
+             K(diagnostic_epoch), K(diagnostic_start_us), K(diagnostic_end_us),
+             K(diagnostic_table_id), K(same_request), K(same_thread), K(same_table), K(ret),
+             K(total_us), K(monotonic_clock_steady), K(wall_span_us), K(wall_mapping_valid),
+             K(wall_quantization_us), K(accounting_valid), K(accounting_error_us),
+             K(child_mono_us), K(child_us), K(child_entries), K(child_first_ret));
+  }
+
+  const uint64_t epoch_, table_id_;
+  const ObOptStatGatherParam &param_;
+  const int &ret_;
+  const std::thread::id thread_;
+  int64_t wall_start_us_, mono_before_us_, start_us_, stamp_us_;
+  Phase phase_;
+  bool valid_;
+  int64_t phase_us_[PHASE_COUNT], phase_entries_[PHASE_COUNT];
+  int phase_first_ret_[PHASE_COUNT];
+};
+}
 
 /**
  * @brief ObDbmsStatsUtils::gather_table_stats
@@ -868,24 +991,39 @@ int ObDbmsStatsExecutor::do_gather_stats(ObExecContext &ctx,
                                          ObIArray<ObOptColumnStat *> &all_cstats)
 {
   int ret = OB_SUCCESS;
+  const uint64_t diagnostic_epoch = ::oceanbase::common::seek1381::request_epoch();
+  std::optional<GatherChildDiagnostic> diagnostic;
+  if (diagnostic_epoch != 0) { diagnostic.emplace(diagnostic_epoch, param, ret); }
   ObSEArray<ObOptTableStat *, 4> tmp_all_tstats;
   int64_t start_time = 0;
-  if (OB_FAIL(THIS_WORKER.check_status())) {
-  } else if (OB_FAIL(param.partition_infos_.assign(gather_partition_infos))) {
-  } else if (OB_FAIL(param.column_params_.assign(gather_column_params))) {
-  } else if (OB_FAIL(ObDbmsStatsGather::gather_stats(ctx, param, audit, opt_stats))) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::check_all_cols_range_skew(gather_column_params, opt_stats))) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::calssify_opt_stat(opt_stats,
+  auto in_phase = [&](GatherChildDiagnostic::Phase phase, auto &&operation) {
+    return diagnostic ? diagnostic->call(phase, operation) : operation();
+  };
+  if (OB_FAIL(in_phase(GatherChildDiagnostic::OTHER, [&]() { return THIS_WORKER.check_status(); }))) {
+  } else if (OB_FAIL(in_phase(GatherChildDiagnostic::OTHER, [&]() {
+      return param.partition_infos_.assign(gather_partition_infos); }))) {
+  } else if (OB_FAIL(in_phase(GatherChildDiagnostic::OTHER, [&]() {
+      return param.column_params_.assign(gather_column_params); }))) {
+  } else if (OB_FAIL(in_phase(GatherChildDiagnostic::GATHER_IMPL, [&]() {
+      return ObDbmsStatsGather::gather_stats(ctx, param, audit, opt_stats); }))) {
+  } else if (OB_FAIL(in_phase(GatherChildDiagnostic::OTHER, [&]() {
+      return ObDbmsStatsUtils::check_all_cols_range_skew(gather_column_params, opt_stats); }))) {
+  } else if (OB_FAIL(in_phase(GatherChildDiagnostic::OTHER, [&]() {
+      return ObDbmsStatsUtils::calssify_opt_stat(opt_stats,
                                                          tmp_all_tstats,
-                                                         all_cstats))) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::merge_split_gather_tab_stats(all_tstats, tmp_all_tstats))) {
+                                                         all_cstats); }))) {
+  } else if (OB_FAIL(in_phase(GatherChildDiagnostic::OTHER, [&]() {
+      return ObDbmsStatsUtils::merge_split_gather_tab_stats(all_tstats, tmp_all_tstats); }))) {
   } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::split_batch_write(
-                 ctx, trans.get_connection(), is_all_columns_gather ? all_tstats : tmp_all_tstats, all_cstats))) {
+  } else if (OB_FAIL(in_phase(GatherChildDiagnostic::SPLIT_WRITE, [&]() {
+      return ObDbmsStatsUtils::split_batch_write(
+                 ctx, trans.get_connection(), is_all_columns_gather ? all_tstats : tmp_all_tstats, all_cstats); }))) {
   } else if (OB_FALSE_IT(DEBUG_SYNC(GATHER_STATS_AFTER_BATCH_WRITE))) {
-  } else if (OB_FAIL(audit.add_flush_stats_audit(ObTimeUtility::current_time() - start_time))) {
+  } else if (OB_FAIL(in_phase(GatherChildDiagnostic::OTHER, [&]() {
+      return audit.add_flush_stats_audit(ObTimeUtility::current_time() - start_time); }))) {
   } else { /*do nothing*/
   }
+  if (diagnostic) { diagnostic->enter(GatherChildDiagnostic::LOCAL_CLEANUP); }
   return ret;
 }
 
