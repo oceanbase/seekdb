@@ -760,13 +760,30 @@ FileStatus ParquetReader::read_footer()
     row_groups_.push_back(std::move(row_group));
   }
 
+  // The reader is only ready once the schema is built. A failure while the
+  // schema is built has to leave the reader unusable, otherwise the next
+  // call to next_batch would go on with a half built reader.
+  const FileStatus built = build_schema();
+  if (!built.ok()) { return built; }
   footer_read_ = true;
-  return build_schema();
+  return {};
 }
 
 FileStatus ParquetReader::build_schema()
 {
   columns_.clear();
+  // A projection that names a column that the file does not have is an
+  // error. Accepting it would read no column at all and produce rows of
+  // NULLs, which is a wrong result instead of a diagnosis.
+  for (const std::string &wanted : options_.projection) {
+    bool found = false;
+    for (const auto &column : parquet_columns_) {
+      if (column.name == wanted) { found = true; break; }
+    }
+    if (!found) {
+      return fail(FileCode::INVALID_DATA,0,"the parquet projection names a column that the file does not have");
+    }
+  }
   for (const auto &column : parquet_columns_) {
     ColumnSchema schema;
     schema.name = column.name;
@@ -1211,6 +1228,7 @@ FileStatus ParquetReader::next_batch(size_t limit, std::vector<ScalarRow> &rows)
 {
   rows.clear();
   if (!footer_read_) { return {FileCode::INVALID_ARGUMENT,0,0,0,"parquet reader is not initialized"}; }
+  if (columns_.empty()) { return {FileCode::INVALID_DATA,0,0,0,"parquet reader has no column"}; }
   const FileStatus unchanged = check_unchanged();
   if (!unchanged.ok()) { return unchanged; }
 

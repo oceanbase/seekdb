@@ -102,7 +102,13 @@ while ((status = reader.next_batch(256, rows)).ok()) { ... }
   因此读取器以列块统计信息里的 `null_count` 为准，`null_count > 0` 的列才可能
   出现 NULL。
 - **列裁剪**：`ParquetOptions::projection` 给出需要读取的列名，未列出的列不读取，
-  也不占用解码开销。
+  也不占用解码开销。projection 只是"哪些列值得读"的提示，**发布的 schema 与产出的
+  行仍然包含文件的全部列**，被裁掉的列在行里是 NULL，这样 SQL 层按位置绑定时列宽
+  不会错位。projection 里出现文件没有的列时直接报错：否则一列都读不到，产出的是
+  全 NULL 的行，那是错误结果而不是诊断。
+- **初始化失败后不可再用**：读取器只有在 schema 建好之后才处于可用状态。
+  `init` 失败后再调用 `next_batch` 会返回错误而不是继续用一个建了一半的读取器
+  （之前会段错误）。
 - **编码**：支持 DATA_PAGE_V1 与 DATA_PAGE_V2，PLAIN、RLE 与 RLE_DICTIONARY
   （字典页）三种编码，以及 SNAPPY 与 UNCOMPRESSED 两种 codec。DATA_PAGE_V2 的值
   是否压缩由页头的 `is_compressed` 决定，而不是由列的 codec 决定。

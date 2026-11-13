@@ -314,6 +314,33 @@ void test_official_sample_plain(const std::string &path)
   check_int32(rows, 0, 0, 7, "the official sample");
 }
 
+
+// A projection that names a column that the file does not have is an error.
+// A scan that reads nothing would produce rows of NULLs, which is a wrong
+// result instead of a diagnosis.
+void test_unknown_projection(const std::string &dir)
+{
+  const std::string path = dir + "/multi_column.parquet";
+  ParquetReader reader;
+  ParquetOptions options;
+  options.projection.push_back("nosuchcolumn");
+  FILE *input = fopen(path.c_str(), "rb");
+  if (input == nullptr) {
+    std::printf("FAIL cannot open %s\n", path.c_str());
+    ++g_failures;
+    return;
+  }
+  const FileStatus status = reader.init(input, options);
+  check(!status.ok(), "a projection of a column that is not in the file is rejected");
+  // The reader has to stay usable after a failed initialization. It used to
+  // go on with a half built reader and crash.
+  std::vector<ScalarRow> rows;
+  const FileStatus next = reader.next_batch(100, rows);
+  check(!next.ok(), "the reader refuses to read after a failed initialization");
+  check(rows.empty(), "the reader produces no row after a failed initialization");
+  fclose(input);
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -362,6 +389,9 @@ int main(int argc, char **argv)
   std::printf("--- several columns and the column pruning ---\n");
   test_multi_column(dir, "multi_column.parquet");
   test_multi_column(dir, "multi_column_v2.parquet");
+
+  std::printf("--- an unknown projection ---\n");
+  test_unknown_projection(dir);
 
   std::printf("--- a large file ---\n");
   test_large(dir, "small.parquet", 2000);

@@ -224,7 +224,9 @@ void test_parquet(const char *path)
   check(status.ok(), "parquet next_batch after rescan succeeds");
   check(again.size() == 7, "parquet rescan returns every row");
 
-  // A projection that does not match any column reads no value.
+  // A projection that names a column that the file does not have is an
+  // error. A scan that reads nothing would produce rows of NULLs, which is
+  // a wrong result instead of a diagnosis.
   ParquetOptions projection;
   projection.projection.push_back("missing");
   ParquetReader projected;
@@ -232,14 +234,117 @@ void test_parquet(const char *path)
   FILE *second = open_parquet(path, second_scratch);
   if (second != nullptr) {
     status = projected.init(second, projection);
-    check(status.ok(), "parquet accepts a projection");
+    check(!status.ok(), "parquet rejects a projection of a column that is not in the file");
+    // The reader has to stay usable after a failed initialization. It used
+    // to go on with a half built reader and crash.
     std::vector<ScalarRow> projected_rows;
     status = projected.next_batch(100, projected_rows);
-    check(status.ok(), "parquet next_batch with a projection succeeds");
-    check(projected_rows.size() == 7, "parquet keeps the row count under a projection");
+    check(!status.ok(), "parquet refuses to read after a failed initialization");
+    check(projected_rows.empty(), "parquet produces no row after a failed initialization");
     fclose(second);
   }
   fclose(input);
+}
+
+// Writes a file with the given content and returns it opened for reading.
+FILE *write_scratch(const char *name, const std::string &content)
+{
+  const std::string path = std::string("/tmp/") + name;
+  FILE *file = fopen(path.c_str(), "wb");
+  if (file == nullptr) { return nullptr; }
+  fwrite(content.data(), 1, content.size(), file);
+  fclose(file);
+  return fopen(path.c_str(), "rb");
+}
+
+// A column that holds an integer and a floating point number at the same
+// time is DOUBLE for every one of its values.
+void test_jsonl_type_conflict()
+{
+  FILE *input = write_scratch("file_sql_type_conflict.jsonl",
+                              "{\"score\":98.5,\"id\":1}\n"
+                              "{\"score\":90,\"id\":2}\n");
+  if (input == nullptr) {
+    std::printf("FAIL cannot write the scratch file\n");
+    ++g_failures;
+    return;
+  }
+  JsonlTableScan scan;
+  const FileStatus status = scan.prepare(input, JsonlOptions(), -1);
+  check(status.ok(), "the jsonl with a type conflict is prepared");
+  if (status.ok()) {
+    const int score = column_index(scan.columns(), "score");
+    check(score >= 0, "the jsonl has a score column");
+    if (score >= 0) {
+      check(scan.columns()[score].type == ScalarType::DOUBLE,
+            "a column of an integer and a floating point number is DOUBLE");
+    }
+    std::vector<ScalarRow> rows;
+    const FileStatus next = scan.next_batch(100, rows);
+    check(next.ok() && rows.size() == 2, "the jsonl with a type conflict has two rows");
+    if (rows.size() == 2 && score >= 0) {
+      check(rows[0][score].type == ScalarType::DOUBLE, "the first score is DOUBLE");
+      check(rows[0][score].real == 98.5, "the first score is 98.5");
+      check(rows[1][score].type == ScalarType::DOUBLE, "the second score is DOUBLE");
+      check(rows[1][score].real == 90.0, "the second score is 90");
+    }
+  }
+  fclose(input);
+}
+
+// A field that a record does not have is NULL.
+void test_jsonl_missing_field()
+{
+  FILE *input = write_scratch("file_sql_missing_field.jsonl",
+                              "{\"a\":1,\"b\":2}\n"
+                              "{\"a\":3}\n");
+  if (input == nullptr) {
+    std::printf("FAIL cannot write the scratch file\n");
+    ++g_failures;
+    return;
+  }
+  JsonlTableScan scan;
+  const FileStatus status = scan.prepare(input, JsonlOptions(), -1);
+  check(status.ok(), "the jsonl with a missing field is prepared");
+  if (status.ok()) {
+    std::vector<ScalarRow> rows;
+    const FileStatus next = scan.next_batch(100, rows);
+    check(next.ok() && rows.size() == 2, "the jsonl with a missing field has two rows");
+    if (rows.size() == 2) {
+      check(!rows[0][1].is_null, "the first record has the second field");
+      check(rows[1][1].is_null, "the second record has a NULL in the second field");
+    }
+  }
+  fclose(input);
+}
+
+// A nested object and an array are rejected.
+void test_jsonl_rejects_nested()
+{
+  {
+    FILE *input = write_scratch("file_sql_nested_object.jsonl", "{\"a\":{\"b\":1}}\n");
+    if (input == nullptr) {
+      std::printf("FAIL cannot write the scratch file\n");
+      ++g_failures;
+      return;
+    }
+    JsonlTableScan scan;
+    const FileStatus status = scan.prepare(input, JsonlOptions(), -1);
+    check(!status.ok(), "a nested object is rejected");
+    fclose(input);
+  }
+  {
+    FILE *input = write_scratch("file_sql_nested_array.jsonl", "{\"a\":[1,2]}\n");
+    if (input == nullptr) {
+      std::printf("FAIL cannot write the scratch file\n");
+      ++g_failures;
+      return;
+    }
+    JsonlTableScan scan;
+    const FileStatus status = scan.prepare(input, JsonlOptions(), -1);
+    check(!status.ok(), "an array is rejected");
+    fclose(input);
+  }
 }
 
 } // namespace
@@ -252,6 +357,9 @@ int main(int argc, char **argv)
   }
   test_jsonl(argv[1]);
   test_parquet(argv[2]);
+  test_jsonl_type_conflict();
+  test_jsonl_missing_field();
+  test_jsonl_rejects_nested();
   std::printf("\n%s (failures=%d)\n", g_failures == 0 ? "ALL PASS" : "FAILURES", g_failures);
   return g_failures == 0 ? 0 : 1;
 }
