@@ -24,6 +24,7 @@
 #include "sql/resolver/dcl/ob_grant_stmt.h"
 #include "sql/resolver/dcl/ob_revoke_stmt.h"
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
+#include "share/ob_debug_sync.h"
 
 namespace oceanbase
 {
@@ -302,6 +303,7 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
+        DEBUG_SYNC(BEFORE_REVOKE_TABLE);
         if (OB_FAIL(query::serialize_root_service_call(
             [&]{ return ctx.root_command_service().revoke_table(arg); }))) {
         }
