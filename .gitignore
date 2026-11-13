@@ -210,6 +210,7 @@ src/oblib/grpc/*.pb.cpp
 !src/oblib/grpc/standbyservice.grpc.pb.h
 !src/oblib/grpc/standbyservice.grpc.pb.cc
 deps/3rd
+/deps/prebuilt/
 deps/ios/
 deps/3rd_party
 deps/usr

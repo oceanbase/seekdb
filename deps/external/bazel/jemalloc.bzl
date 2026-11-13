@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build and expose the native artifacts from seekdb-jemalloc-sys."""
+"""Expose prebuilt jemalloc, retaining the Rust build for iOS and Windows."""
 
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
@@ -50,39 +50,57 @@ _jemalloc_build = rule(
 )
 
 def jemalloc(name):
-    """Expose the native outputs of the rules_rust build script to C++."""
+    """Expose the platform's jemalloc archive and public header to C++."""
     build_target = "_%s_build" % name
-    public_header_target = "%s_public_header" % name
+    rust_archive = "_%s_rust_archive" % name
+    rust_header = "_%s_rust_header" % name
 
     _jemalloc_build(
         name = build_target,
         target_compatible_with = select({
-            "@platforms//os:linux": [],
-            "@platforms//os:macos": [],
             "@platforms//os:ios": [],
             "@platforms//os:windows": [],
-            "@platforms//os:android": [],
             "//conditions:default": ["@platforms//:incompatible"],
         }),
     )
 
     native.filegroup(
-        name = "%s_archive" % name,
+        name = rust_archive,
         srcs = [":" + build_target],
         output_group = "jemalloc_archive",
-        visibility = ["//src/observer:__pkg__"],
     )
 
     native.filegroup(
-        name = public_header_target,
+        name = rust_header,
         srcs = [":" + build_target],
         output_group = "jemalloc_header",
     )
 
     cc_library(
-        name = "%s_headers" % name,
-        hdrs = [":" + public_header_target],
+        name = "_%s_rust_headers" % name,
+        hdrs = [":" + rust_header],
         strip_include_prefix = "jemalloc/include",
+    )
+
+    native.filegroup(
+        name = "%s_archive" % name,
+        srcs = select({
+            "@platforms//os:linux": ["@third_party_native//:lib/libjemalloc_pic.a"],
+            "@platforms//os:macos": ["@third_party_native//:lib/libjemalloc_pic.a"],
+            "@platforms//os:android": ["@third_party_android//:lib/libjemalloc_pic.a"],
+            "//conditions:default": [":" + rust_archive],
+        }),
+        visibility = ["//src/observer:__pkg__"],
+    )
+
+    native.alias(
+        name = "%s_headers" % name,
+        actual = select({
+            "@platforms//os:linux": "@third_party_native//:jemalloc_headers",
+            "@platforms//os:macos": "@third_party_native//:jemalloc_headers",
+            "@platforms//os:android": "@third_party_android//:jemalloc_headers",
+            "//conditions:default": ":_%s_rust_headers" % name,
+        }),
         visibility = ["//src/oblib:__pkg__", "//src/observer:__pkg__"],
     )
 

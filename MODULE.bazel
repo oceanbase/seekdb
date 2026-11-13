@@ -252,8 +252,6 @@ use_repo(
     sdk_sources,
     "sdk_abseil",
     "sdk_roaring",
-    "sdk_vsag_ios",
-    "sdk_vsag_wasm",
     "sdk_cpuinfo",
     "sdk_fmt",
     "sdk_spdlog",

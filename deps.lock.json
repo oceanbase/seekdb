@@ -1,0 +1,70 @@
+{
+  "platforms": {
+    "android-arm64-v8a-api26": {
+      "jemalloc": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-android-arm64-v8a-api26-20261113T092920%2B0000-4c3512459ecc.tar.gz",
+        "sha256": "1c56becb2d54655fdc79f3edf3a78e1ea2705f700481f58d8a9c1c5cc261e9b1"
+      },
+      "vsag": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-android-arm64-v8a-api26-20261113T073702%2B0000-655b9e5f1178.tar.gz",
+        "sha256": "955a9e3b28ea5e7f2d10301879ec2983b1b162be0ade1202377a3c1f9bb31883"
+      }
+    },
+    "ios-arm64-device-min18": {
+      "vsag": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-ios-arm64-device-min18-20261113T073702%2B0000-655b9e5f1178.tar.gz",
+        "sha256": "f8dd7eaef04b17ed79ecbb38663a8b56ff1234867fa8dc7e95b4b5df5c93deee"
+      }
+    },
+    "ios-arm64-simulator-min18": {
+      "vsag": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-ios-arm64-simulator-min18-20261113T073702%2B0000-655b9e5f1178.tar.gz",
+        "sha256": "ce2bdda31a2e6871c08c589a75a4328e88d118e681924963d0f0a06a8b9f43c5"
+      }
+    },
+    "linux-aarch64-glibc217": {
+      "gtest": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-aarch64-glibc217-20261106-8f0a0a8e9fe6.tar.gz",
+        "sha256": "6db9db8c31b26a5e52392ac4848d16681470c8554154ac046b47b78a2f65bac6"
+      },
+      "jemalloc": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-linux-aarch64-glibc217-20261113T092920%2B0000-4c3512459ecc.tar.gz",
+        "sha256": "80343fd4b97c62c9689007d3229f0ea05f8d062b10136a6f094787e154d678ee"
+      },
+      "vsag": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-linux-aarch64-glibc217-20261113T073702%2B0000-655b9e5f1178.tar.gz",
+        "sha256": "501c730180d77b070de5f36dc401fef6bb32a4ba6d7da990dea432f5b1280dba"
+      }
+    },
+    "linux-x86_64-glibc217": {
+      "gtest": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-x86_64-glibc217-20261106-8f0a0a8e9fe6.tar.gz",
+        "sha256": "403ff0e270fffeb5a5336696966963cf5e146fb96c70d9cf81b1383d7d0f8efa"
+      },
+      "jemalloc": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-linux-x86_64-glibc217-20261113T092920%2B0000-4c3512459ecc.tar.gz",
+        "sha256": "041ae2dce281770af17c18bec4dbcb3b0524e88366217eca38c0f797c15e64d9"
+      },
+      "vsag": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-linux-x86_64-glibc217-20261113T073702%2B0000-655b9e5f1178.tar.gz",
+        "sha256": "e9e2037601f2cc6f46a0e3b843ca12f77f13a2cefa1ba49338b9d531971843d2"
+      }
+    },
+    "macos-arm64-min13": {
+      "jemalloc": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-macos-arm64-min13-20261113T092920%2B0000-4c3512459ecc.tar.gz",
+        "sha256": "9acb925380fdb1c326513f1fe2a718cbccefa196bc12cf7e36aaa02d131c3473"
+      },
+      "vsag": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-macos-arm64-min13-20261113T073702%2B0000-655b9e5f1178.tar.gz",
+        "sha256": "2a9ebe59b7d26975e65985af4247f105f97784322b0b000deb30feaa0ea53ea6"
+      }
+    },
+    "wasm32-emscripten": {
+      "vsag": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-wasm32-emscripten-20261113T073702%2B0000-655b9e5f1178.tar.gz",
+        "sha256": "62891c4f3de67bd215771b34c842a35c8034bb78a562fca37945d81d4fe8962d"
+      }
+    }
+  }
+}

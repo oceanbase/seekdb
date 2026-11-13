@@ -28,6 +28,7 @@ SDK_HEADERS = {
         }),
     },
     "roaring_headers": _headers("roaring"),
+    "jemalloc_headers": _headers("jemalloc"),
     "vsag_headers": _headers("vsag"),
     "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
 }
@@ -53,6 +54,8 @@ SDK_IMPORTS = {
 SDK_FILEGROUPS = {
     "ios_base_metadata": {"srcs": ["verified/*.json"]},
     "ios_base_licenses": {"srcs": ["licenses/**/*"]},
+    "ios_locked_metadata": {"srcs": ["locked_manifest.json"]},
+    "ios_locked_licenses": {"srcs": ["locked_licenses/**/*"]},
     "sanity_pass": {"srcs": ["devtools/lib64/libsanitypass.so"]},
 }
 
@@ -135,13 +138,22 @@ def sdk_targets(windows = False):
         cc_import(name = name, **(attributes | ({"hdrs": native.glob(attributes["hdrs"], allow_empty = True)} if "hdrs" in attributes else {})))
     for name, attributes in SDK_FILEGROUPS.items():
         native.filegroup(name = name, **(attributes | {"srcs": native.glob(attributes["srcs"], allow_empty = True)}))
+    vsag_imports = []
+    for library in native.glob(["lib/" + name for name in [
+        "libvsag_static.a", "libdiskann.a", "libsimd.a", "libcpuinfo.a",
+        "libopenblas.a", "libio.a", "libomp_static.a",
+        "libantlr4-runtime.a", "libantlr4-autogen.a", "libfmt.a",
+    ]], allow_empty = True):
+        target = "_vsag_sdk_" + library.rsplit("/", 1)[-1]
+        cc_import(name = target, static_library = library, visibility = ["//visibility:private"])
+        vsag_imports.append(":" + target)
+    cc_library(name = "vsag_sdk", deps = [":vsag_headers"] + vsag_imports)
     if windows:
         _windows_libraries()
 
 _SOURCE_HEADERS = {
     "absl_headers": ("abseil", "abseil"),
     "roaring_headers": ("roaring", "roaring"),
-    "vsag_headers": ("vsag_ios", "vsag_wasm"),
 }
 
 def sdk_aliases():
