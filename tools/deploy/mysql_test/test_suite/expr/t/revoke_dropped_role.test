@@ -1,0 +1,60 @@
+--disable_warnings
+DROP DATABASE IF EXISTS seek1417;
+DROP ROLE IF EXISTS seek1417_role;
+--enable_warnings
+CREATE DATABASE seek1417;
+CREATE TABLE seek1417.t1 (created_at INT);
+CREATE VIEW seek1417.v1 AS SELECT created_at FROM seek1417.t1;
+CREATE ROLE seek1417_role;
+
+--error 5362
+REVOKE SELECT(created_at) ON seek1417.t1 FROM seek1417_role;
+--error 5362
+REVOKE SELECT(created_at) ON seek1417.v1 FROM seek1417_role;
+
+--disable_query_log
+--let $old_debug_sync_timeout = query_get_value(SELECT value FROM oceanbase.__all_virtual_sys_parameter_stat WHERE name = 'debug_sync_timeout' LIMIT 1, value, 1)
+ALTER SYSTEM SET debug_sync_timeout = '30s';
+SET ob_global_debug_sync = 'reset';
+--enable_query_log
+connect(revoke_conn, $OBMYSQL_MS0, root,,test, $OBMYSQL_PORT);
+connection default;
+SET ob_global_debug_sync = 'BEFORE_REVOKE_TABLE signal seek1417_resolved wait_for seek1417_dropped';
+connection revoke_conn;
+send REVOKE SELECT(created_at) ON seek1417.t1 FROM seek1417_role;
+connection default;
+SET ob_global_debug_sync = 'now wait_for seek1417_resolved';
+DROP ROLE seek1417_role;
+SET ob_global_debug_sync = 'now signal seek1417_dropped';
+connection revoke_conn;
+--error 1133
+reap;
+
+connection default;
+CREATE ROLE seek1417_role;
+SET ob_global_debug_sync = 'BEFORE_REVOKE_TABLE signal seek1417_resolved wait_for seek1417_dropped';
+connection revoke_conn;
+send REVOKE SELECT(created_at) ON seek1417.v1 FROM seek1417_role;
+connection default;
+SET ob_global_debug_sync = 'now wait_for seek1417_resolved';
+DROP ROLE seek1417_role;
+SET ob_global_debug_sync = 'now signal seek1417_dropped';
+connection revoke_conn;
+--error 1133
+reap;
+disconnect revoke_conn;
+
+connection default;
+--error 1133
+REVOKE SELECT(created_at) ON seek1417.v1 FROM seek1417_role;
+CREATE ROLE seek1417_role;
+GRANT SELECT(created_at) ON seek1417.t1 TO seek1417_role;
+REVOKE SELECT(created_at) ON seek1417.t1 FROM seek1417_role;
+GRANT SELECT(created_at) ON seek1417.v1 TO seek1417_role;
+REVOKE SELECT(created_at) ON seek1417.v1 FROM seek1417_role;
+DROP ROLE seek1417_role;
+DROP DATABASE seek1417;
+--disable_query_log
+SET ob_global_debug_sync = 'reset';
+--eval ALTER SYSTEM SET debug_sync_timeout = '$old_debug_sync_timeout'
+--enable_query_log

@@ -1,0 +1,32 @@
+DROP DATABASE IF EXISTS seek1417;
+DROP ROLE IF EXISTS seek1417_role;
+CREATE DATABASE seek1417;
+CREATE TABLE seek1417.t1 (created_at INT);
+CREATE VIEW seek1417.v1 AS SELECT created_at FROM seek1417.t1;
+CREATE ROLE seek1417_role;
+REVOKE SELECT(created_at) ON seek1417.t1 FROM seek1417_role;
+ERROR 42000: No such grant defined
+REVOKE SELECT(created_at) ON seek1417.v1 FROM seek1417_role;
+ERROR 42000: No such grant defined
+SET ob_global_debug_sync = 'BEFORE_REVOKE_TABLE signal seek1417_resolved wait_for seek1417_dropped';
+REVOKE SELECT(created_at) ON seek1417.t1 FROM seek1417_role;
+SET ob_global_debug_sync = 'now wait_for seek1417_resolved';
+DROP ROLE seek1417_role;
+SET ob_global_debug_sync = 'now signal seek1417_dropped';
+ERROR 42000: Can not find any matching row in the user table
+CREATE ROLE seek1417_role;
+SET ob_global_debug_sync = 'BEFORE_REVOKE_TABLE signal seek1417_resolved wait_for seek1417_dropped';
+REVOKE SELECT(created_at) ON seek1417.v1 FROM seek1417_role;
+SET ob_global_debug_sync = 'now wait_for seek1417_resolved';
+DROP ROLE seek1417_role;
+SET ob_global_debug_sync = 'now signal seek1417_dropped';
+ERROR 42000: Can not find any matching row in the user table
+REVOKE SELECT(created_at) ON seek1417.v1 FROM seek1417_role;
+ERROR 42000: Can not find any matching row in the user table
+CREATE ROLE seek1417_role;
+GRANT SELECT(created_at) ON seek1417.t1 TO seek1417_role;
+REVOKE SELECT(created_at) ON seek1417.t1 FROM seek1417_role;
+GRANT SELECT(created_at) ON seek1417.v1 TO seek1417_role;
+REVOKE SELECT(created_at) ON seek1417.v1 FROM seek1417_role;
+DROP ROLE seek1417_role;
+DROP DATABASE seek1417;
