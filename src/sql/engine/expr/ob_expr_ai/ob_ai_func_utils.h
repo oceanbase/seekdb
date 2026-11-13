@@ -244,7 +244,6 @@ public:
   static ObIJsonBase *get_value(ObIJsonBase *value, uint64_t index);
   static ObString string_value(ObIJsonBase *value);
   static ObIJsonBase *clone_json(ObIAllocator &allocator, ObIJsonBase *value);
-  static bool ob_is_json_array_all_str(ObIJsonBase* json_array);
   static int transform_array_to_json_array(ObIAllocator &allocator, ObArray<ObString> &contents, ObIJsonBase *&array);
   static int get_json_object(ObIAllocator &allocator, ObIJsonBase *&obj_node);
   static int get_json_array(ObIAllocator &allocator, ObIJsonBase *&array_node);
@@ -385,9 +384,9 @@ class ObAIFuncPromptObjectUtils
 public:
   ObAIFuncPromptObjectUtils() {}
   virtual ~ObAIFuncPromptObjectUtils() {}
-  static bool is_valid_prompt_object(ObIJsonBase* prompt_object);
-  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObIJsonBase* prompt_object, ObString& replaced_prompt_str);
-  static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObIJsonBase *args_array, ObIJsonBase *&prompt_object);
+  static int render_prompt(ObIAllocator &allocator, ObIJsonBase *prompt_object, ObString &result);
+  static int construct_prompt_object(ObIAllocator &allocator, const ObString &template_str,
+                                     const ObString &args, ObIJsonBase *&prompt_object);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";
 private:

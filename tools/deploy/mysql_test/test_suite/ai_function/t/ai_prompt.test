@@ -7,9 +7,10 @@ connection default;
 # 正确
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false','1');
 
-# not support
---error 1235 
-select ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"));
+# JSON arguments retain their native types in the prompt object.
+select ai_prompt('{0}',json_object('a','1'));
+select ai_prompt('{0}|{1}',json_array('中文',1,true,null),json_object('b',json_array(2)));
+select ai_prompt('outer {0}',ai_prompt('inner {0}', 'x'));
 
 
 # 无参数
@@ -29,7 +30,7 @@ select ai_prompt(json_object("a","1"));
 --error 5083
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false',1);
 
-# 表达式支持类型  支持任意数量的输入，要求都是varchar长度内的字符串，不支持其他类型，不允许输入null
+# VARCHAR and binary string arguments, with any number of parameters.
 # test  
 --disable_warnings
 drop table if exists t1;
@@ -48,8 +49,7 @@ select ai_prompt(c) from t1;
 drop table t1;
 
 
-# 表达式不支持的类型 
-# test  text/blob
+# TEXT and LONGTEXT are supported. Numeric types and BLOBs are rejected.
 --disable_warnings
 drop table if exists t1;
 --enable_warnings
@@ -64,12 +64,10 @@ insert into t1 values(7, 'AA', 'bb', 'CC', 'dd');
 select ai_prompt(nr) from t1;
 --error 5083
 select ai_prompt(a) from t1;
---error 5083
-select ai_prompt(b) from t1;
+select ai_prompt(b) from t1 order by nr;
 --error 5083
 select ai_prompt(c) from t1;
---error 5083
-select ai_prompt(d) from t1;
+select ai_prompt(d) from t1 order by nr;
 
 drop table t1;
 

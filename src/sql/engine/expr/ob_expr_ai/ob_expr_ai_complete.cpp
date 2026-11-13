@@ -109,27 +109,18 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     const share::ObAiModelEndpointInfo *endpoint_info = &resolved_endpoint;
     query::ObIAiEndpointResolver *endpoint_resolver =
         ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
-    ObExpr *arg_expr_prompt = expr.args_[1];
-    if ( OB_ISNULL(arg_expr_prompt) ) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (arg_expr_prompt->datum_meta_.type_ == ObJsonType) {
-      ObIJsonBase *j_base = nullptr;
+    const ObExpr &prompt_expr = *expr.args_[PROMPT_IDX];
+    if (ob_is_json(prompt_expr.datum_meta_.type_)) {
       ObIJsonBase *prompt_object = nullptr;
       bool is_null = false;
-      if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, PROMPT_IDX, j_base, is_null))) {
-      } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FALSE_IT(prompt_object = j_base)) {
-      } else if (!ObAIFuncPromptObjectUtils::is_valid_prompt_object(prompt_object)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "prompt is not valid");
-        res.set_null();
-      } else if (!ObAIFuncJsonUtils::ob_is_json_array_all_str(ObAIFuncJsonUtils::get_value(prompt_object, ObAIFuncPromptObjectUtils::prompt_args_key))) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "prompt object is not support");
-      } else if (OB_FAIL(ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(temp_allocator, prompt_object, prompt))) {
+      if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator,
+                                                PROMPT_IDX, prompt_object, is_null))) {
+      } else if (OB_FAIL(ObAIFuncPromptObjectUtils::render_prompt(
+                             temp_allocator, prompt_object, prompt))) {
       }
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_prompt, expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), prompt))) {
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator,
+                           *arg_prompt, prompt_expr.datum_meta_,
+                           prompt_expr.obj_meta_.has_lob_header(), prompt))) {
     }
 
     if (OB_FAIL(ret)) {
