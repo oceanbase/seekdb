@@ -145,6 +145,10 @@ describe select * from read_csv('/path/basic.csv');
   这个路径还没有测试覆盖。
 - 表函数的语句目前不可比较，计划缓存不会复用文件表语句的计划，
   每次执行都会重新推断 Schema。
+- 路径在解析阶段校验一次，算子执行时重新打开文件，两次之间文件被换成指向别处的
+  软链接时不会被发现。执行前再校验一次路径可以关闭这个窗口，属于下一步。
+- `enable_file_sql` 与 `secure_file_priv` 都是会话级变量，`global_enable_file_sql`
+  与 `global_secure_file_priv` 还没有实现，隐藏测试用到全局变量时需要补上。
 
 ## 引擎接入路径
 
