@@ -1101,6 +1101,9 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
             }
 
             if (OB_SUCC(ret) && insert_count > 0) {
+              // Change Stream shards by row key, so several workers may update
+              // the same tablet's incremental HNSW graph at once.
+              TCWLockGuard lock_guard(incr_data->mem_data_rwlock_);
               lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("CSVsagAdd"));
               if (OB_FAIL(obvectorutil::add_index(index_handler,
                                                   vectors,
