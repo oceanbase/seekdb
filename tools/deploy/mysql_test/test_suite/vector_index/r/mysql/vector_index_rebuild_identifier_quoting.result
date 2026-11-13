@@ -1,0 +1,55 @@
+SET ob_enable_index_direct_select = 1;
+SET ob_query_timeout = 20000000;
+SET ob_trx_timeout = 60000000;
+CREATE DATABASE `seekdb_ddl_escaping`;
+USE `seekdb_ddl_escaping`;
+CREATE TABLE `c1_backtick` (`key``id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_backtick` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_backtick'
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_old_index_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_', @c1_table_id, '_idx'));
+CALL dbms_vector.rebuild_index('idx','c1_backtick','v');
+SELECT (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_', @c1_table_id, '_idx')) <> @c1_old_index_id AS rebuilt;
+rebuilt
+1
+SELECT `key``id` AS id,v FROM `c1_backtick` ORDER BY `key``id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CREATE TABLE `c1_partition_backtick` (`key``id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag))
+PARTITION BY RANGE COLUMNS(`key``id`)
+(PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO `c1_partition_backtick` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_backtick'
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_old_index_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_', @c1_table_id, '_idx'));
+CALL dbms_vector.rebuild_index('idx','c1_partition_backtick','v');
+SELECT (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_', @c1_table_id, '_idx')) <> @c1_old_index_id AS rebuilt;
+rebuilt
+1
+SELECT `key``id` AS id,v FROM `c1_partition_backtick` ORDER BY `key``id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CREATE TABLE `c1_types_quoted` (id INT PRIMARY KEY, `enum``value` ENUM('a','b'), `set````value` SET('x','y'), n INT);
+INSERT INTO `c1_types_quoted` VALUES (1,'a','x',NULL),(2,'b','x,y',2),(3,'a','y',3);
+CREATE UNIQUE INDEX `type_idx` ON `c1_types_quoted` (`enum``value`,`set````value`,n);
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_types_quoted'
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SELECT COUNT(*) AS usable_index FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_', @c1_table_id, '_type_idx') AND index_status = 2;
+usable_index
+1
+SELECT id, CAST(`enum``value` AS UNSIGNED) AS enum_ordinal, CAST(`set````value` AS UNSIGNED) AS set_bits, n FROM `c1_types_quoted` ORDER BY id;
+id	enum_ordinal	set_bits	n
+1	1	1	NULL
+2	2	3	2
+3	1	2	3
+SELECT /*+ INDEX(c1_types_quoted type_idx) */ id FROM `c1_types_quoted` WHERE id = 2;
+id
+2
+USE `seekdb_ddl_escaping`;
+DROP DATABASE `seekdb_ddl_escaping`;

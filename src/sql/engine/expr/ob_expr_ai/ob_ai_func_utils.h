@@ -378,6 +378,13 @@ public:
   virtual ~ObAIFuncPromptObjectUtils() {}
   static bool is_valid_prompt_object(ObJsonObject* prompt_object);
   static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str);
+  /**
+   * Get the text used to replace the placeholder of one prompt argument.
+   * A string argument is taken as is, any other JSON value (array, object, number...)
+   * is serialized into its JSON text, so that a prompt built from JSON arguments
+   * can be sent to the model.
+   */
+  static int get_prompt_arg_text(ObIAllocator &allocator, ObJsonNode *arg_node, ObString &arg_text);
   static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";

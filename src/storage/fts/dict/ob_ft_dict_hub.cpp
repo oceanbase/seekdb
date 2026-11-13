@@ -127,6 +127,22 @@ int ObFTDictHub::get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info)
   return ret;
 }
 
+int ObFTDictHub::get_dict_cache_state(const ObFTDictDesc &desc, int32_t &range_count)
+{
+  int ret = OB_SUCCESS;
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfo info;
+  ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+  if (OB_FAIL(get_dict_info(key, info))) {
+    if (OB_HASH_NOT_EXIST == ret) {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  } else {
+    range_count = info.range_count_;
+  }
+  return ret;
+}
+
 int ObFTDictHub::put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &info)
 {
   int ret = OB_SUCCESS;

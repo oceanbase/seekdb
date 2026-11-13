@@ -107,6 +107,21 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  /**
+   * Get the cache state of a dictionary.
+   *
+   * The state changes when the dictionary cache is rebuilt, so that callers
+   * which keep derived state (for example a shared range dictionary) can
+   * rebuild it instead of using a stale one.
+   *
+   * @param[in] desc   dictionary description
+   * @param[out] range_count  number of ranges of the cached dictionary
+   *
+   * @return OB_SUCCESS on success, OB_ENTRY_NOT_EXIST if the dictionary has
+   *         never been cached.
+   */
+  int get_dict_cache_state(const ObFTDictDesc &desc, int32_t &range_count);
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
