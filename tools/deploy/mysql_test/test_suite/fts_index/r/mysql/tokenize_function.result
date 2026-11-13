@@ -82,6 +82,16 @@ select tokenize('hello world', 'ngram ');
 | ["lo", "he", "ll", "or", "rl", "wo", "ld", "el"] |
 +--------------------------------------------------+
 
+select tokenize('hello world', 'space', NULL);
+ERROR HY000: Incorrect arguments to parser args should be in an array.
+select tokenize('hello world', 'space', CAST(NULL AS JSON));
+ERROR HY000: Incorrect arguments to parser args should be in an array.
+set @tokenize_options = NULL;
+select tokenize('hello world', 'space', @tokenize_options);
+ERROR HY000: Incorrect arguments to parser args should be in an array.
+select tokenize('hello world', 'space', 'null');
+ERROR HY000: Incorrect arguments to parser args should be in an array.
+
 select tokenize('hello world', 'space', '[{"output": "all"}]', 'extra');
 ERROR 42000: Incorrect parameter count in the call to native function 'tokenize'
 
