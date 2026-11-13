@@ -1,0 +1,40 @@
+connection default;
+--disable_query_log
+CREATE DATABASE ddl_identifier_escaping;
+USE ddl_identifier_escaping;
+
+CREATE TABLE quoted_columns (
+  `key``id` INT PRIMARY KEY,
+  `value``name` INT,
+  ordinary_value INT
+);
+INSERT INTO quoted_columns VALUES (1,10,100),(2,20,200);
+CREATE INDEX quoted_idx ON quoted_columns (`value``name`);
+CREATE INDEX ordinary_idx ON quoted_columns (ordinary_value);
+SELECT `key``id` AS id
+  FROM quoted_columns FORCE INDEX (quoted_idx)
+  WHERE `value``name` = 20;
+SELECT `key``id` AS id
+  FROM quoted_columns FORCE INDEX (ordinary_idx)
+  WHERE ordinary_value = 100;
+
+CREATE TABLE quoted_types (
+  id INT PRIMARY KEY,
+  `enum``value` ENUM('a','b'),
+  `set````value` SET('x','y'),
+  n INT
+);
+INSERT INTO quoted_types VALUES
+  (1,'a','x',1),(2,'b','x,y',2),(3,'a','y',3);
+CREATE UNIQUE INDEX quoted_types_idx
+  ON quoted_types (`enum``value`,`set````value`,n);
+SELECT id, CAST(`enum``value` AS UNSIGNED) AS enum_ordinal,
+  CAST(`set````value` AS UNSIGNED) AS set_bits, n
+  FROM quoted_types ORDER BY id;
+SELECT id
+  FROM quoted_types FORCE INDEX (quoted_types_idx)
+  WHERE id = 2;
+
+USE test;
+DROP DATABASE ddl_identifier_escaping;
+--enable_query_log
