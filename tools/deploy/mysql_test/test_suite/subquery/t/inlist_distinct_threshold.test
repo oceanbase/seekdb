@@ -1,0 +1,28 @@
+--disable_warnings
+DROP TABLE IF EXISTS inlist_distinct_threshold;
+--enable_warnings
+CREATE TABLE inlist_distinct_threshold (id INT PRIMARY KEY, v BIGINT);
+INSERT INTO inlist_distinct_threshold VALUES (1,1),(2,2),(3,3),(4,4),(5,NULL),(6,-1);
+
+--echo Duplicate integers below the distinct-value threshold stay in the scan.
+EXPLAIN BASIC SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,2,3,1,2,3,1,2);
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,2,3,1,2,3,1,2) ORDER BY id;
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v NOT IN (1,2,3,1,2,3,1,2) ORDER BY id;
+
+--echo A genuinely large distinct set retains the values-table rewrite.
+EXPLAIN BASIC SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,2,3,4,1,2,3,4);
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,2,3,4,1,2,3,4) ORDER BY id;
+
+--echo NULL and mixed-type lists keep their existing semantics.
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,1,NULL,1,1,NULL,1,1) ORDER BY id;
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v NOT IN (1,1,NULL,1,1,NULL,1,1) ORDER BY id;
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,'2',1,'2',1,'2',1,'2') ORDER BY id;
+
+--echo Cached parameterized statements must retain all parameter positions.
+PREPARE membership_stmt FROM 'SELECT /*+OPT_PARAM(''inlist_rewrite_threshold'', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (?,?,?,?,?,?,?,?) ORDER BY id';
+SET @a=1, @b=1, @c=1, @d=1, @e=1, @f=1, @g=1, @h=1;
+EXECUTE membership_stmt USING @a,@b,@c,@d,@e,@f,@g,@h;
+SET @a=1, @b=2, @c=3, @d=4, @e=-1, @f=6, @g=7, @h=NULL;
+EXECUTE membership_stmt USING @a,@b,@c,@d,@e,@f,@g,@h;
+DEALLOCATE PREPARE membership_stmt;
+DROP TABLE inlist_distinct_threshold;
