@@ -1,0 +1,52 @@
+Empty tables: original correlated aggregate with LIMIT
+1
+Empty tables: reduced correlated aggregate with LIMIT
+1
+Empty tables: controls without LIMIT
+1
+1
+Populated and NULL rows: original and reduced queries
+1
+1
+1
+1
+1
+1
+Populated and NULL rows: controls without LIMIT
+1
+1
+1
+1
+1
+1
+Scalar aggregate results
+price
+0.00
+1.00
+2.00
+price
+1.00
+2.00
+price
+1.00
+price
+1.00
+ANY and ALL comparisons
+price
+0.00
+1.00
+2.00
+price
+3.00
+Multi-column row comparisons remain supported
+price
+0.00
+1.00
+2.00
+price
+0.00
+1.00
+2.00
+LIMIT and OFFSET producing no rows
+1
+1
