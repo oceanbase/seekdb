@@ -389,5 +389,12 @@ t_vec	CREATE TABLE `t_vec` (
 (partition `p0` values less than (10),
 partition `p1` values less than (100))
 drop table if exists t_vec;
+create table t_vec(`p``k` int primary key, `v``ec` vector(3), vector index idx1(`v``ec`) with (distance=l2, type=hnsw));
+insert into t_vec values (1, '[1,2,3]');
+alter table t_vec modify column `p``k` tinyint;
+select `p``k` as id from t_vec;
+id
+1
+drop table t_vec;
 drop database if exists yjl_vec;
 alter system set vector_memory_limit =0;
