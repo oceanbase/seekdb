@@ -34,6 +34,9 @@ def version_source(template, status_file, output):
     }
     source = Path(template).read_text(encoding="utf-8")
     for key, value in values.items():
+        # The template embeds metadata inside C++ string literals. Git allows
+        # double quotes in branch names, so preserve them as literal data.
+        value = value.replace("\\", "\\\\").replace('"', '\\"')
         source = source.replace("@" + key + "@", value)
     with open(output, "w", encoding="utf-8", newline="\n") as stream:
         stream.write(source)
