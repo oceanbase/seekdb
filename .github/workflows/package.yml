@@ -8,7 +8,7 @@ on:
         description: Platforms to build
         type: choice
         default: linux-x86_64
-        options: [all, linux-x86_64, linux-aarch64, macos-arm64, windows-x86_64, android-arm64]
+        options: [all, linux-x86_64, linux-aarch64, macos-arm64, windows-x86_64, android-arm64, ios, ios-arm64, ios-simulator-arm64]
       linux_glibc:
         description: Linux compatibility baseline
         type: choice
@@ -50,6 +50,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       linux_matrix: ${{ steps.matrix.outputs.linux_matrix }}
       has_linux: ${{ steps.matrix.outputs.has_linux }}
+      has_ios_pair: ${{ steps.matrix.outputs.has_ios_pair }}
       version: ${{ steps.matrix.outputs.version }}
       release: ${{ steps.matrix.outputs.release }}
       binary_run_id: ${{ steps.matrix.outputs.binary_run_id }}
@@ -86,6 +87,7 @@ jobs:
       PACKAGE_ARCH: ${{ matrix.arch }}
       PACKAGE_GLIBC: ${{ matrix.glibc }}
       LINUX_PROFILE: ${{ matrix.profile }}
+      PACKAGE_APPLE_SDK: ${{ matrix.sdk }}
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
       PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
       BUILD_JOBS: ${{ inputs.jobs }}
@@ -161,15 +163,17 @@ jobs:
           path: |
             deps/3rd
             deps/android
+            deps/ios
           key: package-sdk-v1-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
-          restore-keys: package-sdk-v1-${{ matrix.id }}-
+          # iOS base libraries must match the selected Xcode/SDK exactly.
+          restore-keys: ${{ matrix.os != 'ios' && format('package-sdk-v1-{0}-', matrix.id) || '' }}
       - name: Clear incomplete SDK restore
         if: steps.sdk.outputs.cache-matched-key == ''
         run: |
           python - <<'PY'
           import shutil
           from pathlib import Path
-          for path in (Path('deps/3rd'), Path('deps/android')):
+          for path in (Path('deps/3rd'), Path('deps/android'), Path('deps/ios')):
               if path.exists():
                   shutil.rmtree(path)
           PY
@@ -184,6 +188,7 @@ jobs:
           path: |
             deps/3rd
             deps/android
+            deps/ios
           key: ${{ steps.sdk.outputs.cache-primary-key }}
       - name: Compile seekdb once
         id: build
@@ -207,6 +212,35 @@ jobs:
       - name: Stop Bazel
         if: always() && steps.build.outcome != 'skipped'
         run: python .github/scripts/package.py shutdown
+
+  ios-xcframework:
+    name: ios-xcframework
+    needs: [prepare, binary]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.has_ios_pair == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: binary-ios*
+          merge-multiple: true
+          path: input
+      - name: Combine verified iOS frameworks without compiling
+        run: python3 .github/scripts/package.py xcframework
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-xcframework
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
 
   system-packages:
     name: rpm-deb-${{ matrix.id }}
