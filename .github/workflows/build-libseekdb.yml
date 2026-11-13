@@ -238,6 +238,31 @@ jobs:
         if: failure()
         continue-on-error: true
         run: |
+          if ! command -v gdb >/dev/null 2>&1; then
+            sudo apt-get install -y -qq gdb || exit 0
+          fi
+          # The packed library is stripped, so its frames only print as bare
+          # addresses. Symbolize with the unstripped Bazel output of the very
+          # same build; both files carry identical code.
+          GDB_LIB="$GITHUB_WORKSPACE/build_release/src/include/libseekdb.so"
+          if [ ! -f "$GDB_LIB" ]; then
+            GDB_LIB="$GITHUB_WORKSPACE/build_release/bin/src/observer/libseekdb.so"
+          fi
+          echo "== gdb symbol source: $GDB_LIB"
+
+          # The binding tests die the same way right after "observer init
+          # begin". The rust test binary is the cheapest reproduction, so catch
+          # that fault with symbols before unpacking the release archive.
+          if [ -x "$GITHUB_WORKSPACE/unittest/include/rust/target/debug/test" ]; then
+            echo "== rust binding test, absolute data dir"
+            ( cd "$GITHUB_WORKSPACE/unittest/include/rust" && \
+              gdb -batch \
+                -ex "handle SIGSEGV stop print nopass" \
+                -ex run \
+                -ex "bt 40" \
+                --args target/debug/test "$PWD/seekdb_gdb.db" test ) || true
+          fi
+
           ZIP="package/libseekdb/libseekdb-${{ matrix.platform }}.zip"
           if [ ! -f "$ZIP" ]; then
             exit 0
@@ -248,12 +273,10 @@ jobs:
           sha256sum "$UNPACK/libseekdb.so" build_release/src/include/libseekdb.so || true
           readelf -d "$UNPACK/libseekdb.so" | head -25 || true
           ( cd package/libseekdb/smoke-loader && npx node-gyp rebuild --pack_dir="$UNPACK" ) || exit 0
-          if ! command -v gdb >/dev/null 2>&1; then
-            sudo apt-get install -y -qq gdb || exit 0
-          fi
+          [ -f "$GDB_LIB" ] || GDB_LIB="$UNPACK/libseekdb.so"
           cd "$UNPACK"
           gdb -batch \
-            -ex "set environment LD_PRELOAD=$UNPACK/libseekdb.so" \
+            -ex "set environment LD_PRELOAD=$GDB_LIB" \
             -ex "set environment SEEKDB_NODE_BINDING_PROBE=1" \
             -ex "handle SIGSEGV stop print nopass" \
             -ex run \
