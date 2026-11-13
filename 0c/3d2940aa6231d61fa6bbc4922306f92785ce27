@@ -1,0 +1,19 @@
+src/oblib/lib/utility/ob_platform_io.cpp
+  s_7966c2b79dc7d9::t_45b4ff14786f05 1260-1265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0c3d2940aa6231d61fa6bbc4922306f92785ce27",
+  "prompts": {},
+  "sessions": {
+    "s_7966c2b79dc7d9": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "3375ffcb-47f8-4626-a108-c5811ec63525",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}
