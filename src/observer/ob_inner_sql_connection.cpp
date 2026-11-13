@@ -22,6 +22,7 @@
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "ob_inner_sql_connection.h"
 #include "query/session/ob_inner_sql_connection_access.h"
+#include "query/session/ob_command_cancellation.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -753,6 +754,9 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
       retry_ctrl_.clear_state_before_each_retry(get_session().get_retry_info_for_update());
       retry_ctrl_.reset_retry_times();
       for (int64_t retry_cnt = 0; need_retry; ++retry_cnt) {
+        if (OB_FAIL(query::CommandCancellationScope::check_current())) {
+          break;
+        }
         need_retry = false;
         retry_info.clear_state_before_each_retry();
         res.set_is_read(true);
@@ -988,6 +992,7 @@ int ObInnerSQLConnection::register_multi_data_source(
 
 int ObInnerSQLConnection::rollback()
 {
+  query::CommandCancellationMask cancellation_mask;
   int ret = OB_SUCCESS;
   ObSqlQueryExecutor executor("ROLLBACK");
   if (!is_in_trans()) {

@@ -22,6 +22,9 @@
 #include "rpc/ob_sql_request_operator.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
 #include "query/session/ob_deadlock_session.h"
+#include "query/session/ob_command_cancellation.h"
+#include "lib/worker.h"
+#include "lib/coro/co_var.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 
 using namespace oceanbase::common;
@@ -809,6 +812,122 @@ int is_session_alive(ObIDeadlockSessionService &service,
     is_alive = !facts.is_terminated_;
   }
   return ret;
+}
+
+} // namespace query
+} // namespace oceanbase
+
+namespace oceanbase {
+namespace query {
+
+CommandCancellationScope *&CommandCancellationScope::current()
+{
+  RLOCAL_INLINE(CommandCancellationScope *, scope(nullptr));
+  return scope;
+}
+
+unsigned &CommandCancellationScope::mask_depth()
+{
+  RLOCAL_INLINE(unsigned, depth(0));
+  return depth;
+}
+
+CommandCancellationScope::CommandCancellationScope(
+    const common::ObMySQLTransaction &transaction)
+  : previous_(current()), transaction_(&transaction), session_(nullptr),
+    manager_(nullptr), owns_reference_(false), phase_(Phase::ACTIVE),
+    status_(OB_SUCCESS)
+{
+  if (mask_depth() != 0) {
+    // A compensation helper cannot reactivate a masked parent cancellation.
+  } else if (previous_ != nullptr) {
+    session_ = previous_->session_;
+    manager_ = previous_->manager_;
+    status_ = previous_->status_;
+  } else {
+    sql::ObSQLSessionInfo *source = lib::Worker::self().get_session();
+    if (source != nullptr && source->is_user_session()) {
+      manager_ = source->get_session_manager();
+      if (manager_ == nullptr) {
+        status_ = OB_ERR_UNEXPECTED;
+      } else if (OB_SUCCESS != (status_ = manager_->get_session(source->get_server_sid(), session_))) {
+      } else {
+        owns_reference_ = true;
+        if (session_ != source) {
+          status_ = OB_ERR_UNEXPECTED;
+        }
+      }
+    }
+  }
+  current() = this;
+}
+
+CommandCancellationScope::~CommandCancellationScope()
+{
+  OB_ASSERT(current() == this);
+  current() = previous_;
+  if (owns_reference_) {
+    manager_->revert_session(session_);
+  }
+}
+
+int CommandCancellationScope::check_locked()
+{
+  if (phase_ == Phase::ACTIVE && status_ == OB_SUCCESS && session_ != nullptr) {
+    if (session_->is_terminate(status_)) {
+      phase_ = Phase::CANCELLED;
+    }
+  }
+  return phase_ == Phase::COMMITTING ? OB_SUCCESS : status_;
+}
+
+int CommandCancellationScope::check_status()
+{
+  int ret = status_;
+  if (session_ != nullptr) {
+    sql::ObSQLSessionInfo::LockGuard guard(session_->get_thread_data_lock());
+    ret = check_locked();
+  }
+  return ret;
+}
+
+int CommandCancellationScope::check_current()
+{
+  return mask_depth() != 0 || current() == nullptr
+      ? OB_SUCCESS : current()->check_status();
+}
+
+int CommandCancellationScope::admit_commit(
+    const common::ObMySQLTransaction &transaction)
+{
+  int ret = OB_SUCCESS;
+  CommandCancellationScope *scope = mask_depth() == 0 ? current() : nullptr;
+  while (scope != nullptr && scope->transaction_ != &transaction) {
+    scope = scope->previous_;
+  }
+  if (scope == nullptr) {
+    ret = check_current();
+  } else if (scope->session_ != nullptr) {
+    sql::ObSQLSessionInfo::LockGuard guard(scope->session_->get_thread_data_lock());
+    if (OB_SUCCESS == (ret = scope->check_locked())) {
+      scope->phase_ = Phase::COMMITTING;
+    }
+  } else {
+    ret = scope->status_;
+    if (ret == OB_SUCCESS) { scope->phase_ = Phase::COMMITTING; }
+  }
+  return ret;
+}
+
+CommandCancellationMask::CommandCancellationMask()
+{
+  ++CommandCancellationScope::mask_depth();
+}
+
+CommandCancellationMask::~CommandCancellationMask()
+{
+  OB_ASSERT(CommandCancellationScope::mask_depth() != 0);
+  --CommandCancellationScope::mask_depth();
 }
 
 } // namespace query

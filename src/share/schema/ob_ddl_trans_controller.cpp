@@ -187,14 +187,16 @@ int ObDDLTransController::check_task_ready_(const int64_t task_id,
 
 int ObDDLTransController::wait_task_ready(
     const int64_t task_id,
-    const int64_t wait_us)
+    const int64_t wait_us,
+    int (*check_cancel)())
 {
   int ret = OB_SUCCESS;
   bool ready = false;
   uint64_t cond_idx = task_id % DDL_TASK_COND_SLOT;
   int64_t start_time = ObTimeUtility::current_time();
   while (OB_SUCC(ret) && ObTimeUtility::current_time() - start_time < wait_us) {
-    if (OB_FAIL(check_task_ready_(task_id, ready))) {
+    if (check_cancel != nullptr && OB_FAIL(check_cancel())) {
+    } else if (OB_FAIL(check_task_ready_(task_id, ready))) {
     } else if (ready) {
       break;
     } else {
