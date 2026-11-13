@@ -206,7 +206,17 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: binary-${{ matrix.id }}
-          path: dist/*
+          path: |
+            dist/seekdb-binary-*
+            dist/seekdb-framework-*
+            dist/obshell.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload separate debug information
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: debug-info-${{ matrix.id }}
+          path: dist/seekdb-debug-info-*
           if-no-files-found: error
           compression-level: 0
       - name: Stop Bazel
@@ -270,7 +280,7 @@ jobs:
           github-token: ${{ github.token }}
           path: input
       - name: Install packaging tools
-        run: sudo apt-get update -qq && sudo apt-get install -y rpm binutils dpkg-dev debugedit elfutils file
+        run: sudo apt-get update -qq && sudo apt-get install -y rpm binutils dpkg-dev file
       - name: Package the existing binary without initializing or compiling
         run: |
           mkdir -p .ci-cache
