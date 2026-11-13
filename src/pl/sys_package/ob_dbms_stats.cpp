@@ -31,6 +31,7 @@
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/privilege_check/ob_privilege_check.h"
+#include "sql/pl/ob_pl.h"
 
 namespace oceanbase
 {
@@ -183,6 +184,22 @@ int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
  * @param result
  * @return
  */
+static bool is_initial_schema_gather_after_package_load(ObExecContext &ctx)
+{
+  ObSQLSessionInfo *session = ctx.get_my_session();
+  ObSqlCtx *sql_ctx = ctx.get_sql_ctx();
+  ObPLContext *pl_ctx = nullptr == session ? nullptr : session->get_pl_context();
+  return nullptr != session && nullptr != sql_ctx && nullptr != pl_ctx
+      && MpQuery == sql_ctx->exec_type_ && !sql_ctx->is_from_pl_
+      && !sql_ctx->is_prepare_protocol_ && !sql_ctx->is_dynamic_sql_
+      && !sql_ctx->is_text_ps_mode_
+      && !session->is_nested_session()
+      && pl_ctx->get_exec_stack().count() == 1
+      && nullptr != pl_ctx->get_current_state()
+      && pl_ctx->get_current_state()->is_top_call()
+      && session->get_retry_info().has_only_call_package_load_retries();
+}
+
 int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
 {
   int ret = OB_SUCCESS;
@@ -196,7 +213,8 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ctx.get_my_session()->get_is_in_retry()) {
+  } else if (ctx.get_my_session()->get_is_in_retry()
+             && !is_initial_schema_gather_after_package_load(ctx)) {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"retry gather schema stats is not allowed");
   } else if (OB_FAIL(ObDbmsStatsUtils::cancel_async_gather_stats(ctx))) {

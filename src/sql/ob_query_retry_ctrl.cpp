@@ -741,7 +741,9 @@ void ObQueryRetryCtrl::after_func(ObRetryParam &v)
   }
   if (RETRY_TYPE_NONE != v.retry_type_) {
     v.session_.get_retry_info_for_update().set_last_query_retry_err(v.err_);
-    v.session_.get_retry_info_for_update().inc_retry_cnt();
+    v.session_.get_retry_info_for_update().inc_retry_cnt(
+        OB_SCHEMA_EAGAIN == v.err_ && v.ctx_.call_package_load_retry_
+        && !v.is_inner_sql_ && !v.is_from_pl_);
     if (OB_UNLIKELY(v.err_ != v.client_ret_)) {
       LOG_ERROR_RET(OB_ERR_UNEXPECTED, "when need retry, v.client_ret_ must be equal to err", K(v));
     }

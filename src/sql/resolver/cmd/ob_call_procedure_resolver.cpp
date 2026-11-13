@@ -342,7 +342,24 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
     OX (call_proc_info = static_cast<ObCallProcedureInfo*>(stmt->get_cacheobj_guard().get_cache_obj()));
     CK (OB_NOT_NULL(call_proc_info));
     // Wait for sys package to be loaded if not ready yet
-    OZ (ObResolverUtils::wait_for_sys_package_ready(*session_info_));
+    if (OB_SUCC(ret)) {
+      ret = ObResolverUtils::wait_for_sys_package_ready(*session_info_);
+      ObExecContext *exec_ctx = session_info_->get_cur_exec_ctx();
+      ObSqlCtx *sql_ctx = nullptr == exec_ctx ? nullptr : exec_ctx->get_sql_ctx();
+      if (OB_SCHEMA_EAGAIN == ret && nullptr != sql_ctx
+          && MpQuery == sql_ctx->exec_type_ && !sql_ctx->is_from_pl_
+          && !sql_ctx->is_text_ps_mode_
+          && !params_.is_prepare_protocol_ && !params_.is_prepare_stage_
+          && !params_.is_dynamic_sql_ && !session_info_->is_inner()
+          && !session_info_->is_nested_session()
+          && nullptr == session_info_->get_pl_context()
+          && !sql_ctx->multi_stmt_item_.is_part_of_multi_stmt()
+          && !sql_ctx->multi_stmt_item_.is_batched_multi_stmt()) {
+        // Neither the procedure nor its arguments have been resolved/executed.
+        // Preserve this precise source; other SCHEMA_EAGAIN retries stay unknown.
+        sql_ctx->call_package_load_retry_ = true;
+      }
+    }
     // Parsing process name
     if (OB_SUCC(ret)) {
       if (T_SP_ACCESS_NAME != name_node->type_) {
