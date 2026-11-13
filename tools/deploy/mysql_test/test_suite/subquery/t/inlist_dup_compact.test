@@ -1,0 +1,18 @@
+# Regression for #1512: duplicate integer IN values must not force the
+# values-table rewrite when the distinct values stay below the threshold.
+--disable_warnings
+drop table if exists inlist_dup_compact;
+--enable_warnings
+create table inlist_dup_compact(id int primary key, c int);
+insert into inlist_dup_compact values (1,1),(2,2),(3,3),(4,4),(5,null);
+
+# Six elements but only two distinct values: keep the compact predicate.
+--replace_regex /, $/,/
+explain basic select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c in (1,2,1,2,1,2);
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c in (1,2,1,2,1,2) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c not in (1,2,1,2,1,2) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c in (1,1,1,1) order by id;
+
+# Four distinct values still reach the threshold: keep the values-table path.
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c in (1,2,3,4,1,2) order by id;
+drop table inlist_dup_compact;

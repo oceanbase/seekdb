@@ -1,0 +1,23 @@
+alter system set vector_memory_limit = 0;
+drop table if exists t_inlist_dup_vec;
+create table t_inlist_dup_vec(
+  id bigint not null,
+  embedding vector(3) not null,
+  category5 int not null,
+  primary key(id),
+  vector index idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+alter system flush plan cache;
+select locate('1,2,3,1,2,3', s.statement) > 0 as is_duplicated_list,
+       count(*) as operator_cnt,
+       min(p.operator) as only_operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_inlist_dup_vec') > 0
+group by s.plan_id, locate('1,2,3,1,2,3', s.statement) > 0
+order by is_duplicated_list;
+is_duplicated_list	operator_cnt	only_operator
+0	1	VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)
+1	1	VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)
+drop table t_inlist_dup_vec;
+alter system set vector_memory_limit = 0;
