@@ -48,7 +48,7 @@ def _write_builtin_module_map(repository_ctx, builtin_include_directories):
         if path.exists and str(path) not in roots:
             roots.append(str(path))
     result = repository_ctx.execute(
-        [find] + roots + ["-type", "f", "-print"],
+        [find, "-H"] + roots + ["-type", "f", "-print"],
         environment = {"LC_ALL": "C"},
         quiet = True,
     )
@@ -69,6 +69,23 @@ def _write_builtin_module_map(repository_ctx, builtin_include_directories):
     lines.extend(["  textual header %s" % json.encode(path) for path in headers])
     lines.append("}")
     repository_ctx.file("module.modulemap", "\n".join(lines) + "\n")
+
+def _stage_sysroot(repository_ctx, source):
+    # Keep empty lib/usr/lib directories in sandbox inputs without writing to
+    # the caller's sysroot. Clang searches through lib/../lib64.
+    for entry in source.readdir():
+        if entry.basename not in ["lib", "usr"]:
+            repository_ctx.symlink(entry, "sysroot/" + entry.basename)
+    for entry in source.get_child("usr").readdir():
+        if entry.basename != "lib":
+            repository_ctx.symlink(entry, "sysroot/usr/" + entry.basename)
+    for name in ["lib", "usr/lib"]:
+        directory = source.get_child(name)
+        if directory.exists:
+            for entry in directory.readdir():
+                if entry.basename != ".layout":
+                    repository_ctx.symlink(entry, "sysroot/" + name + "/" + entry.basename)
+        repository_ctx.file("sysroot/" + name + "/.layout", "")
 
 def _linux_cc_toolchain_repository_impl(repository_ctx):
     if repository_ctx.os.name != "linux":
@@ -100,7 +117,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
     if sysroot:
         if not repository_ctx.path(sysroot).get_child("usr/include/stdlib.h").exists:
             fail("SEEKDB_SYSROOT is missing usr/include/stdlib.h: %s" % sysroot)
-        repository_ctx.symlink(sysroot, "sysroot")
+        _stage_sysroot(repository_ctx, repository_ctx.path(sysroot))
         flags = ["--sysroot=" + str(repository_ctx.path("sysroot"))]
 
     repository_ctx.template(

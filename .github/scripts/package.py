@@ -133,19 +133,9 @@ def sysroot():
     for filename in ("usr/include/stdlib.h", "usr/include/linux/version.h", "usr/lib64/libc.so"):
         if not (destination / filename).is_file():
             raise ValueError("incomplete Conda sysroot: " + str(destination / filename))
-    sysroot_layout(destination)
     with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
         stream.write("SEEKDB_SYSROOT=" + destination.as_posix() + "\n")
     print("Using Conda glibc " + version + " sysroot: " + str(destination))
-
-
-def sysroot_layout(destination):
-    # Clang probes lib/../lib64. Keep the intermediate directories in Bazel's
-    # sandbox too, where empty directories alone are not declared inputs.
-    for name in ("lib", "usr/lib"):
-        directory = destination / name
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / ".layout").touch()
 
 
 def initialize():
