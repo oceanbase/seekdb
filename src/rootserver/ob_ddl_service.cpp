@@ -26,6 +26,7 @@
 #include "ob_ddl_service.h"
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
+#include "query/session/ob_command_cancellation.h"
 #include "share/ob_ddl_common.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "sql/printer/ob_schema_printer.h"
@@ -22044,6 +22045,12 @@ int ObDDLSQLTransaction::end(const bool commit)
     }
   }
 
+  if (OB_SUCC(ret) && commit) {
+    ret = query::CommandCancellationScope::admit_commit(*this);
+  }
+  // Cancellation remains sticky on the caller; commit admission or mandatory
+  // rollback must not re-enter that cancelled capability on a pooled session.
+  query::CommandCancellationMask cancellation_mask;
   if (OB_SUCCESS != (tmp_ret = common::ObMySQLTransaction::end(commit && OB_SUCC(ret)))) {
   }
 

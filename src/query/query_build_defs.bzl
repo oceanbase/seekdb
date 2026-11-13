@@ -77,6 +77,7 @@ QUERY_API_INTERFACE_HEADERS = [
     "api/query/resolver/ob_raw_expr_traits.h",
     "api/query/resolver/ob_schema_lookup.h",
     "api/query/session/ob_deadlock_session.h",
+    "api/query/session/ob_command_cancellation.h",
     "api/query/session/ob_free_session_ctx.h",
     "api/query/session/ob_inner_sql_connection_access.h",
     "api/query/session/ob_local_session_var.h",
