@@ -972,10 +972,6 @@ void ObLogApplyService::stop()
 void ObLogApplyService::wait()
 {
   CLOG_LOG(INFO, "ObLogApplyService wait begin");
-  int64_t num = 0;
-  while ((num = common::ObLinkQueueThreadPool::get_queue_num()) > 0) {
-    PAUSE();
-  }
   common::ObLinkQueueThreadPool::wait();
   //At this point, it can be guaranteed that no new queue tasks will enter the thread pool,
   //At the same time, all other modules have called stop, so no new cb will enter the queue

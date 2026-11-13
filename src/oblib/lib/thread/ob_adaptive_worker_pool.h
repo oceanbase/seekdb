@@ -77,11 +77,21 @@ public:
   /// CAS-based expansion up to the given limit.
   bool try_expand_one(int64_t limit)
   {
+    return try_expand_one(limit, []() { return false; });
+  }
+
+  template <typename Cancelled>
+  bool try_expand_one(int64_t limit, Cancelled &&cancelled)
+  {
     int64_t cur = total_cnt_.load(std::memory_order_relaxed);
-    while (cur < limit) {
+    while (cur < limit && !cancelled()) {
       if (total_cnt_.compare_exchange_weak(cur, cur + 1,
               std::memory_order_acq_rel, std::memory_order_relaxed)) {
         while (!self().do_add_worker()) {
+          if (cancelled()) {
+            total_cnt_.fetch_sub(1, std::memory_order_acq_rel);
+            return false;
+          }
           ob_usleep(1000);
         }
         return true;
@@ -109,6 +119,13 @@ public:
   }
 
 protected:
+  // The owner must first join all workers and finish every expansion.
+  void reset_worker_counts()
+  {
+    idle_cnt_.store(0, std::memory_order_relaxed);
+    total_cnt_.store(0, std::memory_order_relaxed);
+  }
+
   int64_t idle_count() const { return idle_cnt_.load(std::memory_order_relaxed); }
   int64_t worker_count() const { return total_cnt_.load(std::memory_order_relaxed); }
 

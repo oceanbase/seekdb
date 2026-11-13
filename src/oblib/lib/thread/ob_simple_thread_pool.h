@@ -53,6 +53,8 @@ class ObSimpleThreadPoolBase
   using QElemType = typename QueueTypeMap<T>::QElemType;
   static const int64_t QUEUE_WAIT_TIME = 1000 * 1000;
   static const int64_t SHRINK_TIMEOUT_US = 1 * 1000 * 1000;
+  static constexpr uint64_t STOPPED = uint64_t{1} << 63;
+  static constexpr uint64_t ACTIVE_OPERATIONS = STOPPED - 1;
 
   struct Worker;
   using WorkerNode = common::ObDLinkNode<Worker *>;
@@ -84,10 +86,11 @@ public:
     return lib::ObAdaptiveWorkerPool<ObSimpleThreadPoolBase<T>>::worker_count();
   }
 
-  // Pool-level control
+  // Pool-level control. Keep the pool alive until submitting callers return;
+  // destroy/init must not overlap invocations from the previous lifetime.
   void stop();
   void wait();
-  bool has_set_stop() const { return stop_; }
+  bool has_set_stop() const { return (lifecycle_.load(std::memory_order_acquire) & STOPPED) != 0; }
 
   // RunWrapper
   void set_run_wrapper(lib::IRunWrapper *rw) { run_wrapper_ = rw; }
@@ -102,6 +105,7 @@ public:
   int set_adaptive_thread(int64_t min_thread_num, int64_t max_thread_num);
 
   // CRTP for lib::ObAdaptiveWorkerPool
+  bool try_expand_one(int64_t limit);
   bool do_add_worker();
   int64_t queue_size() const { return queue_.size(); }
 
@@ -116,8 +120,13 @@ protected:
   virtual void run1();
 
 private:
-  bool is_inited_;
-  bool stop_;
+  bool enter_operation();
+  void leave_operation();
+  void destroy_workers(WorkerList &workers);
+
+  std::atomic<bool> is_inited_;
+  // Stop closes admission; low bits pair every entry with its release.
+  std::atomic<uint64_t> lifecycle_;
   T queue_;
   lib::IRunWrapper *run_wrapper_;
   WorkerList workers_;
