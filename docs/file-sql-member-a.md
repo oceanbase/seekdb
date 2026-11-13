@@ -119,6 +119,22 @@ describe select * from read_csv('/path/basic.csv');
 - `glob()` 只返回一列 `file`，值为文件完整路径。
 - `DESCRIBE` 返回 `column_name`、`column_type`、`null`、`key`、`default`、`extra` 六列。
 
+## 当前状态
+
+| 阶段 | 状态 | 说明 |
+| --- | --- | --- |
+| 会话开关 | 已完成 | `enable_file_sql` 默认关闭 |
+| 路径安全 | 已完成 | 单元测试 43 项通过 |
+| 读取器接口 | 已完成 | CSV 适配器已接 B 的 `CsvTableScan` |
+| SQL 语法 | 已完成 | `table_factor` 增加表函数产生式，bison 2.4.1 `-Werror` 无冲突 |
+| 解析与 Schema 推断 | 已完成 | 生成表项与列项，列类型来自推断结果 |
+| 值转换 | 已完成 | `file_sql_scan` 把推断类型映射为列类型，把扫描值写入 ObDatum |
+| 计划与执行算子 | **未完成** | 见下节的落点清单 |
+| `glob`、`DESCRIBE`、`COPY` | **未完成** | 属于后续评分项 |
+
+未完成的计划与算子部分意味着 `read_csv` 目前还不能真正执行，
+本分支只到解析与 Schema 推断为止，不得当作 Lab 2 的可运行实现。
+
 ## 引擎接入路径
 
 seekdb 没有通用的表函数框架，`read_csv` 这类 FROM 子句中的表函数按 OB 现有的
@@ -133,9 +149,47 @@ seekdb 没有通用的表函数框架，`read_csv` 这类 FROM 子句中的表�
 | 执行 | `src/sql/engine/basic/ob_file_table_op.{h,cpp}` | 流式读取并写入输出 ObDatum |
 | 注册 | `src/query/api/query/engine/ob_operator_reg.h`、`ob_phy_operator_type.h` | 物理算子注册 |
 
-生成文件必须一并提交：仓库构建使用已生成的 `sql_parser_mysql_mode_tab.c`，
-修改语法后需要用 `deps/3rd/usr/local/oceanbase/devtools/bin/bison`（2.4.1）与 flex 重新生成，
-`gen_parser.sh` 在出现冲突时会中止，因此新增产生式不能引入新的语法冲突。
+生成文件由构建生成，不需要提交：`sql_parser_mysql_mode_tab.c`、`sql_parser_mysql_mode_tab.h`、
+`sql_parser_mysql_mode_lex.c` 与 `type_name.c` 都在 `.gitignore` 中，
+`src/sql/CMakeLists.txt` 在配置阶段调用 `gen_parser.sh` 重新生成。
+该脚本使用 `bison -Werror`，出现语法冲突时构建会直接中止，
+因此新增产生式必须先用 `deps/3rd/usr/local/oceanbase/devtools/bin/bison`（2.4.1）验证。
+手动重新生成：
+
+```bash
+cd src/sql/parser && NEED_PARSER_CACHE=OFF bash gen_parser.sh
+```
+
+### 计划与算子的落点清单
+
+按 `JSON_TABLE` 的既有路径实现，每一步都有可直接照搬的参照：
+
+| 步骤 | 文件 | 参照 |
+| --- | --- | --- |
+| 逻辑算子类型 | `src/sql/optimizer/ob_log_operator_factory.h` | `LOG_OP_DEF(LOG_JSON_TABLE, "JSON_TABLE")` |
+| 逻辑算子 | 新建 `src/sql/optimizer/ob_log_file_table.{h,cpp}` | `ObLogJsonTable` |
+| 逻辑算子分配 | `src/sql/optimizer/ob_log_operator_factory.cpp` | `case LOG_JSON_TABLE` |
+| 访问路径类型 | `src/query/api/query/ob_sql_define.h` | `JSON_TABLE_ACCESS` |
+| 访问路径 | `src/sql/optimizer/ob_join_order.h` | `class JsonTablePath` |
+| 访问路径生成 | `src/sql/optimizer/ob_join_order.cpp` | `ObJoinOrder::generate_json_table_paths` |
+| 基表类型分发 | `src/sql/optimizer/ob_join_order.cpp` | `init_base_join_order` 与 `generate_base_paths` |
+| 逻辑算子实例化 | `src/sql/optimizer/ob_log_plan.cpp` | `ObLogPlan::allocate_json_table_path` |
+| 物理算子类型 | `src/query/api/query/engine/ob_phy_operator_type.h` | `PHY_OP_DEF(PHY_JSON_TABLE)` |
+| 算子注册 | `src/query/api/query/engine/ob_operator_reg.h` | `REGISTER_OPERATOR(ObLogJsonTable, PHY_JSON_TABLE, ...)` |
+| 算子与 spec | 新建 `src/sql/engine/basic/ob_file_table_op.{h,cpp}` | `ObJsonTableOp` 与 `ObJsonTableSpec` |
+| plan 到 spec | `src/sql/code_generator/ob_static_engine_cg.cpp` | `generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec, ...)` |
+| 逻辑算子到物理算子 | `src/sql/code_generator/ob_static_engine_cg.cpp` | `LOG_JSON_TABLE` 分支 |
+
+算子的关键点：
+
+- spec 需要携带规范路径、格式、选项和输出列表达式，输出列表达式取自语句中该表项的列项，
+  与 `ObJsonTableSpec::column_exprs_` 的生成方式相同。
+- 算子打开文件、创建读取器并执行 `prepare()`，逐批取行并写入
+  `expr->locate_datum_for_write(eval_ctx_)`。
+- 字符串列的文本必须复制到算子自己的分配器中，且分配器按批次重置，
+  否则整列数据会随文件大小增长，违反流式扫描的要求。
+- 文件在计划期已推断过一次 Schema，算子执行时重新推断可以发现文件变化，
+  变化时必须报错而不是继续使用旧 Schema 读新数据。
 
 ## 风险
 
