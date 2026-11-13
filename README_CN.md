@@ -417,24 +417,32 @@ for step in agent.run():
 <summary><b>🗄️ SQL — Schema + 混合搜索</b></summary>
 
 ```sql
--- 包含向量列、全文索引和 HNSW 向量索引的表
+-- 创建包含向量列和全文索引的表
 CREATE TABLE articles (
   id        INT PRIMARY KEY,
   title     TEXT,
   content   TEXT,
-  embedding VECTOR(384),
-  FULLTEXT INDEX idx_fts (content) WITH PARSER ik,
-  VECTOR   INDEX idx_vec (embedding) WITH (DISTANCE=l2, TYPE=hnsw, LIB=vsag)
+  embedding VECTOR(3),
+  FULLTEXT INDEX idx_fts (content) WITH PARSER ik
 ) ORGANIZATION = HEAP;
 
--- 混合搜索：向量相似度 + 全文匹配在一条查询中完成
+-- 插入样例数据，再基于这些数据构建 HNSW 索引
+INSERT INTO articles (id, title, content, embedding) VALUES
+  (1, 'Quarterly update', 'quarterly report', '[0.12, 0.34, 0.56]'),
+  (2, 'Meeting notes', 'planning notes', '[0.12, 0.34, 0.56]'),
+  (3, 'Quarterly archive', 'quarterly report archive', '[0.32, 0.34, 0.56]');
+CREATE VECTOR INDEX idx_vec ON articles (embedding) WITH (DISTANCE=l2, TYPE=hnsw, LIB=vsag);
+
+-- 结合全文匹配和近似向量排序
 SELECT id, title,
-       l2_distance(embedding, '[0.12, 0.34, ...]') AS dist
+       l2_distance(embedding, '[0.12, 0.34, 0.56]') AS dist
 FROM articles
 WHERE MATCH(content) AGAINST('quarterly report')
 ORDER BY dist APPROXIMATE
 LIMIT 10;
 ```
+
+查询按顺序返回文章 `1` 和 `3`。
 
 Python 开发者可通过 SQLAlchemy 或任何 MySQL 驱动来访问。
 
