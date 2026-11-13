@@ -29,6 +29,11 @@
 #include "palf_iterator.h"         // PalfIteraor
 #include "palf_callback_wrapper.h"
 #include "log_cache.h"
+#ifdef OB_BUILD_EMBED_MODE
+#include "embed_palf_warm_manifest.h"
+#include "log_meta_entry_header.h"
+#include "log_group_entry_header.h"
+#endif
 
 namespace oceanbase
 {
@@ -76,7 +81,12 @@ public:
            LogCache *log_cache,
            LogIOAdapter *io_adapter,
            EntryHeaderType &entry_header,
-           LSN &lsn);
+           LSN &lsn
+#ifdef OB_BUILD_EMBED_MODE
+           ,
+           const EmbedPalfWarmStorageSnapshot *warm_snapshot = nullptr
+#endif
+           );
 
   void destroy();
 
@@ -119,6 +129,17 @@ public:
 
 
   int get_logical_block_size(int64_t &logical_block_size) const;
+#ifdef OB_BUILD_EMBED_MODE
+  int capture_embed_warm_snapshot_for_meta(EmbedPalfWarmStorageSnapshot &snapshot);
+  int capture_embed_warm_snapshot_for_redo(EmbedPalfWarmStorageSnapshot &snapshot);
+  int fill_embed_warm_snapshot_from_state_for_meta(EmbedPalfWarmStorageSnapshot &snapshot,
+                                                   const LogMetaEntryHeader &entry_header,
+                                                   const LSN &last_entry_lsn);
+  int fill_embed_warm_snapshot_from_state_for_redo(EmbedPalfWarmStorageSnapshot &snapshot,
+                                                   const LogGroupEntryHeader &entry_header,
+                                                   const LSN &last_entry_lsn);
+  bool last_load_used_embed_warm_snapshot() const { return last_load_used_embed_warm_snapshot_; }
+#endif
 
   TO_STRING_KV(K_(log_tail),
                K_(log_block_header),
@@ -159,6 +180,28 @@ private:
                                                    EntryHeaderType &entry_header,
                                                    LSN &lsn);
   int load_last_block_(const block_id_t min_block_id, const block_id_t max_block_id);
+#ifdef OB_BUILD_EMBED_MODE
+  template <class EntryHeaderType>
+  int capture_embed_warm_snapshot_(EmbedPalfWarmStorageSnapshot &snapshot);
+  template <class EntryHeaderType>
+  int fill_embed_warm_snapshot_from_state_(EmbedPalfWarmStorageSnapshot &snapshot,
+                                           const EntryHeaderType &entry_header,
+                                           const LSN &last_entry_lsn);
+  template <class EntryHeaderType>
+  int apply_embed_warm_snapshot_(const EmbedPalfWarmStorageSnapshot &snapshot,
+                                 const block_id_t min_block_id,
+                                 const block_id_t max_block_id,
+                                 EntryHeaderType &entry_header,
+                                 LSN &lsn);
+  template <class EntryHeaderType>
+  bool has_embed_warm_snapshot_new_data_(const EmbedPalfWarmStorageSnapshot &snapshot);
+  template <class EntryHeaderType>
+  int locate_log_tail_incremental_from_warm_snapshot_(const EmbedPalfWarmStorageSnapshot &snapshot,
+                                                      const block_id_t min_block_id,
+                                                      const block_id_t max_block_id,
+                                                      EntryHeaderType &entry_header,
+                                                      LSN &lsn);
+#endif
   int inner_truncate_(const LSN &lsn);
   void truncate_block_header_(const LSN &lsn);
 
@@ -197,6 +240,9 @@ private:
   char block_header_serialize_buf_[MAX_INFO_BLOCK_SIZE];
   LogCache *log_cache_;
   bool is_inited_;
+#ifdef OB_BUILD_EMBED_MODE
+  bool last_load_used_embed_warm_snapshot_;
+#endif
 };
 
 // Iterate last non-empty block:
@@ -218,13 +264,22 @@ int LogStorage::load(const char *base_dir,
                      LogCache *log_cache,
                      LogIOAdapter *io_adapter,
                      EntryHeaderType &entry_header,
-                     LSN &lsn)
+                     LSN &lsn
+#ifdef OB_BUILD_EMBED_MODE
+                     ,
+                     const EmbedPalfWarmStorageSnapshot *warm_snapshot
+#endif
+                     )
 {
   int ret = OB_SUCCESS;
   block_id_t min_block_id = LOG_INVALID_BLOCK_ID;
   block_id_t max_block_id = LOG_INVALID_BLOCK_ID;
+  bool used_embed_warm_snapshot = false;
   lsn.reset();
   entry_header.reset();
+#ifdef OB_BUILD_EMBED_MODE
+  last_load_used_embed_warm_snapshot_ = false;
+#endif
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(do_init_(base_dir,
@@ -247,12 +302,58 @@ int LogStorage::load(const char *base_dir,
       ret = OB_SUCCESS;
       PALF_LOG(
           INFO, "there is no block on disk", K(ret), K(min_block_id), K(max_block_id), KPC(this));
-    } else if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
-                   min_block_id, max_block_id, entry_header, lsn))) {
-    } else if (OB_FAIL(load_last_block_(min_block_id, max_block_id))) {
     } else {
+#ifdef OB_BUILD_EMBED_MODE
+      if (nullptr != warm_snapshot
+          && warm_snapshot->is_valid()
+          && warm_snapshot->min_block_id_ == min_block_id
+          && warm_snapshot->max_block_id_ == max_block_id) {
+        // Probe the manifest tail first: when nothing was appended since the manifest was saved,
+        // applying it is enough and the tail scan (the expensive part) can be skipped entirely.
+        if (has_embed_warm_snapshot_new_data_<EntryHeaderType>(*warm_snapshot)) {
+          PALF_LOG(INFO,
+                   "embed warm snapshot stale, incremental tail scan from manifest",
+                   K(sub_dir),
+                   K(min_block_id),
+                   K(max_block_id),
+                   K(warm_snapshot->log_tail_lsn_val_));
+          if (OB_FAIL(locate_log_tail_incremental_from_warm_snapshot_(
+                  *warm_snapshot, min_block_id, max_block_id, entry_header, lsn))) {
+            PALF_LOG(INFO, "embed warm incremental tail scan failed, fallback to full tail scan",
+                     K(sub_dir), K(min_block_id), K(max_block_id));
+            if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                    min_block_id, max_block_id, entry_header, lsn))) {
+            }
+          }
+        } else if (OB_SUCC(apply_embed_warm_snapshot_(*warm_snapshot,
+                                                      min_block_id,
+                                                      max_block_id,
+                                                      entry_header,
+                                                      lsn))) {
+          used_embed_warm_snapshot = true;
+          last_load_used_embed_warm_snapshot_ = true;
+          PALF_LOG(INFO, "LogStorage load used embed warm snapshot", K(sub_dir), K(min_block_id), K(max_block_id));
+        } else if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                min_block_id, max_block_id, entry_header, lsn))) {
+        }
+      } else {
+        if (nullptr != warm_snapshot) {
+          PALF_LOG(INFO, "embed warm snapshot mismatch, fallback to tail scan", K(sub_dir), K(min_block_id), K(max_block_id));
+        }
+        if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+                min_block_id, max_block_id, entry_header, lsn))) {
+        }
+      }
+#else
+      if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(
+              min_block_id, max_block_id, entry_header, lsn))) {
+      }
+#endif
+      if (OB_SUCC(ret) && OB_FAIL(load_last_block_(min_block_id, max_block_id))) {
+      }
     }
-    PALF_LOG(INFO, "LogStorage load finish", KR(ret), KPC(this), K(min_block_id), K(max_block_id));
+    PALF_LOG(INFO, "LogStorage load finish", KR(ret), KPC(this), K(min_block_id), K(max_block_id),
+             K(used_embed_warm_snapshot));
   }
   return ret;
 }
@@ -338,6 +439,199 @@ int LogStorage::locate_log_tail_and_last_valid_entry_header_(const block_id_t mi
 
   return ret;
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+template <class EntryHeaderType>
+int LogStorage::fill_embed_warm_snapshot_from_state_(EmbedPalfWarmStorageSnapshot &snapshot,
+                                                     const EntryHeaderType &entry_header,
+                                                     const LSN &last_entry_lsn)
+{
+  int ret = OB_SUCCESS;
+  block_id_t min_block_id = LOG_INVALID_BLOCK_ID;
+  block_id_t max_block_id = LOG_INVALID_BLOCK_ID;
+  snapshot.reset();
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (!last_entry_lsn.is_valid() || !entry_header.is_valid()) {
+    ret = OB_INVALID_DATA;
+  } else if (OB_FAIL(block_mgr_.get_block_id_range(min_block_id, max_block_id))
+             && OB_ENTRY_NOT_EXIST != ret) {
+  } else if (OB_ENTRY_NOT_EXIST == ret) {
+    ret = OB_ENTRY_NOT_EXIST;
+  } else {
+    snapshot.min_block_id_ = min_block_id;
+    snapshot.max_block_id_ = max_block_id;
+    snapshot.log_tail_lsn_val_ = log_tail_.val_;
+    snapshot.last_entry_start_lsn_val_ = last_entry_lsn.val_;
+    int64_t pos = 0;
+    if (OB_FAIL(entry_header.serialize(snapshot.entry_header_buf_,
+                                       sizeof(snapshot.entry_header_buf_),
+                                       pos))) {
+    } else {
+      snapshot.entry_header_len_ = static_cast<int32_t>(pos);
+    }
+  }
+  return ret;
+}
+
+template <class EntryHeaderType>
+int LogStorage::capture_embed_warm_snapshot_(EmbedPalfWarmStorageSnapshot &snapshot)
+{
+  int ret = OB_SUCCESS;
+  block_id_t min_block_id = LOG_INVALID_BLOCK_ID;
+  block_id_t max_block_id = LOG_INVALID_BLOCK_ID;
+  EntryHeaderType entry_header;
+  LSN lsn;
+  snapshot.reset();
+  lsn.reset();
+  entry_header.reset();
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(block_mgr_.get_block_id_range(min_block_id, max_block_id))
+             && OB_ENTRY_NOT_EXIST != ret) {
+  } else if (OB_ENTRY_NOT_EXIST == ret) {
+    ret = OB_ENTRY_NOT_EXIST;
+  } else if (OB_FAIL(locate_log_tail_and_last_valid_entry_header_(min_block_id,
+                                                                  max_block_id,
+                                                                  entry_header,
+                                                                  lsn))) {
+  } else {
+    snapshot.min_block_id_ = min_block_id;
+    snapshot.max_block_id_ = max_block_id;
+    snapshot.log_tail_lsn_val_ = log_tail_.val_;
+    snapshot.last_entry_start_lsn_val_ = lsn.val_;
+    int64_t pos = 0;
+    if (OB_FAIL(entry_header.serialize(snapshot.entry_header_buf_,
+                                       sizeof(snapshot.entry_header_buf_),
+                                       pos))) {
+    } else {
+      snapshot.entry_header_len_ = static_cast<int32_t>(pos);
+    }
+  }
+  return ret;
+}
+
+template <class EntryHeaderType>
+bool LogStorage::has_embed_warm_snapshot_new_data_(const EmbedPalfWarmStorageSnapshot &snapshot)
+{
+  bool has_new_data = false;
+  using EntryType = typename EntryHeaderType::ENTRYTYPE;
+  PalfIterator<EntryType> iterator;
+  auto get_file_end_lsn = []() { return LSN(LOG_MAX_LSN_VAL); };
+  const LSN start_lsn(snapshot.log_tail_lsn_val_);
+  int ret = OB_SUCCESS;
+  // Manifest tail is the next append offset. inner_pread rejects read_lsn >= log_tail_, so widen
+  // the readable window to the end of the last block before probing for post-manifest writes.
+  const LSN readable_end((snapshot.max_block_id_ + 1) * logical_block_size_);
+  update_log_tail_guarded_by_lock_(readable_end);
+  if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, this))) {
+    has_new_data = true;
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf::LogIOUser::RESTART)))) {
+    has_new_data = true;
+  } else {
+    iterator.set_need_print_error(false);
+    ret = iterator.next();
+    // Only a complete log entry after manifest tail counts as new data. Padding or
+    // partial bytes at the tail must not force a full scan on no-write warm reload.
+    if (OB_SUCC(ret)) {
+      has_new_data = true;
+    }
+  }
+  return has_new_data;
+}
+
+template <class EntryHeaderType>
+int LogStorage::locate_log_tail_incremental_from_warm_snapshot_(
+    const EmbedPalfWarmStorageSnapshot &snapshot,
+    const block_id_t min_block_id,
+    const block_id_t max_block_id,
+    EntryHeaderType &entry_header,
+    LSN &lsn)
+{
+  int ret = OB_SUCCESS;
+  using EntryType = typename EntryHeaderType::ENTRYTYPE;
+  const bool need_print_error = false;
+  if (OB_FAIL(apply_embed_warm_snapshot_(snapshot,
+                                         min_block_id,
+                                         max_block_id,
+                                         entry_header,
+                                         lsn))) {
+  } else {
+    bool found_new_entry = false;
+    const LSN readable_end((max_block_id + 1) * logical_block_size_);
+    update_log_tail_guarded_by_lock_(readable_end);
+    PalfIterator<EntryType> iterator;
+    auto get_file_end_lsn = []() { return LSN(LOG_MAX_LSN_VAL); };
+    const LSN start_lsn(snapshot.log_tail_lsn_val_);
+    if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, this))) {
+    } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf::LogIOUser::RESTART)))) {
+    } else {
+      iterator.set_need_print_error(need_print_error);
+      EntryType curr_entry;
+      LSN curr_lsn;
+      while (OB_SUCC(ret) && OB_SUCC(iterator.next())) {
+        if (OB_FAIL(iterator.get_entry(curr_entry, curr_lsn))) {
+        } else {
+          found_new_entry = true;
+          entry_header = curr_entry.get_header();
+          lsn = curr_lsn;
+        }
+      }
+      if (OB_ITER_END == ret
+          || ((OB_CHECKSUM_ERROR == ret || OB_INVALID_DATA == ret)
+              && true == iterator.check_is_the_last_entry())) {
+        ret = OB_SUCCESS;
+        if (true == lsn.is_valid() && entry_header.is_valid()) {
+          update_log_tail_guarded_by_lock_(lsn + entry_header.get_data_len() + entry_header.get_serialize_size());
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      last_load_used_embed_warm_snapshot_ = !found_new_entry;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    PALF_LOG(INFO, "locate_log_tail_incremental_from_warm_snapshot_ success",
+             K(ret), K(log_tail_), K(last_load_used_embed_warm_snapshot_), KPC(this));
+  }
+  return ret;
+}
+
+template <class EntryHeaderType>
+int LogStorage::apply_embed_warm_snapshot_(const EmbedPalfWarmStorageSnapshot &snapshot,
+                                           const block_id_t min_block_id,
+                                           const block_id_t max_block_id,
+                                           EntryHeaderType &entry_header,
+                                           LSN &lsn)
+{
+  int ret = OB_SUCCESS;
+  lsn.reset();
+  entry_header.reset();
+  if (!snapshot.is_valid()) {
+    ret = OB_INVALID_DATA;
+  } else if (snapshot.min_block_id_ != min_block_id || snapshot.max_block_id_ != max_block_id) {
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    int64_t pos = 0;
+    if (OB_FAIL(entry_header.deserialize(snapshot.entry_header_buf_,
+                                         snapshot.entry_header_len_,
+                                         pos))) {
+    } else if (!entry_header.is_valid()) {
+      ret = OB_INVALID_DATA;
+    } else {
+      lsn.val_ = snapshot.last_entry_start_lsn_val_;
+      update_log_tail_guarded_by_lock_(LSN(snapshot.log_tail_lsn_val_));
+      const block_id_t log_tail_block_id = lsn_2_block(log_tail_, logical_block_size_);
+      const offset_t log_tail_offset = lsn_2_offset(log_tail_, logical_block_size_);
+      const block_id_t header_block_id =
+          (0 == log_tail_offset ? log_tail_block_id - 1 : log_tail_block_id);
+      if (OB_FAIL(read_block_header_(header_block_id, log_block_header_))) {
+      }
+    }
+  }
+  return ret;
+}
+#endif
 } // end namespace palf
 } // end namespace oceanbase
 #endif

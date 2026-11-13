@@ -118,7 +118,37 @@ def _archive_args(files, platform, alwayslink):
             args.append(file.path)
     return args
 
-def _dependency_link_metadata(targets):
+def _named_archives(targets):
+    # Static archives of the given targets, keyed by path so that whole_group
+    # members can be matched after the transitive closure is flattened.
+    paths = {}
+    for target in targets:
+        for file in _link_inputs(target):
+            paths[file.path] = True
+    return paths
+
+def _windows_plain_archive(library, archive):
+    # Archives that stay on the link line but must never be whole-archived: an
+    # import library holds import descriptors instead of objects, and the
+    # compiler runtime (clang_rt.*) is a grab bag whose members only make sense
+    # when something references them.
+    if library.dynamic_library != None:
+        return True
+    return archive != None and archive.basename.startswith("clang_rt.")
+
+def _windows_plain_archives(targets):
+    paths = {}
+    for target in targets:
+        for linker_input in target[CcInfo].linking_context.linker_inputs.to_list():
+            for library in linker_input.libraries:
+                archive = _selected_static_archive(library)
+                if archive == None:
+                    archive = library.interface_library
+                if archive != None and _windows_plain_archive(library, archive):
+                    paths[archive.path] = True
+    return paths
+
+def _dependency_link_metadata(targets, platform):
     # Merge linker inputs as a depset: shared dependencies contribute flags once,
     # while repetition within one library's flags retains its meaning.
     linker_inputs = depset(transitive = [
@@ -133,6 +163,8 @@ def _dependency_link_metadata(targets):
         inputs.extend(linker_input.additional_inputs)
         for library in linker_input.libraries:
             archive = _selected_static_archive(library)
+            if platform.os == "windows" and _windows_plain_archive(library, archive):
+                continue
             if archive != None and library.alwayslink:
                 alwayslink[archive.path] = True
     return flags, inputs, alwayslink
@@ -188,6 +220,64 @@ def _final_link_impl(ctx):
     ordered_link_files = _files_from_targets(
         ctx.attr.ordered_link_files,
     )
+    windows_plain_group_inputs = []
+    plain_group_inputs = []
+    if platform.os == "windows":
+        # A Rust staticlib embeds the MSVC import libraries it links against
+        # (kernel32.dll, bcryptprimitives.dll, ...). /WHOLEARCHIVE visits those
+        # members as if they were object files and lld-link rejects them with
+        # ".idata$4 should not refer to special section 0". Archives whose
+        # position is already pinned by ordered_link_files are still passed to
+        # the linker in that position, so every referenced object is pulled in.
+        ordered_paths = {file.path: True for file in ordered_link_files}
+        whole_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path not in ordered_paths
+        ]
+        # Import libraries and the compiler runtime reach this rule through the
+        # same CcInfo closure. Keep them on the link line, but let the linker
+        # pull their members on demand instead of whole-archiving them.
+        plain_archives = _windows_plain_archives(
+            ctx.attr.direct_object_deps + ctx.attr.group_deps +
+            ctx.attr.whole_group_deps + ctx.attr.tail_deps + ctx.attr.sdk_deps,
+        )
+        windows_plain_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path in plain_archives
+        ]
+        whole_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path not in plain_archives
+        ]
+    # A Rust staticlib bundles the native static libraries its crates link
+    # against. Whole-archiving those same archives here adds a second copy of
+    # every object they contain: on aarch64 the duplicate poly1305 objects put
+    # poly1305_blocks out of the adr relocation range, and ld64 rejects the
+    # duplicate symbols outright. Keep the named archives on the link line right
+    # after the whole group instead, so their members are only pulled for
+    # symbols the embedded copy does not provide. Windows keeps whole-archiving
+    # them: its own import-library handling above already covers the objects
+    # that must stay out of the whole group.
+    plain_group_archives = {}
+    if platform.os != "windows":
+        plain_group_archives = _named_archives(ctx.attr.plain_group_archives)
+    if plain_group_archives:
+        plain_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path in plain_group_archives
+        ]
+        whole_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path not in plain_group_archives
+        ]
+        plain_group_inputs = windows_plain_group_inputs + plain_group_inputs
+    else:
+        plain_group_inputs = windows_plain_group_inputs
     sdk_inputs = _inputs_from_deps(ctx.attr.sdk_deps)
     sdk_paths = {file.path: True for file in sdk_inputs}
     group_inputs = [file for file in group_inputs if file.path not in sdk_paths]
@@ -195,13 +285,14 @@ def _final_link_impl(ctx):
     tail_inputs = [file for file in tail_inputs if file.path not in sdk_paths]
     dependencies = (ctx.attr.direct_object_deps + ctx.attr.group_deps + ctx.attr.whole_group_deps +
                     ctx.attr.tail_deps + ctx.attr.sdk_deps)
-    dependency_flags, dependency_inputs, alwayslink = _dependency_link_metadata(dependencies)
+    dependency_flags, dependency_inputs, alwayslink = _dependency_link_metadata(dependencies, platform)
     extra_inputs = _files_from_targets(ctx.attr.extra_inputs) + dependency_inputs
 
     link_inputs = (
         direct_objects +
         group_inputs +
         whole_group_inputs +
+        plain_group_inputs +
         tail_inputs +
         ordered_link_files +
         sdk_inputs +
@@ -213,6 +304,7 @@ def _final_link_impl(ctx):
     ordered_link_args = _file_paths(direct_objects)
     ordered_link_args.extend(_archive_group(group_inputs, platform, alwayslink = alwayslink))
     ordered_link_args.extend(_archive_group(whole_group_inputs, platform, whole = True))
+    ordered_link_args.extend(_file_paths(plain_group_inputs))
     ordered_link_args.extend(_archive_args(tail_inputs, platform, alwayslink))
     ordered_link_args.extend(_file_paths(ordered_link_files))
     ordered_link_args.extend(_archive_group(sdk_inputs, platform, alwayslink = alwayslink))
@@ -224,6 +316,12 @@ def _final_link_impl(ctx):
     ])
 
     output = ctx.actions.declare_file(ctx.attr.out)
+    # Windows consumers link against an import library, so ask lld-link to
+    # write it to a declared output next to the DLL.
+    interface_library = None
+    if platform.os == "windows" and ctx.attr.shared and ctx.attr.import_library:
+        interface_library = ctx.actions.declare_file(ctx.attr.import_library)
+        ordered_link_args.append("/IMPLIB:" + interface_library.path)
     outputs = [output] + ctx.outputs.side_outputs
     if platform.os == "windows":
         pdb = ctx.actions.declare_file(output.basename.rsplit(".", 1)[0] + ".pdb", sibling = output)
@@ -233,6 +331,8 @@ def _final_link_impl(ctx):
             "/PDB:" + pdb.path,
             "/PDBALTPATH:" + pdb.basename,
         ])
+    if interface_library:
+        outputs.append(interface_library)
     action_name = (
         CPP_LINK_DYNAMIC_LIBRARY_ACTION_NAME
         if ctx.attr.shared
@@ -288,7 +388,7 @@ def _final_link_impl(ctx):
         use_default_shell_env = True,
     )
 
-    if platform.os == "windows" and not ctx.attr.shared:
+    if platform.os == "windows" and (not ctx.attr.shared or ctx.attr.runtime_dlls):
         outputs += _windows_runtime(ctx, dependencies, output)
     return [
         OutputGroupInfo(link_inputs = depset(link_inputs)),
@@ -305,12 +405,15 @@ final_link = rule(
         "direct_object_deps": attr.label_list(providers = [CcInfo]),
         "group_deps": attr.label_list(providers = [CcInfo]),
         "whole_group_deps": attr.label_list(providers = [CcInfo]),
+        "plain_group_archives": attr.label_list(providers = [CcInfo]),
         "tail_deps": attr.label_list(providers = [CcInfo]),
         "sdk_deps": attr.label_list(providers = [CcInfo]),
         "ordered_link_files": attr.label_list(allow_files = True),
         "extra_inputs": attr.label_list(allow_files = True),
         "linkopts": attr.string_list(),
         "out": attr.string(mandatory = True),
+        "import_library": attr.string(default = ""),
+        "runtime_dlls": attr.bool(default = False),
         "side_outputs": attr.output_list(),
         "shared": attr.bool(default = False),
     } | CC_TOOLCHAIN_ATTRS | PLATFORM_ATTRS,

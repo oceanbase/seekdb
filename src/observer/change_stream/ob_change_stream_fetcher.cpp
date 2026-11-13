@@ -140,6 +140,14 @@ int ObCSFetcher::init_consumption_position_()
     LOG_WARN("CSFetcher: invalid PALF restart boundaries",
              KR(ret), K(begin_lsn), K(base_lsn), K(end_lsn));
   } else {
+#ifdef OB_BUILD_EMBED_MODE
+    if (0 == persisted_min_dep_lsn) {
+      // Fresh embed tenant: start at log tail — do not replay full history into tx_info_.
+      start_lsn = end_lsn;
+      FLOG_INFO("CSFetcher embed: start consumption from end_lsn (no history replay)", K(start_lsn));
+    } else
+#endif
+    {
     start_lsn = begin_lsn < base_lsn ? base_lsn : begin_lsn;
 
     if (persisted_min_dep_lsn >= 0) {
@@ -180,6 +188,7 @@ int ObCSFetcher::init_consumption_position_()
       }
     }
 
+    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(read_handle_.seek(start_lsn, iter_))) {
         LOG_WARN("CSFetcher: fail to seek log iterator by restart boundary", KR(ret), K(start_lsn));
@@ -702,22 +711,32 @@ int ObCSFetcher::refresh_async_schema_state_(bool &iter_ready)
       LOG_WARN("CSFetcher: fail to check async indexes for exact schema",
                KR(ret), K(runtime_schema_version));
       publish_schema_error_(ret);
-    } else if (!has_async) {
-      iter_ready = false;
-      ret = drain_to_idle_(runtime_schema_version);
-    } else if (IDLE == running_mode_) {
-      // A new async-index generation starts from the already-ready runtime
-      // schema, not from a CREATE DDL log that min_dep_lsn may have reclaimed.
-      running_mode_ = ACTIVE;
-      current_schema_version_ = runtime_schema_version;
-      pending_ready_schema_version_ = runtime_schema_version;
-      iter_ready = false;
-      LOG_INFO("CSFetcher: activating async-index consumption",
-               K(runtime_schema_version), K(current_schema_version_));
-    } else if (iter_ready) {
-      // Schema changed while remaining ACTIVE (for example partial deletion).
-      publish_schema_state_(runtime_schema_version, true, false);
-      LOG_INFO("CSFetcher: active async schema is ready", K(runtime_schema_version));
+    }
+#ifdef OB_BUILD_EMBED_MODE
+    else {
+      // Single-process embed: always consume CLOG; the per-block has_async_index
+      // filter still decides what gets dispatched.
+      has_async = true;
+    }
+#endif
+    if (OB_SUCC(ret)) {
+      if (!has_async) {
+        iter_ready = false;
+        ret = drain_to_idle_(runtime_schema_version);
+      } else if (IDLE == running_mode_) {
+        // A new async-index generation starts from the already-ready runtime
+        // schema, not from a CREATE DDL log that min_dep_lsn may have reclaimed.
+        running_mode_ = ACTIVE;
+        current_schema_version_ = runtime_schema_version;
+        pending_ready_schema_version_ = runtime_schema_version;
+        iter_ready = false;
+        LOG_INFO("CSFetcher: activating async-index consumption",
+                 K(runtime_schema_version), K(current_schema_version_));
+      } else if (iter_ready) {
+        // Schema changed while remaining ACTIVE (for example partial deletion).
+        publish_schema_state_(runtime_schema_version, true, false);
+        LOG_INFO("CSFetcher: active async schema is ready", K(runtime_schema_version));
+      }
     }
   }
   return ret;
@@ -1031,7 +1050,13 @@ void ObCSFetcher::run1()
   // Failed LS creation and recovery can remove PALF before this readiness gate.
   // After it, runtime teardown keeps PALF alive until the fetcher has joined.
   while (!has_set_stop()) {
-    if (OB_ISNULL(GCTX.sql_proxy_) || GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0
+#ifndef OB_BUILD_EMBED_MODE
+    const bool service_not_ready = (GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0);
+#else
+    // Embed single-process: RS may be IN_SERVICE before FULL_SERVICE; still consume CS logs.
+    const bool service_not_ready = (GCTX.start_service_time_ <= 0);
+#endif
+    if (OB_ISNULL(GCTX.sql_proxy_) || service_not_ready
         || OB_ISNULL(GCTX.schema_service_)) {
       usleep(CS_FETCHER_INIT_RETRY_SLEEP_US);
     } else {

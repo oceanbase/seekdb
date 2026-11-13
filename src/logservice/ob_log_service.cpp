@@ -112,10 +112,19 @@ int ObLogService::start()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(palf_env_->start())) {
-  } else if (OB_FAIL(apply_service_.start())) {
   } else {
-    is_running_ = true;
-    FLOG_INFO("ObLogService is started");
+    if (OB_FAIL(apply_service_.start())) {
+    } else {
+#ifdef OB_BUILD_EMBED_MODE
+      if (OB_FAIL(palf_env_->start_embed_deferred_block_gc())) {
+        CLOG_LOG(WARN, "failed to start embed deferred block gc", K(ret));
+      }
+#endif
+      if (OB_SUCC(ret)) {
+        is_running_ = true;
+        FLOG_INFO("ObLogService is started");
+      }
+    }
   }
   return ret;
 }
@@ -133,6 +142,18 @@ void ObLogService::stop()
   }
   FLOG_INFO("ObLogService is stopped");
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+int ObLogService::save_embed_palf_warm_manifest()
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_ || OB_ISNULL(palf_env_)) {
+  } else if (OB_FAIL(palf_env_->save_embed_warm_manifest())) {
+    CLOG_LOG(WARN, "save embed palf warm manifest failed", K(ret));
+  }
+  return ret;
+}
+#endif
 
 void ObLogService::wait()
 {

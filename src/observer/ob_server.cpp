@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 
 #include "share/ob_io_device_helper.h"
 #include "rust/config.h"
@@ -48,6 +51,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/ob_running_mode.h"
+#include "lib/atomic/ob_atomic.h"
 #include "lib/task/ob_timer_monitor.h"
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "lib/trace/ob_trace.h"
@@ -715,6 +719,92 @@ ObServer::~ObServer()
   destroy();
 }
 
+// ---------------------------------------------------------------------------
+// Cold-start phase timeline (profile aid). startup_timeline_mark() records the
+// elapsed cost of each init/start stage; startup_timeline_dump() prints them
+// force-printed (visible in the default WARN log, stderr and logcat) without
+// raising the log level. Boot runs single-threaded under the open lock, so the
+// file-scope recorders need no synchronization.
+// ---------------------------------------------------------------------------
+namespace {
+static const int OB_STARTUP_MAX_STAGES = 64;
+struct ObStartupStage {
+  const char *name;
+  int64_t cost_us;
+};
+static ObStartupStage g_startup_stages[OB_STARTUP_MAX_STAGES];
+static int64_t g_startup_stage_count = 0;
+static int64_t g_startup_last_us = 0;
+static bool g_startup_tracking = false;
+
+static void startup_timeline_begin()
+{
+  g_startup_tracking = true;
+  g_startup_stage_count = 0;
+  g_startup_last_us = ObTimeUtility::current_time();
+}
+
+static void startup_timeline_mark(const char *name)
+{
+  if (!g_startup_tracking) {
+    return;
+  }
+  const int64_t now_us = ObTimeUtility::current_time();
+  if (g_startup_stage_count < OB_STARTUP_MAX_STAGES) {
+    g_startup_stages[g_startup_stage_count].name = name;
+    g_startup_stages[g_startup_stage_count].cost_us = now_us - g_startup_last_us;
+    g_startup_stage_count++;
+  }
+  g_startup_last_us = now_us;
+}
+
+static void startup_timeline_dump(const char *scope)
+{
+  if (!g_startup_tracking) {
+    return;
+  }
+  // WARN-level log macros (LOG_ERRCODE_FOR_WARN) reference a caller-scope `ret`
+  // as the auto errcode field, so the helper must provide one of its own.
+  int ret = OB_SUCCESS;
+  int64_t total_us = 0;
+  for (int64_t i = 0; i < g_startup_stage_count; ++i) {
+    total_us += g_startup_stages[i].cost_us;
+  }
+  _FLOG_WARN("[STARTUP_TIMELINE] %s done total_us=%lld stages=%lld",
+             scope, (long long)total_us, (long long)g_startup_stage_count);
+  for (int64_t i = 0; i < g_startup_stage_count; ++i) {
+    _FLOG_WARN("[STARTUP_TIMELINE] %-28s cost_us=%lld",
+               g_startup_stages[i].name, (long long)g_startup_stages[i].cost_us);
+  }
+#ifdef __ANDROID__
+  // Android embed: seekdb_open runs under SuppressLogStdoutScope (stderr ->
+  // /dev/null), which drops the _FLOG_WARN console lines above. Mirror each
+  // stage straight to logcat so the timeline stays readable on-device; the
+  // original FLOG_WARN output still covers desktop/server builds.
+  {
+    char _ob_timeline_buf[256];
+    snprintf(_ob_timeline_buf, sizeof(_ob_timeline_buf),
+             "[STARTUP_TIMELINE] %s done total_us=%lld stages=%lld",
+             scope, (long long)total_us, (long long)g_startup_stage_count);
+    __android_log_print(ANDROID_LOG_WARN, "SeekdbStartup", "%s", _ob_timeline_buf);
+  }
+  for (int64_t i = 0; i < g_startup_stage_count; ++i) {
+    char _ob_timeline_buf[256];
+    snprintf(_ob_timeline_buf, sizeof(_ob_timeline_buf),
+             "[STARTUP_TIMELINE] %-28s cost_us=%lld",
+             g_startup_stages[i].name, (long long)g_startup_stages[i].cost_us);
+    __android_log_print(ANDROID_LOG_WARN, "SeekdbStartup", "%s", _ob_timeline_buf);
+  }
+#endif
+  g_startup_tracking = false;
+}
+}  // namespace
+
+const char *ObServer::get_last_startup_stage() const
+{
+  return g_startup_stage_count > 0 ? g_startup_stages[g_startup_stage_count - 1].name : "";
+}
+
 int ObServer::init(const ObServerOptions &opts)
 {
   in_process_ = opts.in_process_;
@@ -724,6 +814,7 @@ int ObServer::init(const ObServerOptions &opts)
   has_stopped_ = false;
 #endif
   gctx_.set_embedded_mode(opts.embedded_);
+  startup_timeline_begin();
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
   int ret = OB_SUCCESS;
@@ -731,6 +822,7 @@ int ObServer::init(const ObServerOptions &opts)
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
+  startup_timeline_mark("init_config");
   // Daemon startup has already forked. Configure allocator defaults before the
   // logger or server workers can create further arenas.
   const int allocator_config_ret = jemalloc_configure_runtime();
@@ -775,6 +867,7 @@ int ObServer::init(const ObServerOptions &opts)
   }
 #endif
 
+  startup_timeline_mark("clients_open_need_init");
   bool need_initialize = false;
   rust::String data_dir_for_init = config::data_dir();
   rust::String redo_dir_for_init = config::redo_dir();
@@ -806,6 +899,7 @@ int ObServer::init(const ObServerOptions &opts)
     } else if (OB_FAIL(ObSqlTaskFactory::get_instance().init())) {
       LOG_ERROR("init sql task factory failed", KR(ret));
     }
+    startup_timeline_mark("sql_static_init");
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql::init_sql_factories())) {
         LOG_ERROR("init sql factories !", KR(ret));
@@ -819,6 +913,7 @@ int ObServer::init(const ObServerOptions &opts)
         LOG_ERROR("init session base values failed", KR(ret));
       }
     }
+    startup_timeline_mark("retry_mds_global_pre");
     if (FAILEDx(ObQueryRetryCtrl::init())) {
       LOG_ERROR("init retry ctrl failed", KR(ret));
     } else if (OB_FAIL(storage::mds::ObMdsEventBuffer::init())) {
@@ -834,43 +929,51 @@ int ObServer::init(const ObServerOptions &opts)
     } else if (OB_FAIL(init_sql_proxy())) {
       LOG_ERROR("init sql connection pool failed", KR(ret));
     }
+    startup_timeline_mark("devices_io");
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
-      LOG_ERROR("init device manager failed", KR(ret));
-    }
-    }
-    if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_io())) {
-      LOG_ERROR("init io failed", KR(ret));
-    }
+      if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
+        LOG_ERROR("init device manager failed", KR(ret));
+      }
     }
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_global_kvcache())) {
-      LOG_ERROR("init global kvcache failed", KR(ret));
+      if (OB_FAIL(init_io())) {
+        LOG_ERROR("init io failed", KR(ret));
+      }
     }
+    startup_timeline_mark("kvcache");
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(init_global_kvcache())) {
+        LOG_ERROR("init global kvcache failed", KR(ret));
+      }
+    }
+    startup_timeline_mark("schema_proxy_init");
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(schema_status_proxy_.init())) {
+        LOG_ERROR("fail to init schema status proxy", KR(ret));
+      }
+    }
+    startup_timeline_mark("init_schema");
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(init_schema())) {
+        LOG_ERROR("init schema failed", KR(ret));
+      }
+    }
+    startup_timeline_mark("network_services_chain");
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(init_network())) {
+        LOG_ERROR("init network failed", KR(ret));
+      }
     }
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_status_proxy_.init())) {
-      LOG_ERROR("fail to init schema status proxy", KR(ret));
+      if (OB_FAIL(init_interrupt())) {
+        LOG_ERROR("init interrupt failed", KR(ret));
+      }
     }
-    }
-    if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_schema())) {
-      LOG_ERROR("init schema failed", KR(ret));
-    }
-    }
-    if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_network())) {
-      LOG_ERROR("init network failed", KR(ret));
-    }
-    }
-    if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_interrupt())) {
-      LOG_ERROR("init interrupt failed", KR(ret));
-    }
+    startup_timeline_mark("fts_ob_service_local_mgmt_sql");
     if (OB_SUCC(ret) && OB_FAIL(init_fts())) {
       LOG_ERROR("init fulltext parser data failed", KR(ret));
-    } else if (OB_FAIL(init_ob_service(need_initialize))) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_ob_service(need_initialize))) {
       LOG_ERROR("init ob service failed", KR(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(init_local_management_service(need_initialize))) {
@@ -884,7 +987,8 @@ int ObServer::init(const ObServerOptions &opts)
     }
     if (OB_SUCC(ret) && OB_FAIL(init_pl())) {
       LOG_ERROR("init pl failed", K(ret));
-    } else if (OB_FAIL(tablet_operator_.init(&local_store_))) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(tablet_operator_.init(&local_store_))) {
       LOG_ERROR("tablet table operator init failed", KR(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(init_autoincrement_service())) {
@@ -899,57 +1003,58 @@ int ObServer::init(const ObServerOptions &opts)
     if (OB_SUCC(ret) && OB_FAIL(ObClockGenerator::init())) {
       LOG_ERROR("init create clock generator failed", KR(ret));
     }
+    startup_timeline_mark("init_storage");
     if (OB_SUCC(ret) && OB_FAIL(init_storage())) {
       LOG_ERROR("init storage failed", KR(ret));
     }
+    startup_timeline_mark("tx_runtime_tail");
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(init_tx_data_cache())) {
-      LOG_ERROR("init tx data cache failed", KR(ret));
-    } else if (OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"))) {
-      LOG_ERROR("init tmp block cache failed", KR(ret));
-    } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache"))) {
-      LOG_ERROR("init tmp page cache failed", KR(ret));
-    } else if (OB_FAIL(ObLogAllocatorMgr::get_instance().init())) {
-      LOG_ERROR("init ObLogAllocatorMgr failed", KR(ret));
-    } else if (OB_FAIL(startup_accel_handler_.init())) {
-      LOG_ERROR("init server startup task handler failed", KR(ret));
-    } else if (OB_FAIL(STORAGE_META_SERVICE.init(server_runtime_controller_, local_store_))) {
-      LOG_ERROR("init server storage meta handler failed", KR(ret));
-    } else if (OB_FAIL(init_server_runtime())) {
-      LOG_ERROR("init server runtime failed", KR(ret));
-    } else if (OB_FAIL(init_ctas_clean_up_task())) {
-      LOG_ERROR("init ctas clean up task failed", KR(ret));
-    } else if (OB_FAIL(init_ddl_heart_beat_task_container())) {
-      LOG_ERROR("init ddl heart beat task container failed", KR(ret));
-    } else if (OB_FAIL(init_redef_heart_beat_task())) {
-      LOG_ERROR("init redef heart beat task failed", KR(ret));
-    } else if (OB_FAIL(init_refresh_cpu_frequency())) {
-      LOG_ERROR("init refresh cpu frequency failed", KR(ret));
-    } else if (OB_FAIL(ObOptStatManager::get_instance().init(&sql_proxy_))) {
-      LOG_ERROR("init opt stat manager failed", KR(ret));
-    } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().set_self_addr(self_addr_))) {
-      LOG_ERROR("set sys task status self addr failed", KR(ret));
-    } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
-      LOG_ERROR("init timer monitor failed", KR(ret));
-    } else if (OB_FAIL(PX_P2P_DH.init())) {
-      LOG_ERROR("init px p2p datahub failed", KR(ret));
-    } else if (OB_FAIL(init_px_target_mgr())) {
-      LOG_ERROR("init px target mgr failed", KR(ret));
-    } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
-      LOG_ERROR("init dict cache failed", KR(ret));
-    } else if (OB_FAIL(ObGenDicLoader::get_instance().init())) {
-      LOG_WARN("init dictionary loader failed", K(ret));
-    } else if (OB_FAIL(ObDDLRedoLock::get_instance().init())) {
-      LOG_WARN("init ddl redo lock failed", K(ret));
+      if (OB_FAIL(init_tx_data_cache())) {
+        LOG_ERROR("init tx data cache failed", KR(ret));
+      } else if (OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"))) {
+        LOG_ERROR("init tmp block cache failed", KR(ret));
+      } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache"))) {
+        LOG_ERROR("init tmp page cache failed", KR(ret));
+      } else if (OB_FAIL(ObLogAllocatorMgr::get_instance().init())) {
+        LOG_ERROR("init ObLogAllocatorMgr failed", KR(ret));
+      } else if (OB_FAIL(startup_accel_handler_.init())) {
+        LOG_ERROR("init server startup task handler failed", KR(ret));
+      } else if (OB_FAIL(STORAGE_META_SERVICE.init(server_runtime_controller_, local_store_))) {
+        LOG_ERROR("init server storage meta handler failed", KR(ret));
+      } else if (OB_FAIL(init_server_runtime())) {
+        LOG_ERROR("init server runtime failed", KR(ret));
+      } else if (OB_FAIL(init_ctas_clean_up_task())) {
+        LOG_ERROR("init ctas clean up task failed", KR(ret));
+      } else if (OB_FAIL(init_ddl_heart_beat_task_container())) {
+        LOG_ERROR("init ddl heart beat task container failed", KR(ret));
+      } else if (OB_FAIL(init_redef_heart_beat_task())) {
+        LOG_ERROR("init redef heart beat task failed", KR(ret));
+      } else if (OB_FAIL(init_refresh_cpu_frequency())) {
+        LOG_ERROR("init refresh cpu frequency failed", KR(ret));
+      } else if (OB_FAIL(ObOptStatManager::get_instance().init(&sql_proxy_))) {
+        LOG_ERROR("init opt stat manager failed", KR(ret));
+      } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().set_self_addr(self_addr_))) {
+        LOG_ERROR("set sys task status self addr failed", KR(ret));
+      } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
+        LOG_ERROR("init timer monitor failed", KR(ret));
+      } else if (OB_FAIL(PX_P2P_DH.init())) {
+        LOG_ERROR("init px p2p datahub failed", KR(ret));
+      } else if (OB_FAIL(init_px_target_mgr())) {
+        LOG_ERROR("init px target mgr failed", KR(ret));
+      } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
+        LOG_ERROR("init dict cache failed", KR(ret));
+      } else if (OB_FAIL(ObGenDicLoader::get_instance().init())) {
+        LOG_WARN("init dictionary loader failed", K(ret));
+      } else if (OB_FAIL(ObDDLRedoLock::get_instance().init())) {
+        LOG_WARN("init ddl redo lock failed", K(ret));
 #ifdef ERRSIM
-    } else if (OB_FAIL(ObDDLSimPointMgr::get_instance().init())) {
-      LOG_WARN("init ddl sim point mgr fail", KR(ret));
+      } else if (OB_FAIL(ObDDLSimPointMgr::get_instance().init())) {
+        LOG_WARN("init ddl sim point mgr fail", KR(ret));
 #endif
-    } else {
-      // All process-owned services are now bound into the server runtime.
+      } else {
+        // All process-owned services are now bound into the server runtime.
+      }
     }
-  }
-  }
 
   if (OB_FAIL(ret)) {
     LOG_ERROR("[OBSERVER_NOTICE] fail to init observer", KR(ret));
@@ -971,6 +1076,7 @@ int ObServer::init(const ObServerOptions &opts)
                     DBA_STEP_INC_INFO(server_start),
                     "observer init success.");
   }
+  startup_timeline_dump("observer.init");
   return ret;
 }
 
@@ -1201,6 +1307,7 @@ int ObServer::start()
 {
   int ret = OB_SUCCESS;
   gctx_.status_ = SS_STARTING;
+  startup_timeline_begin();
   // begin to start a observer
   FLOG_INFO("[OBSERVER_NOTICE] start observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_START_BEGIN,
@@ -1218,6 +1325,7 @@ int ObServer::start()
         FLOG_INFO("success to start signal handler");
       }
     }
+    startup_timeline_mark("startup_accel");
     if (FAILEDx(startup_accel_handler_.start())) {
       LOG_ERROR("fail to start server startup task handler", KR(ret));
     } else {
@@ -1228,11 +1336,13 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to init mds schema helper");
     }
+    startup_timeline_mark("io_manager");
     if (FAILEDx(ObIOManager::get_instance().start())) {
       LOG_ERROR("fail to start io manager", KR(ret));
     } else {
       FLOG_INFO("success to start io manager");
     }
+    startup_timeline_mark("storage_obj_mgr");
     int64_t metadata_reserved_size = 0;
     int64_t effective_log_disk_size = storage_env_.log_disk_size_;
     if (OB_FAIL(ret)) {
@@ -1243,14 +1353,17 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to start storage object manager");
     }
+    startup_timeline_mark("prepare_storage_replay");
     if (FAILEDx(standby_module_->prepare_storage_replay())) {
       LOG_ERROR("fail to restore server role before runtime and storage replay", KR(ret));
     }
+    startup_timeline_mark("server_runtime_start");
     if (FAILEDx(server_runtime_controller_.start())) {
       LOG_ERROR("fail to start server runtime", KR(ret));
     } else {
       FLOG_INFO("success to start server runtime");
     }
+    startup_timeline_mark("storage_meta_service_start");
     if (FAILEDx(STORAGE_META_SERVICE.start(need_bootstrap_))) {
       LOG_ERROR("fail to start server storage meta service", KR(ret));
     } else {
@@ -1276,16 +1389,19 @@ int ObServer::start()
     } else {
       LOG_INFO("success to check disk space available");
     }
+    startup_timeline_mark("log_pool_start");
     if (FAILEDx(log_block_mgr_.start(effective_log_disk_size))) {
       LOG_ERROR("fail to start log pool", KR(ret));
     } else {
       FLOG_INFO("success to start log pool");
     }
+    startup_timeline_mark("initialize_server_runtime");
     if (FAILEDx(initialize_server_runtime())) {
       LOG_ERROR("fail to initialize server runtime", KR(ret));
     } else {
       FLOG_INFO("success to initialize server runtime");
     }
+    startup_timeline_mark("local_mgmt_start_service");
     if (FAILEDx(local_management_service_.start_service())) {
       LOG_ERROR("fail to start local management services", KR(ret));
     } else {
@@ -1304,13 +1420,17 @@ int ObServer::start()
     if (OB_SUCC(ret)) {
       need_bootstrap_ = false;
     }
+    startup_timeline_mark("ob_service_start");
     if (FAILEDx(ob_service_.start())) {
       LOG_ERROR("fail to start oceanbase service", KR(ret));
     } else {
       FLOG_INFO("success to start oceanbase service");
     }
-    if (FAILEDx(standby_module_->start())) {
-      LOG_ERROR("fail to start standby module", KR(ret));
+    if (OB_SUCC(ret)) {
+      startup_timeline_mark("standby_start");
+      if (FAILEDx(standby_module_->start())) {
+        LOG_ERROR("fail to start standby module", KR(ret));
+      }
     }
 
     // Do not reload component configuration after an earlier startup step
@@ -1318,6 +1438,7 @@ int ObServer::start()
     // constructed and bound; on a failed bootstrap (for example, an invalid
     // log-disk resource size) those service slots are intentionally empty.
     if (OB_SUCC(ret)) {
+      startup_timeline_mark("config_reload");
       if (FAILEDx(config_mgr_.reload_config())) {
         LOG_ERROR("fail to reload configuration", KR(ret));
       } else {
@@ -1325,6 +1446,7 @@ int ObServer::start()
       }
     }
 
+    startup_timeline_mark("timer_monitor_start");
     if (FAILEDx(ObTimerMonitor::get_instance().start())) {
       LOG_ERROR("fail to start timer monitor", KR(ret));
     } else {
@@ -1350,29 +1472,34 @@ int ObServer::start()
 
     // refresh server configure
     //
+    startup_timeline_mark("config_got_version");
     if (FAILEDx(config_mgr_.got_version())) {
       FLOG_WARN("fail to refresh server configure", KR(ret));
     } else {
       FLOG_INFO("success to refresh server configure");
     }
 
+    startup_timeline_mark("wait_server_runtime");
     if (FAILEDx(wait_for_server_runtime())) {
       LOG_ERROR("server runtime did not become ready", KR(ret));
     } else {
       FLOG_INFO("server runtime is ready");
     }
+    startup_timeline_mark("runtime_dep_services");
     if (FAILEDx(local_management_service_.start_runtime_dependent_services())) {
       LOG_ERROR("fail to start runtime dependent local services", KR(ret));
     } else {
       FLOG_INFO("success to start runtime dependent local services");
     }
 
+    startup_timeline_mark("wait_metadata_ready");
     if (FAILEDx(standby_module_->wait_metadata_ready())) {
       LOG_ERROR("fail to wait for server metadata readiness", KR(ret));
     } else {
       FLOG_INFO("server metadata is ready");
     }
 
+    startup_timeline_mark("net_frame_start");
     if (OB_SUCC(ret) && !stop_ && OB_FAIL(startup_result_.finish())) {
       LOG_ERROR("background log allocation failed during startup", KR(ret));
     }
@@ -1382,6 +1509,7 @@ int ObServer::start()
       FLOG_INFO("success to start net frame");
     }
 
+    startup_timeline_mark("start_listener");
     if (OB_SUCC(ret) && OB_FAIL(standby_module_->start_listener())) {
       LOG_ERROR("fail to start standby gRPC service", KR(ret));
     }
@@ -1413,6 +1541,7 @@ int ObServer::start()
                         "you may find solutions in previous error logs or seek help from official technicians.");
   }
 
+  startup_timeline_dump("observer.start");
   return ret;
 }
 
@@ -1510,7 +1639,13 @@ int ObServer::check_if_schema_ready()
   bool schema_ready = false;
   int64_t baseline_schema_version = OB_INVALID_VERSION;
   int64_t current_schema_version = OB_INVALID_VERSION;
+#ifdef OB_BUILD_EMBED_MODE
+  const int64_t SLEEP_INTERVAL_US = gctx_.is_embedded_mode() ? 1000 : 10 * 1000; // 1ms embed / 10ms server
+  const int64_t EMBED_BUSY_SPIN_ROUNDS = gctx_.is_embedded_mode() ? 100 : 0;
+#else
   const int64_t SLEEP_INTERVAL_US = 10 * 1000; // 10ms
+  const int64_t EMBED_BUSY_SPIN_ROUNDS = 0;
+#endif
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_SCHEMA_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait schema ready begin.");
@@ -1525,7 +1660,21 @@ int ObServer::check_if_schema_ready()
     }
     if (!schema_ready) {
       LOG_INFO("schema not ready yet", K(current_schema_version), K(baseline_schema_version));
-      ob_usleep(SLEEP_INTERVAL_US);
+      for (int64_t spin = 0; !schema_ready && spin < EMBED_BUSY_SPIN_ROUNDS; ++spin) {
+        ret = OB_SUCCESS;
+        if (OB_FAIL(schema_service_.get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
+        } else if (OB_INVALID_VERSION == baseline_schema_version || baseline_schema_version < 0) {
+        } else if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(current_schema_version))) {
+        } else {
+          schema_ready = (current_schema_version >= baseline_schema_version);
+        }
+        if (!schema_ready) {
+          PAUSE();
+        }
+      }
+      if (!schema_ready) {
+        ob_usleep(SLEEP_INTERVAL_US);
+      }
     }
   }
   FLOG_INFO("check if schema ready", KR(ret), K(stop_), K(schema_ready),
@@ -1547,11 +1696,19 @@ int ObServer::check_if_timezone_usable()
 {
   int ret = OB_SUCCESS;
   bool timezone_usable = false;
+#ifdef OB_BUILD_EMBED_MODE
+  const int64_t SLEEP_INTERVAL_US = gctx_.is_embedded_mode() ? 1000 : 10 * 1000; // 1ms embed / 10ms server
+#else
+  const int64_t SLEEP_INTERVAL_US = 10 * 1000; // 10ms
+#endif
   while (OB_SUCC(ret) && !stop_ && !timezone_usable) {
     timezone_usable = timezone_mgr_.is_usable();
     if (!timezone_usable) {
       (void) (timezone_mgr_.refresh_timezone_info());
-      ob_usleep(10 * 1000);
+      timezone_usable = timezone_mgr_.is_usable();
+      if (!timezone_usable) {
+        ob_usleep(SLEEP_INTERVAL_US);
+      }
     }
   }
   if (FAILEDx(timezone_mgr_.start())) {
@@ -1576,6 +1733,23 @@ bool ObServer::is_prepare_stopped()
 bool ObServer::is_stopped()
 {
   return stop_;
+}
+
+void ObServer::embed_shutdown()
+{
+  // Do not call stop(): it runs multi_tenant_/net_frame teardown that can block
+  // indefinitely in embed CI. Signal modules to exit instead.
+  if (!gctx_.is_inited() || !gctx_.is_embedded_mode() || stop_) {
+    return;
+  }
+#ifdef OB_BUILD_EMBED_MODE
+  if (OB_NOT_NULL(mods_log_service_)) {
+    (void)mods_log_service_->save_embed_palf_warm_manifest();
+  }
+#endif
+  set_stop();
+  obs_stop_modules();
+  obs_wait_modules();
 }
 
 void ObServer::set_stop()
@@ -2472,6 +2646,7 @@ int ObServer::init_global_context()
   gctx_.ssl_key_expired_time_ = 0;
   gctx_.diag_ = &diag_;
   gctx_.scramble_rand_ = &scramble_rand_;
+  gctx_.session_mgr_ = &session_mgr_;
   gctx_.init();
   gctx_.schema_status_proxy_ = &schema_status_proxy_;
   gctx_.in_bootstrap_ = false;

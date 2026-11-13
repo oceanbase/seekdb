@@ -1,0 +1,22 @@
+{
+  "name": "seekdb",
+  "version": "1.0.0",
+  "description": "Node.js bindings for seekdb",
+  "main": "seekdb.js",
+  "scripts": {
+    "test": "bash test.sh"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "koffi": "^2.7.0"
+  },
+  "keywords": [
+    "seekdb",
+    "database",
+    "ffi"
+  ],
+  "author": "OceanBase",
+  "license": "Apache-2.0"
+}

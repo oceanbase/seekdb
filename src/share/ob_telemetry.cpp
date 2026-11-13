@@ -42,6 +42,7 @@
 #undef ERROR
 #endif
 #else
+#include <limits.h>
 #include <unistd.h>
 #ifdef __APPLE__
 #include <TargetConditionals.h>
@@ -1053,18 +1054,21 @@ static int get_telemetry_base_dir(char *base_dir,
       CloseHandle(dir_handle);
     }
 #else
-    char *real_path = realpath(".", nullptr);
-    if (OB_ISNULL(real_path)) {
+    // realpath(".", nullptr) returns libc-allocated memory, which libseekdb
+    // cannot release: the library exports its own free() backed by the bundled
+    // jemalloc, so releasing a libc pointer crashes on Linux. Resolve into a
+    // stack buffer instead.
+    char real_path[PATH_MAX + 1] = {'\0'};
+    if (OB_ISNULL(::realpath(".", real_path))) {
       ret = OB_ERR_SYS;
     } else {
-      const int64_t real_path_len = strlen(real_path);
+      const int64_t real_path_len = static_cast<int64_t>(strlen(real_path));
       if (base_dir_size <= real_path_len) {
         ret = OB_SIZE_OVERFLOW;
       } else {
         MEMCPY(base_dir, real_path, real_path_len + 1);
         base_dir_len = real_path_len;
       }
-      free(real_path);
     }
 #endif
   }

@@ -49,7 +49,8 @@ class ObLightyQueue
 {
 public:
   typedef ObLightyCond Cond;
-  ObLightyQueue(): capacity_(0), n_cond_(0), data_(NULL), cond_(NULL), push_(0), pop_(0) {}
+  ObLightyQueue(): capacity_(0), n_cond_(0), data_(NULL), cond_(NULL),
+                   push_(0), pop_(0), cancel_seq_(0) {}
   ~ObLightyQueue() { destroy(); }
   int init(const uint64_t capacity,
            const lib::ObLabel &label = ObModIds::OB_LIGHTY_QUEUE);
@@ -61,7 +62,11 @@ public:
   bool is_inited() const { return NULL != data_; }
   int push(void* p);
   int pop(void*& p, int64_t timeout = 0);
-  // Broadcast to all per-seq conds so every worker currently blocked in pop()
+  // Bump the cancel generation, then broadcast to all per-seq conds so every
+  // worker currently blocked in pop(timeout > 0) wakes up and aborts its wait.
+  // Used by ObSimpleThreadPoolBase on stop/destroy: after stop_ is set no more
+  // tasks are pushed, so an aborted pop() simply returns OB_ENTRY_NOT_EXIST and
+  // the caller re-checks its stop flag instead of sleeping until the timeout.
   void wake_all();
 private:
   static uint64_t calc_n_cond(uint64_t capacity)
@@ -85,6 +90,9 @@ private:
   Cond* cond_;
   uint64_t push_ CACHE_ALIGNED;
   uint64_t pop_ CACHE_ALIGNED;
+  // Cancel generation. wake_all() bumps it; a pop(timeout > 0) that observes
+  // the bump aborts its wait instead of re-sleeping until the absolute timeout.
+  uint64_t cancel_seq_ CACHE_ALIGNED;
 };
 
 class LightyQueue

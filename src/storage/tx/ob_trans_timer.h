@@ -18,6 +18,9 @@
 #define OCEANBASE_TRANSACTION_OB_TRANS_TIMER_
 
 #include <stdint.h>
+#ifdef _WIN32
+#include <windows.h>  // SYSTEM_INFO, GetSystemInfo (get_thread_num_)
+#endif
 #include "share/ob_time_wheel.h"
 
 namespace oceanbase

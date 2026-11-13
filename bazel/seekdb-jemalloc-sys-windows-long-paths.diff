@@ -1,0 +1,104 @@
+--- a/build.rs
++++ b/build.rs
+@@ -56,12 +56,41 @@
+     .is_some()
+ }
+ 
++fn report_tail(label: &str, bytes: &[u8], keep: usize, drop_include_notes: bool) {
++    let text = String::from_utf8_lossy(bytes);
++    let lines: Vec<&str> = text
++        .lines()
++        .filter(|line| {
++            !(drop_include_notes && line.trim_start().starts_with("Note: including file:"))
++        })
++        .collect();
++    let start = lines.len().saturating_sub(keep);
++    if start < lines.len() {
++        eprintln!(
++            "--- {label}: last {} of {} lines ---",
++            lines.len() - start,
++            lines.len()
++        );
++        for line in &lines[start..] {
++            eprintln!("{line}");
++        }
++    }
++}
++
+ fn run(command: &mut Command) {
+     eprintln!("running: {command:?}");
+-    let status = command
+-        .status()
++    let output = command
++        .output()
+         .unwrap_or_else(|error| panic!("cannot start {command:?}: {error}"));
+-    assert!(status.success(), "command failed: {command:?}");
++    if !output.status.success() {
++        // Bazel discards action output above --experimental_ui_max_stdouterr_bytes,
++        // and configure/make can emit megabytes of /showIncludes notes before the
++        // real error. Report only the tail of each stream so the failure stays
++        // visible in CI logs.
++        report_tail("stderr", &output.stderr, 120, false);
++        report_tail("stdout", &output.stdout, 120, true);
++        panic!("command failed: {command:?} ({})", output.status);
++    }
+ }
+ 
+ fn absolute_from(base: &Path, path: impl AsRef<Path>) -> PathBuf {
+@@ -180,6 +209,19 @@
+     (output_library, output_header)
+ }
+ 
++fn copy_tree(from: &Path, to: &Path) {
++    fs::create_dir_all(to).unwrap();
++    for entry in fs::read_dir(from).unwrap() {
++        let entry = entry.unwrap();
++        let target = to.join(entry.file_name());
++        if entry.file_type().unwrap().is_dir() {
++            copy_tree(&entry.path(), &target);
++        } else {
++            fs::copy(entry.path(), &target).unwrap();
++        }
++    }
++}
++
+ fn shell_path(path: &Path, target_os: &str) -> String {
+     let path = path.to_string_lossy();
+     if target_os == "windows" {
+@@ -223,6 +265,21 @@
+         fs::remove_dir_all(&build_dir).unwrap();
+     }
+     fs::create_dir_all(&build_dir).unwrap();
++    // Windows still enforces MAX_PATH for most processes. Bazel stages this crate
++    // in a runfiles tree whose absolute path already exceeds that limit, so
++    // configure and the generated MSVC make file cannot address the vendored
++    // sources in place. Copy them next to the build directory, whose path Bazel
++    // keeps much shorter.
++    let source_dir = if target_os == "windows" {
++        let staged = out_dir.join("jemalloc-source");
++        if staged.exists() {
++            fs::remove_dir_all(&staged).unwrap();
++        }
++        copy_tree(&source_dir, &staged);
++        staged
++    } else {
++        source_dir
++    };
+ 
+     let mut args = vec![
+         "--with-version=VERSION".to_owned(),
+@@ -268,6 +325,14 @@
+         .arg(format!("-j{jobs}"))
+         .arg("build_lib_static")
+         .envs(&build_env);
++    if target_os == "windows" {
++        // The caller's absolute shell path (for example
++        // "C:/Program Files/Git/bin/sh.exe") reaches make through SHELL, and
++        // jemalloc's recipes expand $(SHELL) without quoting, so the space in
++        // "Program Files" truncates the command and make fails with 127. Pin a
++        // PATH-resolved shell name for the recipes instead.
++        build.arg("SHELL=sh");
++    }
+     run(&mut build);
+ 
+     let (library, public_header) = built_artifacts(&build_dir);

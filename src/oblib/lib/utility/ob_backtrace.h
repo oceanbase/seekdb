@@ -35,7 +35,18 @@ namespace oceanbase
 namespace common
 {
 extern bool g_enable_backtrace;
+// When set, ob_backtrace() walks frame pointers itself instead of calling
+// backtrace(). Embedders that reach the library through an FFI trampoline
+// without unwind information (koffi's assembly trampolines in the Node.js
+// binding, for example) get a corrupt frame chain past that trampoline, and
+// the libgcc unwinder behind backtrace() dereferences the bogus return
+// addresses it finds there. The frame-pointer walk checks every frame against
+// this thread's stack bounds first, so it truncates the trace instead of
+// faulting.
+extern bool g_use_light_backtrace;
 const int64_t LBT_BUFFER_LENGTH = 1024;
+int light_backtrace(void **buffer, int size);
+int light_backtrace(void **buffer, int size, int64_t rbp);
 #if defined(_WIN32) || defined(__EMSCRIPTEN__)
 int _ob_backtrace(void** buffer, int size);
 #define ob_backtrace(buffer, size)                                \
@@ -52,14 +63,18 @@ int _ob_backtrace(void** buffer, int size);
   ({                                                              \
     int rv = 0;                                                   \
     if (OB_LIKELY(::oceanbase::common::g_enable_backtrace)) {     \
-      rv = backtrace(buffer, size);                               \
+      rv = ::oceanbase::common::g_use_light_backtrace             \
+               ? ::oceanbase::common::light_backtrace(buffer, size) \
+               : backtrace(buffer, size);                         \
     }                                                             \
     rv;                                                           \
   })
 #endif
 char *lbt();
 char *lbt(char *buf, int32_t len);
+char *parray(int64_t *array, int size);
 char *parray(char *buf, int64_t len, int64_t *array, int size);
+void addrs_to_offsets(void **buffer, int size);
 } // end namespace common
 } // end namespace oceanbase
 

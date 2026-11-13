@@ -47,11 +47,13 @@ def cxx_bridge(name, src, hdrs = [], deps = [], cfgs = []):
         deps = [":cxx_headers"] + deps,
         visibility = ["//visibility:public"],
     )
+    # Public so the final link can pin this archive after the whole group for
+    # the crates that already embed it in the Rust staticlib.
     cc_library(
         name = name + "_bridge",
         srcs = [name + ".cc"],
         deps = [":" + name + "_headers"],
-        visibility = ["//rust:__subpackages__"],
+        visibility = ["//visibility:public"],
     )
 
 def _config_generate_impl(ctx):

@@ -65,6 +65,7 @@ int ObLightyQueue::init(const uint64_t capacity,
 
 void ObLightyQueue::wake_all()
 {
+  (void)ATOMIC_FAA(&cancel_seq_, 1);
   if (NULL != cond_) {
     for (uint64_t i = 0; i < n_cond_; i++) {
       cond_[i].signal();
@@ -117,7 +118,10 @@ int ObLightyQueue::pop(void*& p, int64_t timeout)
     uint64_t push_idx = ATOMIC_LOAD(&push_);
     if (push_idx <= seq) {
       int64_t abs_timeout = (timeout > 0 ? (get_us() + timeout) : 0);
-      while((push_idx = wait_push(seq, timeout)) <= seq && (timeout = abs_timeout - get_us()) > 0) {
+      uint64_t cancel_seq = ATOMIC_LOAD(&cancel_seq_);
+      while((push_idx = wait_push(seq, timeout)) <= seq
+            && ATOMIC_LOAD(&cancel_seq_) == cancel_seq
+            && (timeout = abs_timeout - get_us()) > 0) {
         PAUSE();
       }
       while((push_idx = push_bounded(DUMMY, seq + 1)) < seq) {

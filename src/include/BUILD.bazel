@@ -1,0 +1,31 @@
+package(default_visibility = ["//visibility:private"])
+
+exports_files(
+    [
+        "seekdb.cpp",
+        "seekdb.h",
+        "seekdb.version",
+    ],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+# macOS hides every symbol except the public C API; ld64 needs the allow list.
+genrule(
+    name = "seekdb_macos_exports",
+    srcs = ["seekdb.h"],
+    outs = ["seekdb_macos_exports.txt"],
+    cmd = "python3 $(location //bazel:exported_symbols.py) macos $(location seekdb.h) $@",
+    tools = ["//bazel:exported_symbols.py"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+# lld-link exports only what the module definition names, so derive it from the
+# same header for the Windows DLL.
+genrule(
+    name = "seekdb_windows_def",
+    srcs = ["seekdb.h"],
+    outs = ["seekdb.def"],
+    cmd = "python3 $(location //bazel:exported_symbols.py) windows $(location seekdb.h) $@",
+    tools = ["//bazel:exported_symbols.py"],
+    visibility = ["//src/observer:__pkg__"],
+)

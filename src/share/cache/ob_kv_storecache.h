@@ -115,7 +115,7 @@ class ObKVGlobalCache : public lib::ObICacheWasher
 {
 public:
   static const int64_t DEFAULT_ONCE_BATCH_GET_BUCKET_NUM = 10000;
-  static constexpr int64_t MAX_CACHE_SIZE = ObKVCacheStore::MAX_CACHE_SIZE;
+  static constexpr int64_t MAX_CACHE_SIZE = MAX_KVCACHE_MEMORY_SIZE;
   static ObKVGlobalCache &get_instance();
   static int64_t default_max_cache_size() { return MAX_CACHE_SIZE; }
   int init(const int64_t bucket_num = DEFAULT_BUCKET_NUM,

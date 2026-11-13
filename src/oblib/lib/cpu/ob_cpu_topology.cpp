@@ -75,7 +75,12 @@ int CpuFlagSet::init_from_os(uint64_t& flags)
 {
   int ret = OB_SUCCESS;
   flags = 0;
-#if defined(__linux__)
+#if defined(__ANDROID__)
+  // Android defines __linux__ as well, but app processes are sandboxed and shelling
+  // out to grep /proc/cpuinfo via system()/posix_spawn() is unsafe during startup.
+  // Rely on direct CPU probing instead.
+  init_from_cpu(flags);
+#elif defined(__linux__)
   const char* const CPU_FLAG_CMDS[(int)CpuFlag::MAX] = {"grep -E ' sse4_2( |$)' /proc/cpuinfo > /dev/null 2>&1",
       "grep -E ' avx( |$)' /proc/cpuinfo > /dev/null 2>&1",
       "grep -E ' avx2( |$)' /proc/cpuinfo > /dev/null 2>&1",
@@ -95,8 +100,8 @@ int CpuFlagSet::init_from_os(uint64_t& flags)
       flags |= (1 << i);
     }
   }
-#elif defined(__APPLE__) || defined(__ANDROID__)
-  // On macOS/Android, /proc/cpuinfo doesn't exist or SSE/AVX features are irrelevant.
+#elif defined(__APPLE__)
+  // On macOS, /proc/cpuinfo doesn't exist or SSE/AVX features are irrelevant.
   // We can use sysctl to check for features, but for now we rely on init_from_cpu
   // and just return success here with flags set to a reasonable default or 
   // matched with cpu flags to avoid mismatch error in constructor.

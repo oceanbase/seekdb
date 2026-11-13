@@ -55,8 +55,11 @@ cc_toolchain_config(
     dbg_compile_flags = ["-O0", "-g"],
     supports_start_end_lib = True,
     tool_paths = {
+        # Use the API-level wrapper so every invocation, including tools that
+        # shell out to $CC without our compile flags (e.g. Cargo build
+        # scripts), gets the Android target and NDK sysroot.
         "gcc": "ndk/bin/@ANDROID_TARGET@-clang",
-        "cpp": "ndk/bin/clang",
+        "cpp": "ndk/bin/@ANDROID_TARGET@-clang",
         "ld": "ndk/bin/ld.lld",
         "ar": "ndk/bin/llvm-ar",
         "nm": "ndk/bin/llvm-nm",
