@@ -157,8 +157,7 @@ public:
   int submit_async_refresh_schema_task(const int64_t schema_version);
   int check_server_empty(bool &server_empty) override;
   int wait_until_change_stream_refreshed(
-      common::ObMySQLProxy &mysql_proxy,
-      int64_t timeout_us) override;
+      int64_t abs_timeout_us) override;
 
 private:
   int inner_fill_tablet_info_(
