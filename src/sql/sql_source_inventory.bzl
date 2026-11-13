@@ -1662,6 +1662,8 @@ SQL_SIMD_UNITY_GROUPS = [
 
 SQL_STANDALONE_SOURCES = [
     struct(path = "src/sql/engine/basic/file_sql/file_sql_csv.cpp", language = "c++", kind = "source"),
+    struct(path = "src/sql/engine/basic/file_sql/file_sql_path.cpp", language = "c++", kind = "source"),
+    struct(path = "src/sql/engine/basic/file_sql/file_sql_reader.cpp", language = "c++", kind = "source"),
     struct(path = "src/sql/engine/basic/file_sql/file_sql_types.cpp", language = "c++", kind = "source"),
     struct(path = "src/sql/engine/aggregate/ob_aggregate_processor.cpp", language = "c++", kind = "source"),
     struct(path = "src/sql/engine/expr/ob_expr_add.cpp", language = "c++", kind = "source"),
