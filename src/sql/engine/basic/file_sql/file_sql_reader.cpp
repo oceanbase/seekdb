@@ -122,16 +122,19 @@ FileTableScanner *create_file_scanner(FileFormat format)
 
 bool parse_file_format(const std::string &name, FileFormat &format)
 {
-  if (0 == ::strcasecmp(name.c_str(), "csv")) {
+  // The names of the table functions and the short names of the formats are
+  // both accepted, read_json and read_ndjson read the same format.
+  if (0 == ::strcasecmp(name.c_str(), "read_csv") || 0 == ::strcasecmp(name.c_str(), "csv")) {
     format = FileFormat::CSV;
     return true;
   }
-  if (0 == ::strcasecmp(name.c_str(), "json") || 0 == ::strcasecmp(name.c_str(), "ndjson")
+  if (0 == ::strcasecmp(name.c_str(), "read_json") || 0 == ::strcasecmp(name.c_str(), "read_ndjson")
+      || 0 == ::strcasecmp(name.c_str(), "json") || 0 == ::strcasecmp(name.c_str(), "ndjson")
       || 0 == ::strcasecmp(name.c_str(), "jsonl") || 0 == ::strcasecmp(name.c_str(), "newline_delimited")) {
     format = FileFormat::JSONL;
     return true;
   }
-  if (0 == ::strcasecmp(name.c_str(), "parquet")) {
+  if (0 == ::strcasecmp(name.c_str(), "read_parquet") || 0 == ::strcasecmp(name.c_str(), "parquet")) {
     format = FileFormat::PARQUET;
     return true;
   }
