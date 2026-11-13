@@ -18,6 +18,7 @@ import package_framework
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import binary
+import symbols
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_MAP = 'framework module SeekDB {\n  umbrella header "seekdb.h"\n  export *\n}\n'
@@ -65,8 +66,8 @@ def swift_import(framework, sdk, options):
         input="import SeekDB\nlet _: SeekdbHandle? = nil\nlet _ = SEEKDB_SUCCESS\n", text=True)
 
 
-def write_distribution(prefix, kind, variant, options, inputs=None):
-    built_at = datetime.now(timezone.utc).replace(microsecond=0)
+def write_distribution(prefix, kind, variant, options, inputs=None, built_at=None, **extra):
+    built_at = built_at or datetime.now(timezone.utc).replace(microsecond=0)
     files = {path.relative_to(prefix).as_posix(): {
         "sha256": binary.digest(path), "size": metadata.st_size,
     } for path, metadata in sorted(binary.entries(prefix)) if stat.S_ISREG(metadata.st_mode)}
@@ -76,6 +77,7 @@ def write_distribution(prefix, kind, variant, options, inputs=None):
         "platform": {"os": "ios", "arch": "arm64", "minimum_os": options.minimum_os, "variant": variant},
         "files": files,
     }
+    manifest.update(extra)
     if inputs is not None:
         manifest["input_archives"] = inputs
     (prefix / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -95,6 +97,7 @@ def write_distribution(prefix, kind, variant, options, inputs=None):
                 stream.write(path, path.relative_to(prefix).as_posix())
     archive.with_name(name + ".sha256").write_text("%s  %s\n" % (binary.digest(archive), name))
     print(archive, flush=True)
+    return archive
 
 
 def load_distribution(archive, destination, options):
@@ -148,6 +151,7 @@ def load_distribution(archive, destination, options):
     sdk = "iphonesimulator" if variant == "simulator" else "iphoneos"
     framework = destination / "SeekDB.framework"
     verify_framework(framework, sdk, options)
+    symbols.verify_stripped(framework)
     if (framework / "Modules/module.modulemap").read_text() != MODULE_MAP:
         raise ValueError("Unexpected iOS framework module map")
     return framework, variant
@@ -159,11 +163,24 @@ def framework(options, temporary):
     result = destination / "SeekDB.framework"
     shutil.copytree(options.input, result)
     verify_framework(result, options.sdk, options)
+    debug = temporary / "debug-info"
+    records = symbols.separate(destination, debug, "ios", options.input / "SeekDB",
+                               Path("SeekDB.framework/SeekDB"))
+    manifest_path = result / "build-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["binary_sha256"] = binary.digest(result / "SeekDB")
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    verify_framework(result, options.sdk, options)
     (result / "Modules").mkdir(exist_ok=True)
     (result / "Modules/module.modulemap").write_text(MODULE_MAP)
     swift_import(result, options.sdk, options)
-    write_distribution(destination, "seekdb-framework",
-                       "simulator" if options.sdk == "iphonesimulator" else "device", options)
+    variant = "simulator" if options.sdk == "iphonesimulator" else "device"
+    built_at = datetime.now(timezone.utc).replace(microsecond=0)
+    related = {}
+    if records:
+        archive = write_distribution(debug, "seekdb-debug-info", variant, options, built_at=built_at, binaries=records)
+        related = {"archive": archive.name, "sha256": binary.digest(archive)}
+    write_distribution(destination, "seekdb-framework", variant, options, built_at=built_at, debug_info=related)
 
 
 def xcframework(options, temporary):
@@ -198,6 +215,7 @@ def xcframework(options, temporary):
         sdk = "iphonesimulator" if variant == "simulator" else "iphoneos"
         nested = result / binary.relative(library["LibraryIdentifier"]) / "SeekDB.framework"
         verify_framework(nested, sdk, options)
+        symbols.verify_stripped(nested)
         swift_import(nested, sdk, options)
     if variants != {"device", "simulator"}:
         raise ValueError("XCFramework is missing an iOS variant")

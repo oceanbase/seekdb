@@ -13,9 +13,11 @@ contains the workflow, then choose:
 | Binary run ID | Empty builds binaries; a previous run ID reuses its Linux binaries for RPM/DEB |
 | Jobs | 0 selects one job on macOS/iOS and two elsewhere; other values are passed to Bazel |
 
-The workflow builds O2 with line tables and the package runtime configuration.
-Each target compiles seekdb once. Download the `binary-*` artifacts for portable
-archives and checksums. Linux `system-packages-*` artifacts contain RPM/DEB
+The workflow builds O2 with line tables and the package runtime configuration,
+then separates debug symbols before exporting the runtime files.
+Each target compiles seekdb once. Download the `binary-*` artifacts for stripped
+portable archives and checksums, and `debug-info-*` for their separate symbols.
+Linux `system-packages-*` artifacts contain RPM/DEB
 packages made from those archives and the SDK's obshell, without another SDK
 initialization or engine build. Other targets produce portable archives.
 Select `ios` to build device and simulator frameworks in parallel, or select
@@ -51,9 +53,9 @@ packages in the run. For example:
 
 ```text
 seekdb-1.4.0.0-20261112T100530Z.x86_64.rpm
-seekdb-debuginfo-1.4.0.0-20261112T100530Z.x86_64.rpm
 seekdb_1.4.0.0-20261112T100530Z_amd64.deb
 seekdb-binary-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
+seekdb-debug-info-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
 seekdb-framework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
 seekdb-framework-1.4.0.0-ios18.0-simulator-arm64-20261112T100530Z-sdb0123456789ab.zip
 seekdb-xcframework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
@@ -75,6 +77,34 @@ and Debian 12 packages. It also uses system libaio, with a private compatibility
 link for the `libaio1t64` SONAME on amd64/arm64. Install it using
 `apt install ./seekdb_<version>-<timestamp>_<arch>.deb` to fetch missing dependencies.
 Portable binary archives still include their runtime libraries.
+
+## Debug symbols
+
+All distributed runtime binaries are stripped, including bundled native libraries
+and obshell. This applies to binary archives, RPM/DEB/TGZ payloads, iOS frameworks,
+and XCFrameworks. RPM no longer generates a separate `seekdb-debuginfo` RPM;
+symbols are exported once alongside the portable binary instead.
+
+Each `seekdb-debug-info` archive uses the same platform, UTC export timestamp,
+and source SHA as its matching binary/framework archive. Its manifest records
+the stripped binary hashes and symbol paths; the runtime manifest records the
+debug archive's name and SHA-256. Both archives have file manifests and checksum
+sidecars. The available information comes from the O2 line-table build, rather
+than a separate full-debug compilation.
+
+- Linux and Android: `.debug` files, with GNU debuglink references in the stripped
+  binaries. The symbol tree mirrors the runtime paths, including bundled libraries.
+- macOS and iOS: dSYM bundles with UUIDs verified against the stripped Mach-O files.
+  Stripping preserves exported symbols and re-signs modified Mach-O files ad hoc.
+- Windows: the linker's PDB is copied into the symbol archive. EXE/DLL files retain
+  only their external CodeView/PDB reference, not embedded debugging data.
+
+iOS exports one symbol ZIP per SDK; these dSYMs also match the corresponding
+device/simulator slices in the XCFramework. The combined framework contains no
+dSYMs. RPM/DEB consumers use the stripped binary and do not download symbol archives.
+Repackaging an older binary archive also strips its payload, without rebuilding
+the engine or altering the original archive. To preserve symbols, retain its
+original unstripped binary if it predates separate symbol exports.
 
 ## Compatibility
 

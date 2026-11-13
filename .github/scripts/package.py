@@ -239,7 +239,14 @@ def export():
     run(arguments)
     if os.environ["PACKAGE_OS"] == "linux":
         helper = ROOT / "deps/3rd/home/admin/oceanbase/bin/obshell"
-        run(["tar", "--dereference", "-czf", ROOT / "dist/obshell.tar.gz", "-C", helper.parent, helper.name])
+        staged = CACHE / "obshell"
+        staged.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(helper, staged / helper.name)
+        (staged / helper.name).chmod(0o755)
+        sys.path.insert(0, str(ROOT / "package"))
+        import symbols
+        symbols.strip_tree(staged, "linux")
+        run(["tar", "-czf", ROOT / "dist/obshell.tar.gz", "-C", staged, helper.name])
 
 
 def ios_package_arguments():

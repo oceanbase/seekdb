@@ -14,6 +14,8 @@ import subprocess
 import tarfile
 import tempfile
 
+import symbols
+
 ROOT = Path(__file__).resolve().parents[1]
 SYSPACK = Path("src/share/inner_table/sys_package/bazel_generated/syspack_release")
 LIFECYCLE = {"preinst": "pre_install", "postinst": "post_install",
@@ -154,21 +156,11 @@ def deb(payload, output, version, release, architecture=None):
 def rpm(payload, work, output, version, release, dependencies, architecture=None):
     for directory in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
         (work / directory).mkdir()
-    strip = dependencies / "usr/local/oceanbase/devtools/bin/llvm-strip"
-    if not strip.is_file():
-        strip = shutil.which("llvm-strip") or shutil.which("strip")
-        if not strip:
-            raise ValueError("RPM packaging requires llvm-strip or strip")
+    strip = symbols.tool("strip", "linux")
     spec = work / "SPECS/seekdb.spec"
     content = (ROOT / "package/rpm/seekdb.spec.in").read_text()
-    libraries = payload / "usr/libexec/seekdb/lib"
-    binaries = [payload / "usr/bin/seekdb"] + [path for path in libraries.rglob("*")
-                                               if path.is_file() and not path.is_symlink()]
-    debug_info = any(re.search(r"\.(?:z)?debug_info\b", subprocess.check_output(
-        ["readelf", "-SW", str(path)], text=True)) for path in binaries)
     values = {"STRIP": str(strip), "VERSION": version, "RELEASE": release,
-              "PAYLOAD": str(payload),
-              "WITH_DEBUGINFO": "1" if debug_info else "0"}
+              "PAYLOAD": str(payload)}
     for name, script in (("PRE", "pre_install"), ("POST", "post_install"),
                          ("PREUN", "pre_uninstall"), ("POSTUN", "post_uninstall")):
         source = payload / "usr/libexec/seekdb/scripts" / (script + ".sh")
@@ -297,7 +289,17 @@ def main():
                 for name in ("LICENSE", "NOTICE"):
                     copy(ROOT / name, binary_package / "licenses" / name)
                 metadata["build_config"] = options.build_config
-                binary.write(binary_package, output, options.version, options.release, options.source_commit, metadata)
+                debug = work / "debug-info"
+                primary = Path("bin/seekdb.exe" if options.layout == "windows" else "bin/seekdb")
+                records = symbols.separate(binary_package, debug, options.layout, original.resolve(), primary)
+                built_at = datetime.now(timezone.utc).replace(microsecond=0)
+                related = {}
+                if records:
+                    archive = binary.write(debug, output, options.version, options.release, options.source_commit,
+                                           metadata, kind="seekdb-debug-info", built_at=built_at, binaries=records)
+                    related = {"archive": archive.name, "sha256": binary.digest(archive)}
+                binary.write(binary_package, output, options.version, options.release, options.source_commit, metadata,
+                             built_at=built_at, debug_info=related)
                 return
         payload = output if options.format == "stage" else work / "server"
         stage(payload, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
@@ -318,6 +320,7 @@ def main():
                 shutil.copytree(binary_package / "lib/seekdb", libraries, dirs_exist_ok=True,
                                 ignore=shutil.ignore_patterns("libaio.so", "libaio.so.*"))
             normalize_permissions(payload)
+        symbols.strip_tree(payload, options.layout)
         if options.format == "rpm":
             rpm(payload, work, output, options.version, options.release, options.dependencies.resolve(),
                 metadata["arch"] if metadata else None)
@@ -331,6 +334,7 @@ def main():
                 libs = work / "libs"
                 stage(libs, options.artifacts.resolve(), options.dependencies.resolve(), "linux",
                       options.version, options.release, "libs", binary_package=binary_package)
+                symbols.strip_tree(libs, "linux")
                 tgz(libs, output, options.version, options.release, "libs", "linux",
                     metadata["arch"] if metadata else None)
 
