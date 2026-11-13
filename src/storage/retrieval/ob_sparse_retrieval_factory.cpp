@@ -246,7 +246,7 @@ int ObSparseRetrievalDaaTCursor::retain_candidate(const ObSparseRetrievalMatch &
   } else if (!accepted || 0 == candidate_limit_) {
   } else if (results_.count() < candidate_limit_) {
     if (OB_FAIL(results_.push_back(match))) {
-    } else if (OB_FAIL(sift_up(results_.count() - 1))) {
+    } else if (candidate_limit_ < (INT64_MAX / 2) && OB_FAIL(sift_up(results_.count() - 1))) {
     }
   } else {
     // The root is the worst retained match.  Keeping that invariant makes
@@ -348,6 +348,13 @@ int ObSparseRetrievalDaaTCursor::compare_matches(
 int ObSparseRetrievalDaaTCursor::sort_results()
 {
   int ret = OB_SUCCESS;
+  // If candidate_limit_ was unbounded, build the min-heap in O(N) using Floyd's heapify:
+  if (candidate_limit_ >= (INT64_MAX / 2)) {
+    for (int64_t i = (results_.count() / 2) - 1; OB_SUCC(ret) && i >= 0; --i) {
+      if (OB_FAIL(sift_down(results_.count(), i))) {
+      }
+    }
+  }
   // Repeatedly move the worst heap root to the tail.  The remaining prefix
   // stays a worst-root heap, so the finished array is best-first with the
   // same score-desc/id-asc policy used for retention.
@@ -988,7 +995,7 @@ int ObSparseRetrievalBMWCursor::retain_candidate(
   } else if (!accepted || 0 == candidate_limit_) {
   } else if (results_.count() < candidate_limit_) {
     if (OB_FAIL(results_.push_back(match))) {
-    } else if (OB_FAIL(sift_up(results_.count() - 1))) {
+    } else if (candidate_limit_ < (INT64_MAX / 2) && OB_FAIL(sift_up(results_.count() - 1))) {
     }
   } else {
     int cmp_result = 0;
@@ -1005,6 +1012,12 @@ int ObSparseRetrievalBMWCursor::retain_candidate(
 int ObSparseRetrievalBMWCursor::sort_results()
 {
   int ret = OB_SUCCESS;
+  if (candidate_limit_ >= (INT64_MAX / 2)) {
+    for (int64_t i = (results_.count() / 2) - 1; OB_SUCC(ret) && i >= 0; --i) {
+      if (OB_FAIL(sift_down(results_.count(), i))) {
+      }
+    }
+  }
   for (int64_t heap_size = results_.count(); OB_SUCC(ret) && heap_size > 1; --heap_size) {
     const ObSparseRetrievalMatch tmp = results_.at(0);
     results_.at(0) = results_.at(heap_size - 1);

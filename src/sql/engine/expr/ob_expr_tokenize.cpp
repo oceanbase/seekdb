@@ -86,8 +86,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   int64_t doc_len = 0;
   storage::ObFTWordMap token_map;
 
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
-
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
@@ -212,7 +210,7 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
   } else if (OB_FAIL(parse_fulltext(expr, ctx, param))) {
   } else if (OB_FAIL(parse_parser_name(expr, ctx, param))) {
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (!param.properties_.empty() && OB_FAIL(param.reform_parser_properties(param.properties_))) {
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
   }
   return ret;
