@@ -4032,6 +4032,27 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
   return ret;
 }
 
+int ObDMLResolver::resolve_file_table_column_all_items(const TableItem &table_item,
+                                                       ObIArray<ColumnItem> &col_items)
+{
+  int ret = OB_SUCCESS;
+  ObDMLStmt *stmt = get_stmt();
+  if (OB_ISNULL(stmt) || OB_ISNULL(table_item.file_table_def_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    // The columns of the file are the columns that the inference reported, the
+    // column items of the table item carry their types.
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_item.file_table_def_->columns_.count(); ++i) {
+      const ColumnItem *col_item = stmt->get_column_item_by_id(table_item.table_id_, i);
+      if (OB_ISNULL(col_item)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(col_items.push_back(*col_item))) {
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDMLResolver::generate_file_table_output_column_item(TableItem *table_item,
                                                           const ObDataType &data_type,
                                                           const ObString &column_name,
