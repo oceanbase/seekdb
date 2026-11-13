@@ -119,6 +119,13 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
     }
   }
   if (OB_SUCC(ret)) {
+    if (OB_FAIL(dedupe_in_list_items(stmt, is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+      OPT_TRACE("dedupe in list items:", is_happened);
+    }
+  }
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(convert_case_when_predicate(stmt, is_happened))) {
     } else {
       trans_happened |= is_happened;
@@ -2715,6 +2722,112 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
         } else if (!cmp_ctx.equal_pairs_.empty()) {
           cmp_ctx.equal_pairs_.reset();
         }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::dedupe_in_list_items(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null stmt", K(ret));
+  } else if (stmt->is_sel_del_upd()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_size(); ++i) {
+      if (OB_FAIL(SMART_CALL(recursive_dedupe_in_list_items(stmt->get_condition_exprs().at(i),
+                                                            trans_happened)))) {
+        LOG_WARN("failed to dedupe in list items", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::recursive_dedupe_in_list_items(ObRawExpr *&expr, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(recursive_dedupe_in_list_items(expr->get_param_expr(i),
+                                                            trans_happened)))) {
+        LOG_WARN("failed to dedupe in list items", K(ret));
+      }
+    }
+    if (OB_FAIL(ret)) {
+      // do nothing
+    } else if ((T_OP_IN == expr->get_expr_type() || T_OP_NOT_IN == expr->get_expr_type())
+               && 2 == expr->get_param_count()
+               && OB_NOT_NULL(expr->get_param_expr(0))
+               && T_OP_ROW != expr->get_param_expr(0)->get_expr_type()) {
+      // scalar IN predicate, e.g. c1 IN (1, 1, 2)
+      if (OB_FAIL(SMART_CALL(do_dedupe_in_list_items(*(static_cast<ObOpRawExpr *>(expr)),
+                                                     trans_happened)))) {
+        LOG_WARN("failed to dedupe in list items", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::do_dedupe_in_list_items(ObOpRawExpr &in_expr, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  ObRawExpr *right_expr = NULL;
+  if (OB_ISNULL(right_expr = in_expr.get_param_expr(1))
+      || T_OP_ROW != right_expr->get_expr_type()) {
+    // IN (subquery) or non-row right value, nothing to do
+  } else {
+    ObOpRawExpr *row_expr = static_cast<ObOpRawExpr *>(right_expr);
+    const int64_t item_count = row_expr->get_param_count();
+    ObSEArray<ObRawExpr *, 64> new_items;
+    ObSEArray<const common::ObObj *, 64> kept_values;
+    bool has_unknown = false;
+    for (int64_t i = 0; OB_SUCC(ret) && !has_unknown && i < item_count; ++i) {
+      ObRawExpr *item = row_expr->get_param_expr(i);
+      if (OB_ISNULL(item)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null in list item", K(ret));
+      } else if (item->is_const_raw_expr()) {
+        const common::ObObj &value = static_cast<ObConstRawExpr *>(item)->get_value();
+        if (value.is_unknown()) {
+          // question mark placeholders must keep one-to-one with bound parameters
+          has_unknown = true;
+        } else {
+          bool found = false;
+          for (int64_t j = 0; !found && j < kept_values.count(); ++j) {
+            found = (value == *(kept_values.at(j)));
+          }
+          if (!found) {
+            if (OB_FAIL(new_items.push_back(item))) {
+              LOG_WARN("failed to push back in list item", K(ret));
+            } else if (OB_FAIL(kept_values.push_back(&value))) {
+              LOG_WARN("failed to push back in list value", K(ret));
+            }
+          }
+        }
+      } else {
+        if (OB_FAIL(new_items.push_back(item))) {
+          LOG_WARN("failed to push back in list item", K(ret));
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+      // do nothing
+    } else if (has_unknown || new_items.count() == item_count) {
+      // nothing to dedupe
+    } else {
+      OPT_TRACE("dedupe in list items, before count:", item_count);
+      OPT_TRACE("dedupe in list items, after count:", new_items.count());
+      if (OB_FAIL(row_expr->set_param_exprs(new_items))) {
+        LOG_WARN("failed to set in list items", K(ret));
+      } else {
+        trans_happened = true;
       }
     }
   }

@@ -207,6 +207,8 @@ private:
                                     const ObRawExpr *left_expr,
                                     const bool is_root_condition,
                                     ObRawExpr *&right_expr);
+  int dedupe_in_list_nodes(const ParseNode *in_list,
+                           const ParseNode *&ret_list);
 private:
   // data members
   ObExprResolveContext &ctx_;
