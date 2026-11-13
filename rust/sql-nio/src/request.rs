@@ -16,7 +16,7 @@ use crate::*;
 
 pub(crate) fn next_request_ticket() -> Option<u64> {
     NEXT_REQUEST_TICKET
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
             (current < usize::MAX as u64).then(|| current + 1)
         })
         .ok()
