@@ -118,6 +118,15 @@ def _archive_args(files, platform, alwayslink):
             args.append(file.path)
     return args
 
+def _named_archives(targets):
+    # Static archives of the given targets, keyed by path so that whole_group
+    # members can be matched after the transitive closure is flattened.
+    paths = {}
+    for target in targets:
+        for file in _link_inputs(target):
+            paths[file.path] = True
+    return paths
+
 def _windows_plain_archive(library, archive):
     # Archives that stay on the link line but must never be whole-archived: an
     # import library holds import descriptors instead of objects, and the
@@ -212,6 +221,7 @@ def _final_link_impl(ctx):
         ctx.attr.ordered_link_files,
     )
     windows_plain_group_inputs = []
+    plain_group_inputs = []
     if platform.os == "windows":
         # A Rust staticlib embeds the MSVC import libraries it links against
         # (kernel32.dll, bcryptprimitives.dll, ...). /WHOLEARCHIVE visits those
@@ -242,6 +252,32 @@ def _final_link_impl(ctx):
             for file in whole_group_inputs
             if file.path not in plain_archives
         ]
+    # A Rust staticlib bundles the native static libraries its crates link
+    # against. Whole-archiving those same archives here adds a second copy of
+    # every object they contain: on aarch64 the duplicate poly1305 objects put
+    # poly1305_blocks out of the adr relocation range, and ld64 rejects the
+    # duplicate symbols outright. Keep the named archives on the link line right
+    # after the whole group instead, so their members are only pulled for
+    # symbols the embedded copy does not provide. Windows keeps whole-archiving
+    # them: its own import-library handling above already covers the objects
+    # that must stay out of the whole group.
+    plain_group_archives = {}
+    if platform.os != "windows":
+        plain_group_archives = _named_archives(ctx.attr.plain_group_archives)
+    if plain_group_archives:
+        plain_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path in plain_group_archives
+        ]
+        whole_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path not in plain_group_archives
+        ]
+        plain_group_inputs = windows_plain_group_inputs + plain_group_inputs
+    else:
+        plain_group_inputs = windows_plain_group_inputs
     sdk_inputs = _inputs_from_deps(ctx.attr.sdk_deps)
     sdk_paths = {file.path: True for file in sdk_inputs}
     group_inputs = [file for file in group_inputs if file.path not in sdk_paths]
@@ -256,7 +292,7 @@ def _final_link_impl(ctx):
         direct_objects +
         group_inputs +
         whole_group_inputs +
-        windows_plain_group_inputs +
+        plain_group_inputs +
         tail_inputs +
         ordered_link_files +
         sdk_inputs +
@@ -268,7 +304,7 @@ def _final_link_impl(ctx):
     ordered_link_args = _file_paths(direct_objects)
     ordered_link_args.extend(_archive_group(group_inputs, platform, alwayslink = alwayslink))
     ordered_link_args.extend(_archive_group(whole_group_inputs, platform, whole = True))
-    ordered_link_args.extend(_file_paths(windows_plain_group_inputs))
+    ordered_link_args.extend(_file_paths(plain_group_inputs))
     ordered_link_args.extend(_archive_args(tail_inputs, platform, alwayslink))
     ordered_link_args.extend(_file_paths(ordered_link_files))
     ordered_link_args.extend(_archive_group(sdk_inputs, platform, alwayslink = alwayslink))
@@ -369,6 +405,7 @@ final_link = rule(
         "direct_object_deps": attr.label_list(providers = [CcInfo]),
         "group_deps": attr.label_list(providers = [CcInfo]),
         "whole_group_deps": attr.label_list(providers = [CcInfo]),
+        "plain_group_archives": attr.label_list(providers = [CcInfo]),
         "tail_deps": attr.label_list(providers = [CcInfo]),
         "sdk_deps": attr.label_list(providers = [CcInfo]),
         "ordered_link_files": attr.label_list(allow_files = True),
