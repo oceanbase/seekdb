@@ -1,0 +1,20 @@
+connection default;
+
+--error 1210
+select ai_prompt('{0}', cast('1' as json));
+
+# Check index errors before model lookup. The valid rendering cases use a local HTTP fixture.
+--error 1210
+select ai_complete('ai_prompt_render_model', ai_prompt('{1}', 'x'));
+--error 1210
+select ai_complete('ai_prompt_render_model', ai_prompt('{18446744073709551616}', 'x'));
+--error 1210
+select ai_complete('ai_prompt_render_model', ai_prompt('{-1}', 'x'));
+--error 1210
+select ai_complete('ai_prompt_render_model', ai_prompt('{0x}', 'x'));
+--error 1210
+select ai_complete('ai_prompt_render_model', ai_prompt('prefix {0', 'x'));
+--error 1210
+select ai_complete('ai_prompt_render_model', ai_prompt('{0}', ai_prompt('{1}', 'x')));
+
+--exec python3 mysql_test/test_suite/ai_function/include/ai_prompt_render.py

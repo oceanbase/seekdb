@@ -1,0 +1,14 @@
+select ai_prompt('{0}', cast('1' as json));
+ERROR HY000: Incorrect arguments to ai_prompt: expected a JSON array or object
+select ai_complete('ai_prompt_render_model', ai_prompt('{1}', 'x'));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
+select ai_complete('ai_prompt_render_model', ai_prompt('{18446744073709551616}', 'x'));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
+select ai_complete('ai_prompt_render_model', ai_prompt('{-1}', 'x'));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
+select ai_complete('ai_prompt_render_model', ai_prompt('{0x}', 'x'));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
+select ai_complete('ai_prompt_render_model', ai_prompt('prefix {0', 'x'));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
+select ai_complete('ai_prompt_render_model', ai_prompt('{0}', ai_prompt('{1}', 'x')));
+ERROR HY000: Incorrect arguments to ai_prompt: invalid placeholder index
