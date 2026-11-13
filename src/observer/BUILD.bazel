@@ -648,11 +648,16 @@ final_link(
     # whole-archiving the same archives adds a second copy of every object they
     # hold. aarch64 rejects the duplicate poly1305 objects with an out-of-range
     # adr relocation, and ld64 rejects the duplicate symbols. Keep these on the
-    # link line and pull their members on demand instead.
+    # link line and pull their members on demand instead. The http-client and
+    # crypto crates list their CXX bridge in link_deps, so those bridge objects
+    # are embedded in libseekdb_rust.a as well; naming the bridge archives here
+    # is what keeps ld64 from reporting the duplicates.
     plain_group_archives = [
         "//bazel/third_party:curl",
         "//bazel/third_party:libcrypto",
         "//bazel/third_party:libssl",
+        "//rust:crypto_bridge",
+        "//rust:http_client_bridge",
     ],
     ordered_link_files = _ORDERED_LINK_FILES,
     extra_inputs = _EXTRA_LINK_INPUTS + _LIBSEEKDB_EXPORT_INPUTS,
