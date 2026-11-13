@@ -114,6 +114,11 @@ SQL 层无从察觉，这个代价不能省。
 | `tools/hipvs_bridge/bench/selfcheck.cpp` | ABI 自检 + 构建耗时 + recall 冒烟 |
 | `tools/hipvs_bridge/bench/bench_build.py` | CPU vs hipVS 构建基准，输出 CSV/Markdown |
 | `tools/hipvs_bridge/README.md` | 构建、ABI、参数映射 |
+| `src/oblib/lib/vector/ob_hipvs_bridge_loader.h` | 服务端侧的 `dlopen`/`dlsym` 加载器与能力探测 |
+
+服务端不直接链接 hipVS：`ob_hipvs_bridge_loader.h` 在首次遇到 `lib=cuvs` 的索引时把
+`libseekdb_cuvs_bridge.so` 打开，缓存整张函数表，并把设备探测结果记住（`usable()`）。
+探测失败只意味着"继续走 CPU"，不会重试也不会拖慢其他索引。
 
 ## 4. 构建与运行
 
