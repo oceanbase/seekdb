@@ -50,8 +50,8 @@ int ObAIFuncExprInfo::init(ObIAllocator &allocator, const ObString &model_id, sh
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "model id is empty");
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_id, ai_model_schema))) {
   } else if (OB_ISNULL(ai_model_schema)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_function, ai model not found, please check if the model exists");
+    ret = OB_AI_FUNC_MODEL_NOT_FOUND;
+    LOG_USER_ERROR(OB_AI_FUNC_MODEL_NOT_FOUND, model_id.length(), model_id.ptr());
   } else {
     OZ(ob_write_string(allocator, ai_model_schema->get_name(), name_));
     OZ(ob_write_string(allocator, ai_model_schema->get_model_name(), model_));

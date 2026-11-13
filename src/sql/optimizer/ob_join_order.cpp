@@ -1423,6 +1423,7 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
     }  else if (OB_FAIL(schema_guard->get_table_schema(vec_index_id, vec_index_schema))) {
     } else if (OB_ISNULL(vec_index_schema)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nullptr to index schema", K(ret));
     } else {
       is_ipivf = ObVectorIndexUtil::is_sindi_index(vec_index_schema);
       ObVecIndexType pre_vec_type = (vec_index_schema->is_vec_hnsw_index() && helper.vec_index_type_ == ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN) ? 
@@ -1460,6 +1461,7 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
   if (OB_FAIL(ret) || !vector_index_match) {
   } else if (OB_ISNULL(vec_index_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("vec_table_schema unexpected null", K(ret));
   } else {
     double selectivity = 0.0;
     if (OB_FAIL(ObOptSelectivity::calculate_selectivity(get_plan()->get_basic_table_metas(),
@@ -16208,6 +16210,30 @@ int ObJoinOrder::get_vector_index_tid_from_expr(ObSqlSchemaGuard *schema_guard,
     } else if (vector_index_match && has_aggr) {
       vector_index_match = false;
     } else if (!vector_index_match) {
+      // this table does not own the vector column; nothing to match here
+    } else if (is_local_vec_ivf_index(index_type)) {
+      // An ivf rebuild exposes both the old and the new domain index. Resolve
+      // the newest complete generation here so an index that is still being
+      // built does not hide the readable generation it is replacing.
+      ObVectorIndexAlgorithmType algorithm = ObVectorIndexAlgorithmType::VIAT_IVF_FLAT;
+      uint64_t centroid_tid = OB_INVALID_ID;
+      uint64_t cid_vector_tid = OB_INVALID_ID;
+      uint64_t rowkey_cid_tid = OB_INVALID_ID;
+      uint64_t extra_tid = OB_INVALID_ID;
+      if (is_vec_ivfsq8_index(index_type)) {
+        algorithm = ObVectorIndexAlgorithmType::VIAT_IVF_SQ8;
+      } else if (is_vec_ivfpq_index(index_type)) {
+        algorithm = ObVectorIndexAlgorithmType::VIAT_IVF_PQ;
+      }
+      if (OB_FAIL(ObVectorIndexUtil::get_latest_avaliable_index_tids_for_ivf(
+              schema_guard->get_schema_guard(), *table_schema, vec_col_id, algorithm,
+              centroid_tid, cid_vector_tid, rowkey_cid_tid, extra_tid))) {
+      } else if (OB_INVALID_ID == centroid_tid) {
+        LOG_INFO("no readable ivf index generation", K(ref_table_id), K(vec_col_id));
+        vector_index_match = false;
+      } else {
+        vec_index_tid = centroid_tid;
+      }
     } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid(schema_guard->get_schema_guard(),
                                                                *table_schema,
                                                                index_type,

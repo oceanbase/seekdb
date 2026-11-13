@@ -1273,7 +1273,26 @@ int ObSPIService::spi_set_variable(ObPLExecCtx *ctx,
             scope = static_cast<ObSetVar::SetScopeType>(expr->get_expr_items().at(2).get_obj().get_int());
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(set_variable(ctx, scope, name, *value, is_default))) {
+        if (OB_SUCC(ret) && T_OP_GET_USER_VAR == expr_type && !is_default) {
+          // Re-issuing the assignment as SET @x = <literal> normalizes the
+          // evaluated value exactly like the SQL path, but that synthetic
+          // statement owns a diagnostics area of its own. Give it a scratch
+          // buffer so its reset/warnings cannot erase the conditions produced
+          // by evaluating the RHS. On failure keep the scratch contents: the
+          // error message and SQLSTATE are reported from there.
+          ObWarningBuffer *outer_wb = ob_get_tsi_warning_buffer();
+          ObWarningBuffer inner_wb;
+          if (OB_NOT_NULL(outer_wb)) {
+            ob_setup_tsi_warning_buffer(&inner_wb);
+          }
+          ret = set_variable(ctx, scope, name, *value, is_default);
+          if (OB_NOT_NULL(outer_wb)) {
+            ob_setup_tsi_warning_buffer(outer_wb);
+            if (OB_FAIL(ret)) {
+              *outer_wb = inner_wb;
+            }
+          }
+        } else if (OB_SUCC(ret) && OB_FAIL(set_variable(ctx, scope, name, *value, is_default))) {
         }
       }
     } else if (T_OP_GET_PACKAGE_VAR == expr_type) {

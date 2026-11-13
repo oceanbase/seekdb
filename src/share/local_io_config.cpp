@@ -25,6 +25,7 @@
 #include <string>
 #ifdef _WIN32
 #include <io.h>
+#include "lib/utility/ob_platform_io.h"
 #else
 #include <unistd.h>
 #endif
@@ -169,7 +170,7 @@ int probe_local_io(const char *directory, LocalIOConfig &config)
   std::string path = std::string(directory) + "/.seekdb-io-probe-XXXXXX";
 #ifdef _WIN32
   int error = _mktemp_s(path.data(), path.size() + 1);
-  int fd = error == 0 ? ::open(path.c_str(), O_CREAT | O_EXCL | O_RDWR | _O_BINARY | _O_TEMPORARY, 0600) : -1;
+  int fd = error == 0 ? common::ob_open_utf8(path.c_str(), O_CREAT | O_EXCL | O_RDWR | _O_TEMPORARY, 0600) : -1;
 #else
   int fd = ::mkstemp(path.data());
   int error = 0;

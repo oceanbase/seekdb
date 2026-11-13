@@ -228,14 +228,23 @@ int ObReleaseAllLockExecutor::execute(ObExecContext &ctx,
 int ObISFreeLockExecutor::execute(ObExecContext &ctx,
                                   const ObString &lock_name)
 {
-  UNUSED(ctx);
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
   uint64_t lock_id = 0;
-  ObSQLSessionInfo *sess = ctx.get_my_session();
   bool exist = false;
-  query::ObSessionInnerSql session_io(sess);
-  OZ (query_lock_id_(*ctx.get_sql_proxy(), lock_name, lock_id));
-  OZ (data_plane::named_lock_exists(session_io, lock_id, exist));
+  OZ (ObLockContext::valid_execute_context(ctx));
+  if (OB_SUCC(ret)) {
+    SMART_VAR(ObLockContext, stack_ctx) {
+      OZ (stack_ctx.init(ctx));
+      query::ObSessionInnerSql session_io(ctx.get_my_session());
+      OZ (query_lock_id_(*ctx.get_sql_proxy(), lock_name, lock_id));
+      OZ (data_plane::named_lock_exists(session_io, lock_id, exist));
+      if (OB_TMP_FAIL(stack_ctx.destroy(ctx, OB_SUCCESS != ret))) {
+        LOG_WARN("stack ctx destroy failed", K(tmp_ret));
+        ret = COVER_SUCC(tmp_ret);
+      }
+    }
+  }
 
   if (OB_SUCC(ret) && !exist) {
     ret = OB_EMPTY_RESULT;

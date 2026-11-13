@@ -17,6 +17,7 @@
 #ifdef _WIN32
 
 #include "observer/ob_win_service.h"
+#include "lib/utility/ob_platform_io.h"
 #include <inttypes.h>
 #include <cstdio>
 #include <cstring>
@@ -115,13 +116,29 @@ static void WINAPI service_main_entry(DWORD argc, LPWSTR *argv)
   }
 }
 
+static std::wstring service_utf8_to_wide(const char *text)
+{
+  const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, nullptr, 0);
+  if (size <= 1) {
+    return {};
+  }
+  std::wstring wide(size, L'\0');
+  if (0 == MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, wide.data(), size)) {
+    return {};
+  }
+  wide.pop_back(); // Remove the NUL written by MultiByteToWideChar.
+  return wide;
+}
+
 static std::string build_service_binary_path(int argc, char *argv[])
 {
-  char exe_path[MAX_PATH] = {};
-  GetModuleFileNameA(nullptr, exe_path, MAX_PATH);
+  std::vector<char> exe_path(4 * 32768);
+  if (0 != common::ob_get_executable_path_utf8(exe_path.data(), exe_path.size())) {
+    return {};
+  }
 
   std::string cmd = "\"";
-  cmd += exe_path;
+  cmd += exe_path.data();
   cmd += "\" --service";
 
   for (int i = 1; i < argc; i++) {
@@ -163,15 +180,24 @@ int ob_install_win_service(const char *service_name, int argc, char *argv[])
 
   std::string binary_path = build_service_binary_path(argc, argv);
 
-  SC_HANDLE service = CreateServiceA(
+  const std::wstring wide_path = service_utf8_to_wide(binary_path.c_str());
+  const std::wstring wide_name = service_utf8_to_wide(service_name);
+  const std::wstring wide_display_name = service_utf8_to_wide(OB_SERVICE_DISPLAY_NAME);
+  if (wide_path.empty() || wide_name.empty() || wide_display_name.empty()) {
+    MPRINT("Error: Failed to encode the Windows service name or command line.");
+    CloseServiceHandle(sc_manager);
+    return 1;
+  }
+
+  SC_HANDLE service = CreateServiceW(
       sc_manager,
-      service_name,
-      OB_SERVICE_DISPLAY_NAME,
+      wide_name.c_str(),
+      wide_display_name.c_str(),
       SERVICE_ALL_ACCESS,
       SERVICE_WIN32_OWN_PROCESS,
       SERVICE_AUTO_START,
       SERVICE_ERROR_NORMAL,
-      binary_path.c_str(),
+      wide_path.c_str(),
       nullptr, nullptr, nullptr,
       nullptr,  // LocalSystem account
       nullptr);
@@ -234,7 +260,13 @@ int ob_remove_win_service(const char *service_name)
     return 1;
   }
 
-  SC_HANDLE service = OpenServiceA(sc_manager, service_name, SERVICE_STOP | DELETE | SERVICE_QUERY_STATUS);
+  const std::wstring wide_name = service_utf8_to_wide(service_name);
+  if (wide_name.empty()) {
+    MPRINT("Error: Failed to encode the Windows service name.");
+    CloseServiceHandle(sc_manager);
+    return 1;
+  }
+  SC_HANDLE service = OpenServiceW(sc_manager, wide_name.c_str(), SERVICE_STOP | DELETE | SERVICE_QUERY_STATUS);
   if (service == nullptr) {
     DWORD err = GetLastError();
     if (err == ERROR_SERVICE_DOES_NOT_EXIST) {
