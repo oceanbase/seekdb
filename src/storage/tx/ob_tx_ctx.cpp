@@ -1451,9 +1451,9 @@ int ObTxCtx::compensate_abort_log_()
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(restart_commit_retry_timer_())) {
       TRANS_LOG(WARN, "restart abort log retry timer failed", KR(ret), KR(tmp_ret), K(*this));
-    } else if (OB_TX_NOLOGCB == ret) {
-      // Callback exhaustion is temporary. The abort has been accepted and
-      // handle_timeout will resubmit its log once a callback becomes available.
+    } else if (OB_TX_NOLOGCB == submit_ret || OB_EAGAIN == submit_ret) {
+      // Callback exhaustion and log append backpressure are retryable. The abort
+      // has been accepted and handle_timeout will resubmit its log.
       // Let explicit rollback wait for that decision instead of returning the
       // internal flow-control error to the client.
       ret = OB_SUCCESS;
