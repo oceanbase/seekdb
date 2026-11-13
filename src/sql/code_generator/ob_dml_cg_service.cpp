@@ -1565,6 +1565,24 @@ int ObDmlCgService::append_all_uk_column_id(ObSchemaGetterGuard *schema_guard,
   return ret;
 }
 
+// Projectors may wrap the source column in casts or other expressions, so
+// inspect the whole tree instead of only the top-level node.
+static bool expr_refs_column(const ObRawExpr *expr, const uint64_t column_id)
+{
+  bool found = false;
+  if (OB_NOT_NULL(expr)) {
+    if (expr->is_column_ref_expr()) {
+      const ObColumnRefRawExpr *column_expr = static_cast<const ObColumnRefRawExpr *>(expr);
+      found = column_expr->get_column_id() == column_id
+              && column_expr->is_hybrid_embedded_vec_column();
+    }
+    for (int64_t i = 0; !found && i < expr->get_param_count(); ++i) {
+      found = expr_refs_column(expr->get_param_expr(i), column_id);
+    }
+  }
+  return found;
+}
+
 template<typename ExprType>
 int ObDmlCgService::set_embedded_vec_datum_flag(const ObIArray<ExprType*> &cur_row,
                                                 ObDASDMLBaseCtDef &das_ctdef)
@@ -1577,16 +1595,9 @@ int ObDmlCgService::set_embedded_vec_datum_flag(const ObIArray<ExprType*> &cur_r
   const uint64_t embedded_col_id =
       das_ctdef.table_param_.get_data_table().get_embedded_vec_col_id();
   das_ctdef.is_embedded_vec_from_old_row_ = false;
-  for (int64_t i = 0; OB_SUCC(ret) && i < cur_row.count(); ++i) {
-    ObRawExpr *expr = cur_row.at(i);
-    if (OB_NOT_NULL(expr) && expr->is_column_ref_expr()) {
-      const ObColumnRefRawExpr *column_expr = static_cast<const ObColumnRefRawExpr *>(expr);
-      if (column_expr->get_column_id() == embedded_col_id
-          && column_expr->is_hybrid_embedded_vec_column()) {
-        das_ctdef.is_embedded_vec_from_old_row_ = true;
-        break;
-      }
-    }
+  for (int64_t i = 0; OB_SUCC(ret) && !das_ctdef.is_embedded_vec_from_old_row_
+       && i < cur_row.count(); ++i) {
+    das_ctdef.is_embedded_vec_from_old_row_ = expr_refs_column(cur_row.at(i), embedded_col_id);
   }
   return ret;
 }
