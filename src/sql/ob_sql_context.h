@@ -274,7 +274,8 @@ public:
     : inited_(false),
       is_rpc_timeout_(false),
       last_query_retry_err_(common::OB_SUCCESS),
-      retry_cnt_(0)
+      retry_cnt_(0),
+      package_load_retry_cnt_(0)
   {
   }
   virtual ~ObQueryRetryInfo() {}
@@ -298,8 +299,18 @@ public:
   // 1. In the timeout scenario, try to feedback the error code from the last attempt, so that the reason for the error is understandable
   // 2. In other scenarios, used to obtain the last error code to decide local retry behavior.
   int get_last_query_retry_err() const { return last_query_retry_err_; }
-  void inc_retry_cnt() { retry_cnt_++; }
+  void inc_retry_cnt(bool before_call_package_load = false)
+  {
+    ++retry_cnt_;
+    if (before_call_package_load) {
+      ++package_load_retry_cnt_;
+    }
+  }
   int64_t get_retry_cnt() const { return retry_cnt_; }
+  bool has_only_call_package_load_retries() const
+  {
+    return inited_ && retry_cnt_ > 0 && retry_cnt_ == package_load_retry_cnt_;
+  }
 
   TO_STRING_KV(K_(inited), K_(is_rpc_timeout), K_(last_query_retry_err));
 
@@ -315,6 +326,9 @@ private:
   int last_query_retry_err_;
   // this value include local retry & packet retry
   int64_t retry_cnt_;
+  // Unknown or execution-stage retries increase only retry_cnt_, permanently
+  // excluding this request from the initial-CALL exception until reset().
+  int64_t package_load_retry_cnt_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObQueryRetryInfo);
 };
@@ -539,7 +553,8 @@ public:
     struct {
       uint32_t enable_strict_defensive_check_: 1; //TRUE if the _enable_defensive_check is '2'
       uint32_t is_from_pl_ : 1;
-      uint32_t reserved_ : 30;
+      uint32_t call_package_load_retry_ : 1;
+      uint32_t reserved_ : 29;
     };
   };
   common::ObString raw_sql_;

@@ -94,6 +94,7 @@ void ObQueryRetryInfo::reset()
   is_rpc_timeout_ = false;
   last_query_retry_err_ = OB_SUCCESS;
   retry_cnt_ = 0;
+  package_load_retry_cnt_ = 0;
 }
 
 void ObQueryRetryInfo::clear()
@@ -209,6 +210,7 @@ void ObSqlCtx::reset()
 //release dynamic allocated memory
 void ObSqlCtx::clear()
 {
+  call_package_load_retry_ = false;
   if (OB_NOT_NULL(partition_infos_)) {
     typedef common::ObFixedArray<ObTablePartitionInfo *, common::ObIAllocator>
         PartitionInfoStorage;

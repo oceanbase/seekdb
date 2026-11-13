@@ -777,6 +777,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
                                     bool &need_disconnect)
 {
   int ret = OB_SUCCESS;
+  ctx_.call_package_load_retry_ = false;
   ObAuditRecordData &audit_record = session.get_raw_audit_record();
   ObExecutingSqlStatRecord sqlstat_record;
   audit_record.try_cnt_++;
