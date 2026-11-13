@@ -29,6 +29,18 @@ using namespace common;
 using namespace memtable;
 using namespace share;
 
+TEST(TransactionContextMemory, bounded_without_per_transaction_recorders)
+{
+  // A recorder alone occupied more than 4 KiB in release builds. These budgets
+  // leave room for the live transaction state while rejecting that fixed cost.
+  RecordProperty("sizeof_ObTransCtx", static_cast<int>(sizeof(ObTransCtx)));
+  RecordProperty("sizeof_ObTxDesc", static_cast<int>(sizeof(ObTxDesc)));
+  RecordProperty("sizeof_ObTxCtx", static_cast<int>(sizeof(ObTxCtx)));
+  EXPECT_LT(sizeof(ObTransCtx), 4U * 1024U);
+  EXPECT_LT(sizeof(ObTxDesc), 4U * 1024U);
+  EXPECT_LT(sizeof(ObTxCtx), 8U * 1024U);
+}
+
 class TestTxReplayExecutor : public ::testing::Test
 {
 protected:
