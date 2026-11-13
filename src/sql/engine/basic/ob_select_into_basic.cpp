@@ -18,7 +18,9 @@
 
 #include "ob_select_into_basic.h"
 #include "lib/compress/ob_compress_util.h"
-#include "lib/compress/zstd_1_3_8/ob_zstd_wrapper.h"
+#include "rust/compression.h"
+#include <algorithm>
+#include <limits>
 
 namespace oceanbase
 {
@@ -33,25 +35,43 @@ int ObCompressStreamWriter::write(const char *src, size_t length, bool is_file_e
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(compressor_)) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = OB_NOT_INIT;
+  } else if ((length > 0 && OB_ISNULL(src))
+             || length > static_cast<size_t>(std::numeric_limits<int64_t>::max())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (compress_stream_finished_) {
+    ret = OB_STATE_NOT_MATCH;
   } else {
-    bool compress_ended = false;
-    size_t consumed_size = 0;
-    do {
-      int64_t compressed_size = 0;
-      if (OB_FAIL(compressor_->compress(src, length, consumed_size, buf_ + curr_pos_, buf_len_ - curr_pos_,
-                                        compressed_size, is_file_end, compress_ended))) {
-      } else {
-        curr_pos_ += compressed_size;
-        total_compressed_bytes_ += compressed_size;
-        if (curr_pos_ >= buf_len_) {
-          if (OB_FAIL(flush_to_storage(buf_, curr_pos_))) {
-          } else {
-            curr_pos_ = 0;
-          }
+    size_t offset = 0;
+    bool finished = false;
+    while (OB_SUCC(ret) && (offset < length || (is_file_end && !finished))) {
+      if (curr_pos_ == buf_len_) {
+        if (OB_FAIL(flush_to_storage(buf_, curr_pos_))) {
+        } else {
+          curr_pos_ = 0;
         }
       }
-    } while (OB_SUCC(ret) && !compress_ended);
+      if (OB_SUCC(ret)) {
+        StreamCompressionProgress progress;
+        const int64_t remaining = static_cast<int64_t>(length - offset);
+        const char *input = remaining > 0 ? src + offset : nullptr;
+        if (OB_FAIL(compressor_->compress(input, remaining, buf_ + curr_pos_,
+                                         buf_len_ - curr_pos_, is_file_end, progress))) {
+        } else if (progress.consumed < 0 || progress.consumed > remaining
+                   || progress.produced < 0 || progress.produced > buf_len_ - curr_pos_
+                   || (progress.finished && (!is_file_end || progress.consumed != remaining))
+                   || (progress.consumed == 0 && progress.produced == 0 && !progress.finished)) {
+          ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+        } else if (progress.produced > std::numeric_limits<int64_t>::max() - total_compressed_bytes_) {
+          ret = OB_SIZE_OVERFLOW;
+        } else {
+          offset += progress.consumed;
+          curr_pos_ += progress.produced;
+          total_compressed_bytes_ += progress.produced;
+          finished = progress.finished;
+        }
+      }
+    }
   }
   return ret;
 }
@@ -91,15 +111,20 @@ int ObCompressStreamWriter::finish_compress_stream()
   return ret;
 }
 
-void ObCompressStreamWriter::reuse()
+int ObCompressStreamWriter::reuse()
 {
-  if (OB_NOT_NULL(compressor_)) {
-    compressor_->reuse();
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(compressor_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(compressor_->reuse())) {
+  } else {
+    curr_pos_ = 0;
+    total_compressed_bytes_ = 0;
+    compress_stream_finished_ = false;
   }
-  curr_pos_ = 0;
-  total_compressed_bytes_ = 0;
-  compress_stream_finished_ = false;
+  return ret;
 }
+
 int ObCompressStreamWriter::init(ObFileAppender *file_appender,
                                  CsvCompressType compress_type,
                                  ObIAllocator &allocator,
@@ -120,7 +145,7 @@ int ObCompressStreamWriter::init(ObFileAppender *file_appender,
   } else {
     buf_len_ = buffer_size;
   }
-  if (compress_type_ == CsvCompressType::NONE) {
+  if (OB_ISNULL(file_appender_) || compress_type_ == CsvCompressType::NONE) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (OB_FAIL(ObOutfileStreamCompressor::create(compress_type_, *allocator_, compressor_))) {
@@ -171,7 +196,9 @@ int ObOutfileStreamCompressor::create(CsvCompressType format, ObIAllocator &allo
     } break;
   }
 
-  if (OB_SUCC(ret) && OB_NOT_NULL(compressor)) {
+  if (OB_SUCC(ret) && OB_ISNULL(compressor)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_SUCC(ret)) {
     if (OB_FAIL(compressor->init())) {
       ObOutfileStreamCompressor::destroy(compressor);
       compressor = NULL;
@@ -189,62 +216,55 @@ void ObOutfileStreamCompressor::destroy(ObOutfileStreamCompressor *compressor)
   }
 }
 
-using OB_ZSTD_customMem = oceanbase::common::zstd_1_3_8::OB_ZSTD_customMem;
-using ObZstdWrapper = oceanbase::common::zstd_1_3_8::ObZstdWrapper;
 int ObOutfileZstdStreamCompressor::init()
 {
   int ret = OB_SUCCESS;
-
-  if (OB_NOT_NULL(zstd_cctx_)) {
+  if (encoder_.has_value()) {
     ret = OB_INIT_TWICE;
   } else {
-    OB_ZSTD_customMem allocator;
-    allocator.customAlloc = ob_zstd_malloc;
-    allocator.customFree  = ob_zstd_free;
-    allocator.opaque      = &allocator_;
-
-    ret = ObZstdWrapper::create_cctx(allocator, zstd_cctx_);
-    if (OB_FAIL(ret)) {
-    }
+    encoder_.emplace(compression::new_zstd_encoder());
   }
-
   return ret;
 }
 
 void ObOutfileZstdStreamCompressor::reset()
 {
-  if (OB_NOT_NULL(zstd_cctx_)) {
-    ObZstdWrapper::free_cctx(zstd_cctx_);
-    zstd_cctx_ = NULL;
-  }
+  encoder_.reset();
 }
 
-void ObOutfileZstdStreamCompressor::reuse()
+int ObOutfileZstdStreamCompressor::reuse()
 {
-  ObZstdWrapper::reset_cctx(zstd_cctx_, 1/*ZSTD_reset_session_only*/);
+  return encoder_.has_value()
+      ? compression_error_code(compression::zstd_encoder_reset(**encoder_)) : OB_NOT_INIT;
 }
 
 int ObOutfileZstdStreamCompressor::compress(const char *src,
-                                            int64_t src_size,
-                                            size_t &consumed_size,
-                                            char *dest,
-                                            int64_t dest_capacity,
-                                            int64_t &compressed_size,
-                                            bool is_file_end,
-                                            bool &compress_ended)
+                                         int64_t src_size,
+                                         char *dest,
+                                         int64_t dest_capacity,
+                                         bool is_file_end,
+                                         StreamCompressionProgress &progress)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(zstd_cctx_)) {
+  progress = {};
+  if (!encoder_.has_value()) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(dest)
-             || dest_capacity <= 0) {
+  } else if (src_size < 0 || (src_size > 0 && OB_ISNULL(src))
+             || OB_ISNULL(dest) || dest_capacity <= 0
+             || static_cast<uint64_t>(src_size) > std::numeric_limits<ptrdiff_t>::max()
+             || static_cast<uint64_t>(dest_capacity) > std::numeric_limits<ptrdiff_t>::max()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    size_t tmp_compressed_size = 0;
-    ret = ObZstdWrapper::compress_stream(zstd_cctx_,
-                                         src, src_size, consumed_size,
-                                         dest, dest_capacity, tmp_compressed_size, is_file_end, compress_ended);
-    compressed_size = static_cast<int64_t>(tmp_compressed_size);
+    const auto *input = reinterpret_cast<const uint8_t *>(src_size > 0 ? src : "");
+    const auto result = compression::zstd_encode(**encoder_,
+        rust::Slice<const uint8_t>(input, static_cast<size_t>(src_size)),
+        reinterpret_cast<uint8_t *>(dest), static_cast<size_t>(dest_capacity),
+        is_file_end);
+    if (OB_SUCC(ret = compression_error_code(result.code))) {
+      progress.consumed = static_cast<int64_t>(result.consumed);
+      progress.produced = static_cast<int64_t>(result.produced);
+      progress.finished = result.finished;
+    }
   }
   return ret;
 }
@@ -252,62 +272,61 @@ int ObOutfileZstdStreamCompressor::compress(const char *src,
 int ObOutfileGzipStreamCompressor::init()
 {
   int ret = OB_SUCCESS;
-  zstr_.zalloc = ob_zlib_alloc;
-  zstr_.zfree = ob_zlib_free;
-  zstr_.opaque = static_cast<voidpf>(&allocator_);
-  int zlib_ret = deflateInit2(&zstr_, 5/* compression level */, Z_DEFLATED,
-                              15 + 16/* for gzip */, 8/* memLevel default value */,
-                              Z_DEFAULT_STRATEGY);
-  if (Z_OK != zlib_ret) {
-    ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-    LOG_WARN("zlib failed to deflateInit2", K(zlib_ret));
+  if (encoder_.has_value()) {
+    ret = OB_INIT_TWICE;
   } else {
-    z_stream_ended_ = false;
+    encoder_.emplace(compression::new_gzip_encoder());
   }
   return ret;
 }
 
 void ObOutfileGzipStreamCompressor::reset()
 {
-  if (!z_stream_ended_) {
-    deflateEnd(&zstr_);
-    z_stream_ended_ = true;
-  }
+  encoder_.reset();
 }
 
-void ObOutfileGzipStreamCompressor::reuse()
+int ObOutfileGzipStreamCompressor::reuse()
 {
-  deflateReset(&zstr_);
+  int ret = OB_SUCCESS;
+  if (encoder_.has_value()) {
+    compression::gzip_reset(*encoder_.value());
+  } else {
+    ret = OB_NOT_INIT;
+  }
+  return ret;
 }
 
 int ObOutfileGzipStreamCompressor::compress(const char *src,
-                                            int64_t src_size,
-                                            size_t &consumed_size,
-                                            char *dest,
-                                            int64_t dest_capacity,
-                                            int64_t &compressed_size,
-                                            bool is_file_end,
-                                            bool &compress_ended)
+                                         int64_t src_size,
+                                         char *dest,
+                                         int64_t dest_capacity,
+                                         bool is_file_end,
+                                         StreamCompressionProgress &progress)
 {
   int ret = OB_SUCCESS;
-  if (NULL == dest
-      || 0 >= dest_capacity) {
+  progress = {};
+  if (!encoder_.has_value()) {
+    ret = OB_NOT_INIT;
+  } else if (src_size < 0 || (src_size > 0 && OB_ISNULL(src))
+             || OB_ISNULL(dest) || dest_capacity <= 0
+             || static_cast<uint64_t>(src_size) > std::numeric_limits<ptrdiff_t>::max()
+             || static_cast<uint64_t>(dest_capacity) > std::numeric_limits<ptrdiff_t>::max()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    zstr_.next_in = (Bytef *)(src + consumed_size);
-    zstr_.avail_in = src_size - consumed_size;
-    zstr_.avail_out = dest_capacity;
-    zstr_.next_out = (Bytef *)dest;
-    int flush_flag = is_file_end ? Z_FINISH : Z_NO_FLUSH;
-    int zlib_ret = deflate(&zstr_, flush_flag);
-    if (zlib_ret == Z_STREAM_ERROR) {
-      ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+    const auto *input = reinterpret_cast<const uint8_t *>(src_size > 0 ? src : "");
+    const auto result = compression::gzip_process(
+        *encoder_.value(),
+        rust::Slice<const uint8_t>(input, static_cast<size_t>(src_size)),
+        rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(dest), dest_capacity),
+        is_file_end);
+    if (compression::Code::Ok != result.code) {
+      ret = compression::Code::OutOfMemory == result.code
+          ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_COMPRESS_DECOMPRESS_DATA;
       LOG_WARN("failed to deflate", KP(src), K(src_size), K(dest_capacity));
-    }
-    if (OB_SUCC(ret)) {
-      compressed_size = dest_capacity - zstr_.avail_out;
-      consumed_size = zstr_.next_in - (Bytef *)src;
-      compress_ended = is_file_end ? (zlib_ret == Z_STREAM_END) : (zstr_.avail_in == 0 && zstr_.avail_out > 0);
+    } else {
+      progress.consumed = static_cast<int64_t>(result.consumed);
+      progress.produced = static_cast<int64_t>(result.produced);
+      progress.finished = result.stream_end;
     }
   }
   return ret;

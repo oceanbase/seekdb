@@ -1,0 +1,48 @@
+DROP TABLE IF EXISTS seek1401_ctas, seek1401_insert, seek1401_update;
+CREATE TABLE seek1401_ctas AS SELECT GET_LOCK('seek1401_ctas', 0) AS g,
+RELEASE_LOCK('seek1401_ctas') AS r, RELEASE_ALL_LOCKS() AS ra,
+IS_USED_LOCK('seek1401_ctas') AS isu, IS_FREE_LOCK('seek1401_ctas') AS isf;
+SELECT * FROM seek1401_ctas;
+g	r	ra	isu	isf
+1	1	0	NULL	1
+CREATE TABLE seek1401_insert (v BIGINT);
+INSERT INTO seek1401_insert VALUES (1);
+SELECT GET_LOCK('seek1401_insert', 0);
+GET_LOCK('seek1401_insert', 0)
+1
+SELECT RELEASE_LOCK('seek1401_insert');
+RELEASE_LOCK('seek1401_insert')
+1
+INSERT INTO seek1401_insert SELECT IS_FREE_LOCK('seek1401_insert');
+SELECT * FROM seek1401_insert ORDER BY v;
+v
+1
+1
+CREATE TABLE seek1401_update (v BIGINT);
+INSERT INTO seek1401_update VALUES (1);
+SELECT GET_LOCK('seek1401_update', 0);
+GET_LOCK('seek1401_update', 0)
+1
+SELECT RELEASE_LOCK('seek1401_update');
+RELEASE_LOCK('seek1401_update')
+1
+UPDATE seek1401_update SET v=IS_FREE_LOCK('seek1401_update');
+SELECT * FROM seek1401_update;
+v
+1
+SELECT GET_LOCK('seek1401_held', 0);
+GET_LOCK('seek1401_held', 0)
+1
+SELECT IS_FREE_LOCK('seek1401_held');
+IS_FREE_LOCK('seek1401_held')
+0
+SELECT RELEASE_LOCK('seek1401_held');
+RELEASE_LOCK('seek1401_held')
+1
+SELECT IS_FREE_LOCK('seek1401_held');
+IS_FREE_LOCK('seek1401_held')
+1
+SELECT IS_FREE_LOCK('seek1401_fresh');
+IS_FREE_LOCK('seek1401_fresh')
+1
+DROP TABLE seek1401_ctas, seek1401_insert, seek1401_update;

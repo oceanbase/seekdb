@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_manager.h"
+#include <inttypes.h>
 #include "lib/ob_running_mode.h"
 #include "share/io/io_schedule/ob_io_schedule_v2.h"
 #include "share/ob_io_device_helper.h"
@@ -1140,9 +1141,9 @@ int ObIOService::print_io_status()
           default:
             break;
         }
-        snprintf(io_status, sizeof(io_status),"group_id:%ld, group_name:%s, mode:%s, cur_req:%ld, hold_mem:%ld "
-            "[FAILED]:fail_size:%ld, fail_iops:%ld, fail_bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld, "
-            "[SUCC]:size:%ld, iops:%ld, norm_iops:%ld, bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld",
+        snprintf(io_status, sizeof(io_status),"group_id:%" PRId64 ", group_name:%s, mode:%s, cur_req:%" PRId64 ", hold_mem:%" PRId64 " "
+            "[FAILED]:fail_size:%" PRId64 ", fail_iops:%" PRId64 ", fail_bw:%" PRId64 ", [delay/us]:prepare:%" PRId64 ", schedule:%" PRId64 ", submit:%" PRId64 ", rt:%" PRId64 ", total:%" PRId64 ", "
+            "[SUCC]:size:%" PRId64 ", iops:%" PRId64 ", norm_iops:%" PRId64 ", bw:%" PRId64 ", [delay/us]:prepare:%" PRId64 ", schedule:%" PRId64 ", submit:%" PRId64 ", rt:%" PRId64 ", total:%" PRId64 "",
             group_config.group_id_,
             group_name,
             mode_str,
@@ -1225,9 +1226,9 @@ int ObIOService::print_io_status()
         }
         group_bw = static_cast<int64_t>(sys_info.at(i).avg_byte_ * sys_info.at(i).avg_iops_);
         snprintf(io_status, sizeof(io_status),
-                "sys_group_name:%s, mode:%s, cur_req:%ld, hold_mem:%ld "
-                "[FAILED]: fail_size:%ld, fail_iops:%ld, fail_bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld, "
-                "[SUCC]: size:%ld, iops:%ld, norm_iops:%ld, bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld",
+                "sys_group_name:%s, mode:%s, cur_req:%" PRId64 ", hold_mem:%" PRId64 " "
+                "[FAILED]: fail_size:%" PRId64 ", fail_iops:%" PRId64 ", fail_bw:%" PRId64 ", [delay/us]:prepare:%" PRId64 ", schedule:%" PRId64 ", submit:%" PRId64 ", rt:%" PRId64 ", total:%" PRId64 ", "
+                "[SUCC]: size:%" PRId64 ", iops:%" PRId64 ", norm_iops:%" PRId64 ", bw:%" PRId64 ", [delay/us]:prepare:%" PRId64 ", schedule:%" PRId64 ", submit:%" PRId64 ", rt:%" PRId64 ", total:%" PRId64 "",
                  get_io_sys_group_name(module),
                  mode_str,
                  sys_mem_stat.group_mem_infos_.at(i).total_cnt_,

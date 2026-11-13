@@ -28,29 +28,85 @@ sub store_error
   return ($ob_errno, $sqlstate, $str_error);
 }
 
+
+# Split a DEFINE_* argument list at top-level commas only. Messages may be C
+# string-literal sequences (e.g. "x=%" PRId64 " us") and may contain commas
+# inside the quoted parts.
+sub split_args
+{
+  my ($text) = @_;
+  my @args;
+  my $cur = "";
+  my $depth = 0;
+  my $in_str = 0;
+  my $escaped = 0;
+  for my $ch (split //, $text) {
+    if ($in_str) {
+      $cur .= $ch;
+      if ($escaped) {
+        $escaped = 0;
+      } elsif ($ch eq "\\") {
+        $escaped = 1;
+      } elsif ($ch eq "\"") {
+        $in_str = 0;
+      }
+    } elsif ($ch eq "\"") {
+      $in_str = 1;
+      $cur .= $ch;
+    } elsif ($ch eq "(") {
+      ++$depth;
+      $cur .= $ch;
+    } elsif ($ch eq ")") {
+      --$depth;
+      $cur .= $ch;
+    } elsif ($ch eq "," && 0 == $depth) {
+      push @args, $cur;
+      $cur = "";
+    } else {
+      $cur .= $ch;
+    }
+  }
+  push @args, $cur if length($cur);
+  for my $arg (@args) {
+    $arg =~ s/^\s+//;
+    $arg =~ s/\s+$//;
+  }
+  return @args;
+}
+
 while(<$fh>) {
   my $error_msg;
   my $sqlstate;
   my $error_code;
-
-  if (/^DEFINE_ERROR\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")/) {
-    ++$error_count;
-    ($error_code, $sqlstate, $error_msg) = store_error(\%map_share, $1, $2, $3, $4, $5, $5);
-  } elsif (/^DEFINE_ERROR_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    ($error_code, $sqlstate, $error_msg) = store_error(\%map_share, $1, $2, $3, $4, $5, $6);
-  } elsif (/^DEFINE_OTHER_MSG_FMT\(([^,]+),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")/) {
-    $other_map_share{$1} = [$2, $3, $4];
-    $other_map{$1} = [$2, $3, $4];
-  } elsif (/^DEFINE_ERROR_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")/) {
-    ++$error_count;
-    ($error_code, $sqlstate, $error_msg) = store_error(\%map_deps, $1, $2, $3, $4, $5, $5);
-  } elsif (/^DEFINE_ERROR_EXT_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    ($error_code, $sqlstate, $error_msg) = store_error(\%map_deps, $1, $2, $3, $4, $5, $6);
-  } elsif (/^DEFINE_OTHER_MSG_FMT_DEP\(([^,]+),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")/) {
-    $other_map_deps{$1} = [$2, $3, $4];
-    $other_map{$1} = [$2, $3, $4];
+  my $line = $_;
+  if ($line =~ /^(DEFINE_[A-Z_]+)\((.*)$/) {
+    my $macro = $1;
+    my $raw_args = $2;
+    # Some historical lines carry a double ';' or omit the closing ')'.
+    $raw_args =~ s/\)\s*;*\s*$//;
+    $raw_args =~ s/;*\s*$//;
+    my @args = split_args($raw_args);
+    if ("DEFINE_ERROR" eq $macro && scalar(@args) >= 5) {
+      ++$error_count;
+      ($error_code, $sqlstate, $error_msg) = store_error(\%map_share, $args[0], $args[1], $args[2], $args[3], $args[4], $args[4]);
+    } elsif ("DEFINE_ERROR_EXT" eq $macro && scalar(@args) >= 6) {
+      ++$error_count;
+      ($error_code, $sqlstate, $error_msg) = store_error(\%map_share, $args[0], $args[1], $args[2], $args[3], $args[4], $args[5]);
+    } elsif ("DEFINE_OTHER_MSG_FMT" eq $macro && scalar(@args) >= 4) {
+      $other_map_share{$args[0]} = [$args[1], $args[2], $args[3]];
+      $other_map{$args[0]} = [$args[1], $args[2], $args[3]];
+    } elsif ("DEFINE_ERROR_DEP" eq $macro && scalar(@args) >= 5) {
+      ++$error_count;
+      ($error_code, $sqlstate, $error_msg) = store_error(\%map_deps, $args[0], $args[1], $args[2], $args[3], $args[4], $args[4]);
+    } elsif ("DEFINE_ERROR_EXT_DEP" eq $macro && scalar(@args) >= 6) {
+      ++$error_count;
+      ($error_code, $sqlstate, $error_msg) = store_error(\%map_deps, $args[0], $args[1], $args[2], $args[3], $args[4], $args[5]);
+    } elsif ("DEFINE_OTHER_MSG_FMT_DEP" eq $macro && scalar(@args) >= 4) {
+      $other_map_deps{$args[0]} = [$args[1], $args[2], $args[3]];
+      $other_map{$args[0]} = [$args[1], $args[2], $args[3]];
+    } elsif ($macro =~ /^DEFINE_/) {
+      print "WARN: unsupported args for $macro: $line";
+    }
   }
   if (defined $error_code) {
     print "WARN: undefined SQLSTATE for $1\n" if ($sqlstate eq "\"\"");
@@ -116,6 +172,7 @@ print $fh_header '
 #ifndef OCEANBASE_LIB_OB_ERRNO_H_
 #define OCEANBASE_LIB_OB_ERRNO_H_
 #include <stdint.h>
+#include <inttypes.h>
 #include "share/mysql_errno.h"
 #include "lib/ob_errno.h"
 
@@ -246,6 +303,7 @@ print $fh_cpp '
 
 #define USING_LOG_PREFIX LIB_MYSQLC
 
+#include <inttypes.h>
 #include "ob_errno.h"
 #include "ob_define.h"
 using namespace oceanbase::common;

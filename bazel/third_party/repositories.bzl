@@ -20,7 +20,9 @@ def _windows_sdk(repository_ctx):
         for child in repository_ctx.path(locked_headers).readdir():
             headers[child.basename] = child
     for name, path in headers.items():
-        if name != "dirent.h":
+        # Boost comes from the pinned @sdk_boost source repository on every
+        # platform; leaving the installed SDK copy here would mix its version.
+        if name not in ("dirent.h", "boost"):
             repository_ctx.symlink(path, "include/" + name)
     # Patch a repository-owned copy, never mutate the shared installed SDK.
     python = repository_ctx.which("python")

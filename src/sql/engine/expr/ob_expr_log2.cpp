@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_log2.h"
+#include "share/ob_math_compat.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -63,7 +64,7 @@ int calc_log2_expr(const ObExpr &expr, ObEvalCtx &ctx,
       LOG_USER_WARN(OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM);
       res_datum.set_null();
     } else {
-      res_datum.set_double(std::log(val) / std::log(2));
+      res_datum.set_double(math_compat::log(val) / math_compat::log(2.0));
     }
   }
   return ret;

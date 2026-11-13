@@ -57,9 +57,9 @@ OBLIB_UNITY_GROUPS = {
             language = "c++",
             srcs = [
                 "src/oblib/common/json_type/ob_json_path.cpp",
-                "src/oblib/common/json_type/ob_json_tree.cpp",
                 "src/oblib/common/json_type/ob_json_bin.cpp",
                 "src/oblib/common/json_type/ob_json_base.cpp",
+                "src/oblib/common/json_type/json_builder.cpp",
                 "src/oblib/common/json_type/ob_json_parse.cpp",
                 "src/oblib/common/json_type/ob_json_schema.cpp",
                 "src/oblib/common/json_type/ob_json_diff.cpp",
@@ -127,7 +127,7 @@ OBLIB_UNITY_GROUPS = {
             srcs = [
                 "src/oblib/common/xml/ob_mul_mode_reader.cpp",
                 "src/oblib/common/xml/ob_xml_parser.cpp",
-                "src/oblib/common/xml/ob_libxml2_sax_handler.cpp",
+                "src/oblib/common/xml/ob_rust_xml_parser.cpp",
                 "src/oblib/common/xml/ob_tree_base.cpp",
                 "src/oblib/common/xml/ob_xml_tree.cpp",
                 "src/oblib/common/xml/ob_xml_util.cpp",
@@ -135,7 +135,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/common/xml/ob_multi_mode_bin.cpp",
                 "src/oblib/common/xml/ob_multi_mode_interface.cpp",
                 "src/oblib/common/xml/ob_path_parser.cpp",
-                "src/oblib/common/xml/ob_binary_aggregate.cpp",
             ],
         ),
         struct(
@@ -348,6 +347,7 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/utility/ob_easy_string.cpp",
                 "src/oblib/lib/utility/ob_fast_convert.cpp",
                 "src/oblib/lib/utility/ob_hang_fatal_error.cpp",
+                "src/oblib/lib/utility/ob_platform_io.cpp",
                 "src/oblib/lib/utility/ob_platform_utils.cpp",
                 "src/oblib/lib/utility/ob_print_utils.cpp",
                 "src/oblib/lib/utility/ob_serialization_helper.cpp",
@@ -420,16 +420,6 @@ OBLIB_STANDALONE_CXX_SOURCES = {
     "src/oblib/common:oblib_common": [
         "src/oblib/common/timezone/ob_timezone_util.cpp",
     ],
-    "src/oblib/lib/compress/zstd_1_3_8:zstd_1_3_8_objs": [
-        "src/oblib/lib/compress/zstd_1_3_8/ob_zstd_wrapper.cpp",
-    ],
-    "src/oblib/lib/compress:compress": [
-        "src/oblib/lib/compress/none/ob_none_compressor.cpp",
-        "src/oblib/lib/compress/ob_compressor.cpp",
-        "src/oblib/lib/compress/ob_compressor_pool.cpp",
-        "src/oblib/lib/compress/zlib/ob_zlib_compressor.cpp",
-        "src/oblib/lib/compress/zstd_1_3_8/ob_zstd_compressor_1_3_8.cpp",
-    ],
     "src/oblib/lib/restore:restore": [
         "src/oblib/lib/restore/ob_io_device.cpp",
     ],
@@ -439,32 +429,5 @@ OBLIB_STANDALONE_CXX_SOURCES = {
     ],
     "src/oblib/lib:mock_di": [
         "src/oblib/lib/stat/mock_diagnostic_info.cpp",
-    ],
-}
-
-OBLIB_STANDALONE_C_SOURCES = {
-    "src/oblib/lib/compress/zstd_1_3_8:zstd_1_3_8_objs": [
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/debug.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/entropy_common.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/error_private.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/fse_compress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/fse_decompress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/hist.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/huf_compress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/huf_decompress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/pool.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/threading.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/xxhash.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_common.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_compress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_ddict.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_decompress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_decompress_block.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_double_fast.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_fast.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_lazy.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_ldm.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_opt.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstdmt_compress.c",
     ],
 }

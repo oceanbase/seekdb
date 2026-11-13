@@ -1,0 +1,123 @@
+# Standard JSON syntax is identical on every platform.
+select json_valid('{"a":[1,true,null,"雪"]}');
+select json_valid('{a:1}');
+select json_valid('{''a'':1}');
+select json_valid('[1,]');
+select json_valid('{"a":1,}');
+select json_valid('TRUE');
+select json_valid('False');
+select json_valid('NULL');
+select json_valid('+1');
+select json_valid('.5');
+select json_valid('01');
+select json_valid('0x10');
+select json_valid('NaN');
+select json_valid('Infinity');
+select json_valid('1.');
+select json_valid('/* comment */null');
+select json_type(cast('9223372036854775807' as json));
+select json_type(cast('9223372036854775808' as json));
+select json_type(cast('18446744073709551616' as json));
+select json_type(cast('-0' as json));
+select json_type(cast('-0.0' as json));
+select json_type(cast('{"a":[1]}' as json));
+select json_depth(cast('null' as json));
+select json_depth(cast('[]' as json));
+select json_depth(cast('{"a":[1,{"b":2}]}' as json));
+select json_depth('{"a":[1,{"b":2}]}');
+select json_depth(null);
+select json_extract(cast('{"a":[1,2],"a":{"x":3}}' as json), '$.a.x');
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json));
+select json_length('{"a":[0,1,2,3],"b":{"a":5}}', '$.a');
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), '$.a[1 to 2]');
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), '$**.a');
+select json_length(cast('{"a":1}' as json), '$.missing');
+select json_length(cast('1' as json), '$[0]');
+select json_length(cast('1' as json), '$[*]');
+select json_length('{"雪":{"x":true}}', '$.雪');
+select json_contains_path(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), 'one', '$**.a');
+select json_contains_path('{"a":[0,1,2,3],"b":{"a":5}}', 'all', '$.a', '$.b.a');
+select json_contains_path(cast('{"a":1}' as json), 'all', '$.a', '$.missing');
+select json_contains_path('{"雪":{"x":true},"a.b":9}', 'one', '$.雪.x', '$."a.b"');
+select json_contains_path(cast('{"a":1}' as json), 'one', '$.missing', '$.a');
+select json_value('{"a":1}', '$.a' returning signed);
+select json_value('{"a":"雪"}', '$.a' returning char);
+select json_value('{"a":true}', '$.a' returning signed);
+select json_value('{"a":null}', '$.a' returning signed);
+select json_value('{"a":2}', '$.missing' returning signed default 99 on empty);
+select json_value('{"a":[1,2]}', '$.a[1]' returning signed);
+select json_value('{"a":[1,2]}', '$.a[*]' returning signed default 88 on error);
+select json_value('{"a":3}', '$.a' returning signed);
+select json_query('{"a":[1,2]}', '$.a' returning json);
+select json_query('{"a":1}', '$.a' returning json with wrapper);
+select json_query('{"a":[1,2]}', '$.a[*]' returning json);
+select json_query('{"a":[1,2]}', '$.a[*]' returning json with wrapper);
+select json_query('{"a":[1,2]}', '$.a[*]' returning json with conditional wrapper);
+select json_query('{"a":1}', '$.a[0]' returning json);
+select json_query('{"a":1}', '$.a' returning json disallow scalars with conditional wrapper);
+select json_query('{"a":{"x":1},"b":{"x":2}}', '$**.x' returning json with wrapper);
+select json_query('{"a":"雪"}', '$.a' returning json with wrapper);
+select json_query('{"a":1,"a":2}', '$.a' returning json);
+select json_query(cast('{"a":[1,2]}' as json), '$.a' returning json);
+select json_query('{"a":[1,2]}', '$.missing' returning json empty array on empty);
+select json_query('{"a":[1,2]}', '$.missing' returning json empty object on empty);
+set @json_invalid_document = 'not-json';
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select json_query(cast(@json_invalid_document as json), '$' returning json null on error);
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select json_value(cast(@json_invalid_document as json), '$' null on error);
+set @json_invalid_document = null;
+--error 4016
+select json_query('{}', '' returning json);
+select json_depth(json_query(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json));
+select json_depth(json_value(concat(repeat('[',101),'0',repeat(']',101)), '$' returning json));
+select ord,a from json_table('[{"a":1},{"a":2}]', '$[*]' columns(ord for ordinality,a int path '$.a')) jt;
+select * from json_table('[{"a":10,"b":[1,2]},{"a":20,"b":[]}]', '$[*]' columns(ord for ordinality,a int path '$.a',nested path '$.b[*]' columns(b int path '$'))) jt;
+select * from json_table('[{"a":[{"b":[1]}]},{"a":[{"b":[2]}]}]','$[*]' columns(nested path '$.a[*]' columns(nested path '$.b[*]' columns(v int path '$')))) jt;
+select * from json_table('{"a":[1,2],"b":[3,4]}', '$' columns(nested path '$.a[*]' columns(a int path '$'),nested path '$.b[*]' columns(b int path '$'))) jt;
+select * from json_table('[{"a":[1,2]},{"a":null},{}]', '$[*]' columns(a json path '$.a[*]')) jt;
+select * from json_table('[{"a":1},{}]', '$[*]' columns(a int path '$.missing' default '9' on empty)) jt;
+prepare json_table_scan from 'select a from json_table(?, ''$[*]'' columns(a int path ''$.a'')) jt';
+set @json_table_document = '[{"a":1},{"a":2}]';
+execute json_table_scan using @json_table_document;
+set @json_table_document = '[{"a":3}]';
+execute json_table_scan using @json_table_document;
+deallocate prepare json_table_scan;
+set @json_table_document = null;
+--error ER_INVALID_JSON_PATH
+select json_length(cast('{"a":1}' as json), '$**');
+--error ER_INVALID_JSON_PATH
+select json_contains_path(cast('{"a":1}' as json), 'one', '$.0a');
+select json_schema_valid('{"type":"object"}', '{"a":1}');
+--error 1
+select json_schema_valid('{"dependencies":{"a":{"required":["b"]}}}', 'null');
+--error 1
+select json_schema_validation_report('{"dependencies":{"a":{"required":["b"]}}}', 'null');
+select json_schema_valid('{"properties":{"a":{"not":{"minimum":0}}},"patternProperties":{"a":{"not":{"type":"integer"}}}}', '{"ba":1}');
+--error 1048
+select json_schema_valid(schema_text,document_text) from (select '{"properties":{"a":{"not":{"minimum":0}}},"patternProperties":{"a":{"not":{"type":"integer"}}}}' schema_text,'{"ba":1}' document_text union all select '{}','{}') inputs;
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select json_schema_valid('{"type":"object"}', '{a:1}');
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select cast('{"a":1,}' as json);
+
+--error ER_INVALID_JSON_PATH
+select json_replace('{"a":[1,2]}', '$.a[*]', 9);
+set @json_invalid_mutation_value = 'invalid json';
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select json_insert('1', '$.a', cast(@json_invalid_mutation_value as json));
+select json_insert('1', '$.missing.a', cast(@json_invalid_mutation_value as json));
+set @json_invalid_mutation_value = null;
+select json_set('{"a":[1,2]}', '$.a[0]', 9, '$.a[1]', 8);
+select json_schema_valid(json_object('enum',json_array(time '12:00:00.000001')),json_extract(json_array(time '12:00:00.000002'),'$[0]'));
+select json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'));
+prepare json_table_nested_scan from 'select * from json_table(?, ''$[*]'' columns(nested path ''$.a[*]'' columns(nested path ''$.b[*]'' columns(v int path ''$'')))) jt';
+set @json_nested_document = '[{"a":[{"b":[1,2]}]},{"a":[{"b":[3]}]}]';
+execute json_table_nested_scan using @json_nested_document;
+set @json_nested_document = '[{"a":[{"b":[4]}]},{"a":[{"b":[5,6]}]}]';
+execute json_table_nested_scan using @json_nested_document;
+deallocate prepare json_table_nested_scan;
+set @json_nested_document = null;
+select json_contains('[[2],1]', '1') as nested_scalar, json_contains('[{"a":2},1]', '[1]') as candidate_array, json_contains('[[3],1,2]', '[1,2]') as multiple_candidates, json_contains('{"b":{}}', '{"b":{"x":2}}') as empty_first, json_contains('{"a":1,"b":{}}', '{"a":1,"b":{"x":2}}') as empty_after_match;
+select json_extract(json_array(repeat('x',300),-1),'$[1]') as constructed_negative, json_extract(cast(concat('["',repeat('x',300),'",-1]') as json),'$[1]') as parsed_negative;
+select json_search('{"a":"leaf","nested":{"a":"leaf"}}','all','leaf',null,'$**.a') as recursive_locations;

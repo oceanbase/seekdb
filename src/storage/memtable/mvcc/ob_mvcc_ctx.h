@@ -18,6 +18,7 @@
 #define OCEANBASE_MEMTABLE_MVCC_OB_MVCC_CTX_
 
 #include "share/ob_define.h"
+#include <inttypes.h>
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/utility/ob_print_utils.h"
@@ -208,8 +209,8 @@ public:
         "ObIMvccCtx={"
         "alloc_type=%d "
         "ctx_descriptor=%u "
-        "min_table_version=%ld "
-        "max_table_version=%ld trans_version=",
+        "min_table_version=%" PRId64 " "
+        "max_table_version=%" PRId64 " trans_version=",
         alloc_type_,
         ctx_descriptor_,
         min_table_version_,
@@ -217,7 +218,7 @@ public:
     common::databuff_printf(buf, buf_len, pos, trans_version_);
     common::databuff_printf(buf, buf_len, pos, " commit_version=");
     common::databuff_printf(buf, buf_len, pos, commit_version_);
-    common::databuff_printf(buf, buf_len, pos, " lock_wait_start_ts=%ld replay_compact_version=", 
+    common::databuff_printf(buf, buf_len, pos, " lock_wait_start_ts=%" PRId64 " replay_compact_version=",
         lock_wait_start_ts_);
     common::databuff_printf(buf, buf_len, pos, replay_compact_version_);
     common::databuff_printf(buf, buf_len, pos, "}");

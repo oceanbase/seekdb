@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_partition_exchange.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
@@ -47,7 +48,7 @@ ObPartitionExchange::~ObPartitionExchange()
 int ObPartitionExchange::check_and_exchange_partition(const obcall::ObExchangePartitionArg &arg, obcall::ObAlterTableRes &res, ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  
+
   const ObTableSchema *base_table_schema = NULL;
   const ObTableSchema *inc_table_schema = NULL;
   bool base_has_add_column_instant = false;
@@ -307,7 +308,7 @@ int ObPartitionExchange::do_exchange_partitions_(
     const ObIArray<ObTabletID> &inc_tablet_ids)
 {
   int ret = OB_SUCCESS;
-  
+
   int64_t schema_version = OB_INVALID_VERSION;
   ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
   ObDDLOperator ddl_operator(ddl_service_.get_schema_service(), ddl_service_.get_sql_proxy());
@@ -932,7 +933,7 @@ int ObPartitionExchange::get_subpart_tablet_ids_by_part_name(
   return ret;
 }
 
-int ObPartitionExchange::exchange_data_table_partitions(const ObTableSchema &base_table_schema, 
+int ObPartitionExchange::exchange_data_table_partitions(const ObTableSchema &base_table_schema,
     const ObTableSchema &inc_table_schema,
     const ObIArray<ObTabletID> &base_tablet_ids,
     const ObIArray<ObTabletID> &inc_tablet_ids,
@@ -1550,7 +1551,7 @@ int ObPartitionExchange::push_data_table_schema_version_(const ObTableSchema &ta
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObRefreshSchemaStatus schema_status;
-    
+
     HEAP_VAR(ObTableSchema, new_table_schema) {
       if (OB_FAIL(schema_service->get_table_schema_from_inner_table(schema_status, table_schema.get_table_id(), trans, new_table_schema))) {
       } else if (OB_FALSE_IT(new_table_schema.set_in_offline_ddl_white_list(true))) {
@@ -1581,7 +1582,7 @@ int ObPartitionExchange::get_local_storage_index_and_lob_table_schemas_(const Ob
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
   } else {
-    
+
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); i++) {
       if (OB_FAIL(aux_table_ids.push_back(simple_index_infos.at(i).table_id_))) {
       }
@@ -1819,12 +1820,12 @@ int ObPartitionExchange::sync_exchange_partition_stats_info_(const uint64_t new_
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   ObSqlString sql_string;
-  
+
   if (OB_UNLIKELY(OB_INVALID_ID == new_table_id || StatLevel::INVALID_LEVEL == new_stat_level || OB_INVALID_ID == old_partition_id ||
                   OB_INVALID_ID == new_partition_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, object_type = %ld"
-        " WHERE table_id = %ld and partition_id = %ld",
+  } else if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET table_id = %" PRId64 ", partition_id = %" PRId64 ", object_type = %" PRId64 ""
+        " WHERE table_id = %" PRId64 " and partition_id = %" PRId64 "",
         OB_ALL_TABLE_STAT_TNAME, new_table_id, new_partition_id, new_stat_level,
         orig_table_schema.get_table_id(), old_partition_id))) {
   } else if (OB_FAIL(trans.write(sql_string.ptr(), affected_rows))) {
@@ -1840,12 +1841,12 @@ int ObPartitionExchange::sync_exchange_partition_stats_info_(const uint64_t new_
         ret = OB_ERR_UNEXPECTED;
       } else if (col->get_column_id() < OB_APP_MIN_COLUMN_ID) {
         // bypass hidden column
-      } else if (OB_FAIL(column_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld, object_type = %ld"
-          " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
+      } else if (OB_FAIL(column_sql_string.assign_fmt("UPDATE %s SET table_id = %" PRId64 ", partition_id = %" PRId64 ", column_id = %" PRId64 ", object_type = %" PRId64 ""
+          " WHERE table_id = %" PRId64 " and partition_id = %" PRId64 " and column_id = %" PRId64 "",
           OB_ALL_COLUMN_STAT_TNAME, new_table_id, new_partition_id, col->get_column_id(), new_stat_level,
           orig_table_schema.get_table_id(), old_partition_id, col->get_column_id()))) {
-      } else if (OB_FAIL(histogram_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld, object_type = %ld"
-          " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
+      } else if (OB_FAIL(histogram_sql_string.assign_fmt("UPDATE %s SET table_id = %" PRId64 ", partition_id = %" PRId64 ", column_id = %" PRId64 ", object_type = %" PRId64 ""
+          " WHERE table_id = %" PRId64 " and partition_id = %" PRId64 " and column_id = %" PRId64 "",
           OB_ALL_HISTOGRAM_STAT_TNAME, new_table_id, new_partition_id, col->get_column_id(), new_stat_level,
           orig_table_schema.get_table_id(), old_partition_id, col->get_column_id()))) {
       } else if (OB_FAIL(trans.write(column_sql_string.ptr(), affected_rows))) {
@@ -1863,10 +1864,10 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t new_t
   ObSqlString monitor_modified_read_sql_string;
   ObSqlString monitor_modified_insert_sql_string;
   ObSqlString monitor_modified_delete_sql_string;
-  
+
   if (OB_UNLIKELY(OB_INVALID_ID == new_table_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(monitor_modified_read_sql_string.assign_fmt("SELECT last_inserts, last_updates, last_deletes, inserts, updates, deletes FROM %s WHERE table_id = %ld and tablet_id = %ld", 
+  } else if (OB_FAIL(monitor_modified_read_sql_string.assign_fmt("SELECT last_inserts, last_updates, last_deletes, inserts, updates, deletes FROM %s WHERE table_id = %" PRId64 " and tablet_id = %" PRId64 "",
              OB_ALL_MONITOR_MODIFIED_TNAME, orig_table_schema.get_table_id(), tablet_id.id()))) {
   } else {
     bool need_update = false;
@@ -1898,9 +1899,9 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t new_t
       }
     }
     if (OB_SUCC(ret) && need_update) {
-      if (OB_FAIL(monitor_modified_insert_sql_string.assign_fmt("INSERT INTO %s(table_id, tablet_id, last_inserts, last_updates, last_deletes, inserts, updates, deletes) VALUES (%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld) ON DUPLICATE KEY UPDATE table_id = %ld, tablet_id = %ld", OB_ALL_MONITOR_MODIFIED_TNAME,
+      if (OB_FAIL(monitor_modified_insert_sql_string.assign_fmt("INSERT INTO %s(table_id, tablet_id, last_inserts, last_updates, last_deletes, inserts, updates, deletes) VALUES (%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ") ON DUPLICATE KEY UPDATE table_id = %" PRId64 ", tablet_id = %" PRId64 "", OB_ALL_MONITOR_MODIFIED_TNAME,
         new_table_id, tablet_id.id(), last_inserts, last_updates, last_deletes, inserts, updates, deletes, new_table_id, tablet_id.id()))) {
-      } else if (OB_FAIL(monitor_modified_delete_sql_string.assign_fmt("DELETE FROM %s WHERE table_id = %ld AND tablet_id = %ld", OB_ALL_MONITOR_MODIFIED_TNAME,
+      } else if (OB_FAIL(monitor_modified_delete_sql_string.assign_fmt("DELETE FROM %s WHERE table_id = %" PRId64 " AND tablet_id = %" PRId64 "", OB_ALL_MONITOR_MODIFIED_TNAME,
         orig_table_schema.get_table_id(), tablet_id.id()))) {
       } else if (OB_FAIL(trans.write(monitor_modified_insert_sql_string.ptr(), affected_rows))) {
       } else if (OB_FAIL(trans.write(monitor_modified_delete_sql_string.ptr(), affected_rows))) {
@@ -1910,7 +1911,7 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t new_t
   return ret;
 }
 
-int ObPartitionExchange::get_object_id_from_partition_schema_(ObPartitionSchema &partition_schema, const bool get_subpart_only, int64_t &object_id) 
+int ObPartitionExchange::get_object_id_from_partition_schema_(ObPartitionSchema &partition_schema, const bool get_subpart_only, int64_t &object_id)
 {
   int ret = OB_SUCCESS;
   object_id = OB_INVALID_PARTITION_ID;

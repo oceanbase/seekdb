@@ -1,6 +1,9 @@
-"""Configure the installed Android NDK for arm64, API 28."""
+"""Configure the installed Android NDK for arm64."""
 
 load(":repository_utils.bzl", "host_substitutions")
+
+_ANDROID_API_LEVEL = 28
+_ANDROID_TARGET = "aarch64-linux-android{}".format(_ANDROID_API_LEVEL)
 
 def _android_cc_toolchain_repository_impl(ctx):
     ndk = ctx.getenv("ANDROID_NDK_HOME")
@@ -9,7 +12,7 @@ def _android_cc_toolchain_repository_impl(ctx):
         return
     host = "darwin-x86_64" if ctx.os.name == "mac os x" else "linux-x86_64"
     toolchain = ctx.path(ndk + "/toolchains/llvm/prebuilt/" + host)
-    compiler = toolchain.get_child("bin").get_child("clang")
+    compiler = toolchain.get_child("bin").get_child(_ANDROID_TARGET + "-clang")
     if not compiler.exists:
         fail("Android NDK compiler is missing: %s" % compiler)
     ctx.symlink(toolchain, "ndk")
@@ -18,6 +21,8 @@ def _android_cc_toolchain_repository_impl(ctx):
         fail("Cannot run Android NDK Clang: %s" % resource.stderr)
     version = resource.stdout.strip().split("/")[-1]
     ctx.template("BUILD.bazel", Label(":BUILD.android_cc_toolchain.tpl"), substitutions = host_substitutions(ctx) | {
+        "@ANDROID_API_LEVEL@": str(_ANDROID_API_LEVEL),
+        "@ANDROID_TARGET@": _ANDROID_TARGET,
         "@CLANG_VERSION@": version,
         "@REPOSITORY_ROOT@": "external/" + ctx.name,
     })

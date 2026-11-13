@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::collections::TryReserveError;
-use std::io::Read;
 
 pub(crate) const COMPRESS_HEADER_SIZE: usize = 7;
 
@@ -88,16 +87,17 @@ where
     }
 
     let mut scratch = Vec::new();
-    reserve_scratch(&mut scratch, chunk.len().saturating_sub(1)).ok()?;
-
-    let mut compressor = flate2::Compress::new(flate2::Compression::default(), true);
-    let status = compressor
-        .compress_vec(chunk, &mut scratch, flate2::FlushCompress::Finish)
-        .ok()?;
-    if status == flate2::Status::StreamEnd
-        && compressor.total_in() == chunk.len() as u64
-        && scratch.len() < chunk.len()
-    {
+    let capacity = chunk.len() - 1;
+    reserve_scratch(&mut scratch, capacity).ok()?;
+    scratch.resize(capacity, 0);
+    let size = compression::zlib::zlib_compress(
+        chunk,
+        &mut scratch,
+        compression::zlib::DEFAULT_COMPRESSION_LEVEL,
+    )
+    .ok()?;
+    if size < chunk.len() {
+        scratch.truncate(size);
         Some(scratch)
     } else {
         None
@@ -150,7 +150,6 @@ pub fn deframe_step_limited(buf: &[u8], at: usize, max_plain: usize) -> DeframeS
         out.extend_from_slice(payload);
         out
     } else {
-        let mut dec = flate2::read::ZlibDecoder::new(payload);
         let mut out = Vec::new();
         let output_cap = match uncomp_len.checked_add(1) {
             Some(cap) => cap,
@@ -159,12 +158,10 @@ pub fn deframe_step_limited(buf: &[u8], at: usize, max_plain: usize) -> DeframeS
         if out.try_reserve_exact(output_cap).is_err() {
             return DeframeStep::Bad;
         }
-        let decoded = dec
-            .by_ref()
-            .take(uncomp_len.saturating_add(1) as u64)
-            .read_to_end(&mut out);
-        if decoded.is_err() || out.len() != uncomp_len || dec.total_in() != payload.len() as u64 {
-            return DeframeStep::Bad;
+        out.resize(output_cap, 0);
+        match compression::zlib::zlib_decompress_complete(payload, &mut out) {
+            Ok(size) if size == uncomp_len => out.truncate(size),
+            _ => return DeframeStep::Bad,
         }
         out
     };
@@ -174,3 +171,7 @@ pub fn deframe_step_limited(buf: &[u8], at: usize, max_plain: usize) -> DeframeS
         plain,
     }
 }
+
+#[cfg(test)]
+#[path = "compress_tests.rs"]
+mod tests;

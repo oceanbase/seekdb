@@ -10,6 +10,7 @@ crate-type = ["staticlib"]
 [features]
 default = ["native-network"]
 native-network = ["sql-nio/native-network"]
+native-http = ["dep:http-client"]
 
 [dependencies]
 mvt = { path = "../mvt" }
@@ -20,8 +21,16 @@ config = { path = "../config" }
 local = { path = "../local" }
 in-process = { path = "../in-process" }
 regex-engine = { path = "../regex-engine" }
+xml-parser = { path = "../xml-parser" }
+compression = { path = "../compression" }
+crypto = { path = "../crypto" }
 spatial-covering = { path = "../spatial-covering" }
 uuid-generator = { path = "../uuid-generator" }
+json = { path = "../json" }
+http-client = { path = "../http-client", optional = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 standby-rpc = { path = "../standby-rpc" }
+math = { path = "../math" }
+vector-kernels = { path = "../vector-kernels" }
+path-utils = { path = "../path-utils" }

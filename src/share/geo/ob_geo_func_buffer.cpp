@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX LIB
 
 #include "ob_geo_func_buffer.h"
+#include "share/geo/ob_geo_buffer_join_round.h"
+#include "share/geo/ob_geo_buffer_point_circle.h"
 #include "share/geo/ob_geo_func_utils.h"
 #include "share/geo/ob_geo_longtitude_correct_visitor.h"
 
@@ -92,11 +94,11 @@ private:
     bg::strategy::buffer::distance_symmetric<double> distance_s(strategy.distance_val_); 
     bg::strategy::buffer::side_straight side_s;
 
-    bg::strategy::buffer::join_round join_round_s(strategy.join_round_val_);
+    oceanbase::share::geo::ObBufferJoinRound<> join_round_s(strategy.join_round_val_);
     bg::strategy::buffer::join_miter join_miter_s(strategy.join_miter_val_);
     bg::strategy::buffer::end_round end_round_s(strategy.end_round_val_);
     bg::strategy::buffer::end_flat end_flat_s;
-    bg::strategy::buffer::point_circle point_circle_s(strategy.point_circle_val_);
+    oceanbase::share::geo::ObBufferPointCircle<> point_circle_s(strategy.point_circle_val_);
     bg::strategy::buffer::point_square point_square_s;
 
     // bg::buffer requires input and output the same type, and output type must be tree type.
@@ -242,13 +244,13 @@ private:
       bg::strategy::buffer::distance_symmetric<double> distance_s(strategy->distance_val_); 
       bg::strategy::buffer::side_straight side_s;
       // param 3
-      bg::strategy::buffer::join_round join_round_s(strategy->join_round_val_);
+      oceanbase::share::geo::ObBufferJoinRound<> join_round_s(strategy->join_round_val_);
       bg::strategy::buffer::join_miter join_miter_s(strategy->join_miter_val_);
       // param 4
       bg::strategy::buffer::end_round end_round_s(strategy->end_round_val_);
       bg::strategy::buffer::end_flat end_flat_s;
       // param 5
-      bg::strategy::buffer::point_circle point_circle_s(strategy->point_circle_val_);
+      oceanbase::share::geo::ObBufferPointCircle<> point_circle_s(strategy->point_circle_val_);
       bg::strategy::buffer::point_square point_square_s;
 
       switch (ObGeoBufferStrategyStateType(strategy->state_num_)) {
@@ -530,7 +532,7 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncBufferImpl, ObWkbGeogPoint, ObGeometry *)
       // init buffer context for graphical point
       bg::strategy::buffer::distance_symmetric<double> distance_s(strategy->distance_val_); 
       bg::strategy::buffer::side_straight side_s;
-      bg::strategy::buffer::join_round join_round_s(strategy->join_round_val_);
+      oceanbase::share::geo::ObBufferJoinRound<> join_round_s(strategy->join_round_val_);
       bg::strategy::buffer::end_round end_round_s(strategy->end_round_val_);
 
       // fix bg sphere parameter

@@ -15,36 +15,12 @@
  */
 
 #include "ob_utility.h"
+#include "lib/utility/ob_platform_io.h"
 #ifdef _WIN32
 #include <windows.h>
 #ifdef ERROR
 #undef ERROR
 #endif
-#include <io.h>
-#include <BaseTsd.h>
-typedef SSIZE_T ssize_t;
-static inline ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) {
-  HANDLE h = (HANDLE)_get_osfhandle(fd);
-  if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
-  OVERLAPPED ov = {};
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
-  ov.OffsetHigh = (DWORD)(offset >> 32);
-  DWORD written = 0;
-  if (!WriteFile(h, buf, (DWORD)count, &written, &ov)) { return -1; }
-  return (ssize_t)written;
-}
-static inline ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
-  HANDLE h = (HANDLE)_get_osfhandle(fd);
-  if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
-  OVERLAPPED ov = {};
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
-  ov.OffsetHigh = (DWORD)(offset >> 32);
-  DWORD nread = 0;
-  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) { return -1; }
-  return (ssize_t)nread;
-}
-#define pwrite ob_pwrite
-#define pread ob_pread
 #else
 #include <sys/mman.h>
 #endif
@@ -77,7 +53,8 @@ int64_t ob_pwrite(const int fd, const char *buf, const int64_t count, const int6
   int64_t offset2write = 0;
   int64_t write_ret = 0;
   while (length2write > 0) {
-    write_ret = ::pwrite(fd, (char *)buf + offset2write, length2write, offset + offset2write);
+    write_ret = ob_pwrite_fd(fd, (char *)buf + offset2write, length2write,
+                             offset + offset2write);
     if (0 >= write_ret) {
       if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
         continue;
@@ -100,7 +77,8 @@ int64_t ob_pread(const int fd, char *buf, const int64_t count, const int64_t off
   int64_t read_ret = 0;
   while (length2read > 0) {
     for (int64_t retry = 0; retry < 3;) {
-      read_ret = ::pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
+      read_ret = ob_pread_fd(fd, (char *)buf + offset2read, length2read,
+                             offset + offset2read);
       if (0 > read_ret) {
         if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
           continue;

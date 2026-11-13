@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <cstring>
+#include "share/ob_math_compat.h"
 
 namespace oceanbase
 {
@@ -93,7 +94,7 @@ double ObDistribution::normal(
     radius_squared = x_squared + y_squared;
   } while (radius_squared > 1.0 || radius_squared == 0.0);
 
-  const double log_radius = std::log(radius_squared);
+  const double log_radius = math_compat::log(radius_squared);
   const double scaled_log = -2.0 * log_radius;
   const double multiplier = std::sqrt(scaled_log / radius_squared);
   const double standard_normal = y * multiplier;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_tablet_fork_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -666,7 +667,7 @@ int ObTabletForkDag::fill_dag_key(char *buf, const int64_t buf_len) const
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(databuff_printf(buf, buf_len, 
-      "Fork table: src_tablet_id=%ld, dst_tablet_id=%ld, fork_snapshot_version=%ld, schema_version=%ld",
+      "Fork table: src_tablet_id=%" PRId64 ", dst_tablet_id=%" PRId64 ", fork_snapshot_version=%" PRId64 ", schema_version=%" PRId64 "",
       param_.source_tablet_id_.id(), param_.dest_tablet_id_.id(), param_.fork_snapshot_version_,
       param_.schema_version_))) {
   }

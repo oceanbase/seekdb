@@ -1,3 +1,4 @@
+#include <inttypes.h>
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -31,12 +32,12 @@ namespace sql
 #define PDML_DISABLE_BY_MERGE_UPDATE_PK "PDML disabled because the merge statement update primary key or unique index key"
 #define PDML_DISABLED_BY_IGNORE "PDML disabled because it is an dml ignore query"
 #define PDML_DISABLED_BY_UPDATE_NOW "PDML disabled by update now"
-#define PARALLEL_ENABLED_BY_GLOBAL_HINT "Degree of Parallelism is %ld because of hint"
-#define PARALLEL_ENABLED_BY_TABLE_HINT "Degree of Parallelism is %ld because of hint"
-#define PARALLEL_ENABLED_BY_SESSION "Degree of Parallelism is %ld because of session"
-#define PARALLEL_ENABLED_BY_TABLE_PROPERTY "Degree of Parallelisim is %ld because of table property"
-#define PARALLEL_ENABLED_BY_AUTO_DOP "Degree of Parallelisim is %ld because of Auto DOP"
-#define PARALLEL_DISABLED_BY_PL_UDF_DAS  "Degree of Parallelisim is %ld because stmt contain pl_udf which force das scan"
+#define PARALLEL_ENABLED_BY_GLOBAL_HINT "Degree of Parallelism is %" PRId64 " because of hint"
+#define PARALLEL_ENABLED_BY_TABLE_HINT "Degree of Parallelism is %" PRId64 " because of hint"
+#define PARALLEL_ENABLED_BY_SESSION "Degree of Parallelism is %" PRId64 " because of session"
+#define PARALLEL_ENABLED_BY_TABLE_PROPERTY "Degree of Parallelisim is %" PRId64 " because of table property"
+#define PARALLEL_ENABLED_BY_AUTO_DOP "Degree of Parallelisim is %" PRId64 " because of Auto DOP"
+#define PARALLEL_DISABLED_BY_PL_UDF_DAS  "Degree of Parallelisim is %" PRId64 " because stmt contain pl_udf which force das scan"
 #define PDML_DISABLED_BY_INSERT_PK_AUTO_INC "PDML disabled because the insert statement primary key or partition key has specified auto-increment column"
 #define PDML_DISABLED_BY_TRANSFORMATIONS "PDML disabled because transformations like or-expansion"
 #define NON_STANDARD_COMPARISON_SETTING "Non-standard comparison level is set to %s because of %s"

@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_mysql_proc_table.h"
+#include <inttypes.h>
 
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -443,8 +444,8 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
       
       ObString col_name = col_id == CREATED ? "GMT_CREATE" : "GMT_MODIFIED";
       const char *sql_str = "select %.*s from oceanbase.__all_routine where "
-                            " database_id = %ld and package_id = %ld "
-                            " and routine_id = %lu and subprogram_id = %ld";
+                            " database_id = %" PRId64 " and package_id = %" PRId64 " "
+                            " and routine_id = %" PRIu64 " and subprogram_id = %" PRId64 "";
       ObSqlString sql;
       if (OB_FAIL(sql.append_fmt(sql_str, col_name.length(), col_name.ptr(), 
                                 routine_info->get_database_id() & 0xFFFFFFFF, 

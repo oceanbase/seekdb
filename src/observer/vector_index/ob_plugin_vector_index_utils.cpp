@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX SERVER
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
@@ -1613,23 +1614,53 @@ int ObPluginVectorIndexUtils::get_vector_index_prefix_inner(const ObTableSchema 
     const char* index_snapshot_data_table = ObVecIndexBuilderUtil::SNAPSHOT_DATA_TABLE_NAME_SUFFIX;
     const char* hybrid_log_table = ObVecIndexBuilderUtil::HYBRID_LOG_TABLE_NAME_SUFFIX;
     const char* hybrid_embedded_table = ObVecIndexBuilderUtil::HYBRID_EMBEDDED_VEC_TABLE_NAME_SUFFIX;
-    int64_t prefix_len = 0;
+    const char* ivf_centroid_table = ObVecIndexBuilderUtil::IVF_CENTROID_TABLE_NAME_SUFFIX;
+    const char* ivf_rowkey_cid_table = ObVecIndexBuilderUtil::IVF_ROWKEY_CID_TABLE_NAME_SUFFIX;
+    const char* ivf_cid_vector_table = ObVecIndexBuilderUtil::IVF_CID_VECTOR_TABLE_NAME_SUFFIX;
+    const char* ivf_sq_meta_table = ObVecIndexBuilderUtil::IVF_SQ_META_TABLE_NAME_SUFFIX;
+    const char* ivf_pq_centroid_table = ObVecIndexBuilderUtil::IVF_PQ_CENTROID_TABLE_NAME_SUFFIX;
+    const char* ivf_pq_code_table = ObVecIndexBuilderUtil::IVF_PQ_CODE_TABLE_NAME_SUFFIX;
+    const char* ivf_pq_rowkey_cid_table = ObVecIndexBuilderUtil::IVF_PQ_ROWKEY_CID_TABLE_NAME_SUFFIX;
+    const char* suffix = nullptr;
 
     if (index_schema.is_vec_delta_buffer_type()) {
-      prefix_len = table_name_len - strlen(delta_buffer_table);
+      suffix = delta_buffer_table;
     } else if (index_schema.is_vec_index_id_type()) {
-      prefix_len = table_name_len - strlen(index_id_table);
+      suffix = index_id_table;
     } else if (index_schema.is_vec_index_snapshot_data_type()) {
-      prefix_len = table_name_len - strlen(index_snapshot_data_table);
+      suffix = index_snapshot_data_table;
     } else if (index_schema.is_hybrid_vec_index_log_type()) {
-      prefix_len = table_name_len - strlen(hybrid_log_table);
+      suffix = hybrid_log_table;
     } else if (index_schema.is_hybrid_vec_index_embedded_type()) {
-      prefix_len = table_name_len - strlen(hybrid_embedded_table);
+      suffix = hybrid_embedded_table;
+    } else if (index_schema.is_vec_ivf_centroid_index()) {
+      suffix = ivf_centroid_table;
+    } else if (index_schema.is_vec_ivfflat_rowkey_cid_index()
+               || index_schema.is_vec_ivfsq8_rowkey_cid_index()) {
+      suffix = ivf_rowkey_cid_table;
+    } else if (index_schema.is_vec_ivfflat_cid_vector_index()
+               || index_schema.is_vec_ivfsq8_cid_vector_index()) {
+      suffix = ivf_cid_vector_table;
+    } else if (index_schema.is_vec_ivfsq8_meta_index()) {
+      suffix = ivf_sq_meta_table;
+    } else if (index_schema.is_vec_ivfpq_pq_centroid_index()) {
+      suffix = ivf_pq_centroid_table;
+    } else if (index_schema.is_vec_ivfpq_code_index()) {
+      suffix = ivf_pq_code_table;
+    } else if (index_schema.is_vec_ivfpq_rowkey_cid_index()) {
+      suffix = ivf_pq_rowkey_cid_table;
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected vector index type", K(ret), K(index_schema.get_index_type()),
+               K(index_schema.get_table_name_str()));
     }
-    if (OB_SUCC(ret)) {
-      prefix.assign_ptr(index_name.ptr(), prefix_len);
+    const int64_t suffix_len = OB_NOT_NULL(suffix) ? static_cast<int64_t>(strlen(suffix)) : 0;
+    if (OB_SUCC(ret) && OB_UNLIKELY(table_name_len < suffix_len)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index name is shorter than its aux suffix", K(ret), K(index_name),
+               K(index_schema.get_index_type()), K(suffix_len));
+    } else if (OB_SUCC(ret)) {
+      prefix.assign_ptr(index_name.ptr(), table_name_len - suffix_len);
       LOG_INFO("get_index_prefix", K(prefix), K(index_name));
     }
   }
@@ -1763,21 +1794,21 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
             if (OB_NOT_NULL(adaptor->get_incr_data()) &&
                 OB_NOT_NULL(adaptor->get_incr_data()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_incr_data()->mem_ctx_->mem_ctx())) {
-              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_incr_%lu\":%d", adaptor->get_inc_table_id(), adaptor->get_incr_vsag_mem_hold()))) {
+              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_incr_%" PRIu64 "\":%d", adaptor->get_inc_table_id(), adaptor->get_incr_vsag_mem_hold()))) {
               }
             }
             if (OB_FAIL(ret)) {
             } else if (OB_NOT_NULL(adaptor->get_snap_data_()) &&
                 OB_NOT_NULL(adaptor->get_snap_data_()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_snap_data_()->mem_ctx_->mem_ctx())) {
-              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_snap_%lu\":%d", adaptor->get_snapshot_table_id(), adaptor->get_snap_vsag_mem_hold()))) {
+              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_snap_%" PRIu64 "\":%d", adaptor->get_snapshot_table_id(), adaptor->get_snap_vsag_mem_hold()))) {
               }
             }
             if (OB_FAIL(ret)) {
             } else if (OB_NOT_NULL(adaptor->get_vbitmap_data()) &&
                 OB_NOT_NULL(adaptor->get_vbitmap_data()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_vbitmap_data()->mem_ctx_->mem_ctx())) {
-              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_bitmap_%lu\":%lu", adaptor->get_vbitmap_table_id(), adaptor->get_vbitmap_data()->mem_ctx_->hold()))) {
+              if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_bitmap_%" PRIu64 "\":%" PRIu64 "", adaptor->get_vbitmap_table_id(), adaptor->get_vbitmap_data()->mem_ctx_->hold()))) {
               }
             }
           }
@@ -1829,7 +1860,7 @@ int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorInd
         } else if (ret == OB_HASH_NOT_EXIST) {
           ret = OB_SUCCESS;
           if (adaptor != NULL) {
-            if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"ivf_cache_%lu\":%ld", adaptor->get_table_id(), adaptor->get_memory_hold()))) {
+            if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"ivf_cache_%" PRIu64 "\":%" PRId64 "", adaptor->get_table_id(), adaptor->get_memory_hold()))) {
             }
           }
           OZ(adaptor_ptr_set.set_refactored(reinterpret_cast<int64_t>(adaptor)));

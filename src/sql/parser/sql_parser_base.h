@@ -18,6 +18,7 @@
 #define OCEANBASE_SRC_SQL_PARSER_SQL_PARSER_BASE_H_
 
 #include <stdint.h>
+#include <inttypes.h>
 #include <assert.h>
 #include <time.h>
 #include <stdlib.h>
@@ -366,7 +367,7 @@ do {                                                                            
         result->no_param_sql_len_ += start - result->pl_parse_info_.last_pl_symbol_pos_ - 1; \
         result->pl_parse_info_.last_pl_symbol_pos_ = end; \
         result->no_param_sql_[result->no_param_sql_len_++]  = ':'; \
-        result->no_param_sql_len_ += sprintf(result->no_param_sql_ + result->no_param_sql_len_, "%ld", idx); \
+        result->no_param_sql_len_ += sprintf(result->no_param_sql_ + result->no_param_sql_len_, "%" PRId64, (int64_t)(idx)); \
       } \
     } while (0)
 
@@ -443,7 +444,7 @@ do {                                                                            
           copy_and_skip_symbol(result, start, end); \
           check_need_malloc(result, 21); \
           result->no_param_sql_[result->no_param_sql_len_++]  = ':'; \
-          result->no_param_sql_len_ += sprintf(result->no_param_sql_ + result->no_param_sql_len_, "%ld", idx); \
+          result->no_param_sql_len_ += sprintf(result->no_param_sql_ + result->no_param_sql_len_, "%" PRId64, (int64_t)(idx)); \
           store_pl_symbol(node, result->param_nodes_, result->tail_param_node_); \
         } else if (is_report_error) { \
           YYABORT_UNDECLARE_VAR;   \

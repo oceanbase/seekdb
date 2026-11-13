@@ -256,7 +256,7 @@ private:
   struct RemoveStaleIncompletePalfFunctor : public ObBaseDirFunctor {
     RemoveStaleIncompletePalfFunctor(PalfEnvImpl *palf_env_impl);
     ~RemoveStaleIncompletePalfFunctor();
-    int func(const dirent *entry) override;
+    int func(const char *entry_name) override;
     PalfEnvImpl *palf_env_impl_;
   };
 

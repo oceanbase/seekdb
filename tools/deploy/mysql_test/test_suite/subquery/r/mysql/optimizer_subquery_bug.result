@@ -1496,7 +1496,7 @@ drop table if exists case_partition_10_parent, case_partition_10_set_null_parent
 CREATE TABLE `case_partition_10_parent` (
   `pk` int(11) NOT NULL,
   PRIMARY KEY (`pk`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by hash(pk)
 (partition `p0`,
 partition `p1`,
@@ -1510,7 +1510,7 @@ partition `p7`);
 CREATE TABLE `case_partition_10_set_null_parent` (
   `pk` int(11) NOT NULL,
   PRIMARY KEY (`pk`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by hash(pk)
 (partition `p0`,
 partition `p1`,
@@ -1524,7 +1524,7 @@ partition `p7`);
 CREATE TABLE `case6_grandparent1` (
   `pk` int(11) NOT NULL,
   PRIMARY KEY (`pk`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 
 explain
 UPDATE

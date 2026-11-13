@@ -17,9 +17,11 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include <cmath>
+#include <inttypes.h>
 #include <memory>
 
 #include "ob_select_into_op.h"
+#include "lib/utility/ob_platform_io.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -391,7 +393,7 @@ int ObSelectIntoOp::calc_first_file_path(ObString &path)
       OZ(file_name_with_suffix.append_fmt("%.*s", input_file_name.length(), input_file_name.ptr()));
     }
     if (MY_SPEC.parallel_ > 1) {
-      OZ(file_name_with_suffix.append_fmt("_%ld_%ld_%d", input->sqc_id_, input->task_id_, 0));
+      OZ(file_name_with_suffix.append_fmt("_%" PRId64 "_%" PRId64 "_%d", input->sqc_id_, input->task_id_, 0));
     } else {
       OZ(file_name_with_suffix.append_fmt("_%d", 0));
     }
@@ -422,7 +424,7 @@ int ObSelectIntoOp::calc_next_file_path(ObExternalFileWriter &data_writer)
   } else {
     file_path = data_writer.url_.split_on(data_writer.url_.reverse_find('_'));
     if (OB_FAIL(url_with_suffix.assign(file_path))) {
-    } else if (OB_FAIL(url_with_suffix.append_fmt("_%ld", data_writer.split_file_id_))) {
+    } else if (OB_FAIL(url_with_suffix.append_fmt("_%" PRId64 "", data_writer.split_file_id_))) {
     }
     ObString file_extension;
     OZ(external_properties_.get_format_file_extension(format_type_, file_extension));
@@ -490,9 +492,13 @@ int ObSelectIntoOp::check_csv_file_size(ObCsvFileWriter &data_writer)
       }
     }
     if (has_compress_ && has_split) {
-      data_writer.get_compress_stream_writer()->reuse();
+      if (OB_FAIL(data_writer.get_compress_stream_writer()->reuse())) {
+        LOG_WARN("failed to reset outfile compression", K(ret));
+      }
     }
-    data_writer.update_last_line_pos();
+    if (OB_SUCC(ret)) {
+      data_writer.update_last_line_pos();
+    }
   }
   return ret;
 }
@@ -1202,18 +1208,16 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 {
   int ret = OB_SUCCESS;
   ObString file_path = file_name.split_on(file_name.reverse_find('/'));
-  char full_path_buf[PATH_MAX+1];
+  char full_path_buf[common::MAX_PATH_SIZE] = {0};
   char *actual_path = nullptr;
   ObSqlString sql_str;
   ObString secure_file_priv;
   
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
-#ifdef _WIN32
-  } else if (OB_ISNULL(actual_path = _fullpath(full_path_buf, sql_str.ptr(), PATH_MAX))) {
-#else
-  } else if (OB_ISNULL(actual_path = realpath(sql_str.ptr(), full_path_buf))) {
-#endif
+  } else if (0 != common::ob_absolute_path_utf8(sql_str.ptr(), full_path_buf,
+                                                sizeof(full_path_buf))) {
     ret = OB_FILE_NOT_EXIST;
+  } else if (FALSE_IT(actual_path = full_path_buf)) {
   } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
                                                                 SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),

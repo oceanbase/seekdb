@@ -619,7 +619,7 @@ FALSE {
     if (p->is_not_utf8_connection_) {
       dup_value = parse_str_convert_utf8(p->charset_info_, tmp_literal, p->malloc_pool_, &(yylval->node->str_len_), &(p->extra_errno_));
       check_identifier_convert_result(p->extra_errno_);
-      //fprintf(stderr, "parse identifier result, str=%s, str_len=%ld\n", node->str_value_, node->str_len_);
+      //fprintf(stderr, "parse identifier result, str=%s, str_len=%lld\n", node->str_value_, node->str_len_);
     } else {
       dup_value = parse_strndup(tmp_literal, yylval->node->str_len_ + 1, p->malloc_pool_);
     }
@@ -689,7 +689,7 @@ FALSE {
     if (p->is_not_utf8_connection_) {
       dup_value = parse_str_convert_utf8(p->charset_info_, tmp_literal, p->malloc_pool_, &(yylval->node->str_len_), &(p->extra_errno_));
       check_identifier_convert_result(p->extra_errno_);
-      //fprintf(stderr, "parse identifier result, str=%s, str_len=%ld\n", node->str_value_, node->str_len_);
+      //fprintf(stderr, "parse identifier result, str=%s, str_len=%lld\n", node->str_value_, node->str_len_);
     } else {
       dup_value = parse_strndup(tmp_literal, yylval->node->str_len_ + 1, p->malloc_pool_);
     }
@@ -1260,7 +1260,7 @@ Timestamp{whitespace}?\"[^\"]*\" {
     if (p->is_not_utf8_connection_) {
       dup_value = parse_str_convert_utf8(p->charset_info_, tmp_literal, p->malloc_pool_, &(yylval->node->str_len_), &(p->extra_errno_));
       check_identifier_convert_result(p->extra_errno_);
-      //fprintf(stderr, "parse identifier result, str=%s, str_len=%ld\n", node->str_value_, node->str_len_);
+      //fprintf(stderr, "parse identifier result, str=%s, str_len=%lld\n", node->str_value_, node->str_len_);
     } else {
       dup_value = parse_strndup(tmp_literal, yylval->node->str_len_ + 1, p->malloc_pool_);
     }
@@ -1752,7 +1752,7 @@ BEGIN(in_c_comment);
       if (p->is_not_utf8_connection_) {
         node->str_value_ = parse_str_convert_utf8(p->charset_info_, yytext, p->malloc_pool_, &(node->str_len_), &(p->extra_errno_));
         check_identifier_convert_result(p->extra_errno_);
-        //fprintf(stderr, "parse identifier result, str=%s, str_len=%ld\n", node->str_value_, node->str_len_);
+        //fprintf(stderr, "parse identifier result, str=%s, str_len=%lld\n", node->str_value_, node->str_len_);
       } else {
         node->str_value_ = parse_strdup(yytext, p->malloc_pool_, &(node->str_len_));
       }

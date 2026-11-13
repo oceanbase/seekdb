@@ -11,18 +11,11 @@ import shlex
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_PACKAGES = ("zlib", "openssl", "curl", "lzma", "libxml2")
+DEFAULT_PACKAGES = ("openssl", "curl")
 
 PACKAGES = {
-    "lzma": ("5.4.7", "https://codeload.github.com/tukaani-project/xz/tar.gz/refs/tags/v5.4.7",
-             "87ef1bb0183ce477ba3ddb2700000b4c1e723f8d984e8f678dddcb11c5bf4f99"),
-    "libxml2": ('2.10.4', 'https://codeload.github.com/GNOME/libxml2/tar.gz/refs/tags/v2.10.4',
-        '6f6fb27f91bb65f9d7196e3c616901b3e18a7dea31ccc2ae857940b125faa780'),
-
     "curl": ("8.12.1", "https://curl.se/download/curl-8.12.1.tar.gz",
              "7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf"),
-    "zlib": ("1.2.13", "https://codeload.github.com/madler/zlib/tar.gz/refs/tags/v1.2.13",
-             "1525952a0a567581792613a9723333d7f8cc20b87a81f920fb8bc7e3f2251428"),
     "openssl": ("1.1.1u", "https://codeload.github.com/openssl/openssl/tar.gz/refs/tags/OpenSSL_1_1_1u",
                 "fafe27202bde4238dce258d82ec8a8592a657842e5431264620a933a0c9436b7"),
 }
@@ -78,24 +71,6 @@ def verify_archive(archive, simulator, environment):
         raise RuntimeError("Unexpected archive platforms: " + repr(platforms))
 
 
-def build_zlib(source, build, prefix, sdk, options, environment):
-    """Compile zlib's static target and install its public headers and archive."""
-    # Modern Apple SDKs define TARGET_OS_MAC even for iOS; this is not classic Mac OS.
-    header = source / "zutil.h"
-    original = "#if defined(MACOS) || defined(TARGET_OS_MAC)"
-    patched = "#if defined(MACOS) && !defined(__APPLE__)"
-    content = header.read_text()
-    if original in content:
-        header.write_text(content.replace(original, patched))
-    elif patched not in content:
-        raise RuntimeError("Unrecognized zlib platform guard")
-    environment = target_environment(sdk, options, environment)
-    run([source / "configure", "--static", "--prefix=" + str(prefix)], build, environment)
-    run(["make", "-j" + str(options.jobs), "libz.a"], build, environment)
-    verify_archive(build / "libz.a", options.simulator, environment)
-    run(["make", "install"], build, environment)
-
-
 def build_openssl(source, build, prefix, sdk, options, environment):
     """Build and install OpenSSL with the SDK's iOS target and no dynamic libraries."""
     target = "iossimulator-xcrun" if options.simulator else "ios64-xcrun"
@@ -115,8 +90,8 @@ def build_openssl(source, build, prefix, sdk, options, environment):
 
 
 def build_curl(source, build, prefix, sdk, options, environment):
-    """Build libcurl against the verified local OpenSSL and zlib archives."""
-    for library in ("libssl.a", "libcrypto.a", "libz.a"):
+    """Build libcurl against local OpenSSL and the Apple SDK system zlib."""
+    for library in ("libssl.a", "libcrypto.a"):
         verify_archive(prefix / "lib" / library, options.simulator, environment)
     environment = target_environment(sdk, options, environment, prefix)
     run([source / "configure", "--host=aarch64-apple-darwin", "--disable-shared",
@@ -126,7 +101,7 @@ def build_curl(source, build, prefix, sdk, options, environment):
          "--without-zstd", "--without-brotli", "--without-libidn2", "--without-librtmp",
          "--without-gssapi", "--without-apple-idn", "--without-secure-transport",
          "--without-quiche", "--without-msh3", "--without-libuv", "--without-libgsasl",
-         "--with-openssl=" + str(prefix), "--with-zlib=" + str(prefix),
+         "--with-openssl=" + str(prefix), "--with-zlib=" + str(Path(sdk) / "usr"),
          "--prefix=" + str(prefix)], build, environment)
     run(["make", "-C", "lib", "-j" + str(options.jobs)], build, environment)
     verify_archive(build / "lib/.libs/libcurl.a", options.simulator, environment)
@@ -156,43 +131,9 @@ def target_environment(sdk, options, environment, prefix=None):
     return result
 
 
-def build_lzma(source, build, prefix, sdk, options, environment):
-    if not (source / "configure").exists():
-        run(["sh", "autogen.sh", "--no-po4a", "--no-doxygen"], source, environment)
-    environment = target_environment(sdk, options, environment)
-    run([source / "configure", "--host=aarch64-apple-darwin", "--enable-static",
-         "--disable-shared", "--disable-dependency-tracking", "--disable-nls",
-         "--disable-xz", "--disable-xzdec", "--disable-lzmadec", "--disable-lzmainfo",
-         "--disable-lzma-links", "--disable-scripts", "--with-pic",
-         "--prefix=" + str(prefix)], build, environment)
-    run(["make", "-C", "src/liblzma", "-j" + str(options.jobs)], build, environment)
-    verify_archive(build / "src/liblzma/.libs/liblzma.a", options.simulator, environment)
-    run(["make", "-C", "src/liblzma", "install"], build, environment)
-
-
-def build_libxml2(source, build, prefix, sdk, options, environment):
-    if not (source / "configure").exists():
-        run(["autoreconf", "--install", "--force"], source, environment)
-    for library in ("libz.a", "liblzma.a"):
-        verify_archive(prefix / "lib" / library, options.simulator, environment)
-    environment = target_environment(sdk, options, environment, prefix)
-    run([source / "configure", "--host=aarch64-apple-darwin", "--enable-static",
-         "--disable-shared", "--disable-dependency-tracking", "--without-python",
-         "--without-readline", "--with-zlib=" + str(prefix), "--with-lzma=" + str(prefix),
-         "--prefix=" + str(prefix)], build, environment)
-    run(["make", "-j" + str(options.jobs), "libxml2.la"], build, environment)
-    verify_archive(build / ".libs/libxml2.a", options.simulator, environment)
-    run(["make", "install-libLTLIBRARIES"], build, environment)
-    run(["make", "-C", "include", "install"], build, environment)
-
-
 PACKAGE_OUTPUTS = {
-    "zlib": ("lib/libz.a", "include/zlib.h", "include/zconf.h"),
-    "openssl": ("lib/libssl.a", "lib/libcrypto.a", "include/openssl/ssl.h"),
     "curl": ("lib/libcurl.a", "include/curl/curl.h"),
-    "lzma": ("lib/liblzma.a", "include/lzma.h"),
-    "libxml2": ("lib/libxml2.a", "include/libxml2/libxml/parser.h",
-                "include/libxml2/libxml/xmlversion.h"),
+    "openssl": ("lib/libssl.a", "lib/libcrypto.a", "include/openssl/ssl.h"),
 }
 
 
@@ -222,8 +163,6 @@ def publish_metadata(name, source, marker, prefix):
     notices = set()
     for pattern in ("LICENSE*", "COPYING*", "Copyright", "license.html"):
         notices.update(path for path in source.glob(pattern) if path.is_file())
-    if name == "zlib":
-        notices.add(source / "zlib.h")
     if not notices:
         raise RuntimeError("No upstream license notice found: " + name)
     destination = prefix / "licenses" / name
@@ -289,8 +228,8 @@ def main():
             shutil.rmtree(build)
         source = source_package(name, environment)
         build.mkdir(parents=True, exist_ok=True)
-        {"zlib": build_zlib, "openssl": build_openssl, "curl": build_curl,
-         "lzma": build_lzma, "libxml2": build_libxml2}[name](source, build, prefix, sdk, options, environment)
+        {"openssl": build_openssl, "curl": build_curl}[name](
+            source, build, prefix, sdk, options, environment)
         outputs = installed_output_hashes(name, prefix)
         if outputs is None:
             raise RuntimeError("Missing installed dependency outputs: " + name)

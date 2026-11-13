@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_dbms_sched_table_operator.h"
 #include "ob_dbms_sched_job_utils.h"
 #include "query/scheduler/ob_scheduler_job.h"
@@ -142,7 +143,7 @@ int ObDBMSSchedTableOperator::_build_job_finished_dml(int64_t now, ObDBMSSchedJo
   OZ (dml.add_column(true, "this_exec_addr"));
   OZ (dml.add_column(true, "this_exec_trace_id"));
   // job reach end_date before first scheduled shoule updated too
-  OZ (dml.get_extra_condition().assign_fmt("(state is NULL OR state!='BROKEN') AND (last_date is null OR last_date<=usec_to_time(%ld))", job_info.last_date_));
+  OZ (dml.get_extra_condition().assign_fmt("(state is NULL OR state!='BROKEN') AND (last_date is null OR last_date<=usec_to_time(%" PRId64 "))", job_info.last_date_));
   OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
   return ret;
 }
@@ -433,13 +434,13 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
   CK (OB_LIKELY(job_id != OB_INVALID_ID));
 
   if (!job_name.empty()) {
-    OZ (sql.append_fmt("select * from %s where job_name = \'%.*s\' and job = %ld",
+    OZ (sql.append_fmt("select * from %s where job_name = \'%.*s\' and job = %" PRId64 "",
         OB_ALL_SCHEDULER_JOB_TNAME,
         job_name.length(),
         job_name.ptr(),
         job_id));
   } else {
-    OZ (sql.append_fmt("select * from %s where job = %ld",
+    OZ (sql.append_fmt("select * from %s where job = %" PRId64 "",
         OB_ALL_SCHEDULER_JOB_TNAME,
         job_id));
   }

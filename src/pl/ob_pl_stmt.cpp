@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_pl_stmt.h"
+#include <inttypes.h>
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "pl/ob_pl_dependency_util.h"
@@ -2664,33 +2665,33 @@ int64_t ObPLBlockNS::to_string(char* buf, const int64_t buf_len) const
   if (OB_ISNULL(buf) || buf_len <= 0) {
   } else {
     databuff_printf(buf, buf_len, pos,
-      "TYPE:%d, DB_NAME:%s, PKG_NAME: %s, PKG_ID: %ld," \
-        "PKG_VERSION: %ld, ROUTINE_ID: %ld EXPLICT_BLOCK: %d\n",
+      "TYPE:%d, DB_NAME:%s, PKG_NAME: %s, PKG_ID: %" PRId64 "," \
+        "PKG_VERSION: %" PRId64 ", ROUTINE_ID: %" PRId64 " EXPLICT_BLOCK: %d\n",
       type_, db_name_.ptr(), package_name_.ptr(),
       package_id_, package_version_, routine_id_, explicit_block_);
-    databuff_printf(buf, buf_len, pos, "\t TYPES(%ld): \t\t[", types_.count());
+    databuff_printf(buf, buf_len, pos, "\t TYPES(%" PRId64 "): \t\t[", types_.count());
     for (int64_t i = 0; i < types_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", types_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", types_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t SYMBOLS(%ld): \t\t[", symbols_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t SYMBOLS(%" PRId64 "): \t\t[", symbols_.count());
     for (int64_t i = 0; i < symbols_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", symbols_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", symbols_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t LABLES(%ld): \t\t[", labels_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t LABLES(%" PRId64 "): \t\t[", labels_.count());
     for (int64_t i = 0; i < labels_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", labels_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", labels_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t CONDITIONS(%ld): \t[", conditions_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t CONDITIONS(%" PRId64 "): \t[", conditions_.count());
     for (int64_t i = 0; i < conditions_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", conditions_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", conditions_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t CURSORS(%ld): \t\t[", cursors_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t CURSORS(%" PRId64 "): \t\t[", cursors_.count());
     for (int64_t i = 0; i < cursors_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", cursors_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", cursors_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t ROUTINES(%ld): \t\t[", routines_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t ROUTINES(%" PRId64 "): \t\t[", routines_.count());
     for (int64_t i = 0; i < routines_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", routines_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", routines_.at(i));
     }
     databuff_printf(buf, buf_len, pos, "]\n");
     if (OB_NOT_NULL(pre_ns_)) {

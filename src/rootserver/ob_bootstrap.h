@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_BOOTSTRAP_H_
 
 #include <typeinfo>
+#include <inttypes.h>
 #include "share/ob_define.h"
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "rootserver/ob_ddl_service.h"
@@ -167,10 +168,10 @@ private:
       int64_t cost = end_ts - begin_ts_; \
       begin_ts_ = end_ts ; \
       if (OB_SUCC(ret)) { \
-        _BOOTSTRAP_LOG(INFO, "STEP_%ld.%ld:%s execute success, cost=%ld", \
+        _BOOTSTRAP_LOG(INFO, "STEP_%" PRId64 ".%" PRId64 ":%s execute success, cost=%" PRId64 "", \
                        major_step, step_id_, function_name, cost); \
       } else { \
-        _BOOTSTRAP_LOG(WARN, "STEP_%ld.%ld:%s execute fail, ret=%d, cost=%ld", \
+        _BOOTSTRAP_LOG(WARN, "STEP_%" PRId64 ".%" PRId64 ":%s execute fail, ret=%d, cost=%" PRId64 "", \
                        major_step, step_id_, function_name, ret, cost); \
       }\
     } while (0)
@@ -188,10 +189,10 @@ private:
       int64_t cost = end_ts - begin_ts_; \
       begin_ts_ = end_ts ; \
       if (OB_SUCC(ret)) { \
-        _BOOTSTRAP_LOG(INFO, "STEP_%ld.%ld:%s execute success, cost=%ld", \
+        _BOOTSTRAP_LOG(INFO, "STEP_%" PRId64 ".%" PRId64 ":%s execute success, cost=%" PRId64 "", \
                        major_step, step_id_, __FUNCTION__, cost); \
       } else { \
-        _BOOTSTRAP_LOG(WARN, "STEP_%ld.%ld:%s execute fail, ret=%d, cost=%ld", \
+        _BOOTSTRAP_LOG(WARN, "STEP_%" PRId64 ".%" PRId64 ":%s execute fail, ret=%d, cost=%" PRId64 "", \
                        major_step, step_id_, __FUNCTION__, ret, cost); \
       }\
     } while (0)

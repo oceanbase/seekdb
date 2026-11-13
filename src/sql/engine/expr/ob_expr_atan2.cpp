@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_atan2.h"
+#include "share/ob_math_compat.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -63,7 +64,7 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       res_datum.set_null();
     } else if (ObDoubleType == expr.args_[0]->datum_meta_.type_) {
       const double arg = radian->get_double();
-      res_datum.set_double(atan(arg));
+      res_datum.set_double(math_compat::atan(arg));
     }
   } else { // 2 == expr.arg_cnt_
     // calc atan2(y/x)
@@ -94,7 +95,7 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       }
     } else if (ObDoubleType == arg0->datum_meta_.type_
               && ObDoubleType == arg1->datum_meta_.type_) {
-      res_datum.set_double(atan2(y->get_double(), x->get_double()));
+      res_datum.set_double(math_compat::atan2(y->get_double(), x->get_double()));
     } else {
       ret = OB_ERR_UNEXPECTED;
     }

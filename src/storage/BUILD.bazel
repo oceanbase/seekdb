@@ -264,14 +264,11 @@ _STORAGE_RUNTIME_NATIVE_DEPS = [
     "//src/share:vector",
     "//src/share:worker_runtime",
     "//bazel/third_party:absl_headers",
-    "//bazel/third_party:curl_headers",
     "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
-    "//bazel/third_party:rapidjson_headers",
     "//bazel/third_party:roaring_headers",
     "//bazel/third_party:vsag_headers",
-    "//bazel/third_party:zlib_headers",
 ]
 
 _STORAGE_RUNTIME_NON_SHARE_DEPS = [
@@ -385,6 +382,7 @@ _STORAGE_EXACT_HEADER_DEPS = [
     ":tablet_autoincrement_handler_internal",
     ":tablet_autoincrement_service_internal",
     ":tablet_autoincrement_state",
+    "//rust:vector_kernels_headers",
     "//src/data_plane:lock_wait_service",
     "//src/query:ai_endpoint_resolver",
     "//src/query:change_stream_service",

@@ -149,6 +149,7 @@ cc_library(
         _SQL_SEMANTIC_HEADER_PREFIXES,
     ),
     deps = _SQL_INTERFACE_NON_SHARE_DEPS + _SQL_PUBLIC_CLOSURE_OBLIB_DEPS + _SQL_PUBLIC_CLOSURE_SHARE_DEPS + [
+        "//rust:compression_headers",
         "//rust:config_headers",
         "//src/sql/optimizer:optimizer_public_headers",
         "//src/sql/parser:parser_public_headers",
@@ -220,8 +221,12 @@ _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = singleton_unity_groups(
 )
 
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
+    "//rust:path_utils",
     "//rust:uuid_generator_headers",
+    "//rust:compression_headers",
     "//rust:config_headers",
+    "//rust:json",
+    "//src/share:math_compat",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
     ":sql_runtime_internal_headers",
@@ -321,7 +326,6 @@ grouped_unity_cc_library(
         "//src/share:vector",
         "//src/share:worker_runtime",
         "//bazel/third_party:boost_headers",
-        "//bazel/third_party:curl_headers",
         "//rust:regex_engine_headers",
         "//bazel/third_party:openssl_headers",
     ],

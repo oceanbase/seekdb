@@ -9,12 +9,9 @@ on:
     branches: [master, develop]
     types: [opened, reopened, synchronize, ready_for_review]
     paths-ignore:
+      - '**/*.md'
       - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
-      - '.github/pull_request_template.md'
-      - 'README.md'
-      - 'README_CN.md'
-      - 'CONTRIBUTING.md'
   schedule:
     - cron: '30 9 * * *'
 

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_snapshot_table_proxy.h"
+#include <inttypes.h>
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_share_util.h"
 
@@ -45,9 +46,9 @@ ObSnapshotInfo::ObSnapshotInfo()
 
 int ObSnapshotInfo::init(
     const uint64_t tablet_id,
-    const ObSnapShotType &snapshot_type, 
+    const ObSnapShotType &snapshot_type,
     const SCN &snapshot_scn,
-    const int64_t schema_version, 
+    const int64_t schema_version,
     const char* comment)
 {
   int ret = OB_SUCCESS;
@@ -175,11 +176,11 @@ int ObSnapshotTableProxy::batch_add_snapshot(
   } else {
     SCN snapshot_gc_scn = SCN::min_scn();
     int64_t report_idx = 0;
-    
+
     ObSnapshotInfo info;
     bool is_valid = false;
     info.snapshot_type_ = snapshot_type;
-    
+
     info.snapshot_scn_ = snapshot_scn;
     info.schema_version_ = schema_version;
     info.comment_ = comment;
@@ -235,7 +236,7 @@ int ObSnapshotTableProxy::remove_snapshot(
     const ObSnapshotInfo &info)
 {
   int ret = OB_SUCCESS;
-  
+
   int64_t affected_rows = 0;
   ObDMLSqlSplicer dml;
   ObDMLExecHelper exec(proxy);
@@ -243,7 +244,7 @@ int ObSnapshotTableProxy::remove_snapshot(
   if (!ObSnapshotInfo::is_valid_snapshot_type(info.snapshot_type_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(dml.add_pk_column("snapshot_type", info.snapshot_type_))
-             || (info.snapshot_scn_.is_valid() && 
+             || (info.snapshot_scn_.is_valid() &&
                  OB_FAIL(dml.add_uint64_pk_column("snapshot_scn", info.snapshot_scn_.get_val_for_inner_table_field())))
              || (info.schema_version_ > 0 && OB_FAIL(dml.add_pk_column("schema_version", info.schema_version_)))
              || (info.tablet_id_ > 0 && OB_FAIL(dml.add_pk_column("tablet_id", info.tablet_id_)))) {
@@ -261,7 +262,7 @@ int ObSnapshotTableProxy::batch_remove_snapshots(
     const common::ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  
+
   const int64_t BATCH_CNT = 256;
 
   if (!ObSnapshotInfo::is_valid_snapshot_type(snapshot_type)) {
@@ -276,7 +277,7 @@ int ObSnapshotTableProxy::batch_remove_snapshots(
       const int64_t cur_batch_cnt = remain_cnt < BATCH_CNT ? remain_cnt : BATCH_CNT;
       for (int64_t i = 0; OB_SUCC(ret) && i < cur_batch_cnt; ++i) {
         const uint64_t &tablet_id = tablet_ids.at(report_idx + i).id();
-        if (OB_FAIL(tablet_list.append_fmt("%s %lu", i == 0 ? "" : ",", tablet_id))) {
+        if (OB_FAIL(tablet_list.append_fmt("%s %" PRIu64 "", i == 0 ? "" : ",", tablet_id))) {
         }
       }
       if (FAILEDx(sql.append_fmt(
@@ -284,10 +285,10 @@ int ObSnapshotTableProxy::batch_remove_snapshots(
           OB_ALL_ACQUIRED_SNAPSHOT_TNAME,
           OB_ALL_ACQUIRED_SNAPSHOT_TNAME,
           snapshot_type, tablet_list.string().length(), tablet_list.string().ptr()))) {
-      } else if (snapshot_scn.is_valid() && OB_FAIL(sql.append_fmt(" AND snapshot_scn = %lu", 
+      } else if (snapshot_scn.is_valid() && OB_FAIL(sql.append_fmt(" AND snapshot_scn = %" PRIu64 "",
           snapshot_scn.get_val_for_inner_table_field()))) {
       } else if (schema_version > 0 && OB_FAIL(sql.append_fmt(
-        " AND schema_version = %ld", schema_version))) {
+        " AND schema_version = %" PRId64 "", schema_version))) {
       } else if (OB_FAIL(proxy.write(sql.ptr(), affected_rows))) {
       } else if (OB_UNLIKELY(affected_rows < 0)) {
         ret = OB_ERR_UNEXPECTED;
@@ -469,8 +470,8 @@ int ObSnapshotTableProxy::get_snapshot(
       sqlclient::ObMySQLResult *result = NULL;
       ObTimeoutCtx ctx;
       if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-      } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE snapshot_type = %d AND snapshot_scn = %lu "
-          , OB_ALL_ACQUIRED_SNAPSHOT_TNAME, snapshot_type, 
+      } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE snapshot_type = %d AND snapshot_scn = %" PRIu64 " "
+          , OB_ALL_ACQUIRED_SNAPSHOT_TNAME, snapshot_type,
           snapshot_scn.get_val_for_inner_table_field()))) {
       } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {

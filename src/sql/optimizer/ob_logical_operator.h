@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 
 #include <limits>
+#include <inttypes.h>
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_iterator.h"
@@ -150,7 +151,7 @@ struct partition_access
   } else {                                                                      \
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {                           \
       if (OB_FAIL(BUF_PRINTF("["))) { /* Do nothing */                          \
-      } else if (OB_FAIL(BUF_PRINTF("%lu", arr.at(i)))) { /* Do nothing */      \
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", arr.at(i)))) { /* Do nothing */      \
       } else if (OB_FAIL(BUF_PRINTF("]"))) { /* Do nothing */                   \
       } else if (i < N - 1) {                                                   \
         ret = BUF_PRINTF(", ");                                                 \

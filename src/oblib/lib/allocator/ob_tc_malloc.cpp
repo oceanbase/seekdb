@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB_ALLOC
 
 #include "ob_tc_malloc.h"
+#include <inttypes.h>
 #ifdef __linux__
 #include <malloc.h>
 #elif defined(__APPLE__)
@@ -71,7 +72,7 @@ int64_t get_virtual_memory_used(int64_t *resident_size)
   int64_t res_page_cnt = 0;
   FILE *statm = fopen("/proc/self/statm", "r");
   if (OB_NOT_NULL(statm)) {
-    fscanf(statm, "%ld %ld", &page_cnt, &res_page_cnt);
+    fscanf(statm, "%" PRId64 " %" PRId64 "", &page_cnt, &res_page_cnt);
     fclose(statm);
     if (resident_size) *resident_size = res_page_cnt * ps;
   }

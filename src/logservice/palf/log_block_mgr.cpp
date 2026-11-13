@@ -16,25 +16,9 @@
 
 #include "log_block_mgr.h"
 #include "log_writer_utils.h"                           // LogWriteBuf
-#include "log_io_utils.h"                               // openat_with_retry
+#include "log_io_utils.h"                               // open_directory, renameat_with_retry
 #include "log_io_adapter.h"                             // LogIOAdapter
-#ifdef _WIN32
-#include <io.h>
-#include <fcntl.h>
-#ifndef O_DIRECTORY
-#define O_DIRECTORY 0
-#endif
-#ifndef O_RDONLY
-#define O_RDONLY _O_RDONLY
-#endif
-static int ob_win_truncate(const char *path, int64_t length) {
-  int fd = ::_open(path, _O_RDWR | _O_BINARY);
-  if (fd == -1) return -1;
-  int rc = ::_chsize_s(fd, length);
-  ::_close(fd);
-  return rc == 0 ? 0 : -1;
-}
-#endif
+#include "lib/utility/ob_platform_io.h"                 // ob_truncate_utf8
 
 namespace oceanbase
 {
@@ -447,25 +431,15 @@ int LogBlockMgr::try_recovery_last_block_(const char *log_dir,
   int64_t file_size = 0;
   char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   block_id_t block_id = max_block_id_ - 1;
-  int fd = -1;
   if (true == empty_()) {
     PALF_LOG(INFO, "dir is empty, no need to recovery last block");
   } else if (OB_FAIL(convert_to_normal_block(log_dir, block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
   } else if (OB_FAIL(FileDirectoryUtils::get_file_size(block_path, file_size))) {
-  } else if (file_size == log_block_size) {
-    PALF_LOG(INFO, "last block no need to recovery", K(block_id));
-#ifdef _WIN32
-  } else if (-1 == ob_win_truncate(block_path, log_block_size)) {
-#else
-  } else if (-1 == ::truncate(block_path, log_block_size)) {
-#endif
+  } else if (-1 == ob_truncate_utf8(block_path, log_block_size)) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "ftruncate failed", K(ret), KPC(this), K(file_size));
   } else {
     PALF_LOG(INFO, "try_recovery_last_block_ success", "origin_size", file_size);
-  }
-  if (-1 != fd) {
-    ::close(fd);
   }
   return ret;
 }

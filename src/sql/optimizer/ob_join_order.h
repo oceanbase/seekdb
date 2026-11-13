@@ -17,6 +17,7 @@
 #ifndef _OB_JOIN_ORDER_H
 #define _OB_JOIN_ORDER_H 1
 #include "lib/container/ob_int_flags.h"
+#include <inttypes.h>
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -652,7 +653,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -1114,7 +1115,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@sub_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", subquery_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", subquery_id_))) {
       }
       return ret;
     }
@@ -1140,7 +1141,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@function_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -1166,7 +1167,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@json_table_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -1196,7 +1197,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@temp_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return  ret;
     }
@@ -1223,7 +1224,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@cte_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -1249,7 +1250,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@values_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }

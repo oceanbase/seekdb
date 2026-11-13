@@ -45,7 +45,9 @@ int ObAllVirtualMemstoreUsage::inner_get_next_row(ObNewRow *&row)
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
-  } else if (!start_to_read_) {
+  } else if (start_to_read_) {
+    ret = OB_ITER_END;
+  } else {
     ObObj *cells = NULL;
     // allocator_ is allocator of PageArena type, no need to free
     if (NULL == (cells = cur_row_.cells_)) {
@@ -92,13 +94,10 @@ int ObAllVirtualMemstoreUsage::inner_get_next_row(ObNewRow *&row)
                 break;
             }
           }
-          if (OB_SUCCESS == ret
-              && OB_SUCCESS != (ret = scanner_.add_row(cur_row_))) {
-            SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
-          }
         }
       }
       if (OB_SUCC(ret)) {
+        start_to_read_ = true;
         row = &cur_row_;
       }
     }

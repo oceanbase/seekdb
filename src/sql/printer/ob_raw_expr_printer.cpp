@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_raw_expr_printer.h"
+#include <inttypes.h>
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_json_param_type.h"
@@ -217,7 +218,7 @@ int ObRawExprPrinter::print(ObRawExpr *expr)
       ObVarRawExpr *var_expr = static_cast<ObVarRawExpr *>(expr);
       if (var_expr->get_ref_expr() != NULL) {
         int64_t idx = var_expr->get_ref_index();
-        DATA_PRINTF("para%ld", idx);
+        DATA_PRINTF("para%" PRId64 "", idx);
       }
       break;
     }
@@ -628,7 +629,7 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
         } else if (!current_idx.var_name_.empty()) {
           DATA_PRINTF("%.*s", current_idx.var_name_.length(), current_idx.var_name_.ptr());
         } else {
-          DATA_PRINTF("%ld", current_idx.var_index_);
+          DATA_PRINTF("%" PRId64 "", current_idx.var_index_);
         }
         if (parent_is_table) {
           DATA_PRINTF(")");
@@ -730,7 +731,7 @@ int ObRawExprPrinter::print(ObSetOpRawExpr *expr)
         ret = OB_ERR_UNEXPECTED;
         break;
     }
-    DATA_PRINTF("[%ld]", expr->get_idx() + 1);
+    DATA_PRINTF("[%" PRId64 "]", expr->get_idx() + 1);
   }
   return ret;
 }

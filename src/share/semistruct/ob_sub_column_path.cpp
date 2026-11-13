@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "ob_sub_column_path.h"
 #include "lib/utility/ob_fast_convert.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
@@ -126,8 +126,8 @@ int ObSubColumnPathItem::compare(const ObSubColumnPathItem &other, const bool us
   } else if (type_ == DICT_KEY) {
     cmp_ret = id_ - other.id_;
   } else {
-    ObJsonKeyCompare key_cmp(use_lexicographical_order);
-    cmp_ret = key_cmp.compare(key_, other.key_);
+    cmp_ret = !use_lexicographical_order && key_.length() != other.key_.length()
+        ? key_.length() - other.key_.length() : key_.compare(other.key_);
   }
   return cmp_ret;
 }

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "lib/thread/ob_queue_thread.h"
+#include <inttypes.h>
 
 extern "C" {
 int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg);
@@ -185,7 +186,7 @@ void *S2MQueueThread::rebalance_(int64_t &idx, const ThreadConf &cur_thread)
       each_queue_len_[idx].inc(-1);
       if (0 == (rebalance_counter++ % 10000)) {
         _OB_LOG(INFO,
-                  "task has been rebalance between threads rebalance_counter=%ld cur_idx=%ld balance_idx=%ld",
+                  "task has been rebalance between threads rebalance_counter=%" PRId64 " cur_idx=%" PRId64 " balance_idx=%" PRId64 "",
                   *(&rebalance_counter), cur_thread.index, balance_idx);
       }
       break;

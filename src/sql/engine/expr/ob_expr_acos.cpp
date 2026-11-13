@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_acos.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "share/ob_math_compat.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

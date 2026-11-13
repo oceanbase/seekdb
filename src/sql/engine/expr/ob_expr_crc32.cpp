@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_crc32.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "rust/compression.h"
 
 namespace oceanbase {
 using namespace common;
@@ -52,8 +53,8 @@ inline void calc_crc32_inner(const ObString &str_val, ObDatum &res_datum)
   if (str_val.empty()) {
     res_datum.set_uint(0ULL);
   } else {
-    unsigned char* buf = reinterpret_cast<unsigned char*>(const_cast<char*>(str_val.ptr()));
-    res_datum.set_uint(crc32(0, buf, str_val.length()));
+    res_datum.set_uint(compression::crc32(rust::Slice<const uint8_t>(
+        reinterpret_cast<const uint8_t *>(str_val.ptr()), str_val.length())));
   }
 }
 

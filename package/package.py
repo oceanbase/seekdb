@@ -58,7 +58,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
         copy(source, share / "admin" / source.name)
     copy(timezone, share / "timezone/timezone_V1.log")
     copy(ROOT / "tools/default_srs_data_mysql.sql", share / "srs/default_srs_data_mysql.sql")
-    variables = json.loads((ROOT / "src/share/system_variable/ob_system_variable_init.json").read_text())
+    variables = json.loads((ROOT / "src/share/system_variable/ob_system_variable_init.json").read_text(encoding="utf-8"))
     def clear_links(value):
         if isinstance(value, dict):
             return {key: "" if key == "ref_url" else clear_links(item) for key, item in value.items()}

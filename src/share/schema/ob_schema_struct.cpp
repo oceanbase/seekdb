@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_schema_struct.h"
 #include "share/system_variable/ob_system_variable_alias.h"  // OB_SV_READ_ONLY, previously hidden behind a removed sql include chain, make the dependency explicit
 #include "share/ob_timezone_mgr.h"
@@ -2659,15 +2660,15 @@ int ObPartitionSchema::gen_hash_part_name(const int64_t part_idx,
     ret = OB_INVALID_ARGUMENT;
   } else if (FIRST_PART == name_type) {
     if (need_upper_case) {
-      part_name_size += snprintf(buf, buf_size, "P%ld", part_idx);
+      part_name_size += snprintf(buf, buf_size, "P%" PRId64, part_idx);
     } else {
-      part_name_size += snprintf(buf, buf_size, "p%ld", part_idx);
+      part_name_size += snprintf(buf, buf_size, "p%" PRId64, part_idx);
     }
   } else if (TEMPLATE_SUB_PART == name_type) {
     if (need_upper_case) {
-      part_name_size += snprintf(buf, buf_size, "P%ld", part_idx);
+      part_name_size += snprintf(buf, buf_size, "P%" PRId64, part_idx);
     } else {
-      part_name_size += snprintf(buf, buf_size, "p%ld", part_idx);
+      part_name_size += snprintf(buf, buf_size, "p%" PRId64, part_idx);
     }
   } else if (INDIVIDUAL_SUB_PART == name_type) {
     if (OB_ISNULL(partition)) {
@@ -2675,9 +2676,9 @@ int ObPartitionSchema::gen_hash_part_name(const int64_t part_idx,
     } else {
       part_name_size += snprintf(buf, buf_size, "%s", partition->get_part_name().ptr());
       if (need_upper_case) {
-        part_name_size += snprintf(buf + part_name_size, buf_size - part_name_size, "SP%ld", part_idx);
+        part_name_size += snprintf(buf + part_name_size, buf_size - part_name_size, "SP%" PRId64, part_idx);
       } else {
-        part_name_size += snprintf(buf + part_name_size, buf_size - part_name_size, "sp%ld", part_idx);
+        part_name_size += snprintf(buf + part_name_size, buf_size - part_name_size, "sp%" PRId64, part_idx);
       }
     }
   } else {
@@ -5724,7 +5725,7 @@ DEF_TO_STRING(ObPrintPackedPrivArray)
   int ret = OB_SUCCESS;
   ret = BUF_PRINTF("\"");
   if (packed_priv_array_.count() > 0 ){
-    ret = BUF_PRINTF("%ld", packed_priv_array_[0]);
+    ret = BUF_PRINTF("%" PRId64 "", packed_priv_array_[0]);
     /*FOREACH(it, packed_priv_array_) {
       if ((*it) != NULL) {
         ret = BUF_PRINTF("%lld", *(*it));

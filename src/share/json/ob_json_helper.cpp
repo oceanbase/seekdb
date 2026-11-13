@@ -202,12 +202,13 @@ ObJsonReaderHelper::~ObJsonReaderHelper()
 {
 }
 
-int ObJsonReaderHelper::parse(const char *json_str, size_t json_len, ObJsonNode *&root)
+int ObJsonReaderHelper::parse(const char *json_str, size_t json_len, ObIJsonBase *&root)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(json_str) || json_len == 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObJsonParser::get_tree(&allocator_, json_str, json_len, root))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator_, json_str, json_len,
+      common::ObJsonInType::JSON_TEXT, root))) {
     
     int64_t print_size = std::min(static_cast<size_t>(1000), json_len);
     char debug_buffer[1001];

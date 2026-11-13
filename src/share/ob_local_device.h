@@ -101,7 +101,8 @@ public:
   virtual int rmdir(const char *pathname) override;
   virtual int unlink(const char *pathname) override;
   virtual int rename(const char *oldpath, const char *newpath) override;
-  virtual int scan_dir(const char *dir_name, int (*func)(const dirent *entry)) override;
+  virtual int scan_dir(const char *dir_name,
+                       int (*func)(const common::ObPlatformDirEntry &entry)) override;
   virtual int scan_dir(const char *dir_name, common::ObBaseDirEntryOperator &op) override;
   virtual int fsync(const common::ObIOFd &fd) override;
   virtual int fdatasync(const common::ObIOFd &fd) override;

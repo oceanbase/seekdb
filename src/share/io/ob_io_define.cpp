@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include <inttypes.h>
 #include "share/resource/ob_server_resource_config.h"
 #include "share/ob_force_print_log.h"
 #include "lib/ob_define.h"
@@ -1732,8 +1733,8 @@ int64_t ObIOServiceConfig::to_string(char* buf, const int64_t buf_len) const
         J_COMMA();
       }
       BUF_PRINTF("group_id = ");
-      char group_id[8];
-      snprintf(group_id, sizeof(group_id), "%ld", group_configs_.at(i).group_id_);
+      char group_id[24];
+      snprintf(group_id, sizeof(group_id), "%" PRId64, group_configs_.at(i).group_id_);
       J_KV(group_id, group_configs_.at(i));
       need_comma = true;
     }

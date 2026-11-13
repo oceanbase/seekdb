@@ -65,7 +65,7 @@ public:
                          common::ObString &api_key,
                          ObArray<ObString> &headers) = 0;
   virtual int parse_output(common::ObIAllocator &allocator,
-                           common::ObJsonObject *http_response,
+                           common::ObIJsonBase *http_response,
                            common::ObIJsonBase *&result) = 0;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncBase);
@@ -80,9 +80,9 @@ public:
                        common::ObString &model,
                        common::ObString &prompt, 
                        common::ObString &content,
-                       common::ObJsonObject *config,
-                       common::ObJsonObject *&body) = 0;
-  virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObJsonObject *config) = 0;
+                       common::ObIJsonBase *&config,
+                       common::ObIJsonBase *&body) = 0;
+  virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObIJsonBase *&config) = 0;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncIComplete);
 };
@@ -95,8 +95,8 @@ public:
   virtual int get_body(common::ObIAllocator &allocator,
                        common::ObString &model,
                        common::ObArray<ObString> &contents,
-                       common::ObJsonObject *config,
-                       common::ObJsonObject *&body) = 0;
+                       common::ObIJsonBase *&config,
+                       common::ObIJsonBase *&body) = 0;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncIEmbed);
 };
@@ -109,9 +109,9 @@ public:
   virtual int get_body(common::ObIAllocator &allocator,
                        common::ObString &model,
                        common::ObString &query,
-                       common::ObJsonArray *document_array,
-                       common::ObJsonObject *config,
-                       common::ObJsonObject *&body) = 0;
+                       common::ObIJsonBase *document_array,
+                       common::ObIJsonBase *&config,
+                       common::ObIJsonBase *&body) = 0;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncIRerank);
 };
@@ -124,13 +124,13 @@ public:
   virtual int send_post(common::ObIAllocator &allocator,
                         const ObString &url,
                         ObArray<ObString> &headers, 
-                        ObJsonObject *data,
-                        ObJsonObject *&response) = 0;
+                        ObIJsonBase *data,
+                        ObIJsonBase *&response) = 0;
   virtual int send_post_batch(common::ObIAllocator &allocator,
                               const ObString &url, 
                               ObArray<ObString> &headers,
-                              ObArray<ObJsonObject *> &data_array, 
-                              ObArray<ObJsonObject *> &responses) = 0;
+                              ObArray<ObIJsonBase *> &data_array,
+                              ObArray<ObIJsonBase *> &responses) = 0;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncHandle);
 };

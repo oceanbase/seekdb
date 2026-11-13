@@ -17,15 +17,18 @@ SDK_HEADERS = {
     "sanity_headers": {"hdrs": ["devtools/include/sanity/**/*.h"], "includes": ["devtools/include"]},
     "absl_headers": _headers("absl"),
     "boost_headers": _headers("boost"),
-    "curl_headers": _headers("curl"),
     "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
-    "libxml2_headers": _headers("libxml2", ["include/libxml2"]),
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
-    "rapidjson_headers": _headers("rapidjson"),
+    "curl_headers": _headers("curl") | {
+        "linkopts": select({
+            "@platforms//os:android": ["-lz"],
+            "@platforms//os:ios": ["-lz"],
+            "//conditions:default": [],
+        }),
+    },
     "roaring_headers": _headers("roaring"),
     "vsag_headers": _headers("vsag"),
-    "zlib_headers": {"hdrs": ["include/zconf.h", "include/zlib.h"], "includes": ["include"]},
     "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
 }
 SDK_IMPORTS = {
@@ -41,17 +44,11 @@ SDK_IMPORTS = {
         "includes": ["include"],
     },
     "libssl": {"static_library": "lib/libssl.a"},
-    "zlib": {"static_library": "lib/libz.a"},
+    "curl": {
+        "static_library": "lib/libcurl.a",
+        "deps": [":curl_headers", ":libssl", ":libcrypto"],
+    },
 }
-
-SDK_IMPORTS.update({
-    name: {"static_library": "lib/" + archive}
-    for name, archive in {
-        "libxml2": "libxml2.a",
-        "curl": "libcurl.a",
-        "lzma": "liblzma.a",
-    }.items()
-})
 
 SDK_FILEGROUPS = {
     "ios_base_metadata": {"srcs": ["verified/*.json"]},
@@ -74,10 +71,9 @@ NATIVE_LINK_FILES = [
 _WINDOWS_SHARED = {
     "libcrypto": ("openssl/libcrypto.lib", "openssl_bin/libcrypto-3-x64.dll", []),
     "libssl": ("openssl/libssl.lib", "openssl_bin/libssl-3-x64.dll", [":libcrypto"]),
-    "zlib": ("lib/zlib.lib", "bin/zlib1.dll", []),
+    "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":curl_headers", ":curl_zlib_runtime"]),
+    "curl_zlib_runtime": ("lib/zlib.lib", "bin/zlib1.dll", []),
     "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
-    "libxml2": ("lib/libxml2.lib", "bin/libxml2.dll", [":zlib", ":iconv"]),
-    "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":zlib"]),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
     "pthreads": ("lib/pthreadVC3.lib", "bin/pthreadVC3.dll", []),
@@ -86,12 +82,9 @@ _WINDOWS_SHARED = {
 
 _WINDOWS_HEADER_LIBRARIES = {
     "absl_headers": [":absl"],
-    "curl_headers": [":curl"],
-    "libxml2_headers": [":libxml2"],
     "openssl_headers": [":libssl"],
     "roaring_headers": [":roaring"],
     "vsag_headers": [":vsag"],
-    "zlib_headers": [":zlib"],
     "windows_headers": [":pthreads", ":compiler_runtime"],
 }
 
@@ -154,11 +147,7 @@ _SOURCE_HEADERS = {
 def sdk_aliases():
     cc_library(
         name = "base_libraries",
-        deps = [":libcrypto", ":libssl", ":libxml2"] + select({
-            "@platforms//os:emscripten": [],
-            "@platforms//os:windows": [":curl", ":zlib"],
-            "//conditions:default": [":curl", ":lzma", ":zlib"],
-        }),
+        deps = [":libcrypto", ":libssl"],
     )
     for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + HOST_FILES + NATIVE_LINK_FILES:
         if name in HOST_FILES + ["sanity_pass", "sanity_headers"]:
@@ -174,11 +163,14 @@ def sdk_aliases():
             elif name == "boost_headers":
                 ios = "@sdk_boost//:library"
                 simulator = ios
+            native_headers = ("@sdk_boost//:library" if name == "boost_headers"
+                              else "@third_party_native//:" + name)
             actual = select({
                 "@platforms//os:android": "@third_party_android//:" + name,
                 "@platforms//os:emscripten": wasm,
                 "@platforms//os:ios": ios,
                 Label("//bazel:ios_simulator"): simulator,
+                "@platforms//os:windows": native_headers,
                 "//conditions:default": "@third_party_native//:" + name,
             })
         native.alias(name = name, actual = actual)

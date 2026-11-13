@@ -391,6 +391,7 @@ cc_library(
     name = "local_io_config",
     srcs = ["local_io_config.cpp"],
     hdrs = ["local_io_config.h"],
+    deps = ["//src/oblib:oblib_foundation"],
     visibility = ["//src:__subpackages__"],
 )
 
@@ -496,7 +497,6 @@ cc_library(
     ],
     deps = [
         "//src/oblib:oblib_foundation",
-        "//bazel/third_party:openssl_headers",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -1671,14 +1671,12 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     ":transaction_id",
     "//bazel/third_party:absl_headers",
     "//bazel/third_party:boost_headers",
-    "//bazel/third_party:curl_headers",
+    "//rust:http_client_headers",
     "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
-    "//bazel/third_party:openssl_headers",
-    "//bazel/third_party:rapidjson_headers",
+    "//rust:crypto_headers",
     "//bazel/third_party:roaring_headers",
     "//rust:spatial_covering_headers",
-    "//bazel/third_party:zlib_headers",
 ]
 
 _SHARE_RUNTIME_SEMANTIC_DEPS = [
@@ -1796,8 +1794,10 @@ grouped_unity_cc_library(
     split_unity_groups = True,
     implementation_deps = [
         ":_share_implementation_headers",
+        ":math_compat",
         "//rust:config_headers",
         "//rust:mvt_headers",
+        "//rust:json",
     ] + _SHARE_RUNTIME_COMPILE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",

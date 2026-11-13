@@ -92,7 +92,8 @@ public:
       common::ObMySQLTransaction &trans,
       share::schema::ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<const share::schema::ObTableSchema*> &data_table_schemas,
-      int64_t &new_fetched_snapshot);
+      int64_t &new_fetched_snapshot,
+      int64_t &source_schema_version);
 
   // Release snapshot for multiple tables at once
   static int release_snapshot(

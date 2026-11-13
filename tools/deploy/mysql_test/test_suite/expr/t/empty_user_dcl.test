@@ -1,0 +1,6 @@
+--error ER_CANNOT_USER
+GRANT ALL ON * TO ''@'localhost%';
+--error ER_CANNOT_USER
+ALTER USER ''@localhost ACCOUNT LOCK;
+--error ER_CANNOT_USER
+GRANT ALL PRIVILEGES ON test.* TO ''@'localhost';

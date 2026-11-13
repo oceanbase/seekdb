@@ -300,7 +300,7 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_e
     LOG_WARN("failed to push back array value", K(ret));                                        \
   }
 
-int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJsonNode &j_node, const ObCollectionTypeBase *elem_type, ObIArrayType *dst)
+int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObIJsonBase &j_node, const ObCollectionTypeBase *elem_type, ObIArrayType *dst)
 {
   int ret = OB_SUCCESS;
   if (j_node.json_type() == ObJsonNodeType::J_NULL) {
@@ -309,15 +309,16 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
   } else if (j_node.json_type() == ObJsonNodeType::J_ARRAY) {
     const ObCollectionArrayType *array_type = dynamic_cast<const ObCollectionArrayType *>(elem_type);
     ObIArrayType *child_array = nullptr;
-    ObJsonArray *json_arr = static_cast<ObJsonArray *>(&j_node);
     if (OB_ISNULL(array_type)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
     } else if (OB_FAIL(ObArrayTypeObjFactory::construct(alloc, *array_type, child_array))) {
-    } else if (json_arr->element_count() == 0 && array_type->element_type_->type_id_ != OB_BASIC_TYPE) {
+    } else if (j_node.element_count() == 0 && array_type->element_type_->type_id_ != OB_BASIC_TYPE) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
     }
-    for (int i = 0; i < json_arr->element_count() && OB_SUCC(ret); i++) {
-      if (OB_FAIL(add_json_node_to_array(alloc, *(*json_arr)[i], array_type->element_type_, child_array))) {
+    for (int i = 0; i < j_node.element_count() && OB_SUCC(ret); i++) {
+      ObIJsonBase *element = nullptr;
+      if (OB_FAIL(j_node.get_array_element(i, element))) {
+      } else if (OB_FAIL(add_json_node_to_array(alloc, *element, array_type->element_type_, child_array))) {
       }
     }
     if (OB_SUCC(ret)) {
@@ -544,22 +545,9 @@ static inline void skip_whitespace_and_spliter(const char*& start, const char* e
   }
 }
 
-int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc, 
-                                      ObString &arr_text, 
-                                      ObIArrayType *&dst, 
-                                      const ObCollectionMapType *dst_map_type, 
-                                      ObCastMode cast_mode,
-                                      const bool is_sparse_vector)
+static void normalize_collection_nulls(std::string &src_text)
 {
-  int ret = OB_SUCCESS;
-  std::string src_text(arr_text.ptr(), arr_text.length());
-  // add quote to numberic key if it not exists
-  std::regex regex_quote(R"((\{|,)\s*(-?\d+(\.\d+)?(?:[eE][-+]?\d+)?)\s*:)");
-  src_text = std::regex_replace(src_text, regex_quote, R"($1"$2":)");
-  // Quote the normalized NULL key for JSON parsers that require quoted object keys.
-  std::regex regex_null(R"((\{|,)\s*\"?(n|N)(u|U)(l|L)(l|L)\s*\"?\s*:)");
-  src_text = std::regex_replace(src_text, regex_null, R"($1"NULL":)");
-  // MAP accepts case-insensitive NULL values, including nested array elements.
+  // Collection text accepts SQL NULL tokens outside quoted string data.
   // Normalize only unquoted tokens; string contents and escaped quotes are data.
   bool in_string = false;
   bool escaped = false;
@@ -576,27 +564,44 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
     } else if (ch == '"') {
       in_string = true;
     } else if (is_null_string_start(ch)
-               && is_null_const_string(src_text.data() + i, src_text.data() + src_text.size())
+               && src_text.size() - i >= ObArrayCastUtils::NULL_STR_LEN
+               && ObString(ObArrayCastUtils::NULL_STR_LEN, src_text.data() + i).case_compare("null") == 0
                && (i == 0 || is_whitespace(src_text[i - 1]) || src_text[i - 1] == ':'
                    || src_text[i - 1] == '[' || src_text[i - 1] == ',')
-               && (is_whitespace(src_text[i + NULL_STR_LEN]) || src_text[i + NULL_STR_LEN] == ','
-                   || src_text[i + NULL_STR_LEN] == ']' || src_text[i + NULL_STR_LEN] == '}')) {
-      src_text.replace(i, NULL_STR_LEN, "null");
-      i += NULL_STR_LEN - 1;
+               && (i + ObArrayCastUtils::NULL_STR_LEN == src_text.size()
+                   || is_whitespace(src_text[i + ObArrayCastUtils::NULL_STR_LEN]) || src_text[i + ObArrayCastUtils::NULL_STR_LEN] == ','
+                   || src_text[i + ObArrayCastUtils::NULL_STR_LEN] == ']' || src_text[i + ObArrayCastUtils::NULL_STR_LEN] == '}')) {
+      src_text.replace(i, ObArrayCastUtils::NULL_STR_LEN, "null");
+      i += ObArrayCastUtils::NULL_STR_LEN - 1;
     }
   }
+}
+
+int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
+                                      ObString &arr_text,
+                                      ObIArrayType *&dst,
+                                      const ObCollectionMapType *dst_map_type,
+                                      ObCastMode cast_mode,
+                                      const bool is_sparse_vector)
+{
+  int ret = OB_SUCCESS;
+  std::string src_text(arr_text.ptr(), arr_text.length());
+  // add quote to numberic key if it not exists
+  std::regex regex_quote(R"((\{|,)\s*(-?\d+(\.\d+)?(?:[eE][-+]?\d+)?)\s*:)");
+  src_text = std::regex_replace(src_text, regex_quote, R"($1"$2":)");
+  // Quote the normalized NULL key for JSON parsers that require quoted object keys.
+  std::regex regex_null(R"((\{|,)\s*\"?(n|N)(u|U)(l|L)(l|L)\s*\"?\s*:)");
+  src_text = std::regex_replace(src_text, regex_null, R"($1"NULL":)");
+  normalize_collection_nulls(src_text);
   // parse text to json node
-  const char *syntaxerr = NULL;
-  uint64_t err_offset = 0;
-  ObJsonNode *j_node = NULL;
-  uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
-  if (OB_FAIL(ObJsonParser::parse_json_text(&alloc, src_text.data(), src_text.length(), syntaxerr, &err_offset, j_node, parse_flag))) {
+  ObIJsonBase *j_node = NULL;
+  uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
+  if (OB_FAIL(ObJsonBaseFactory::get_json_base(&alloc, src_text.data(), src_text.length(),
+      ObJsonInType::JSON_TEXT, j_node, parse_flag))) {
   } else if (j_node->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     // add json object node to map
-    ObJsonObjectArray *json_obj_array;
-    static_cast<ObJsonObject *>(j_node)->get_obj_array(json_obj_array);
     ObIArrayType *key_arr;
     ObIArrayType *value_arr;
     ObMapType *dst_map;
@@ -616,8 +621,10 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
     // append NULL key
     if (OB_FAIL(ret)) {
     } else {
-      ObJsonNode *null_key_value = static_cast<ObJsonObject *>(j_node)->get_value("NULL");
-      if (OB_ISNULL(null_key_value)) {
+      ObIJsonBase *null_key_value = nullptr;
+      if (OB_FAIL(j_node->get_object_value(ObString("NULL"), null_key_value))) {
+        if (ret == OB_SEARCH_NOT_FOUND) { ret = OB_SUCCESS; }
+      } else if (OB_ISNULL(null_key_value)) {
         // do nothing
       } else if (is_sparse_vector) {
         ret = OB_ERR_NULL_VALUE;
@@ -626,12 +633,14 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
       }
     }
 
-    for (int i = 0; i < json_obj_array->size() && OB_SUCC(ret); i++) {
-      ObJsonObjectPair key_value = json_obj_array->at(i);
-      ObString key_str = key_value.get_key();
-      if (key_str.case_compare("NULL") == 0) {
+    for (uint64_t i = 0; i < j_node->element_count() && OB_SUCC(ret); i++) {
+      ObString key_str;
+      ObIJsonBase *value = nullptr;
+      if (OB_FAIL(j_node->get_key(i, key_str))) {
+      } else if (OB_FAIL(j_node->get_object_value(i, value))) {
+      } else if (key_str.case_compare("NULL") == 0) {
         // do nothing
-      } else if (is_sparse_vector && OB_FAIL(key_value.get_value()->json_type() == ObJsonNodeType::J_NULL)) {
+      } else if (is_sparse_vector && OB_FAIL(value->json_type() == ObJsonNodeType::J_NULL)) {
         ret = OB_ERR_NULL_VALUE;
       } else {
         // append key
@@ -642,7 +651,7 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
         }
         // append value
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(add_json_node_to_array(alloc, *key_value.get_value(), dst_value_elem_type, value_arr))) {
+        } else if (OB_FAIL(add_json_node_to_array(alloc, *value, dst_value_elem_type, value_arr))) {
         }
       }
     } // end for
@@ -1077,20 +1086,24 @@ int ObArrayCastUtils::string_cast(common::ObIAllocator &alloc, ObString &arr_tex
                                   ObIArrayType *&dst, const ObCollectionTypeBase *dst_elem_type)
 {
   int ret = OB_SUCCESS;
-  const char *syntaxerr = NULL;
-  uint64_t err_offset = 0;
-  ObJsonNode *j_node = NULL;
-  uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
+  if (arr_text.empty()) {
+    return OB_ERR_NULL_VALUE;
+  }
+  std::string src_text(arr_text.ptr(), arr_text.length());
+  normalize_collection_nulls(src_text);
+  ObIJsonBase *j_node = NULL;
+  uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
   if (OB_FAIL(
-          ObJsonParser::parse_json_text(&alloc, arr_text.ptr(), arr_text.length(), syntaxerr, &err_offset, j_node, parse_flag))) {
+          ObJsonBaseFactory::get_json_base(&alloc, src_text.data(), src_text.length(), ObJsonInType::JSON_TEXT, j_node, parse_flag))) {
   } else if (j_node->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_INVALID_ARGUMENT;
   } else if (j_node->element_count() == 0 && dst_elem_type->type_id_ != OB_BASIC_TYPE) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
   } else {
     for (int i = 0; i < j_node->element_count() && OB_SUCC(ret); i++) {
-      ObJsonArray *json_arr = static_cast<ObJsonArray *>(j_node);
-      if (OB_FAIL(add_json_node_to_array(alloc, *(*json_arr)[i], dst_elem_type, dst))) {
+      ObIJsonBase *element = nullptr;
+      if (OB_FAIL(j_node->get_array_element(i, element))) {
+      } else if (OB_FAIL(add_json_node_to_array(alloc, *element, dst_elem_type, dst))) {
       }
     }
   }

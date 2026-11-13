@@ -1,4 +1,5 @@
 #include "share/ob_dml_sql_splicer.h"
+#include <inttypes.h>
 #include "share/ob_table_access_helper.h"
 #include "share/rc/ob_server_runtime.h"
 /*
@@ -352,7 +353,7 @@ int ObTableLockDetector::get_lock_owner_by_lock_id(common::ObISQLClient &sql_cli
   int64_t owner_type = 0;
 
   OZ (where_cond.assign_fmt("WHERE obj_type = '%d' AND"
-                            " obj_id = %ld AND lock_mode = %d",
+                            " obj_id = %" PRId64 " AND lock_mode = %d",
                             static_cast<int>(ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC),
                             lock_id,
                             static_cast<int>(EXCLUSIVE)));

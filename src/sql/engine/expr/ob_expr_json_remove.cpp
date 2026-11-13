@@ -54,94 +54,9 @@ int ObExprJsonRemove::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-static int remove_from_json(ObJsonPath *path_node, ObIJsonBase *child)
-{
-  INIT_SUCC(ret);
-  // remove item in hits
-  ObJsonPathBasicNode* last_node = path_node->last_path_node();
-  // get node to be removed
-  ObJsonNodeType type;
-  ObIJsonBase* parent = nullptr;
-  if (OB_FAIL(child->get_parent(parent)) || OB_ISNULL(parent)) {
-    // may be null parent
-    ret = OB_SUCCESS;
-  } else if (FALSE_IT(type = parent->json_type())) {
-  } else if (type == ObJsonNodeType::J_OBJECT && last_node->get_node_type() == JPN_MEMBER) {
-    ObPathMember member = last_node->get_object();
-    ObString key(member.len_, member.object_name_);
-    if (OB_FAIL(parent->object_remove(key))) {
-    }
-  } else if (type == ObJsonNodeType::J_ARRAY && last_node->get_node_type() == JPN_ARRAY_CELL) {
-    ObJsonArrayIndex array_index;
-    if (OB_FAIL(last_node->get_first_array_index(parent->element_count(), array_index))) {
-    } else if (array_index.is_within_bounds() && OB_FAIL(parent->array_remove(array_index.get_array_index()))) {
-    }
-  }
-  return ret;
-}
-
 int ObExprJsonRemove::eval_json_remove(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
-  int ret = OB_SUCCESS;
-  ObIJsonBase *json_doc = NULL;
-
-  bool is_null_result = false;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
-    ret = OB_ERR_INVALID_JSON_CHARSET;
-  } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
-                                                    json_doc, is_null_result))) {
-  }
-
-  ObJsonPathCache ctx_cache(&temp_allocator);
-  ObJsonPathCache* path_cache = NULL;
-  if (OB_SUCC(ret) && !is_null_result) {
-    path_cache = ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
-    path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
-  }
-  
-  ObJsonSeekResult hits;
-  for (int64_t i = 1; OB_SUCC(ret) && !is_null_result && i < expr.arg_cnt_; i++) {
-    hits.clear();
-    ObDatum *path_data = NULL;
-    if (expr.args_[i]->datum_meta_.type_ == ObNullType) {
-      is_null_result = true;
-    } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, path_data))) {
-      ret = OB_ERR_INVALID_JSON_PATH;
-      LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
-    } else {
-      ObString path_val = path_data->get_string();
-      ObJsonPath *json_path;
-      if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(expr.args_[i], ctx, temp_allocator, path_val, is_null_result))) {
-      } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, json_path, path_val, i, false))) {
-      } else if (json_path->path_node_cnt() == 0) {
-        ret = OB_ERR_JSON_VACUOUS_PATH;
-        LOG_USER_ERROR(OB_ERR_JSON_VACUOUS_PATH); 
-      } else if (OB_FAIL(json_doc->seek(*json_path, json_path->path_node_cnt(), true, false, hits))) {
-      } else if (hits.size() == 0){
-        continue;
-      } else if (hits.size() > 1){
-        ret = OB_INVALID_ERROR;
-      } else {
-        if (OB_FAIL(remove_from_json(json_path, hits[0]))) {
-        } else if (OB_FAIL(ObJsonExprHelper::refresh_root_when_bin_rebuild_all(json_doc))) {
-        }
-      }
-    }
-  }
-
-  // set result
-  if (OB_FAIL(ret)) {
-  } else if (is_null_result) {
-    res.set_null();
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr, ctx, temp_allocator, json_doc, res))) {
-  }
-  if (OB_NOT_NULL(json_doc)) {
-    json_doc->reset();
-  }
-  return ret;
+  return ObJsonExprHelper::eval_json_mutation(expr, ctx, res, JsonMutation::Remove);
 }
 
 int ObExprJsonRemove::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
