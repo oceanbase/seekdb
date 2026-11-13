@@ -23,8 +23,11 @@ LIFECYCLE = {"preinst": "pre_install", "postinst": "post_install",
 DISTRIBUTIONS = {
     "el7": {"format": "rpm", "glibc": "2.17"},
     "el8": {"format": "rpm", "glibc": "2.28"},
-    "debian12": {"format": "deb", "glibc": "2.36"},
-    "ubuntu22.04": {"format": "deb", "glibc": "2.35"},
+    "debian12": {"format": "deb", "glibc": "2.36", "image": "debian:12-slim"},
+    "debian13": {"format": "deb", "glibc": "2.41", "image": "debian:13-slim"},
+    "ubuntu22.04": {"format": "deb", "glibc": "2.35", "image": "ubuntu:22.04"},
+    "ubuntu24.04": {"format": "deb", "glibc": "2.39", "image": "ubuntu:24.04"},
+    "ubuntu26.04": {"format": "deb", "glibc": "2.43", "image": "ubuntu:26.04"},
 }
 
 
@@ -215,7 +218,7 @@ def main():
                         help="target layout; inferred from --binary-package, otherwise Linux (native OS for binary)")
     parser.add_argument("--component", choices=("server", "libs"), default="server")
     parser.add_argument("--distribution", choices=DISTRIBUTIONS,
-                        help="required target for RPM (el7/el8) or DEB (debian12/ubuntu22.04)")
+                        help="required target for RPM (EL7/EL8) or DEB (Debian 12/13 or Ubuntu 22.04/24.04/26.04)")
     inputs = parser.add_mutually_exclusive_group()
     inputs.add_argument("--binary-package", type=Path, help="verified seekdb-binary directory or tar archive; never builds sources")
     inputs.add_argument("--seekdb-bin", type=Path, help="existing native executable; resources still come from --artifacts")

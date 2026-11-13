@@ -37,15 +37,29 @@ System packaging selects the following target distributions:
 | EL7 | RPM | Selected glibc 2.17 binary | `.el7` |
 | EL8 | RPM | Selected glibc 2.28 binary | `.el8` |
 | Debian 12 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+debian12` |
+| Debian 13 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+debian13` |
 | Ubuntu 22.04 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+ubuntu22.04` |
+| Ubuntu 24.04 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+ubuntu24.04` |
+| Ubuntu 26.04 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+ubuntu26.04` |
 
 Each selected architecture produces an EL7 RPM for glibc 2.17 and/or an EL8 RPM
-for glibc 2.28, plus both DEB targets when requested. With both glibc variants,
+for glibc 2.28, plus all five DEB targets when requested. All targets cover
+amd64 and arm64. With both glibc variants,
 DEB uses only the 2.28 input so a distribution/architecture never receives two
 different packages with the same version. For example,
 `system-packages-debian12-x86_64` contains the Debian 12 amd64 package, while
 `system-packages-el7-aarch64` contains the EL7 aarch64 package. Binary/debug
 artifact names keep their original architecture and glibc identifiers.
+
+Each DEB job also installs its package in the corresponding official Debian or
+Ubuntu container on the native runner architecture. APT resolves the package's
+system dependencies, then the job checks `--version`, validates the systemd unit,
+starts the installed service helper, creates/inserts/reads a SQL table, and stops
+the database through the packaged stop helper. This verifies the five supported
+userlands on amd64/arm64 without another engine compilation. The container does
+not boot systemd as PID 1, so full service-manager and host-kernel certification
+remain separate. Runtime-check images and dependencies are not added to the
+Actions dependency cache.
 
 To repackage an existing binary, enter its original workflow run ID in
 **Binary run ID**, select a Linux platform and matching glibc baseline, and
@@ -71,7 +85,10 @@ packages in the run. For example:
 seekdb-1.4.0.0-20261112T100530Z.el7.x86_64.rpm
 seekdb-1.4.0.0-20261112T100530Z.el8.x86_64.rpm
 seekdb_1.4.0.0-20261112T100530Z+debian12_amd64.deb
+seekdb_1.4.0.0-20261112T100530Z+debian13_amd64.deb
 seekdb_1.4.0.0-20261112T100530Z+ubuntu22.04_amd64.deb
+seekdb_1.4.0.0-20261112T100530Z+ubuntu24.04_amd64.deb
+seekdb_1.4.0.0-20261112T100530Z+ubuntu26.04_amd64.deb
 seekdb-binary-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
 seekdb-debug-info-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
 seekdb-framework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
@@ -86,7 +103,8 @@ one explicitly. The wrappers no longer require a positional release; an old
 fourth positional release is accepted and ignored.
 
 Local RPM/DEB commands require `--distribution`: RPM accepts `el7` or `el8`,
-and DEB accepts `debian12` or `ubuntu22.04`. The distribution is part of both
+and DEB accepts `debian12`, `debian13`, `ubuntu22.04`, `ubuntu24.04`, or
+`ubuntu26.04`. The distribution is part of both
 the filename and RPM Release / DEB Version metadata. For example:
 
 ```bash
@@ -100,8 +118,10 @@ The RPM/DEB shell wrappers accept the same option and reject missing or mismatch
 distributions before initializing dependencies or building. RPM source builds
 also select the matching EL7/EL8 SDK. Packaging checks the input binary's declared
 glibc baseline and the actual GLIBC requirements of all staged ELF files,
-including obshell, against the target distribution. EL7, EL8, Debian 12, and
-Ubuntu 22.04 use glibc limits 2.17, 2.28, 2.36, and 2.35 respectively. The label
+including obshell, against the target distribution. EL7/EL8 use glibc limits
+2.17/2.28; Debian 12/13 use 2.36/2.41; Ubuntu 22.04/24.04/26.04 use
+2.35/2.39/2.43. These are validation limits, not new compilation baselines.
+All five DEB targets reuse the same selected Linux binary. The label
 identifies the packaging target; it does not replace runtime certification on
 that distribution.
 

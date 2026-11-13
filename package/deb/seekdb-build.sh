@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $# -lt 3 || "$2" != seekdb ]]; then
-  echo "Usage: $0 <source-path> seekdb <version> --distribution debian12|ubuntu22.04 [--binary-package PATH | --seekdb-bin PATH] [package options]" >&2
+  echo "Usage: $0 <source-path> seekdb <version> --distribution debian12|debian13|ubuntu22.04|ubuntu24.04|ubuntu26.04 [--binary-package PATH | --seekdb-bin PATH] [package options]" >&2
   exit 64
 fi
 source_dir="$(cd "$1" && pwd)"
@@ -21,8 +21,8 @@ for argument in "${@:$first_option}"; do
   previous="$argument"
 done
 case "$distribution" in
-  debian12|ubuntu22.04) ;;
-  *) echo "DEB requires --distribution debian12 or ubuntu22.04" >&2; exit 64 ;;
+  debian12|debian13|ubuntu22.04|ubuntu24.04|ubuntu26.04) ;;
+  *) echo "DEB requires --distribution debian12, debian13, ubuntu22.04, ubuntu24.04, or ubuntu26.04" >&2; exit 64 ;;
 esac
 if [[ "$prebuilt" == false ]]; then
   (

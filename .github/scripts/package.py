@@ -86,7 +86,8 @@ def matrix():
             # newer selected baseline rather than publishing duplicate versions.
             binary_target = max(candidates, key=lambda target: binary.version_tuple(target["glibc"]))
             packages.append(dict(binary_target, id=distribution + "-" + arch, binary_id=binary_target["id"],
-                                 distribution=distribution, format=requirements["format"]))
+                                 distribution=distribution, format=requirements["format"],
+                                 image=requirements.get("image", "")))
     # An unused placeholder keeps the job matrix valid when this job is skipped.
     output("linux_matrix", json.dumps({"include": packages or [dict(targets[0], binary_id=targets[0]["id"],
             distribution="", format="")]}, separators=(",", ":")))

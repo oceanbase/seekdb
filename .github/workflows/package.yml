@@ -286,6 +286,76 @@ jobs:
         run: |
           mkdir -p .ci-cache
           python3 .github/scripts/package.py system
+      - name: Validate the installed DEB on its target distribution
+        if: matrix.format == 'deb'
+        timeout-minutes: 15
+        env:
+          PACKAGE_IMAGE: ${{ matrix.image }}
+        run: |
+          case "$PACKAGE_ARCH" in
+            x86_64) docker_arch=amd64 ;;
+            aarch64) docker_arch=arm64 ;;
+          esac
+          docker run --rm -i --platform "linux/$docker_arch" \
+            --ulimit nofile=65536:65536 --ulimit stack=-1:-1 \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/dist,target=/packages,readonly" \
+            "$PACKAGE_IMAGE" bash -s <<'SH'
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive TELEMETRY_MODE=0
+          cat /etc/os-release
+          apt-get update -qq
+          apt-get install -y --no-install-recommends /packages/*.deb python3-pymysql
+          seekdb --version
+          systemd-analyze verify --man=no /usr/lib/systemd/system/seekdb.service
+          sed -i 's/^cpu_count=.*/cpu_count=2/' /etc/seekdb/seekdb.cnf
+          cat >> /etc/seekdb/seekdb.cnf <<'CONFIG'
+          memory_limit=2G
+          datafile_size=1G
+          log_disk_size=2G
+          CONFIG
+          pid=""
+          cleanup() {
+            status=$?
+            if [[ -n "$pid" ]]; then
+              MAINPID="$pid" /usr/libexec/seekdb/scripts/seekdb_systemd_stop || true
+              wait "$pid" || true
+            fi
+            if [[ "$status" != 0 ]]; then
+              tail -n 80 /tmp/seekdb-start.log || true
+              tail -n 80 /var/lib/seekdb/log/*.log || true
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          /usr/libexec/seekdb/scripts/seekdb_systemd_start > /tmp/seekdb-start.log 2>&1 &
+          pid=$!
+          python3 - <<'PY'
+          import time
+          import pymysql
+          deadline = time.monotonic() + 240
+          while True:
+              try:
+                  connection = pymysql.connect(host="127.0.0.1", port=2881, user="root",
+                      password="", connect_timeout=2, read_timeout=10, write_timeout=10, autocommit=True)
+                  break
+              except pymysql.err.OperationalError:
+                  if time.monotonic() >= deadline:
+                      raise
+                  time.sleep(2)
+          with connection:
+              with connection.cursor() as cursor:
+                  cursor.execute("CREATE DATABASE packaging_smoke")
+                  cursor.execute("CREATE TABLE packaging_smoke.t (id INT PRIMARY KEY, v VARCHAR(32))")
+                  cursor.execute("INSERT INTO packaging_smoke.t VALUES (1, 'ready')")
+                  cursor.execute("SELECT v FROM packaging_smoke.t WHERE id = 1")
+                  assert cursor.fetchone() == ("ready",)
+                  cursor.execute("DROP DATABASE packaging_smoke")
+          print("Installed seekdb passed SQL read/write checks")
+          PY
+          MAINPID="$pid" /usr/libexec/seekdb/scripts/seekdb_systemd_stop
+          wait "$pid"
+          pid=""
+          SH
       - name: Upload system packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
