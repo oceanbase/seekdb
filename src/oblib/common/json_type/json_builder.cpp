@@ -132,7 +132,9 @@ int encode_json_time(ObIAllocator &allocator, ObJsonNodeType type, const ObTime 
       MEMCPY(&value, &date, sizeof(date)); length = 4; break;
     }
     case ObJsonNodeType::J_TIME:
-      value = ObTimeConverter::ob_time_to_time(time); break;
+      value = ObTimeConverter::ob_time_to_time(time);
+      if (IS_NEG_TIME(time.mode_)) { value = -value; }
+      break;
     case ObJsonNodeType::J_MYSQL_DATETIME: {
       kind = 33;
       ObMySQLDateTime datetime;
