@@ -93,6 +93,8 @@ Portable binary archives still include their runtime libraries.
   be linked statically for the current exporter.
 - iOS builds target 18.0 for arm64 devices and arm64 simulators, using the
   runner's selected Xcode and the repository's existing framework target.
+  A dedicated host profile supplies parser tools and fallback headers without
+  downloading the standalone LLVM compiler, obshell, or client utilities.
   Packaging checks the Mach-O platform, deployment target, public ABI exports,
   source revision, build metadata, and system-only dynamic dependencies. The
   XCFramework job also verifies the source/version and complete file checksums
