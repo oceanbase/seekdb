@@ -1134,6 +1134,11 @@ public:
                                const ObRawExpr *expr,
                                ObObj &min_value,
                                ObObj &max_value);
+  static int calc_arith_expr_min_max(const OptTableMetas &table_metas,
+                                     const OptSelectivityCtx &ctx,
+                                     const ObRawExpr *expr,
+                                     ObObj &min_value,
+                                     ObObj &max_value);
   static int calc_year_min_max(const OptTableMetas &table_metas,
                                const OptSelectivityCtx &ctx,
                                const ObRawExpr *expr,
