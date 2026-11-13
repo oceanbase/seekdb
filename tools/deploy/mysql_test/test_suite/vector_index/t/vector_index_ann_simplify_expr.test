@@ -1,0 +1,57 @@
+# owner: database-competition
+# owner group: SQL
+# description: ANN queries keep expression simplification, so duplicated filters are removed (#1489).
+
+--disable_warnings
+drop table if exists ann_simplify;
+--enable_warnings
+
+create table ann_simplify (
+  id bigint primary key,
+  embedding vector(3) not null,
+  category int not null,
+  age int not null,
+  key idx_category (category),
+  key idx_age (age)
+) organization heap;
+insert into ann_simplify values
+  (1, '[1,0,0]', 1, 10), (2, '[0,1,0]', 1, 20), (3, '[0,0,1]', 2, 30),
+  (4, '[1,1,0]', 2, 40), (5, '[0.9,0.1,0]', 1, 50);
+create vector index ann_simplify_hnsw on ann_simplify(embedding)
+  with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
+
+--echo # duplicated OR operands are simplified away while the vector index is still used
+explain basic select id from ann_simplify
+ where category = 1 or age > 1000 or age > 1000 or age > 1000 or age > 1000
+    or age > 1000 or age > 1000 or age > 1000 or age > 1000
+ order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
+
+--echo # duplicated AND operands are simplified as well
+explain basic select id from ann_simplify
+ where category = 1 and category = 1 and age < 100 and age < 100
+ order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
+
+--echo # the filter from #1489: category = 1 followed by 128 OR-ed copies of age > 1000
+let $wide_filter = category = 1;
+let $i = 128;
+while ($i)
+{
+  let $wide_filter = $wide_filter or age > 1000;
+  dec $i;
+}
+--disable_query_log
+eval explain basic select id from ann_simplify where $wide_filter
+ order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
+--enable_query_log
+
+--echo # results are unchanged by the simplification
+--disable_query_log
+eval select id from ann_simplify where $wide_filter
+ order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
+eval select id from ann_simplify where $wide_filter order by id;
+--enable_query_log
+select id from ann_simplify
+ where category = 1
+ order by l2_distance(embedding, '[1,0,0]') approximate limit 3;
+
+drop table ann_simplify;
