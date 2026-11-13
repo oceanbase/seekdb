@@ -271,15 +271,6 @@ void ObLogReplayService::wait()
 {
   CLOG_LOG(INFO, "replay service wait begin");
   replay_stat_.wait();
-  int64_t num = 0;
-
-  int ret = OB_SUCCESS;
-  while ((num = common::ObLinkQueueThreadPool::get_queue_num()) > 0) {
-    PAUSE();
-  }
-  if (OB_FAIL(ret)) {
-  }
-  CLOG_LOG(INFO, "replay service SimpleQueue empty");
   common::ObLinkQueueThreadPool::wait();
   CLOG_LOG(INFO, "replay service SimpleQueue destroy finish");
   CLOG_LOG(INFO, "replay service wait finish");
