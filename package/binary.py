@@ -13,6 +13,7 @@ import struct
 import subprocess
 import tarfile
 import zipfile
+from collections import deque
 
 
 def digest(path):
@@ -83,12 +84,12 @@ def version_tuple(value):
     return parts + (0,) * (3 - len(parts))
 
 
-def linux_libdir():
+def linux_token(token, candidates):
     import ctypes
     import tempfile
     with tempfile.TemporaryDirectory(prefix="seekdb-libdir-") as temporary:
         root = Path(temporary)
-        probe = root / "$LIB/seekdb-probe.so"
+        probe = root / ("$" + token) / "seekdb-probe.so"
         def failure():
             try:
                 ctypes.CDLL(str(probe))
@@ -97,7 +98,7 @@ def linux_libdir():
             raise ValueError("unexpected load of an empty ELF library probe")
         missing = failure()
         # An empty file changes the loader error without executing any library.
-        for name in ("lib", "lib64", "lib/x86_64-linux-gnu", "lib/aarch64-linux-gnu"):
+        for name in candidates:
             target = root / name / probe.name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.touch()
@@ -105,10 +106,14 @@ def linux_libdir():
             target.unlink()
             if found:
                 return name
-    raise ValueError("unsupported native ELF $LIB directory")
+    raise ValueError("unsupported native ELF $" + token + " value")
 
 
-def linux_loader_help():
+def linux_libdir():
+    return linux_token("LIB", ("lib", "lib64", "lib/x86_64-linux-gnu", "lib/aarch64-linux-gnu"))
+
+
+def linux_loader_output(option):
     # Older loaders have no hwcaps directories and do not recognize --help.
     if version_tuple(os.confstr("CS_GNU_LIBC_VERSION").split()[-1]) < version_tuple("2.33"):
         return ""
@@ -117,9 +122,28 @@ def linux_loader_help():
     interpreter = re.search(r"\[Requesting program interpreter: (.*?)\]", headers)
     if not interpreter:
         return ""
-    result = subprocess.run([interpreter.group(1), "--help"], text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    result = subprocess.run([interpreter.group(1), option], text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            env={**os.environ, "LC_ALL": "C"})
     return result.stdout
+
+
+def linux_loader_help():
+    return linux_loader_output("--help")
+
+
+def linux_platform():
+    diagnostics = linux_loader_output("--list-diagnostics")
+    match = re.search(r'^dl_platform="([^"]*)"$', diagnostics, re.MULTILINE)
+    if match:
+        return match.group(1)
+    import ctypes
+    libc = ctypes.CDLL(None)
+    libc.getauxval.argtypes = [ctypes.c_ulong]
+    libc.getauxval.restype = ctypes.c_void_p
+    address = libc.getauxval(15)  # AT_PLATFORM; dl_platform may be CPU-tuned on x86.
+    native = ctypes.string_at(address).decode() if address else platform.machine()
+    return linux_token("PLATFORM", dict.fromkeys((native, "haswell", "xeon_phi")))
 
 
 def linux_hwcaps(output=None):
@@ -130,22 +154,37 @@ def linux_hwcaps(output=None):
         r"^\s+(\S+) \(supported, searched\)$", section, re.MULTILINE))
 
 
-def linux_libraries(prefix, original, directories, extra_libraries):
+def linux_cache(output, capabilities):
+    cache = {}
+    ranks = {name[len("glibc-hwcaps/"):]: index for index, name in enumerate(capabilities)}
+    for name, attributes, path in re.findall(r"^\s*(\S+)\s+\(([^\n]*)\)\s+=>\s+(\S+)", output, re.MULTILINE):
+        hwcap = re.search(r'hwcap:\s*"([^"]+)"', attributes)
+        if "hwcap:" in attributes and (not hwcap or hwcap.group(1) not in ranks):
+            continue
+        rank = ranks[hwcap.group(1)] if hwcap else len(ranks)
+        cache.setdefault(name, []).append((rank, Path(path)))
+    return {name: [path for _, path in sorted(values, key=lambda item: item[0])]
+            for name, values in cache.items()}
+
+
+def linux_libraries(prefix, original, directories, extra_libraries, fallback_directories=()):
     libraries = prefix / "lib/seekdb"
     libraries.mkdir(parents=True)
     executable = prefix / "bin/seekdb"
     system = re.compile(r"^(ld-linux[^/]*|lib(c|m|mvec|dl|rt|pthread|resolv|util|anl|thread_db|BrokenLocale|nss_[^.]*)\.so)(\.|$)")
-    cache = {}
+    loader_help = linux_loader_help()
+    capabilities = linux_hwcaps(loader_help)
     ldconfig = shutil.which("ldconfig") or "/sbin/ldconfig"
-    for name, path in re.findall(r"^\s*(\S+)\s+\([^\n]*\)\s+=>\s+(\S+)",
-                                 subprocess.check_output([ldconfig, "-p"], text=True), re.MULTILINE):
-        cache.setdefault(name, []).append(Path(path))
-    pending = [(original, executable, ())]
+    cache = linux_cache(subprocess.check_output([ldconfig, "-p"], text=True,
+                        env={**os.environ, "LC_ALL": "C"}), capabilities)
+    pending = deque([(original, executable, ())])
     origins = {}
+    identities = {}
+    loaded = set()
     executable_arch = architecture(executable, "linux")
     libdir = None
-    loader_help = linux_loader_help()
-    subdirectories = linux_hwcaps(loader_help) + ("",)
+    native_platform = None
+    subdirectories = capabilities + ("",)
     defaults = [Path(name) for name in re.findall(r"^\s+(/\S+) \(system search path\)$", loader_help, re.MULTILINE)]
     if not defaults:
         libdir = linux_libdir()
@@ -155,13 +194,22 @@ def linux_libraries(prefix, original, directories, extra_libraries):
 
     def expand(entry, source):
         def replace(match):
-            nonlocal libdir
-            if (match.group(1) or match.group(2)) == "ORIGIN":
+            nonlocal libdir, native_platform
+            token = match.group(1) or match.group(2)
+            if token == "ORIGIN":
                 return str(source.parent)
+            if token == "PLATFORM":
+                if native_platform is None:
+                    native_platform = linux_platform()
+                return native_platform
             if libdir is None:
                 libdir = linux_libdir()
             return libdir
-        return Path(re.sub(r"\$(?:\{(ORIGIN|LIB)\}|(ORIGIN|LIB)\b)", replace, entry))
+        return Path(re.sub(r"\$(?:\{(ORIGIN|LIB|PLATFORM)\}|(ORIGIN|LIB|PLATFORM)\b)", replace, entry))
+
+    def search_paths(value, source, environment=False):
+        # Empty tags are ignored; empty components in a nonempty tag mean cwd.
+        return tuple(expand(entry, source) for entry in re.split("[:;]" if environment else ":", value)) if value else ()
 
     def matching(path):
         try:
@@ -180,36 +228,53 @@ def linux_libraries(prefix, original, directories, extra_libraries):
             return
         if architecture(source, "linux") != executable_arch:
             raise ValueError("runtime library architecture mismatch: %s" % source)
+        info = source.stat()
+        identity = (info.st_dev, info.st_ino)
+        if identity in identities:
+            raise ValueError("runtime library aliases %s and %s refer to the same DSO; "
+                             "binary archives require one name per source library" % (identities[identity], name))
+        identities[identity] = name
         origins[name] = canonical
+        loaded.add(name)
+        loaded.update(re.findall(r"\(SONAME\).*?\[(.*?)\]", dynamic(source)))
         target = libraries / name
         shutil.copyfile(source, target)
         target.chmod(0o755)
         pending.append((source, target, inherited))
 
     root_paths = dict(re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", dynamic(original)))
-    inherited = () if "RUNPATH" in root_paths else tuple(
-        expand(entry, original) for entry in root_paths.get("RPATH", "").split(":") if entry)
-    for source in extra_libraries:
-        enqueue(source, source.name, inherited)
-    while pending:
-        source, target, inherited = pending.pop()
+    root_inherited = () if "RUNPATH" in root_paths else search_paths(root_paths.get("RPATH", ""), original)
+    environment = search_paths(os.environ.get("LD_LIBRARY_PATH", ""), original, environment=True)
+    extras = deque(extra_libraries)
+    while pending or extras:
+        # dlopen plugins are loaded after the executable's initial dependency graph.
+        if not pending:
+            extra = extras.popleft()
+            enqueue(extra, extra.name, root_inherited)
+            if not pending:
+                continue
+        source, target, inherited = pending.popleft()
         metadata = dynamic(source)
         tags = re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", metadata)
-        paths = {kind: tuple(expand(entry, source) for entry in value.split(":") if entry) for kind, value in tags}
+        paths = {kind: search_paths(value, source) for kind, value in tags}
         if "RUNPATH" not in paths:
             inherited = paths.get("RPATH", ()) + inherited
-        search = list(paths.get("RUNPATH", inherited))
+        search = list(inherited if "RUNPATH" not in paths else ())
+        search.extend(environment)
+        search.extend(paths.get("RUNPATH", ()))
         search.extend(directories)
         rpaths = [value for _, value in tags]
         needed = re.findall(r"\(NEEDED\).*?\[(.*?)\]", metadata)
         for name in needed:
-            if system.match(name):
+            if system.match(name) or name in loaded:
                 continue
             if Path(name).name != name:
                 raise ValueError("runtime dependency must use a library basename: %s" % name)
             candidates = [directory / subdirectory / name for directory in search
                           for subdirectory in subdirectories] + cache.get(name, [])
             candidates += [directory / subdirectory / name for directory in defaults
+                           for subdirectory in subdirectories]
+            candidates += [directory / subdirectory / name for directory in fallback_directories
                            for subdirectory in subdirectories]
             resolved = next((path for path in candidates if matching(path)), None)
             if resolved is None:
@@ -333,7 +398,7 @@ def android_binaries(prefix, arch):
     return binaries
 
 
-def prepare(prefix, original, layout, directories, extra_libraries, glibc):
+def prepare(prefix, original, layout, directories, extra_libraries, glibc, fallback_directories=()):
     arch = architecture(prefix / "bin" / ("seekdb.exe" if layout == "windows" else "seekdb"), layout)
     host_layout = {"Linux": "linux", "Darwin": "macos", "Windows": "windows"}.get(platform.system())
     machine = platform.machine().lower()
@@ -343,7 +408,7 @@ def prepare(prefix, original, layout, directories, extra_libraries, glibc):
         raise ValueError("binary distributions must be assembled on a matching native OS and architecture")
     metadata = {"os": layout, "arch": arch}
     if layout == "linux":
-        binaries = linux_libraries(prefix, original, directories, extra_libraries)
+        binaries = linux_libraries(prefix, original, directories, extra_libraries, fallback_directories)
         required = glibc_requirement(binaries)
         if glibc and version_tuple(required) > version_tuple(glibc):
             raise ValueError("binary requires GLIBC_%s, exceeding requested baseline %s" % (required, glibc))

@@ -280,11 +280,11 @@ def main():
             original = options.seekdb_bin or options.artifacts / "src/observer" / (
                 "seekdb/seekdb.exe" if options.layout == "windows" else "seekdb")
             directories = [path.resolve() for path in options.runtime_lib_dir]
-            directories += [options.dependencies.resolve() / path for path in (
+            fallbacks = [options.dependencies.resolve() / path for path in (
                 "usr/local/oceanbase/devtools/lib64", "usr/local/oceanbase/deps/devel/lib",
                 "usr/local/oceanbase/deps/devel/lib/vsag_lib")]
             metadata = binary.prepare(binary_package, original.resolve(), options.layout, directories,
-                                      options.extra_library, options.glibc_version)
+                                      options.extra_library, options.glibc_version, fallbacks)
             if options.format == "binary":
                 for name in ("LICENSE", "NOTICE"):
                     copy(ROOT / name, binary_package / "licenses" / name)

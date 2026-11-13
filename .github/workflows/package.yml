@@ -114,7 +114,7 @@ jobs:
         with:
           arch: x64
       - name: Install Linux build utilities
-        if: matrix.os == 'linux'
+        if: runner.os == 'Linux'
         run: |
           packages=(rpm2cpio cpio make binutils patchelf)
           if [[ "$LINUX_PROFILE" == el7 ]]; then

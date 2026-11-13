@@ -62,7 +62,7 @@ seekdb-xcframework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
 ```
 
 Portable binary archives retain their UTC export timestamp before the source SHA
-and omit the numeric release. Local `package/package.py` and RPM/DEB wrappers
+and omit the numeric release. Local `package/package.py` and RPM/DEB/TGZ wrappers
 also generate a UTC package timestamp by default; `--package-timestamp` can supply
 one explicitly. The wrappers no longer require a positional release; an old
 fourth positional release is accepted and ignored.
@@ -114,6 +114,11 @@ original unstripped binary if it predates separate symbol exports.
   and compilation still uses seekdb's bundled Clang/Bazel toolchain. The host
   tools' runtime requirements do not set the engine's glibc floor. The exporter
   checks actual ELF symbol requirements, and system packaging also checks obshell.
+  For existing native executables, dependency collection follows RPATH,
+  LD_LIBRARY_PATH, RUNPATH, eligible loader-cache entries, and default directories;
+  explicit runtime search directories precede the cache, and implicit SDK paths
+  are fallbacks. Duplicate source-library aliases are rejected rather than copied
+  into separate DSO instances with independent globals/TLS.
 - macOS builds target 13.0 and validate the executable and every bundled dylib.
 - Windows builds retain `/MD` and the Windows 10 compatibility target. The
   bundled non-system DLLs and CRT are checked during export. A future VSAG
@@ -163,6 +168,8 @@ matching sysroot before building; selecting older dependency archives alone
 does not lower the compiler's system headers or link libraries. For example,
 after installing `sysroot_linux-64=2.17` into a Conda environment, point
 `SEEKDB_SYSROOT` at `<environment>/x86_64-conda-linux-gnu/sysroot`.
+The common toolchain stages required empty library-search directories in its
+own repository; the supplied sysroot can be read-only and is not modified.
 
 Full engine builds need substantial RAM and disk. The runner labels are in
 `.github/scripts/package.py`; use suitable larger/self-hosted runners there
