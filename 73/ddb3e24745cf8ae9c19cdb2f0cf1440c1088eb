@@ -1,0 +1,57 @@
+src/observer/ob_inner_sql_connection.cpp
+  s_c1726ac37da477::t_e8ca841f41a624 2000-2001,2003
+  s_c1726ac37da477::t_fb08b77505250a 1999,2002
+src/sql/session/ob_basic_session_info.cpp
+  s_c1726ac37da477::t_e8ca841f41a624 4438-4447
+rust/sql-nio/src/pump.rs
+  s_c1726ac37da477::t_c0c5b28fa8aaf8 571,578-581
+rust/sql-nio/include/callbacks.h
+  s_c1726ac37da477::t_72977ed6f10f6d 36-39
+  s_c1726ac37da477::t_ff657a39da50ec 40
+src/oblib/lib/profile/ob_trace_id.h
+  s_c1726ac37da477::t_fb08b77505250a 456
+src/observer/mysql/obsm_conn_callback.cpp
+  s_c1726ac37da477::t_e8ca841f41a624 167-168,178-182,186-187
+rust/sql-nio/src/lib.rs
+  s_c1726ac37da477::t_72977ed6f10f6d 87
+rust/sql-nio/src/bridge.rs
+  s_c1726ac37da477::t_72977ed6f10f6d 392-406,408-409
+  s_c1726ac37da477::t_ff657a39da50ec 407
+rust/sql-nio/src/reactor.rs
+  s_c1726ac37da477::t_ff657a39da50ec 1446
+  s_c1726ac37da477::t_14006c78c59c8e 565-568,1261,1266
+  s_c1726ac37da477::t_c0c5b28fa8aaf8 596,681,763,1415,1447-1449
+src/oblib/rpc/obmysql/ob_sql_nio_server.cpp
+  s_c1726ac37da477::t_72977ed6f10f6d 78-81,83-90,92-93
+  s_c1726ac37da477::t_ff657a39da50ec 82,91
+src/sql/session/ob_basic_session_info.h
+  s_c1726ac37da477::t_e8ca841f41a624 661-662
+rust/sql-nio/src/conn.rs
+  s_c1726ac37da477::t_024befd20fd0e5 17-30,40-64,69-78,84-88,90-102,104-120,371,423,430,437,439,445,447
+  s_c1726ac37da477::t_e07653f15c5f26 82-83
+  s_c1726ac37da477::t_72977ed6f10f6d 103
+  s_c1726ac37da477::t_9e516f30b3d77f 31-39
+  s_c1726ac37da477::t_260b4fa21534a1 80-81
+  s_c1726ac37da477::t_ff657a39da50ec 65-68,79,89
+src/sql/optimizer/stat/ob_dbms_stats_executor.cpp
+  s_c1726ac37da477::t_fb08b77505250a 197-198,315-316,324-325
+  s_c1726ac37da477::t_c12731c39d9ccf 20,195-196,199-208,212-232,237-238,246-250,263,269-270,276,280,298,300,303-307,310-314,317-318,320-323,327
+  s_c1726ac37da477::t_14006c78c59c8e 209-211,308-309
+  s_c1726ac37da477::t_6e61b901e78813 319,326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "73ddb3e24745cf8ae9c19cdb2f0cf1440c1088eb",
+  "prompts": {},
+  "sessions": {
+    "s_c1726ac37da477": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c9b8-d9ec-7e81-bc9f-4f6259e85576",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

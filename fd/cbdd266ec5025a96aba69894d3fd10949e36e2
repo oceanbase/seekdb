@@ -1,0 +1,19 @@
+src/storage/ls/ob_ls_tablet_service.cpp
+  s_c1726ac37da477::t_ba2bc5653aec9f 158,164-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fdcbdd266ec5025a96aba69894d3fd10949e36e2",
+  "prompts": {},
+  "sessions": {
+    "s_c1726ac37da477": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c9b8-d9ec-7e81-bc9f-4f6259e85576",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}
