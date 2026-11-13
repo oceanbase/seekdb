@@ -6,18 +6,25 @@ contains the workflow, then choose:
 
 | Input | Values |
 | --- | --- |
-| Platform | Linux x86_64/aarch64, macOS arm64, Windows x86_64, Android arm64, or all |
+| Platform | Linux x86_64/aarch64, macOS arm64, Windows x86_64, Android arm64, iOS device/simulator arm64, or all |
 | Linux glibc | 2.17, 2.28, or both |
 | Version | Empty uses `VERSION` from `bazel/compile_config.bzl`, or the reused binary's version |
 | Formats | Binary archive only, RPM, DEB, or both system formats |
 | Binary run ID | Empty builds binaries; a previous run ID reuses its Linux binaries for RPM/DEB |
-| Jobs | 0 selects one job on macOS and two elsewhere; other values are passed to Bazel |
+| Jobs | 0 selects one job on macOS/iOS and two elsewhere; other values are passed to Bazel |
 
 The workflow builds O2 with line tables and the package runtime configuration.
 Each target compiles seekdb once. Download the `binary-*` artifacts for portable
 archives and checksums. Linux `system-packages-*` artifacts contain RPM/DEB
 packages made from those archives and the SDK's obshell, without another SDK
 initialization or engine build. Other targets produce portable archives.
+Select `ios` to build device and simulator frameworks in parallel, or select
+`ios-arm64` / `ios-simulator-arm64` individually. `all` includes both iOS variants.
+The `binary-ios*` artifacts contain verified `SeekDB.framework` ZIPs. When both
+variants are selected, the `ios-xcframework` job downloads those archives and
+combines them into one `SeekDB.xcframework` ZIP without compiling the engine again.
+Framework packages include a Clang module map; the workflow type-checks a Swift
+import for each SDK before publishing the archives.
 Artifacts use the repository's default retention period; the workflow does
 not publish a release.
 When building both glibc variants, keep their system-package artifact directories
@@ -47,6 +54,9 @@ seekdb-1.4.0.0-20261112T100530Z.x86_64.rpm
 seekdb-debuginfo-1.4.0.0-20261112T100530Z.x86_64.rpm
 seekdb_1.4.0.0-20261112T100530Z_amd64.deb
 seekdb-binary-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
+seekdb-framework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
+seekdb-framework-1.4.0.0-ios18.0-simulator-arm64-20261112T100530Z-sdb0123456789ab.zip
+seekdb-xcframework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
 ```
 
 Portable binary archives retain their UTC export timestamp before the source SHA
@@ -81,8 +91,14 @@ Portable binary archives still include their runtime libraries.
 - Android builds target API 26, use NDK 27.3.13750724, and require Android ELF
   API notes and at least 16 KiB load alignment. Non-system dependencies must
   be linked statically for the current exporter.
+- iOS builds target 18.0 for arm64 devices and arm64 simulators, using the
+  runner's selected Xcode and the repository's existing framework target.
+  Packaging checks the Mach-O platform, deployment target, public ABI exports,
+  source revision, build metadata, and system-only dynamic dependencies. The
+  XCFramework job also verifies the source/version and complete file checksums
+  of both inputs. Apps sign the embedded framework when they are built.
 
-The timezone resource, micromamba version, and Conda sysroot versions/builds
+The timezone resource, micromamba version, Conda sysroot versions/builds, and iOS deployment target
 are pinned in `.github/packaging.json`. The timezone and installed sysroot
 package records are checked against their pinned SHA-256 values before use.
 The workflow uses the public upstream Bazel download URLs with their existing
@@ -90,11 +106,16 @@ integrity checks instead of the developer proxy configuration.
 
 ## Dependency cache
 
-The workflow restores and saves one dependency cache containing `deps/3rd`
-and `deps/android`. These directories hold the extracted SDKs and their
+The workflow restores and saves one dependency cache containing `deps/3rd`,
+`deps/android`, and `deps/ios`. These directories hold the extracted SDKs and their
 downloaded archives in `pkg/`. The cache key includes the target, dependency
 manifests, and initializer. `init` rechecks the manifest identity when an older
 same-target snapshot is restored, reusing its downloaded archives as needed.
+iOS keys additionally include the base-library recipe, deployment target, Xcode
+version, and selected SDK version. iOS restores require an exact cache key;
+device and simulator dependencies use separate targets. Only dependencies under
+`deps/` are persisted; source-SDK Bazel outputs are built with the engine and are
+not uploaded as a separate cache.
 The initialized SDK is saved before compilation. Cache restore/save steps have
 a five-minute limit and do not block builds on failure. An incomplete restore
 is removed before initializing dependencies again. Windows adds MSYS utilities

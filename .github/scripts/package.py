@@ -56,7 +56,13 @@ def matrix():
         dict(id="windows-x86_64-md", platform="windows-x86_64", os="windows", arch="x86_64", runner="windows-2022", glibc="", profile=""),
         dict(id="android-arm64-api26", platform="android-arm64", os="android", arch="aarch64", runner="ubuntu-24.04", glibc="", profile=""),
     ]
-    targets = [target for target in targets if selected == "all" or target["platform"] == selected]
+    for sdk, platform, variant in (("iphoneos", "ios-arm64", ""),
+                                   ("iphonesimulator", "ios-simulator-arm64", "-simulator")):
+        targets.append(dict(id="ios" + CONFIG["ios_minimum_os"] + variant + "-arm64",
+                            platform=platform, os="ios", arch="arm64", runner="macos-15",
+                            glibc="", profile="", sdk=sdk))
+    targets = [target for target in targets if selected == "all" or target["platform"] == selected
+               or (selected == "ios" and target["os"] == "ios")]
     if not targets:
         raise ValueError("unsupported package platform: " + selected)
     output("matrix", json.dumps({"include": targets}, separators=(",", ":")))
@@ -64,6 +70,7 @@ def matrix():
     # An unused placeholder keeps the job matrix valid when this job is skipped.
     output("linux_matrix", json.dumps({"include": linux or [targets[0]]}, separators=(",", ":")))
     output("has_linux", str(bool(linux)).lower())
+    output("has_ios_pair", str(sum(target["os"] == "ios" for target in targets) == 2).lower())
     output("version", version)
     output("release", release)
     output("binary_run_id", binary_run_id)
@@ -84,7 +91,7 @@ def environment():
     arch = os.environ["PACKAGE_ARCH"]
     if target == "linux":
         profiles = ["oceanbase.%s.%s.deps" % (os.environ["LINUX_PROFILE"], arch)]
-    elif target == "macos":
+    elif target in ("macos", "ios"):
         profiles = ["oceanbase.macos13.arm64.deps"]
     elif target == "windows":
         profiles = ["oceanbase.windows.x86_64.deps"]
@@ -93,6 +100,21 @@ def environment():
     sdk = hashlib.sha256((ROOT / "deps/init/prepare.py").read_bytes())
     for name in profiles:
         sdk.update((ROOT / "deps/init" / name).read_bytes())
+    if target == "ios":
+        developer = os.environ.get("DEVELOPER_DIR") or subprocess.check_output(
+            ["xcode-select", "-p"], text=True).strip()
+        os.environ["DEVELOPER_DIR"] = developer
+        with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
+            stream.write("DEVELOPER_DIR=" + developer + "\n")
+            stream.write("IPHONEOS_DEPLOYMENT_TARGET=" + CONFIG["ios_minimum_os"] + "\n")
+        sdk.update((ROOT / "deps/init/ios/build.py").read_bytes())
+        sdk.update(CONFIG["ios_minimum_os"].encode())
+        sdk.update(os.environ["PACKAGE_APPLE_SDK"].encode())
+        for command in (["xcodebuild", "-version"],
+                        ["xcrun", "--sdk", os.environ["PACKAGE_APPLE_SDK"], "--show-sdk-version"]):
+            identity = subprocess.check_output(command)
+            print(identity.decode().strip(), flush=True)
+            sdk.update(identity)
     output("sdk", sdk.hexdigest()[:24])
 
 
@@ -125,8 +147,11 @@ def sysroot_layout(destination):
 
 
 def initialize():
-    if os.environ["PACKAGE_OS"] == "macos":
-        run(["brew", "install", "autoconf", "automake", "libtool", "pkg-config"])
+    if os.environ["PACKAGE_OS"] in ("macos", "ios"):
+        packages = ["autoconf", "automake", "libtool", "pkg-config"]
+        if os.environ["PACKAGE_OS"] == "ios":
+            packages.append("gettext")
+        run(["brew", "install", *packages])
     arguments = [sys.executable, "build.py", "init"]
     if os.environ["PACKAGE_OS"] == "linux":
         arguments += ["--linux-profile", os.environ["LINUX_PROFILE"]]
@@ -143,6 +168,16 @@ def initialize():
             stream.write("ANDROID_NDK_HOME=" + ndk.as_posix() + "\n")
         arguments.append("--android")
     run(arguments)
+    if os.environ["PACKAGE_OS"] == "ios":
+        simulator = os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator"
+        environment = dict(os.environ, RUSTUP_AUTO_INSTALL="1")
+        environment.pop("RUSTUP_TOOLCHAIN", None)
+        run(["rustup", "target", "add", "aarch64-apple-ios-sim" if simulator else "aarch64-apple-ios"],
+            env=environment)
+        # Build the base dependencies here; Bazel builds source_sdk with the
+        # engine below, using the CI downloader configuration and parallelism.
+        run([sys.executable, "deps/init/ios/build.py", "--reuse", "--jobs", build_jobs(),
+             "--deployment-target", CONFIG["ios_minimum_os"], *(["--simulator"] if simulator else [])])
 
 
 def bazel_arguments():
@@ -153,13 +188,22 @@ def bazel_arguments():
     return ["--downloader_config=" + str(direct)]
 
 
-def build():
+def build_jobs():
     jobs = os.environ["BUILD_JOBS"]
     if jobs == "0":
-        jobs = "1" if os.environ["PACKAGE_OS"] == "macos" else "2"
+        jobs = "1" if os.environ["PACKAGE_OS"] in ("macos", "ios") else "2"
+    return jobs
+
+
+def build():
     arguments = [sys.executable, "build.py", "build", *bazel_arguments(),
-                 "--jobs=" + jobs, "--config=O2", "--config=line_tables_only", "--config=package",
+                 "--jobs=" + build_jobs(), "--config=O2", "--config=line_tables_only", "--config=package",
                  "--lockfile_mode=error"]
+    if os.environ["PACKAGE_OS"] == "ios":
+        configuration = "ios-simulator" if os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator" else "ios"
+        run(arguments + ["--config=" + configuration, "--ios_minimum_os=" + CONFIG["ios_minimum_os"],
+                         "//src/observer:ios_framework"])
+        return
     if os.environ["PACKAGE_OS"] == "android":
         arguments.append("--config=android")
     run(arguments + ["//src/observer:seekdb", "//src/share/inner_table/sys_package:syspack_release"])
@@ -178,6 +222,11 @@ def timezone():
 
 
 def export():
+    if os.environ["PACKAGE_OS"] == "ios":
+        run([sys.executable, "package/ios/distribution.py", "framework",
+             "--input", ROOT / "build/bin/src/observer/framework/SeekDB.framework",
+             "--sdk", os.environ["PACKAGE_APPLE_SDK"], *ios_package_arguments()])
+        return
     arguments = [sys.executable, "package/package.py", "binary", "--version", os.environ["PACKAGE_VERSION"],
                  "--package-timestamp", os.environ["PACKAGE_RELEASE"], "--layout", os.environ["PACKAGE_OS"],
                  "--source-commit", os.environ["GITHUB_SHA"], "--timezone-file", timezone(),
@@ -188,6 +237,16 @@ def export():
     if os.environ["PACKAGE_OS"] == "linux":
         helper = ROOT / "deps/3rd/home/admin/oceanbase/bin/obshell"
         run(["tar", "--dereference", "-czf", ROOT / "dist/obshell.tar.gz", "-C", helper.parent, helper.name])
+
+
+def ios_package_arguments():
+    return ["--version", os.environ["PACKAGE_VERSION"], "--source-commit", os.environ["GITHUB_SHA"],
+            "--minimum-os", CONFIG["ios_minimum_os"], "--output", ROOT / "dist"]
+
+
+def xcframework():
+    run([sys.executable, "package/ios/distribution.py", "xcframework",
+         "--input", ROOT / "input", *ios_package_arguments()])
 
 
 def system_packages():
@@ -233,6 +292,7 @@ def shutdown():
 
 if __name__ == "__main__":
     commands = {"matrix": matrix, "sysroot": sysroot, "environment": environment, "initialize": initialize,
-                "build": build, "export": export, "system": system_packages, "shutdown": shutdown}
+                "build": build, "export": export, "xcframework": xcframework,
+                "system": system_packages, "shutdown": shutdown}
     os.chdir(ROOT)
     commands[sys.argv[1]]()
