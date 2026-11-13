@@ -3960,6 +3960,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
 
   TableItem *item = NULL;
   ObFileTableDef *file_def = NULL;
+  char *path_buffer = NULL;
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(item = stmt->create_table_item(*allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -3982,7 +3983,16 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
     item->type_ = TableItem::FILE_TABLE;
     item->file_table_def_ = file_def;
     file_def->func_name_ = func_name;
-    file_def->path_.assign_ptr(canonical_path.c_str(), canonical_path.length());
+    // The path is copied into the memory of the statement, the canonical path
+    // is a local string that does not outlive the resolver.
+    if (OB_ISNULL(path_buffer = static_cast<char *>(allocator_->alloc(canonical_path.length() + 1)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(path_buffer, canonical_path.c_str(), canonical_path.length());
+      path_buffer[canonical_path.length()] = '\0';
+      file_def->path_.assign_ptr(path_buffer, canonical_path.length());
+    }
+    file_def->file_format_ = static_cast<int8_t>(file_format);
     file_def->format_ = format;
     file_def->header_ = header;
     file_def->sample_size_ = sample_size;

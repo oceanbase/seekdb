@@ -5571,7 +5571,7 @@ int ObStaticEngineCG::generate_spec(ObLogFileTable &op, ObFileTableSpec &spec,
       spec.quote_ = file_def->quote_;
       spec.escape_ = file_def->escape_;
       spec.skip_blank_lines_ = file_def->skip_blank_lines_;
-      spec.file_format_ = static_cast<int8_t>(file_sql::FileFormat::CSV);
+      spec.file_format_ = file_def->file_format_;
     }
   }
   return ret;

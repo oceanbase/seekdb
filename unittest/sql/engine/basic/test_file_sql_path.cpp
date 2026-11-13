@@ -60,6 +60,10 @@ int main()
   CHECK(!path_is_under("/tmp/secure", "/tmp/other/file.csv"));
   CHECK(!path_is_under("/tmp/secure", "/tmp"));
   CHECK(!path_is_under("", "/tmp/secure/file.csv"));
+  // The root directory holds every path, this is the default of
+  // secure_file_priv.
+  CHECK(path_is_under("/", "/tmp/secure/file.csv"));
+  CHECK(path_is_under("/", "/etc/passwd"));
 
   // Lexical canonicalization collapses the relative parts without touching the
   // file system.
@@ -96,6 +100,12 @@ int main()
 
   // A directory is not a readable table.
   CHECK(check_secure_path(secure_dir, secure_dir, resolved) == PathCode::NOT_REGULAR_FILE);
+
+  // The default of secure_file_priv is the root directory, every path is
+  // allowed then.
+  std::string root_resolved;
+  CHECK(check_secure_path("/", inside_file, root_resolved) == PathCode::OK);
+  CHECK(root_resolved == inside_file);
 
   // An empty path and an unusable secure_file_priv are rejected.
   CHECK(check_secure_path(secure_dir, "", resolved) == PathCode::EMPTY_PATH);

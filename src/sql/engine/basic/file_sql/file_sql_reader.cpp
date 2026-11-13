@@ -105,6 +105,11 @@ void unregister_file_scanner(FileFormat format)
 
 FileTableScanner *create_file_scanner(FileFormat format)
 {
+  if (FileFormat::CSV == format) {
+    // The csv module of member B is part of the framework, it is always
+    // available.
+    return create_csv_scanner();
+  }
   ScannerRegistry &registry = scanner_registry();
   FileScannerFactory factory = nullptr;
   {

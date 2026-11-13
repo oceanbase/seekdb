@@ -176,6 +176,7 @@ int ObFileTableDef::deep_copy(const ObFileTableDef &src, ObIRawExprCopier &expr_
     quote_ = src.quote_;
     escape_ = src.escape_;
     skip_blank_lines_ = src.skip_blank_lines_;
+    file_format_ = src.file_format_;
     for (int64_t i = 0; OB_SUCC(ret) && i < src.columns_.count(); ++i) {
       const ObFileTableColumnDef &src_col = src.columns_.at(i);
       ObFileTableColumnDef col;

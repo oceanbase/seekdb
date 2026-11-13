@@ -182,6 +182,10 @@ bool path_is_under(const std::string &secure_dir, const std::string &canonical_p
   if (canonical_path == dir) {
     return true;
   }
+  if ("/" == dir) {
+    // The root directory holds every path.
+    return true;
+  }
   if (canonical_path.size() <= dir.size()) {
     return false;
   }

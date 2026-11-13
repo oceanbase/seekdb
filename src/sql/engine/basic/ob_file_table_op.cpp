@@ -88,7 +88,7 @@ int ObFileTableOp::open_file()
 {
   int ret = OB_SUCCESS;
   const ObFileTableSpec &spec = MY_SPEC;
-  file_sql::FileFormat format = file_sql::FileFormat::CSV;
+  file_sql::FileFormat format = static_cast<file_sql::FileFormat>(spec.file_format_);
   if (OB_ISNULL(input_)) {
     if (NULL == (input_ = ::fopen(spec.path_.ptr(), "rb"))) {
       ret = OB_FILE_NOT_EXIST;

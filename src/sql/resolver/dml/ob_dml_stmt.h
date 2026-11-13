@@ -154,6 +154,7 @@ typedef struct ObFileTableDef
       quote_('"'),
       escape_('"'),
       skip_blank_lines_(false),
+      file_format_(0),
       columns_() {}
 
   int deep_copy(const ObFileTableDef &src, ObIRawExprCopier &expr_copier, ObIAllocator *allocator);
@@ -170,6 +171,8 @@ typedef struct ObFileTableDef
   char quote_;
   char escape_;
   bool skip_blank_lines_;
+  // The format of the file, it is the value of file_sql::FileFormat.
+  int8_t file_format_;
   common::ObSEArray<ObFileTableColumnDef, 4, common::ModulePageAllocator, true> columns_;
 } ObFileTableDef;
 
