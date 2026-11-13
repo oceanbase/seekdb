@@ -1,0 +1,133 @@
+CREATE DATABASE inlist_duplicate_1512;
+USE inlist_duplicate_1512;
+SET @saved_plan_cache = @@ob_enable_plan_cache;
+SET @saved_ef_search = @@ob_hnsw_ef_search;
+SET ob_enable_plan_cache = 1;
+SET ob_hnsw_ef_search = 100;
+CREATE TABLE t(id BIGINT PRIMARY KEY, k BIGINT, v VECTOR(3),
+VECTOR INDEX vi(v) WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate))
+ORGANIZATION HEAP;
+# Small distinct count stays in the vector scan (hint threshold).
+direct_ann_scan
+1
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t
+WHERE k IN (1,2,3,1,2,3,1,2,3,1,2,3)
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+id
+0
+1
+2
+5
+6
+7
+10
+11
+12
+15
+# The reported 3072-element list also stays direct at the default threshold.
+direct_ann_scan
+1
+id
+0
+1
+2
+5
+6
+7
+10
+11
+12
+15
+# Ordinary SQL retains the VALUES rewrite for the same long list.
+exact_values_rewrite
+1
+# Lists with enough distinct integers retain the existing rewrite.
+direct_ann_scan
+0
+# Cached ANN parameters stay live when duplicate positions change.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t WHERE k IN (1,1,1,1,1,1,1,1,1,1,1,1) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+id
+0
+5
+10
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t WHERE k IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+id
+0
+1
+2
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t WHERE k IN (5,5,5,5,5,5,5,5,5,5,5,5) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+id
+4
+9
+14
+# ANN NULL semantics and a top-level conjunction.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM t WHERE id >= 5 AND k IN (1,NULL,1,NULL,1,NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+id
+5
+10
+15
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM t WHERE k NOT IN (1,NULL,1,NULL,1,NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+id
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM t WHERE k IN (NULL,NULL,NULL,NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+id
+# Same parameterized SQL, different duplicate positions and values.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ COUNT(*), SUM(id) FROM t WHERE k IN (1,1,1,1,1,1,1,1,1,1,1,1);
+COUNT(*)	SUM(id)
+20	950
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ COUNT(*), SUM(id) FROM t WHERE k IN (1,2,3,4,5,6,7,8,9,10,11,12);
+COUNT(*)	SUM(id)
+100	4950
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ COUNT(*), SUM(id) FROM t WHERE k IN (5,5,5,5,5,5,5,5,5,5,5,5);
+COUNT(*)	SUM(id)
+20	1030
+# NULL preserves IN and NOT IN three-valued logic.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k IN (1,NULL,1,NULL,1,NULL);
+COUNT(*)
+20
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k NOT IN (1,NULL,1,NULL,1,NULL);
+COUNT(*)
+0
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k IN (NULL,NULL,NULL,NULL);
+COUNT(*)
+0
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k NOT IN (1,1,1,1);
+COUNT(*)
+80
+# Prepared placeholders are retained across executions.
+PREPARE ps FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'', 4) */ COUNT(*), SUM(id) FROM t WHERE k IN (?,?,?,?,?,?)';
+SET @a=1, @b=1, @c=1, @d=1, @e=1, @f=1;
+EXECUTE ps USING @a,@b,@c,@d,@e,@f;
+COUNT(*)	SUM(id)
+20	950
+SET @a=1, @b=2, @c=3, @d=4, @e=5, @f=NULL;
+EXECUTE ps USING @a,@b,@c,@d,@e,@f;
+COUNT(*)	SUM(id)
+100	4950
+DEALLOCATE PREPARE ps;
+# Existing coercion and row-expression paths remain valid.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k IN ('1','2','1','2');
+COUNT(*)
+40
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k IN (1.0,2.0,1.0,2.0);
+COUNT(*)
+40
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE (k,k) IN ((1,1),(2,2),(1,1),(2,2));
+COUNT(*)
+40
+# Signed boundaries and unsigned fallback do not alias.
+CREATE TABLE bounds(k BIGINT);
+INSERT INTO bounds VALUES (-9223372036854775808),(-1),(0),(9223372036854775807),(NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ k FROM bounds WHERE k IN (-9223372036854775808,-1,-9223372036854775808,-1) ORDER BY k;
+k
+-9223372036854775808
+-1
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ k FROM bounds WHERE k IN (9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807) ORDER BY k;
+k
+9223372036854775807
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM bounds WHERE k IN (18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615);
+COUNT(*)
+0
+SET ob_enable_plan_cache = @saved_plan_cache;
+SET ob_hnsw_ef_search = @saved_ef_search;
+USE test;
+DROP DATABASE inlist_duplicate_1512;
