@@ -918,9 +918,8 @@ static int convert_datum_to_json(const ObDatum &datum, const ObObjMeta &meta,
           if (OB_SUCC(ret)) { ret = database_payload.append(reinterpret_cast<const char *>(&date), sizeof(date)); }
         } else {
           if (type == ObTimeType) {
-            kind = 10; time.mode_ = DT_TYPE_TIME;
-            ret = ObTimeConverter::time_to_ob_time(datum.get_time(), time);
-            if (OB_SUCC(ret)) { value = ObTimeConverter::ob_time_to_time(time); }
+            kind = 10;
+            value = datum.get_time();
           } else if (type == ObMySQLDateTimeType) {
             kind = 33; time.mode_ = DT_TYPE_MYSQL_DATETIME;
             ret = ObTimeConverter::mdatetime_to_ob_time(datum.get_datetime(), time);

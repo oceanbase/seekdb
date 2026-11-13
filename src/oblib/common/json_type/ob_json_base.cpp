@@ -379,6 +379,9 @@ OrderResult compare_temporal(rust::Slice<const uint8_t> left, rust::Slice<const 
   ObDTMode mode_b;
   if (OB_FAIL(a.reset_iter())) {
   } else if (OB_FAIL(b.reset_iter())) {
+  } else if (a.json_type() == ObJsonNodeType::J_TIME && b.json_type() == ObJsonNodeType::J_TIME) {
+    // TIME payloads are signed microseconds, including fractional seconds.
+    result.order = (a.get_int() > b.get_int()) - (a.get_int() < b.get_int());
   } else if (OB_FAIL(ObJsonBaseUtil::get_dt_mode_by_json_type(b.json_type(), mode_b))) {
   } else if (OB_FAIL(a.get_obtime(time_a))) {
   } else if (OB_FAIL(b.get_obtime(time_b))) {
@@ -444,6 +447,8 @@ json::HashResult json::HashCapability::hash_database_scalar(uint64_t seed, uint8
     result.value = append_bytes(seed, {reinterpret_cast<const uint8_t *>(number.get_digits()), length});
   } else if (OB_SUCC(ret) && type == ObJsonNodeType::J_OPAQUE) {
     result.value = append_bytes(seed, payload);
+  } else if (OB_SUCC(ret) && type == ObJsonNodeType::J_TIME) {
+    result.value = append_bytes(seed, {reinterpret_cast<const uint8_t *>(&integer), sizeof(integer)});
   } else if (OB_SUCC(ret)) {
     ObTime time;
     ObDTMode mode = DT_TYPE_DATE;
@@ -457,10 +462,6 @@ json::HashResult json::HashCapability::hash_database_scalar(uint64_t seed, uint8
       case ObJsonNodeType::J_MYSQL_DATE:
         time.mode_ |= DT_TYPE_MYSQL_DATE;
         ret = ObTimeConverter::mdate_to_ob_time(integer, time);
-        break;
-      case ObJsonNodeType::J_TIME:
-        mode = DT_TYPE_TIME;
-        ret = ObTimeConverter::time_to_ob_time(integer, time);
         break;
       case ObJsonNodeType::J_DATETIME:
       case ObJsonNodeType::J_TIMESTAMP:
@@ -1395,11 +1396,7 @@ int ObIJsonBase::to_time(int64_t &value) const
       break;
     }
     case ObJsonNodeType::J_TIME: {
-      ObTime t;
-      if (OB_FAIL(get_obtime(t))) {
-      } else {
-        value = ObTimeConverter::ob_time_to_time(t);
-      }
+      value = get_int();
       break;
     }
 
