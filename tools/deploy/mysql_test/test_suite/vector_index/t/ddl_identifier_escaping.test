@@ -1,0 +1,47 @@
+connect (c2_user,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connection c2_user;
+
+--disable_warnings
+DROP DATABASE IF EXISTS ddl_identifier_escaping;
+--enable_warnings
+CREATE DATABASE ddl_identifier_escaping;
+USE ddl_identifier_escaping;
+
+CREATE TABLE c2_types_quoted (
+  id INT PRIMARY KEY,
+  `enum``value` ENUM('a','b'),
+  `set````value` SET('x','y'),
+  n INT);
+INSERT INTO c2_types_quoted VALUES
+  (1,'a','x',NULL),
+  (2,'b','x,y',2),
+  (3,'a','y',3);
+CREATE UNIQUE INDEX type_idx ON c2_types_quoted
+  (`enum``value`,`set````value`,n);
+
+SET @c2_table_id = (
+  SELECT table_id
+  FROM oceanbase.__all_table
+  WHERE table_name = 'c2_types_quoted'
+    AND database_id = (
+      SELECT database_id
+      FROM oceanbase.__all_database
+      WHERE database_name = DATABASE()));
+SELECT COUNT(*) AS usable_index
+FROM oceanbase.__all_table
+WHERE table_name = CONCAT('__idx_',@c2_table_id,'_type_idx')
+  AND index_status = 2;
+SELECT id,
+       CAST(`enum``value` AS UNSIGNED) AS enum_ordinal,
+       CAST(`set````value` AS UNSIGNED) AS set_bits,
+       n
+FROM c2_types_quoted
+ORDER BY id;
+SELECT /*+ INDEX(c2_types_quoted type_idx) */ id
+FROM c2_types_quoted
+WHERE id = 2;
+
+USE test;
+DROP DATABASE ddl_identifier_escaping;
+disconnect c2_user;
+connection default;
