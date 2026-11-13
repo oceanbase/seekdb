@@ -549,30 +549,56 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
-  // append comma
-  if (with_comma) {
-    if (OB_FAIL(sql_string.append_fmt(", "))) {
+  ObSqlString escaped_name;
+  const ObString &name = column_name_info.column_name_;
+
+  // Double embedded backticks before quoting the identifier.
+  if (with_origin_name || with_alias_name) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < name.length(); ++i) {
+      if (OB_FAIL(escaped_name.append(name.ptr() + i, 1))) {
+      } else if (name.ptr()[i] == '`') {
+        if (OB_FAIL(escaped_name.append("`"))) {
+        }
+      }
     }
   }
-  // append original column name
+
+  if (OB_SUCC(ret) && with_comma) {
+    if (OB_FAIL(sql_string.append(", "))) {
+    }
+  }
+
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
-      // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append("cast("))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(sql_string.append("`"))) {
+      } else if (OB_FAIL(sql_string.append(escaped_name.string()))) {
+      } else if (OB_FAIL(sql_string.append("`"))) {
+      }
+    }
+    if (OB_SUCC(ret) && column_name_info.is_enum_set_need_cast_) {
+      if (OB_FAIL(sql_string.append(" as unsigned)"))) {
+      }
     }
   }
-  // append AS
+
   if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt(" AS "))) {
+    if (OB_FAIL(sql_string.append(" AS "))) {
     }
   }
-  // append alias column name
+
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(sql_string.append("`"))) {
+    } else if (column_name_info.is_shadow_column_) {
+      ret = sql_string.append("__SHADOW_");
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(sql_string.append(escaped_name.string()))) {
+      } else if (OB_FAIL(sql_string.append("`"))) {
+      }
     }
   }
   return ret;
