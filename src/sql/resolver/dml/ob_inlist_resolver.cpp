@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "sql/resolver/dml/inlist_cardinality.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -350,6 +351,30 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+    }
+  }
+  if (OB_SUCC(ret) && is_enable && !is_prepare_stmt && T_OP_ROW != left_expr.get_expr_type()) {
+    // Decide by the distinct integer count for duplicate-heavy scalar lists.
+    // Keep every parse node/parameter: equal values on this execution need not
+    // remain equal when the cached plan is reused. NULLs, other types, tuples,
+    // and unbound prepared parameters retain the existing rewrite path.
+    const auto read_integer = [&](const int64_t i, int64_t &value) {
+      const ParseNode *node = in_list.children_[i];
+      bool is_integer = false;
+      if (NULL == node) {
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+        is_integer = true;
+      } else if (T_QUESTIONMARK == node->type_ && NULL != param_store &&
+                 node->value_ >= 0 && node->value_ < param_store->count() &&
+                 ObIntType == param_store->at(node->value_).get_type()) {
+        value = param_store->at(node->value_).get_int();
+        is_integer = true;
+      }
+      return is_integer;
+    };
+    if (has_small_integer_inlist(in_list.num_child_, threshold, read_integer)) {
+      is_enable = false;
     }
   }
   return ret;

@@ -1,0 +1,13 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "test_inlist_cardinality",
+    linkstatic = True,
+    srcs = ["test_inlist_cardinality.cpp"],
+    deps = [
+        "//src/sql:inlist_cardinality",
+        "//bazel/third_party:gtest",
+    ],
+)
