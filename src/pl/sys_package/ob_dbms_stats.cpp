@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "lib/profile/ob_trace_id.h"
+#include "lib/container/ob_array_wrap.h"
 #include "share/ob_share_util.h"
 #include "share/ob_ex_rpc.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
@@ -31,6 +32,9 @@
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/privilege_check/ob_privilege_check.h"
+#include <chrono>
+#include <optional>
+#include <thread>
 
 namespace oceanbase
 {
@@ -38,6 +42,129 @@ using namespace sql;
 using namespace common;
 using namespace share::schema;
 namespace pl {
+
+namespace {
+class SchemaOptionsDiagnostic
+{
+public:
+  enum Phase { REFRESH_AND_STATUS, MONITOR_SETUP, TABLE_PART_PARSE, OPTION_PARSE, STAT_LOCK, PHASE_COUNT };
+
+  explicit SchemaOptionsDiagnostic(const uint64_t epoch)
+    : epoch_(epoch), thread_(std::this_thread::get_id())
+  {
+    mono_before_us_ = monotonic_us();
+    wall_start_us_ = ObTimeUtility::current_time();
+    start_us_ = last_end_us_ = monotonic_us();
+  }
+
+  SchemaOptionsDiagnostic(const SchemaOptionsDiagnostic &) = delete;
+  SchemaOptionsDiagnostic &operator=(const SchemaOptionsDiagnostic &) = delete;
+
+  void observe_schema(const uint64_t schema_id)
+  {
+    if (schema_id_ == OB_INVALID_ID) { schema_id_ = schema_id; }
+    schema_valid_ = schema_valid_ && schema_id != OB_INVALID_ID && schema_id == schema_id_;
+  }
+
+  template<class Operation> int call(const Phase phase, Operation &&operation)
+  {
+    observe_context();
+    const int64_t begin_us = monotonic_us();
+    const int ret = operation();
+    const int64_t end_us = monotonic_us();
+    observe_context();
+    if (stopped_ || begin_us < 0 || begin_us < last_end_us_ || end_us < begin_us) {
+      valid_ = false;
+    } else {
+      const int64_t delta_us = end_us - begin_us;
+      checked_add(phase_us_[phase], delta_us);
+      checked_add(total_measured_us_, delta_us);
+    }
+    last_end_us_ = end_us;
+    checked_add(phase_calls_[phase], 1);
+    if (ret != OB_SUCCESS && phase_first_ret_[phase] == OB_SUCCESS) { phase_first_ret_[phase] = ret; }
+    return ret;
+  }
+
+  void stop()
+  {
+    if (stopped_) { valid_ = false; }
+    observe_context();
+    end_us_ = monotonic_us();
+    wall_end_us_ = ObTimeUtility::current_time();
+    mono_after_us_ = monotonic_us();
+    stopped_ = true;
+  }
+
+  void emit(const uint64_t schema_id, const int ret, const int64_t observed_table_attempts)
+  {
+    observe_context();
+    const bool same_thread = same_thread_, same_request = same_request_;
+    const bool same_schema = schema_valid_ && schema_id_ != OB_INVALID_ID && schema_id == schema_id_;
+    const bool ordered = stopped_ && mono_before_us_ >= 0 && start_us_ >= mono_before_us_
+        && last_end_us_ >= start_us_ && end_us_ >= last_end_us_ && mono_after_us_ >= end_us_;
+    const int64_t envelope_us = ordered ? end_us_ - start_us_ : -1;
+    const int64_t max_anchor_span_us = ordered ? mono_after_us_ - mono_before_us_ : -1;
+    const int64_t diagnostic_start_us = wall_start_us_, diagnostic_end_us = wall_end_us_;
+    const int64_t wall_span_us = diagnostic_start_us >= 0 && diagnostic_end_us >= diagnostic_start_us
+        ? diagnostic_end_us - diagnostic_start_us : -1;
+    const int64_t wall_quantization_us = 2;
+    const bool wall_mapping_valid = ordered && wall_span_us >= 0
+        && (wall_span_us >= envelope_us || envelope_us - wall_span_us <= wall_quantization_us)
+        && (wall_span_us <= max_anchor_span_us || wall_span_us - max_anchor_span_us <= wall_quantization_us);
+    int64_t sum_us = 0;
+    for (int64_t i = 0; i < PHASE_COUNT; ++i) { checked_add(sum_us, phase_us_[i]); }
+    const bool accounting_valid = valid_ && same_request && same_thread && same_schema && ordered
+        && sum_us == total_measured_us_ && sum_us <= envelope_us && observed_table_attempts > 0;
+    const int64_t accounting_error_us = accounting_valid ? total_measured_us_ - sum_us : -1;
+    const int64_t total_measured_us = total_measured_us_;
+    const uint64_t diagnostic_epoch = epoch_, diagnostic_schema_id = schema_id_;
+    const int options_schema_version = 1, options_phase_count = PHASE_COUNT;
+    const bool monotonic_clock_steady = std::chrono::steady_clock::is_steady;
+    int64_t mono_us[] = {mono_before_us_, start_us_, end_us_, mono_after_us_};
+    ObArrayWrap<int64_t> options_mono_us(mono_us, 4);
+    ObArrayWrap<int64_t> options_us(phase_us_, PHASE_COUNT);
+    ObArrayWrap<int64_t> options_calls(phase_calls_, PHASE_COUNT);
+    ObArrayWrap<int> options_first_ret(phase_first_ret_, PHASE_COUNT);
+    LOG_INFO("seek1381 schema options operations", K(options_schema_version), K(options_phase_count),
+             K(diagnostic_epoch), K(diagnostic_start_us), K(diagnostic_end_us), K(diagnostic_schema_id),
+             K(same_request), K(same_thread), K(same_schema), K(ret), K(total_measured_us),
+             K(monotonic_clock_steady), K(wall_span_us), K(wall_mapping_valid), K(wall_quantization_us),
+             K(accounting_valid), K(accounting_error_us), K(options_mono_us), K(options_us),
+             K(options_calls), K(options_first_ret), K(observed_table_attempts));
+  }
+
+private:
+  static int64_t monotonic_us()
+  {
+    return std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+  }
+
+  void checked_add(int64_t &value, const int64_t delta)
+  {
+    if (value < 0 || delta < 0 || value > INT64_MAX - delta) { valid_ = false; }
+    else { value += delta; }
+  }
+
+  void observe_context()
+  {
+    same_thread_ = same_thread_ && thread_ == std::this_thread::get_id();
+    same_request_ = same_request_ && same_thread_ && epoch_ != 0
+        && epoch_ == ::oceanbase::common::seek1381::request_epoch();
+  }
+
+  const uint64_t epoch_;
+  const std::thread::id thread_;
+  uint64_t schema_id_ = OB_INVALID_ID;
+  int64_t mono_before_us_ = 0, start_us_ = 0, last_end_us_ = 0, end_us_ = 0, mono_after_us_ = 0;
+  int64_t wall_start_us_ = 0, wall_end_us_ = 0, total_measured_us_ = 0;
+  int64_t phase_us_[PHASE_COUNT] = {}, phase_calls_[PHASE_COUNT] = {};
+  int phase_first_ret_[PHASE_COUNT] = {};
+  bool valid_ = std::chrono::steady_clock::is_steady;
+  bool same_thread_ = true, same_request_ = true, schema_valid_ = true, stopped_ = false;
+};
+}
 
 static int check_stats_table_priv(ObExecContext &ctx,
                                   const ObTableSchema &table_schema,
@@ -188,6 +315,12 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
   int ret = OB_SUCCESS;
   const int64_t diagnostic_start_us = ObTimeUtility::current_time();
   seek1381::Request diagnostic_request(diagnostic_start_us, ret);
+  const uint64_t options_epoch = ::oceanbase::common::seek1381::request_epoch();
+  std::optional<SchemaOptionsDiagnostic> options_diagnostic;
+  if (options_epoch != 0) { options_diagnostic.emplace(options_epoch); }
+  auto options_call = [&](SchemaOptionsDiagnostic::Phase phase, auto &&operation) {
+    return options_diagnostic.has_value() ? options_diagnostic->call(phase, operation) : operation();
+  };
   enum DiagnosticPhase { PREFLIGHT, ENUMERATE, OPTIONS, TABLE_DISPATCH, POST_GATHER, CLEANUP_SCOPE, OTHER, PHASE_COUNT };
   int64_t phase_us[PHASE_COUNT] = {};
   int64_t phase_calls[PHASE_COUNT] = {};
@@ -254,6 +387,7 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
         do {
           enter_phase(OPTIONS);
           ++table_attempts;
+          if (options_diagnostic.has_value()) { options_diagnostic->observe_schema(global_param.db_id_); }
           need_retry = false;
           ObTableStatParam stat_param = global_param;
           ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -264,11 +398,11 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
           int64_t start_time = ObTimeUtility::current_time();
           ObOptStatGatherAudit audit(tmp_alloc);
           ObOptStatRunningMonitor running_monitor(ctx.get_allocator(), start_time, stat_param.allocator_->used(), gather_stat, audit);
-          if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-          } else if (OB_FAIL(THIS_WORKER.check_status())) {
-          } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_PREPARE))) {
-          } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param, true))) {
-          } else if (OB_FAIL(parse_gather_stat_options(ctx,
+          if (OB_FAIL(options_call(SchemaOptionsDiagnostic::REFRESH_AND_STATUS, [&]() { return refresh_runtime_schema_guard(ctx); }))) {
+          } else if (OB_FAIL(options_call(SchemaOptionsDiagnostic::REFRESH_AND_STATUS, [&]() { return THIS_WORKER.check_status(); }))) {
+          } else if (OB_FAIL(options_call(SchemaOptionsDiagnostic::MONITOR_SETUP, [&]() { return running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_PREPARE); }))) {
+          } else if (OB_FAIL(options_call(SchemaOptionsDiagnostic::TABLE_PART_PARSE, [&]() { return parse_table_part_info(ctx, stat_table, stat_param, true); }))) {
+          } else if (OB_FAIL(options_call(SchemaOptionsDiagnostic::OPTION_PARSE, [&]() { return parse_gather_stat_options(ctx,
                                                        params.at(1),
                                                        params.at(2),
                                                        params.at(3),
@@ -279,12 +413,12 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
                                                        params.at(12),
                                                        NULL/*hist_est_percent*/,
                                                        NULL/*hist_block_sample*/,
-                                                       stat_param))) {
-          } else if (OB_FAIL(running_monitor.add_table_info(stat_param))) {
+                                                       stat_param); }))) {
+          } else if (OB_FAIL(options_call(SchemaOptionsDiagnostic::MONITOR_SETUP, [&]() { return running_monitor.add_table_info(stat_param); }))) {
           } else if (stat_param.force_ &&
-                    OB_FAIL(ObDbmsStatsLockUnlock::fill_stat_locked(ctx, stat_param))) {
+                    OB_FAIL(options_call(SchemaOptionsDiagnostic::STAT_LOCK, [&]() { return ObDbmsStatsLockUnlock::fill_stat_locked(ctx, stat_param); }))) {
           } else if (!stat_param.force_ &&
-                    OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, stat_param))) {
+                    OB_FAIL(options_call(SchemaOptionsDiagnostic::STAT_LOCK, [&]() { return ObDbmsStatsLockUnlock::check_stat_locked(ctx, stat_param); }))) {
             if (OB_ERR_DBMS_STATS_PL == ret) {
               // all table/partition locked, just skip
               ret = OB_SUCCESS;
@@ -343,6 +477,7 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
     enter_phase(CLEANUP_SCOPE);
     }
   }
+  if (options_diagnostic.has_value()) { options_diagnostic->stop(); }
   const int64_t diagnostic_end_us = ObTimeUtility::current_time();
   const int64_t final_delta_us = diagnostic_end_us - phase_start_us;
   clock_regressed = clock_regressed || final_delta_us < 0;
@@ -367,6 +502,7 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
            K(post_gather_us), K(cleanup_scope_us), K(other_us), K(diagnostic_schema_id),
            K(diagnostic_table_count), K(table_attempts), K(table_calls), K(accounting_error_us),
            K(clock_regressed));
+  if (options_diagnostic.has_value()) { options_diagnostic->emit(diagnostic_schema_id, ret, table_attempts); }
   return ret;
 }
 
