@@ -10,6 +10,7 @@ arch=arm64
 repo=https://mirrors.oceanbase.com/oceanbase/development-kit/darwin/15/arm64
 
 [deps]
+gtest-1.14.0-bin-macos-arm64-min13-20261106-75e97b8357c0.tar.gz url=https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-macos-arm64-min13-20261106-75e97b8357c0.tar.gz sha256=37fb6914d3abe683ab17b5802523b14eedabff19619d4ba8f09916732e2d9b23
 devdeps-abseil-cpp-20211102.0-20251205.tar.gz
 devdeps-boost-1.74.0-20251205.tar.gz
 devdeps-libcurl-8.12.1-20251210.tar.gz

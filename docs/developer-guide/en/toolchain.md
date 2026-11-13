@@ -31,6 +31,26 @@ The standard Rust test harness requires unwinding. This supported rules_rust set
 
 The build script downloads locked Cargo dependencies through the RsProxy sparse registry, overriding the user's crates.io source selection for this step. Downloads reuse the existing Cargo cache (`CARGO_HOME`, or `~/.cargo` by default).
 
+### GitHub-hosted dependencies
+
+The gtest 1.14.0 archives are pinned by SHA-256 in the dependency profiles. GitHub downloads use `https://gh-proxy.com/` by default. Set `SEEKDB_GITHUB_PROXY_PREFIX` to another URL prefix, or set it to an empty value to download directly from GitHub. The prefix applies only to `https://github.com/` URLs.
+
+Downloaded archives are cached under `~/.cache/seekdb/downloads` by default. Set `SEEKDB_DEPS_DOWNLOAD_CACHE_DIR` to choose another path. This archive cache is separate from `DEP_CACHE_DIR`, which stores complete, unpacked dependency profiles.
+
+For example, on Linux or macOS:
+
+```bash
+SEEKDB_DEPS_DOWNLOAD_CACHE_DIR=/mnt/cache/seekdb SEEKDB_GITHUB_PROXY_PREFIX=https://gh-proxy.com/ ./build.py init
+```
+
+In PowerShell:
+
+```powershell
+$env:SEEKDB_DEPS_DOWNLOAD_CACHE_DIR = 'D:\cache\seekdb'
+$env:SEEKDB_GITHUB_PROXY_PREFIX = 'https://gh-proxy.com/'
+python build.py init
+```
+
 ## Host detection and supported architectures
 
 The current dependency initialization script recognizes the following host families. Recognition means that a dependency profile can be selected; it does not by itself guarantee that every generated package is certified for production on that host.
@@ -76,7 +96,7 @@ sudo zypper install git wget curl rpm cpio make glibc-devel binutils m4 python3
 ## macOS host packages
 
 ```bash
-brew install git pkg-config openssl@3 ncurses googletest
+brew install git pkg-config openssl@3 ncurses
 brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
