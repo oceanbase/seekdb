@@ -26,5 +26,6 @@
       }
     }
   },
-  "android_ndk": "27.3.13750724"
+  "android_ndk": "27.3.13750724",
+  "ios_minimum_os": "18.0"
 }
