@@ -2134,6 +2134,10 @@ int ObVectorIndexUtil::get_vector_index_tid(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
   } else {
+    // An ivf rebuild exposes both the old and the new domain index through
+    // simple_index_infos. Keep the version across the whole scan so the newest
+    // generation wins; a per-table variable always accepts its first column.
+    int64_t last_ivf_schema_version = OB_INVALID_ID;
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
       if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
@@ -2153,7 +2157,6 @@ int ObVectorIndexUtil::get_vector_index_tid(
       } else if (is_local_vec_ivf_index(index_type)) {
         // when rebuild ivf index, simple_index_infos inclue both new/old index info, we should know by schema version
         // so do not use tid == OB_INVALID_ID as a condition to stop the for loop
-        int64_t last_shcema_version = OB_INVALID_ID;
         bool has_same_col_id = false;
         for (int64_t j = 0; OB_SUCC(ret) && j < index_table_schema->get_column_count(); j++) {
           const ObColumnSchemaV2 *col_schema = nullptr;
@@ -2169,9 +2172,10 @@ int ObVectorIndexUtil::get_vector_index_tid(
             // only need vec_vector column, here skip other column
           } else if (OB_FAIL(has_same_cascaded_col_id(data_table_schema, *col_schema, col_id, has_same_col_id))) {
           } else if (has_same_col_id &&
-                    (last_shcema_version == OB_INVALID_ID ||
-                      index_table_schema->get_schema_version() > last_shcema_version)) {
+                    (last_ivf_schema_version == OB_INVALID_ID ||
+                      index_table_schema->get_schema_version() > last_ivf_schema_version)) {
             tid = simple_index_infos.at(i).table_id_;
+            last_ivf_schema_version = index_table_schema->get_schema_version();
           }
         }
       } else { // delta buffer, index id, index snapshot, we should check cascaded_column by vec_vector col
@@ -2460,6 +2464,209 @@ int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_hnsw(
     } else if (inc_tid == OB_INVALID_ID || vbitmap_tid == OB_INVALID_ID || snapshot_tid == OB_INVALID_ID || (is_hybrid && emdedded_tid == OB_INVALID_ID)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
+    }
+  }
+
+  return ret;
+}
+
+static bool is_ivf_centroid_index_type(
+    const ObVectorIndexAlgorithmType type,
+    const ObIndexType index_type)
+{
+  return (ObVectorIndexAlgorithmType::VIAT_IVF_FLAT == type
+          && INDEX_TYPE_VEC_IVFFLAT_CENTROID_LOCAL == index_type)
+      || (ObVectorIndexAlgorithmType::VIAT_IVF_SQ8 == type
+          && INDEX_TYPE_VEC_IVFSQ8_CENTROID_LOCAL == index_type)
+      || (ObVectorIndexAlgorithmType::VIAT_IVF_PQ == type
+          && INDEX_TYPE_VEC_IVFPQ_CENTROID_LOCAL == index_type);
+}
+
+static bool is_ivf_aux_index_type(
+    const ObVectorIndexAlgorithmType type,
+    const ObIndexType index_type)
+{
+  bool is_aux = false;
+  if (ObVectorIndexAlgorithmType::VIAT_IVF_FLAT == type) {
+    is_aux = INDEX_TYPE_VEC_IVFFLAT_ROWKEY_CID_LOCAL == index_type
+          || INDEX_TYPE_VEC_IVFFLAT_CID_VECTOR_LOCAL == index_type;
+  } else if (ObVectorIndexAlgorithmType::VIAT_IVF_SQ8 == type) {
+    is_aux = INDEX_TYPE_VEC_IVFSQ8_ROWKEY_CID_LOCAL == index_type
+          || INDEX_TYPE_VEC_IVFSQ8_CID_VECTOR_LOCAL == index_type
+          || INDEX_TYPE_VEC_IVFSQ8_META_LOCAL == index_type;
+  } else if (ObVectorIndexAlgorithmType::VIAT_IVF_PQ == type) {
+    is_aux = INDEX_TYPE_VEC_IVFPQ_ROWKEY_CID_LOCAL == index_type
+          || INDEX_TYPE_VEC_IVFPQ_CODE_LOCAL == index_type
+          || INDEX_TYPE_VEC_IVFPQ_PQ_CENTROID_LOCAL == index_type;
+  }
+  return is_aux;
+}
+
+// Get the newest complete generation of ivf aux tables for a vector column.
+// A generation is a set of aux tables sharing the same index prefix, so the
+// centroid table decides which generation is used and the other aux tables
+// must come from that same prefix. Unreadable tables (e.g. the index is
+// still being built or has just been dropped) are skipped, and an older
+// generation is tried when the newest one is incomplete.
+int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_ivf(
+    share::schema::ObSchemaGetterGuard *schema_guard,
+    const ObTableSchema &data_table_schema,
+    const int64_t col_id,
+    const ObVectorIndexAlgorithmType type,
+    uint64_t &centroid_tid,
+    uint64_t &cid_rowkey_tid,
+    uint64_t &rowkey_cid_tid,
+    uint64_t &extra_tid)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
+
+  centroid_tid = OB_INVALID_ID;
+  cid_rowkey_tid = OB_INVALID_ID;
+  rowkey_cid_tid = OB_INVALID_ID;
+  extra_tid = OB_INVALID_ID;
+
+  ObVecTidCandidateMaxCompare cmp;
+  ObVecTidMaxHeap centroid_tid_heap(cmp);
+
+  if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(schema_guard));
+  } else if (ObVectorIndexAlgorithmType::VIAT_IVF_FLAT != type
+             && ObVectorIndexAlgorithmType::VIAT_IVF_SQ8 != type
+             && ObVectorIndexAlgorithmType::VIAT_IVF_PQ != type) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid ivf index type", K(ret), K(type));
+  } else if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
+    LOG_WARN("fail to get simple index infos", K(ret));
+  } else {
+    // 1. collect readable centroid tables of the column, newest first
+    for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
+      const ObTableSchema *index_table_schema = nullptr;
+      if (OB_FAIL(schema_guard->get_table_schema(simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index table schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
+      } else if (OB_ISNULL(index_table_schema)) {
+        ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
+      } else if (!is_ivf_centroid_index_type(type, index_table_schema->get_index_type())) {
+        // skip index tables of other types
+      } else if (!index_table_schema->can_read_index() || !index_table_schema->is_index_visible()) {
+        LOG_DEBUG("[VEC_INDEX][IVF_PLAN] skip unavaliable index table",
+                  K(index_table_schema->get_schema_version()), K(simple_index_infos.at(i).table_id_));
+      } else {
+        bool has_same_col_id = false;
+        for (int64_t j = 0; OB_SUCC(ret) && j < index_table_schema->get_column_count(); ++j) {
+          const ObColumnSchemaV2 *col_schema = nullptr;
+          if (OB_ISNULL(col_schema = index_table_schema->get_column_schema_by_idx(j))) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected col schema, is nullptr", K(ret), K(j), KPC(index_table_schema));
+          } else if (!col_schema->is_vec_ivf_center_id_column()) {
+            // only need vec_vector column, here skip other column
+          } else if (OB_FAIL(has_same_cascaded_col_id(data_table_schema, *col_schema, col_id, has_same_col_id))) {
+            LOG_WARN("fail to check same cascaded col id", K(ret), K(col_id));
+          } else if (has_same_col_id) {
+            ObString index_prefix;
+            if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*index_table_schema, index_prefix))) {
+              LOG_WARN("failed to get index prefix", K(ret));
+            } else {
+              ObVecTidCandidate candidate(index_table_schema->ObMergeSchema::get_schema_version(),
+                                          simple_index_infos.at(i).table_id_,
+                                          index_prefix);
+              if (OB_FAIL(centroid_tid_heap.push(candidate))) {
+                LOG_WARN("failed to push candidate to centroid tid heap", K(ret));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. pick the newest generation whose aux tables are all readable
+    while (OB_SUCC(ret) && !centroid_tid_heap.empty()
+           && (OB_INVALID_ID == centroid_tid
+               || OB_INVALID_ID == cid_rowkey_tid
+               || OB_INVALID_ID == rowkey_cid_tid
+               || (ObVectorIndexAlgorithmType::VIAT_IVF_FLAT != type
+                   && OB_INVALID_ID == extra_tid))) {
+      // The heap only orders its root, so pop it to visit candidates by
+      // descending schema version instead of raw heap-array order.
+      const ObVecTidCandidate candidate = centroid_tid_heap.top();
+      ObString current_index_prefix = candidate.index_prefix_;
+      centroid_tid = candidate.inc_tid_;
+      cid_rowkey_tid = OB_INVALID_ID;
+      rowkey_cid_tid = OB_INVALID_ID;
+      extra_tid = OB_INVALID_ID;
+
+      for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
+        const ObTableSchema *index_table_schema = nullptr;
+        if (OB_FAIL(schema_guard->get_table_schema(simple_index_infos.at(i).table_id_, index_table_schema))) {
+          LOG_WARN("fail to get index table schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
+        } else if (OB_ISNULL(index_table_schema)) {
+          ret = OB_TABLE_NOT_EXIST;
+          LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
+        } else if (!is_ivf_aux_index_type(type, index_table_schema->get_index_type())) {
+          // skip index tables that do not belong to this ivf generation
+        } else if (!index_table_schema->can_read_index() || !index_table_schema->is_index_visible()) {
+          LOG_DEBUG("[VEC_INDEX][IVF_PLAN] skip unavaliable index table",
+                    K(index_table_schema->get_schema_version()), K(simple_index_infos.at(i).table_id_));
+        } else {
+          ObString index_prefix;
+          if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*index_table_schema, index_prefix))) {
+            LOG_WARN("failed to get index prefix", K(ret));
+          } else if (index_prefix != current_index_prefix) {
+            // the aux table belongs to another generation
+          } else if (ObVectorIndexAlgorithmType::VIAT_IVF_PQ == type
+                     && INDEX_TYPE_VEC_IVFPQ_PQ_CENTROID_LOCAL == index_table_schema->get_index_type()) {
+            // column ids of the pq centroid table are not persisted
+            extra_tid = simple_index_infos.at(i).table_id_;
+          } else if (ObVectorIndexAlgorithmType::VIAT_IVF_SQ8 == type
+                     && INDEX_TYPE_VEC_IVFSQ8_META_LOCAL == index_table_schema->get_index_type()) {
+            // column ids of the sq8 meta table are not persisted
+            extra_tid = simple_index_infos.at(i).table_id_;
+          } else {
+            bool has_same_col_id = false;
+            for (int64_t j = 0; OB_SUCC(ret) && j < index_table_schema->get_column_count(); ++j) {
+              const ObColumnSchemaV2 *col_schema = nullptr;
+              if (OB_ISNULL(col_schema = index_table_schema->get_column_schema_by_idx(j))) {
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("unexpected col schema, is nullptr", K(ret), K(j), KPC(index_table_schema));
+              } else if (!col_schema->is_vec_ivf_center_id_column()) {
+                // only need vec_vector column, here skip other column
+              } else if (OB_FAIL(has_same_cascaded_col_id(data_table_schema, *col_schema, col_id, has_same_col_id))) {
+                LOG_WARN("fail to check same cascaded col id", K(ret), K(col_id));
+              } else if (has_same_col_id) {
+                if (INDEX_TYPE_VEC_IVFFLAT_ROWKEY_CID_LOCAL == index_table_schema->get_index_type()
+                    || INDEX_TYPE_VEC_IVFSQ8_ROWKEY_CID_LOCAL == index_table_schema->get_index_type()
+                    || INDEX_TYPE_VEC_IVFPQ_ROWKEY_CID_LOCAL == index_table_schema->get_index_type()) {
+                  rowkey_cid_tid = simple_index_infos.at(i).table_id_;
+                } else if (INDEX_TYPE_VEC_IVFFLAT_CID_VECTOR_LOCAL == index_table_schema->get_index_type()
+                           || INDEX_TYPE_VEC_IVFSQ8_CID_VECTOR_LOCAL == index_table_schema->get_index_type()
+                           || INDEX_TYPE_VEC_IVFPQ_CODE_LOCAL == index_table_schema->get_index_type()) {
+                  cid_rowkey_tid = simple_index_infos.at(i).table_id_;
+                }
+              }
+            }
+          }
+        }
+      }
+      centroid_tid_heap.pop();
+    }
+
+    // The caller treats a non-invalid centroid tid as a usable generation, so
+    // never return a partially filled tuple. If the heap is exhausted before
+    // all aux tables of one generation are found, report no generation at all.
+    if (OB_SUCC(ret)
+        && OB_INVALID_ID != centroid_tid
+        && (OB_INVALID_ID == cid_rowkey_tid
+            || OB_INVALID_ID == rowkey_cid_tid
+            || (ObVectorIndexAlgorithmType::VIAT_IVF_FLAT != type
+                && OB_INVALID_ID == extra_tid))) {
+      LOG_DEBUG("[VEC_INDEX][IVF_PLAN] no complete ivf index generation",
+                K(type), K(centroid_tid), K(cid_rowkey_tid), K(rowkey_cid_tid), K(extra_tid));
+      centroid_tid = OB_INVALID_ID;
+      cid_rowkey_tid = OB_INVALID_ID;
+      rowkey_cid_tid = OB_INVALID_ID;
+      extra_tid = OB_INVALID_ID;
     }
   }
 
@@ -3104,13 +3311,13 @@ int ObVectorIndexUtil::check_index_param(
           }
         } else if (last_variable == "MODEL") {
           if (!new_parser_name.empty()) {
-            ObAIFuncExprInfo *ai_func_info;
+            ObAIFuncExprInfo *ai_func_info = nullptr;
             if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, new_parser_name, ai_func_info))) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");
+              LOG_WARN("failed to get ai func info for vector index model", K(ret), K(new_parser_name));
+            } else {
+              endpoint_is_set = true;
+              endpoint_name = new_parser_name;
             }
-            endpoint_is_set = true;
-            endpoint_name = new_parser_name;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");

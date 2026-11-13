@@ -96,7 +96,8 @@ int DASRefCountContext::acquire_task_execution_resource(int64_t timeout_ts)
 
 bool DasRefKey::operator==(const DasRefKey &other) const
 {
-  return (tablet_access_ == other.tablet_access_ && op_type_ == other.op_type_);
+  return (tablet_access_ == other.tablet_access_ && op_type_ == other.op_type_
+          && vec_datum_kind_ == other.vec_datum_kind_);
 }
 
 uint64_t DasRefKey::hash() const
@@ -104,6 +105,7 @@ uint64_t DasRefKey::hash() const
   uint64_t hash = 0;
   hash = murmurhash(&tablet_access_, sizeof(tablet_access_), hash);
   hash = murmurhash(&op_type_, sizeof(op_type_), hash);
+  hash = murmurhash(&vec_datum_kind_, sizeof(vec_datum_kind_), hash);
   return hash;
 }
 
@@ -132,13 +134,14 @@ DASOpResultIter ObDASRef::begin_result_iter()
   return DASOpResultIter(batched_tasks_.begin());
 }
 
-ObIDASTaskOp* ObDASRef::find_das_task(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type)
+ObIDASTaskOp* ObDASRef::find_das_task(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type,
+                                    DasVecDatumKind vec_datum_kind)
 {
   int ret = OB_SUCCESS;
   ObIDASTaskOp *das_task = nullptr;
   lookup_cnt_++;
   if (task_map_.created()) {
-    DasRefKey key(tablet_access, op_type);
+    DasRefKey key(tablet_access, op_type, vec_datum_kind);
     if (OB_FAIL(task_map_.get_refactored(key, das_task))) {
       if (OB_HASH_NOT_EXIST != ret) {
       }
@@ -155,6 +158,7 @@ ObIDASTaskOp* ObDASRef::find_das_task(const DASRuntimeTabletAccess *tablet_acces
       if (tmp_task != nullptr &&
           tmp_task->get_tablet_access() == tablet_access &&
           tmp_task->get_type() == op_type &&
+          tmp_task->get_vec_datum_kind() == vec_datum_kind &&
           !(tmp_task->is_write_buff_full()) &&
           tmp_task->get_agg_task()->start_status_ == DAS_AGG_TASK_UNSTART) {
         das_task = tmp_task;
@@ -185,7 +189,7 @@ int ObDASRef::create_task_map()
       } else if (task->is_write_buff_full() ||
           task->get_agg_task()->start_status_ != DAS_AGG_TASK_UNSTART) {
       } else {
-        DasRefKey key(task->get_tablet_access(), task->get_type());
+        DasRefKey key(task->get_tablet_access(), task->get_type(), task->get_vec_datum_kind());
         if (OB_FAIL(task_map_.set_refactored(key, task))) {
         }
       }
@@ -202,7 +206,7 @@ int ObDASRef::add_batched_task(ObIDASTaskOp *das_task)
   int ret = OB_SUCCESS;
   if (OB_FAIL(batched_tasks_.store_obj(das_task))) {
   } else if (task_map_.created()) {
-    DasRefKey key(das_task->get_tablet_access(), das_task->get_type());
+    DasRefKey key(das_task->get_tablet_access(), das_task->get_type(), das_task->get_vec_datum_kind());
     if (OB_FAIL(task_map_.set_refactored(key, das_task))) {
     }
   }
@@ -478,7 +482,8 @@ int ObDASRef::close_all_task()
 
 int ObDASRef::create_das_task(const DASRuntimeTabletAccess *tablet_access,
                               ObDASOpType op_type,
-                              ObIDASTaskOp *&task_op)
+                              ObIDASTaskOp *&task_op,
+                              DasVecDatumKind vec_datum_kind)
 {
   int ret = OB_SUCCESS;
   ObDASTaskFactory &das_factory = get_das_factory();
@@ -495,6 +500,7 @@ int ObDASRef::create_das_task(const DASRuntimeTabletAccess *tablet_access,
     task_op->in_stmt_retry_ = session->get_is_in_retry();
     task_op->set_tablet_id(tablet_access->tablet_id_);
     task_op->set_tablet_access(tablet_access);
+    task_op->set_vec_datum_kind(vec_datum_kind);
     if (is_snapshot_opt_enabled() && OB_FAIL(task_op->init_das_snapshot_opt_info(session->get_tx_isolation()))) {
     } else if (OB_FAIL(add_aggregated_task(task_op, op_type))) {
     }

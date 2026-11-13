@@ -414,10 +414,12 @@ int ObConflictChecker::build_base_conflict_map(
 // Check if the current primary key conflicts
 int ObConflictChecker::check_duplicate_rowkey(const ObChunkDatumStore::StoredRow *replace_row,
                                               ObIArray<ObConflictValue> &constraint_values,
-                                              bool is_insert_up)
+                                              bool is_insert_up,
+                                              ObNewRowSource &conflict_row_source)
 {
   int ret = OB_SUCCESS;
   bool is_break = false;
+  conflict_row_source = ObNewRowSource::FROM_SCAN;
   if (OB_FAIL(to_expr(replace_row))) {
   } else {
     LOG_DEBUG("check one row whether duplicated in hash_map", K(ret),
@@ -441,6 +443,11 @@ int ObConflictChecker::check_duplicate_rowkey(const ObChunkDatumStore::StoredRow
     // todo @kaizhan.dkz Here needs to check whether update_incremental_row_check is needed,
     // insert_up is needed, replace is not used for now
     if (OB_SUCC(ret) && constraint_value.current_datum_row_ != NULL) {
+      if (constraint_values.empty()) {
+        // All constraint keys point at the same stored row, so the first hit
+        // carries the provenance of the conflicting row.
+        conflict_row_source = constraint_value.new_row_source_;
+      }
       if (OB_FAIL(add_var_to_array_no_dup(constraint_values, constraint_value))) {
       } else if (is_insert_up) {
         //is_insert_up = true:
@@ -546,11 +553,12 @@ int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_ro
 }
 
 int ObConflictChecker::update_row(const ObChunkDatumStore::StoredRow *new_row,
-                                  const ObChunkDatumStore::StoredRow *old_row)
+                                  const ObChunkDatumStore::StoredRow *old_row,
+                                  ObNewRowSource from)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(delete_old_row(old_row, ObNewRowSource::FROM_INSERT))) {
-  } else if (OB_FAIL(insert_new_row(new_row, ObNewRowSource::FROM_UPDATE))) {
+  } else if (OB_FAIL(insert_new_row(new_row, from))) {
   }
   return ret;
 }

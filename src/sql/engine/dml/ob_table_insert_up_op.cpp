@@ -147,7 +147,8 @@ int ObTableInsertUpOp::inner_open()
   } else if (OB_FAIL(insert_up_row_store_.init(UINT64_MAX,
                                                ObCtxIds::DEFAULT_CTX_ID,
                                                "insert_up_row_store",
-                                               false/*enable_dump*/))) {
+                                               false/*enable_dump*/,
+                                               sizeof(int64_t)/*input row number*/))) {
   } else if (OB_FAIL(inner_open_with_das())) {
   } else {
     const ObInsertUpCtDef *insert_up_ctdef = MY_SPEC.insert_up_ctdefs_.at(0);
@@ -352,12 +353,17 @@ int ObTableInsertUpOp::do_insert_up_cache()
     int64_t update_rows = 0;
     int64_t found_rows = 0;
     constraint_values.reuse();
+    ObNewRowSource conflict_row_source = ObNewRowSource::FROM_SCAN;
+    if (OB_NOT_NULL(insert_row)) {
+      upd_rtdef.cur_row_num_ = insert_row->extra_payload<int64_t>();
+    }
     if (OB_ISNULL(insert_row)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(insert_row->to_expr(MY_SPEC.all_saved_exprs_, eval_ctx_))) {
     } else if (OB_FAIL(conflict_checker_.check_duplicate_rowkey(insert_row,
                                                                 constraint_values,
-                                                                true))) {
+                                                                true,
+                                                                conflict_row_source))) {
     } else if (constraint_values.empty()) {
       // do insert
       ObChunkDatumStore::StoredRow *insert_new_row = NULL;
@@ -419,7 +425,13 @@ int ObTableInsertUpOp::do_insert_up_cache()
         update_rows++;
         modify_row.old_row_ = const_cast<ObChunkDatumStore::StoredRow *>(upd_old_row);
         modify_row.new_row_ = upd_new_row;
-        if (OB_FAIL(conflict_checker_.update_row(upd_new_row, upd_old_row))) {
+        // A row first inserted in this cache still contains statement values,
+        // including text for semantic indexes, rather than fetched vectors.
+        // Preserve its provenance across further conflicts and key moves.
+        const ObNewRowSource row_source =
+            conflict_row_source == ObNewRowSource::FROM_INSERT
+                ? ObNewRowSource::FROM_INSERT : ObNewRowSource::FROM_UPDATE;
+        if (OB_FAIL(conflict_checker_.update_row(upd_new_row, upd_old_row, row_source))) {
         } else if (need_after_row_process(upd_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
         }
       } else {
@@ -912,6 +924,7 @@ int ObTableInsertUpOp::load_batch_insert_up_rows(bool &is_iter_end,
 
   while (OB_SUCC(ret) && !reach_mem_limit) {
     bool is_skipped = false;
+    ObChunkDatumStore::StoredRow *stored_row = nullptr;
     if (OB_FAIL(get_next_row_from_child())) {
       if (OB_ITER_END != ret) {
       } else {
@@ -920,8 +933,14 @@ int ObTableInsertUpOp::load_batch_insert_up_rows(bool &is_iter_end,
     } else if (OB_FAIL(try_insert_row(is_skipped))) {
     } else if (is_first_insert_row && OB_FAIL(record_session_last_insert_id())) {
     } else if (!is_skipped &&
-          OB_FAIL(insert_up_row_store_.add_row(MY_SPEC.all_saved_exprs_, &eval_ctx_))) {
+          OB_FAIL(insert_up_row_store_.add_row(MY_SPEC.all_saved_exprs_, &eval_ctx_, &stored_row))) {
+    } else if (!is_skipped && OB_ISNULL(stored_row)) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
+      if (!is_skipped) {
+        // Preserve the original ordinal across batching and skipped input rows.
+        stored_row->extra_payload<int64_t>() = insert_up_rtdefs_.at(0).ins_rtdef_.cur_row_num_;
+      }
       insert_rows++;
       is_first_insert_row = false;
       row_count++;

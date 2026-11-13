@@ -88,6 +88,7 @@ public:
   ObWarningBuffer() : item_(ARRAY_BLOCK_SIZE),
                       append_idx_(0),
                       total_warning_count_(0),
+                      warning_reset_generation_(0),
                       error_ret_(OB_SUCCESS)
   {
     item_.set_label(ObModIds::OB_SQL_SESSION_WARNING_BUFFER);
@@ -101,6 +102,9 @@ public:
   static inline bool is_warn_log_on() {return is_log_on_;}
 
   inline uint32_t get_total_warning_count(void) const {return total_warning_count_;}
+  // An observer's count is valid only until this buffer resets. Assignment also
+  // calls reset(), so the generation belongs to this buffer, not its contents.
+  inline uint64_t get_warning_reset_generation() const {return warning_reset_generation_;}
   inline uint32_t get_buffer_size(void) const {return MAX_BUFFER_SIZE;}
   inline uint32_t get_readable_warning_count(void) const;
   inline uint32_t get_max_warn_len(void) const {return WarningItem::STR_LEN;}
@@ -143,6 +147,7 @@ private:
   WarningItem err_;
   uint32_t append_idx_;
   uint32_t total_warning_count_;
+  uint64_t warning_reset_generation_;
   // it willl alloc memory when appending, so use error_ret_ to keep status
   int error_ret_;
   static bool is_log_on_;
@@ -150,12 +155,14 @@ private:
 
 inline void ObWarningBuffer::reset_warning()
 {
+  ++warning_reset_generation_;
   append_idx_ = 0;
   total_warning_count_ = 0;
 }
 
 inline void ObWarningBuffer::reset()
 {
+  ++warning_reset_generation_;
   append_idx_ = 0;
   total_warning_count_ = 0;
   err_.reset();
@@ -203,6 +210,12 @@ inline void ObWarningBuffer::append_msg(UserMsgLevel msg_level, const char *str,
       item->set_log_level(msg_level);
       if (sql_state != nullptr) {
         item->set_sql_state(sql_state);
+      } else {
+        // The slot may be a reused ring entry. A warning appended without an explicit
+        // sqlstate must not inherit the previous occupant's state, or a later class
+        // match would treat it as that class. Clear only the state; the message buffer
+        // may alias `str`, so the item is not reset wholesale.
+        item->set_sql_state("");
       }
       append_idx_ = (append_idx_ + 1) % MAX_BUFFER_SIZE;
       total_warning_count_++;
