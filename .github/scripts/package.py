@@ -91,7 +91,9 @@ def environment():
     arch = os.environ["PACKAGE_ARCH"]
     if target == "linux":
         profiles = ["oceanbase.%s.%s.deps" % (os.environ["LINUX_PROFILE"], arch)]
-    elif target in ("macos", "ios"):
+    elif target == "ios":
+        profiles = ["oceanbase.ios-host.arm64.deps"]
+    elif target == "macos":
         profiles = ["oceanbase.macos13.arm64.deps"]
     elif target == "windows":
         profiles = ["oceanbase.windows.x86_64.deps"]
@@ -152,6 +154,17 @@ def initialize():
         if os.environ["PACKAGE_OS"] == "ios":
             packages.append("gettext")
         run(["brew", "install", *packages])
+    if os.environ["PACKAGE_OS"] == "ios":
+        sys.path.insert(0, str(ROOT / "deps/init"))
+        import prepare
+        simulator = os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator"
+        prepare.prepare_rust("aarch64-apple-ios-sim" if simulator else "aarch64-apple-ios")
+        prepare.install(ROOT / "deps/init/oceanbase.ios-host.arm64.deps", ROOT / "deps/3rd")
+        # Build the base dependencies here; Bazel builds source_sdk with the
+        # engine below, using the CI downloader configuration and parallelism.
+        run([sys.executable, "deps/init/ios/build.py", "--reuse", "--jobs", build_jobs(),
+             "--deployment-target", CONFIG["ios_minimum_os"], *(["--simulator"] if simulator else [])])
+        return
     arguments = [sys.executable, "build.py", "init"]
     if os.environ["PACKAGE_OS"] == "linux":
         arguments += ["--linux-profile", os.environ["LINUX_PROFILE"]]
@@ -168,16 +181,6 @@ def initialize():
             stream.write("ANDROID_NDK_HOME=" + ndk.as_posix() + "\n")
         arguments.append("--android")
     run(arguments)
-    if os.environ["PACKAGE_OS"] == "ios":
-        simulator = os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator"
-        environment = dict(os.environ, RUSTUP_AUTO_INSTALL="1")
-        environment.pop("RUSTUP_TOOLCHAIN", None)
-        run(["rustup", "target", "add", "aarch64-apple-ios-sim" if simulator else "aarch64-apple-ios"],
-            env=environment)
-        # Build the base dependencies here; Bazel builds source_sdk with the
-        # engine below, using the CI downloader configuration and parallelism.
-        run([sys.executable, "deps/init/ios/build.py", "--reuse", "--jobs", build_jobs(),
-             "--deployment-target", CONFIG["ios_minimum_os"], *(["--simulator"] if simulator else [])])
 
 
 def bazel_arguments():
