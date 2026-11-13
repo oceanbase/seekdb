@@ -78,9 +78,9 @@ int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;
   int64_t DEFAULT_TIMEOUT_US = config::rpc_timeout(); // default is 2s
-#ifdef __APPLE__
-  // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
-  // Increase the default timeout to 10s to avoid bootstrap failure.
+#if defined(__APPLE__) || defined(_WIN32)
+  // Allow extra time for internal SQL on platforms with slower startup I/O.
+  // Preserve configured timeouts that are already greater than 10 seconds.
   DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL);
 #endif
 
