@@ -132,6 +132,23 @@ public:
              K(monotonic_clock_steady), K(wall_span_us), K(wall_mapping_valid), K(wall_quantization_us),
              K(accounting_valid), K(accounting_error_us), K(options_mono_us), K(options_us),
              K(options_calls), K(options_first_ret), K(observed_table_attempts));
+#ifdef _WIN32
+    {
+      seek1381::StdioErrorScope preserve_errors;
+      seek1381::StdioFrame frame(seek1381::current_stdio_identity(), seek1381::StdioFrame::OPTIONS);
+      frame.word(options_schema_version); frame.word(options_phase_count); frame.word(diagnostic_epoch);
+      frame.word(diagnostic_start_us); frame.word(diagnostic_end_us); frame.word(diagnostic_schema_id);
+      frame.word(same_request); frame.word(same_thread); frame.word(same_schema); frame.word(ret);
+      frame.word(total_measured_us); frame.word(monotonic_clock_steady); frame.word(wall_span_us);
+      frame.word(wall_mapping_valid); frame.word(wall_quantization_us); frame.word(accounting_valid);
+      frame.word(accounting_error_us); frame.word(observed_table_attempts);
+      for (int i = 0; i < 4; ++i) { frame.word(mono_us[i]); }
+      for (int i = 0; i < PHASE_COUNT; ++i) { frame.word(phase_us_[i]); }
+      for (int i = 0; i < PHASE_COUNT; ++i) { frame.word(phase_calls_[i]); }
+      for (int i = 0; i < PHASE_COUNT; ++i) { frame.word(phase_first_ret_[i]); }
+      frame.write();
+    }
+#endif
   }
 
 private:
@@ -502,6 +519,17 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
            K(post_gather_us), K(cleanup_scope_us), K(other_us), K(diagnostic_schema_id),
            K(diagnostic_table_count), K(table_attempts), K(table_calls), K(accounting_error_us),
            K(clock_regressed));
+#ifdef _WIN32
+  if (options_epoch != 0) {
+    seek1381::StdioErrorScope preserve_errors;
+    seek1381::StdioFrame frame(seek1381::current_stdio_identity(), seek1381::StdioFrame::SCHEMA);
+    frame.word(ret); frame.word(diagnostic_start_us); frame.word(diagnostic_end_us); frame.word(total_us);
+    frame.word(preflight_us); frame.word(enumerate_us); frame.word(options_us); frame.word(table_dispatch_us);
+    frame.word(post_gather_us); frame.word(cleanup_scope_us); frame.word(other_us); frame.word(diagnostic_schema_id);
+    frame.word(diagnostic_table_count); frame.word(table_attempts); frame.word(table_calls);
+    frame.word(accounting_error_us); frame.word(clock_regressed); frame.write();
+  }
+#endif
   if (options_diagnostic.has_value()) { options_diagnostic->emit(diagnostic_schema_id, ret, table_attempts); }
   return ret;
 }

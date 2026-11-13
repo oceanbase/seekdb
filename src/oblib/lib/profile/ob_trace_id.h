@@ -307,6 +307,46 @@ struct CpuSample {
   uint64_t kernel = 0;
   bool valid = false;
 };
+#ifdef _WIN32
+class StdioErrorScope {
+public:
+  StdioErrorScope();
+  ~StdioErrorScope();
+  StdioErrorScope(const StdioErrorScope &) = delete;
+  StdioErrorScope &operator=(const StdioErrorScope &) = delete;
+private:
+  uint32_t last_error_;
+  int errno_;
+};
+struct StdioIdentity {
+  ObCurTraceId::TraceId trace;
+  uint64_t epoch = 0, pid = 0, process_birth = 0, handle_type = 0;
+  int64_t start_us = 0;
+  CpuSample thread;
+  uintptr_t handle = 0;
+  bool process_known = false, context_valid = false;
+};
+StdioIdentity sample_stdio_identity(const ObCurTraceId::TraceId &trace, uint64_t epoch,
+                                  int64_t start_us, const CpuSample &expected, bool context_valid);
+StdioIdentity current_stdio_identity();
+class StdioFrame {
+public:
+  enum Kind { SELECT_FIRST = 1, SCHEMA = 2, OPTIONS = 3, REQUEST = 4, DETAIL = 5 };
+  StdioFrame(const StdioIdentity &identity, Kind kind, uint64_t chunk = 0,
+             uint64_t chunks = 1, uint64_t first_slot = 0, uint64_t slots = 0);
+  StdioFrame(const StdioFrame &) = delete;
+  StdioFrame &operator=(const StdioFrame &) = delete;
+  void word(uint64_t value);
+  void text(const char *value);
+  void write();
+private:
+  void append(char value);
+  char bytes_[4096];
+  int64_t size_ = 0;
+  bool valid_ = true, written_ = false;
+  uintptr_t handle_ = 0;
+};
+#endif
 struct WriteTotals {
   int64_t calls = 0;
   int64_t query_calls = 0;

@@ -35,6 +35,7 @@
 #include "lib/profile/ob_trace_id.h"
 #ifdef _WIN32
 #include <windows.h>
+#include <cerrno>
 #endif
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
@@ -203,6 +204,93 @@ void emit_totals(int64_t diagnostic_start_us, int64_t family_code, const WriteTo
            K(other_kernel_100ns), K(query_kernel_100ns), K(close_kernel_100ns), K(cleanup_kernel_100ns));
 }
 }
+#ifdef _WIN32
+StdioErrorScope::StdioErrorScope() : last_error_(GetLastError()), errno_(errno) {}
+StdioErrorScope::~StdioErrorScope() { errno = errno_; SetLastError(last_error_); }
+
+StdioIdentity sample_stdio_identity(const ObCurTraceId::TraceId &trace, uint64_t epoch,
+                                  int64_t start_us, const CpuSample &expected, bool context_valid)
+{
+  StdioIdentity value;
+  value.trace = trace; value.epoch = epoch; value.start_us = start_us;
+  value.pid = GetCurrentProcessId();
+  FILETIME birth = {}, exit = {}, kernel = {}, user = {};
+  value.process_known = GetProcessTimes(GetCurrentProcess(), &birth, &exit, &kernel, &user) != FALSE;
+  if (value.process_known) {
+    value.process_birth = (uint64_t(birth.dwHighDateTime) << 32) | birth.dwLowDateTime;
+  }
+  value.thread = sample_cpu();
+  value.context_valid = context_valid && trace.is_valid() && epoch != 0 && expected.valid
+      && value.thread.valid && expected.tid == value.thread.tid && expected.birth == value.thread.birth;
+  const HANDLE handle = GetStdHandle(STD_ERROR_HANDLE);
+  value.handle = reinterpret_cast<uintptr_t>(handle);
+  value.handle_type = GetFileType(handle);
+  return value;
+}
+StdioIdentity current_stdio_identity()
+{
+  const RequestState &s = state();
+  return sample_stdio_identity(s.trace, s.epoch, s.diagnostic_start_us, s.cpu_start,
+                               s.valid && identity_matches(s));
+}
+void StdioFrame::append(char value)
+{
+  if (size_ >= static_cast<int64_t>(sizeof(bytes_))) { valid_ = false; }
+  else { bytes_[size_++] = value; }
+}
+void StdioFrame::word(uint64_t value)
+{
+  const char digits[] = "0123456789abcdef";
+  for (int shift = 60; shift >= 0; shift -= 4) { append(digits[(value >> shift) & 15]); }
+}
+void StdioFrame::text(const char *value)
+{
+  uint64_t length = 0;
+  if (value != nullptr) {
+    while (length < 192 && value[length] != '\0') { ++length; }
+    if (length == 192 && value[length] != '\0') { valid_ = false; }
+  }
+  word(length);
+  const char digits[] = "0123456789abcdef";
+  for (uint64_t i = 0; i < length; ++i) {
+    const unsigned char c = static_cast<unsigned char>(value[i]);
+    append(digits[c >> 4]); append(digits[c & 15]);
+  }
+}
+StdioFrame::StdioFrame(const StdioIdentity &id, Kind kind, uint64_t chunk,
+                       uint64_t chunks, uint64_t first_slot, uint64_t slots) : handle_(id.handle)
+{
+  const char prefix[] = "SEEK1381P1 ";
+  for (const char *p = prefix; *p != '\0'; ++p) { append(*p); }
+  word(0); word(kind); word(id.epoch); word(id.start_us);
+  word(id.pid); word(id.process_known); word(id.process_birth);
+  word(id.thread.tid); word(id.thread.valid); word(id.thread.birth); word(id.context_valid);
+  for (int i = 0; i < 4; ++i) { word(id.trace.get()[i]); }
+  word(chunk); word(chunks); word(first_slot); word(slots); word(id.handle_type);
+  append('|');
+}
+void StdioFrame::write()
+{
+  if (written_) { return; }
+  written_ = true;
+  const int64_t final_size = size_ + 22; // '|', checksum, " END\n".
+  if (!valid_ || final_size > static_cast<int64_t>(sizeof(bytes_))) { return; }
+  const char digits[] = "0123456789abcdef";
+  for (int i = 0; i < 16; ++i) { bytes_[11 + i] = digits[(uint64_t(final_size) >> (60 - 4 * i)) & 15]; }
+  uint64_t checksum = UINT64_C(14695981039346656037);
+  for (int64_t i = 0; i < size_; ++i) {
+    checksum = (checksum ^ static_cast<unsigned char>(bytes_[i])) * UINT64_C(1099511628211);
+  }
+  append('|'); word(checksum);
+  append(' '); append('E'); append('N'); append('D'); append('\n');
+  DWORD written = 0;
+  const HANDLE handle = reinterpret_cast<HANDLE>(handle_);
+  if (handle != nullptr && handle != INVALID_HANDLE_VALUE) {
+    // One attempt only. A missing/partial/interleaved frame is UNKNOWN to the reader.
+    (void)WriteFile(handle, bytes_, static_cast<DWORD>(size_), &written, nullptr);
+  }
+}
+#endif
 Request::Request(int64_t diagnostic_start_us, const int &ret)
     : previous_((state().active ? (detail_transition(state().detail.stage), state()) : state())), slot_(reinterpret_cast<uintptr_t>(&state())),
       epoch_(next_epoch()), start_(sample_cpu()), ret_(ret)
@@ -283,6 +371,49 @@ Request::~Request()
              K(shared_writer_errors), K(shared_inflight_start), K(shared_inflight_end));
     LOG_INFO("seek1381 shared logger writer admission", K(diagnostic_start_us), K(shared_counters_valid),
              K(shared_async_calls), K(shared_sync_calls));
+#ifdef _WIN32
+    {
+      StdioErrorScope preserve_errors;
+      const StdioIdentity identity = sample_stdio_identity(completed.trace, completed.epoch,
+          diagnostic_start_us, start_, context_valid);
+      const DetailState &d = completed.detail;
+      const bool detail_valid = d.valid && d.depth == 0;
+      int64_t exclusive_sum_us = 0;
+      bool sum_valid = detail_valid;
+      for (int region = 0; region < DETAIL_REGION_COUNT; ++region) {
+        for (int stage = 0; stage < DETAIL_STAGE_COUNT; ++stage) {
+          sum_valid = d.totals[region][stage].wall_valid
+              && add(exclusive_sum_us, d.totals[region][stage].wall_us) && sum_valid;
+        }
+      }
+      const int64_t accounting_error_us = sum_valid && d.stamp_us >= d.start_us
+          ? d.stamp_us - d.start_us - d.excluded_nested_us - exclusive_sum_us : -1;
+      {
+        StdioFrame frame(identity, StdioFrame::REQUEST);
+        frame.word(result_ret); frame.word(context_valid); frame.word(cpu_valid); frame.word(wall_us);
+        frame.word(start_tid); frame.word(end_tid); frame.word(start_birth); frame.word(end_birth);
+        frame.word(user_cpu_100ns); frame.word(kernel_cpu_100ns);
+        frame.word(nested_writes); frame.word(nested_schemas);
+        frame.word(detail_valid); frame.word(d.transitions); frame.word(d.start_us); frame.word(d.stamp_us);
+        frame.word(sum_valid); frame.word(d.excluded_nested_us); frame.word(exclusive_sum_us);
+        frame.word(accounting_error_us); frame.write();
+      }
+      constexpr int slots = DETAIL_REGION_COUNT * DETAIL_STAGE_COUNT;
+      constexpr int per_chunk = 16, chunks = (slots + per_chunk - 1) / per_chunk;
+      for (int chunk = 0; chunk < chunks; ++chunk) {
+        const int first = chunk * per_chunk, count = slots - first < per_chunk ? slots - first : per_chunk;
+        StdioFrame frame(identity, StdioFrame::DETAIL, chunk, chunks, first, count);
+        for (int slot = first; slot < first + count; ++slot) {
+          const DetailTotals &t = d.totals[slot / DETAIL_STAGE_COUNT][slot % DETAIL_STAGE_COUNT];
+          frame.word(t.calls); frame.word(t.success); frame.word(t.iter_end); frame.word(t.errors);
+          frame.word(t.first_error); frame.word(t.wall_us); frame.word(t.user_100ns); frame.word(t.kernel_100ns);
+          frame.word(t.logger_records); frame.word(t.logger_full_ns); frame.word(t.logger_free_ns);
+          frame.word(t.wall_valid); frame.word(t.cpu_valid);
+        }
+        frame.write();
+      }
+    }
+#endif
   }
   if (owns_slot) {
     (void)logger::diagnostic_enable(logger_start_.enabled);
@@ -2158,6 +2289,25 @@ SelectRequest::~SelectRequest()
       LOG_INFO("seek1381 business select return", K(diagnostic_start_us), K(session_id), K(fingerprint),
                K(sequence), K(source_file), K(source_line), K(source_function), K(observed_ret), K(origin_assignment));
     }
+#ifdef _WIN32
+    if (done.first_nonzero.sequence != 0 || local_ret_at_exit != OB_SUCCESS
+        || (returned_known && returned_ret != OB_SUCCESS)) {
+      StdioErrorScope preserve_errors;
+      const StdioIdentity identity = sample_stdio_identity(done.trace, done.epoch,
+          diagnostic_start_us, done.cpu, context_valid);
+      StdioFrame frame(identity, StdioFrame::SELECT_FIRST);
+      frame.word(session_id); frame.word(fingerprint); frame.word(context_valid);
+      frame.word(returned_known); frame.word(returned_ret); frame.word(local_ret_at_exit);
+      frame.word(kept); frame.word(dropped); frame.word(done.sequence);
+      frame.word(ObTimeUtility::current_time());
+      for (int slot = 0; slot < 2; ++slot) {
+        const SelectState::Event &e = slot == 0 ? done.first_nonzero : done.first_4016;
+        frame.word(e.sequence); frame.word(e.result); frame.word(e.line); frame.word(e.origin);
+        frame.text(e.file); frame.text(e.function);
+      }
+      frame.write();
+    }
+#endif
   }
 }
 }}}
