@@ -548,6 +548,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
+name = "file-io"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "libc",
+ "tokio",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -829,6 +839,7 @@ name = "in-process"
 version = "0.1.0"
 dependencies = [
  "cxx",
+ "file-io",
  "libc",
 ]
 
@@ -868,17 +879,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "json"
-version = "0.1.0"
-dependencies = [
- "cxx",
- "memchr",
- "ryu",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "js-sys"
 version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -890,10 +890,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "json"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "memchr",
+ "ryu",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kv"
 version = "0.1.0"
 dependencies = [
- "windows-sys 0.61.2",
+ "file-io",
 ]
 
 [[package]]
@@ -907,6 +918,12 @@ name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+
+[[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "link-cplusplus"
@@ -928,6 +945,7 @@ name = "local"
 version = "0.1.0"
 dependencies = [
  "cxx",
+ "file-io",
  "kv",
 ]
 
@@ -952,11 +970,11 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cxx",
+ "file-io",
  "libc",
  "log",
  "mio",
  "spdlog-rs",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1030,12 +1048,6 @@ name = "matchit"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
-
-[[package]]
-name = "libm"
-version = "0.2.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "math"
@@ -1604,6 +1616,7 @@ dependencies = [
  "compression",
  "config",
  "crypto",
+ "file-io",
  "http-client",
  "in-process",
  "json",
@@ -1617,6 +1630,7 @@ dependencies = [
  "spatial-covering",
  "sql-nio",
  "standby-rpc",
+ "storage-io",
  "uuid-generator",
  "vector-kernels",
  "xml-parser",
@@ -1804,6 +1818,16 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tonic-prost",
+]
+
+[[package]]
+name = "storage-io"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "file-io",
+ "libc",
+ "tokio",
 ]
 
 [[package]]
@@ -2594,16 +2618,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
 
 [[package]]
-name = "zmij"
-version = "1.0.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-
-[[package]]
 name = "zlib-rs"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
+
+[[package]]
+name = "zmij"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zstd-safe"

@@ -432,58 +432,9 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
 }
 int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
 {
-  int ret = OB_SUCCESS;
-  ObRefreshIOCalibraitonStmt *stmt = nullptr;
-  ObRefreshIOCalibrationParam *param = nullptr;
-  if (OB_UNLIKELY(T_REFRESH_IO_CALIBRATION != parse_tree.type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type is not T_REFRESH_IO_CALIBRATION", "type", get_type_name(parse_tree.type_));
-  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshIOCalibraitonStmt>())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("create ObRefreshIOCalibraitonStmt failed");
-  } else if (FALSE_IT(stmt_ = stmt)) {
-  } else if (OB_UNLIKELY(NULL == parse_tree.children_ || 3 != parse_tree.num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    param = &stmt->get_param();
-  }
-  if (OB_SUCC(ret)) {
-    // parse storage_name from child[0]
-    const ParseNode *storage_name_node = parse_tree.children_[0];
-    if (OB_ISNULL(storage_name_node) || storage_name_node->num_child_ <= 0) {
-      // allow null, do nothing
-    } else if (OB_FAIL(Util::resolve_string(storage_name_node->children_[0], param->storage_name_))) {
-    }
-  }
-  if (OB_SUCC(ret)) {
-    // parse calibration_list from child[1]
-    const ParseNode *calibration_list_node = parse_tree.children_[1];
-    if (OB_ISNULL(calibration_list_node)) {
-      // null means refresh
-      param->only_refresh_ = true;
-    } else if (nullptr == calibration_list_node->children_ || calibration_list_node->num_child_ <= 0) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < calibration_list_node->num_child_; ++i) {
-        common::ObIOBenchResult item;
-        const ParseNode *calibration_info_node = calibration_list_node->children_[i];
-        ObString calibration_string;
-        if (OB_ISNULL(calibration_info_node)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(Util::resolve_string(calibration_info_node, calibration_string))) {
-          if (0 == i && calibration_info_node->str_len_ <= 0) {
-            // empty means reset, do nothing
-            param->only_refresh_ = false;
-            ret = OB_SUCCESS;
-            break;
-          }
-        } else if (OB_FAIL(ObIOCalibration::parse_calibration_string(calibration_string, item))) {
-        } else if (OB_FAIL(param->calibration_list_.push_back(item))) {
-        }
-      }
-    }
-  }
-  return ret;
+  UNUSED(parse_tree);
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, "manual I/O calibration");
+  return OB_NOT_SUPPORTED;
 }
 
 int ObSwitchRoleResolver::resolve(const ParseNode &parse_tree)

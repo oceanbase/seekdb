@@ -1371,7 +1371,6 @@ int ObChunkRowStore::write_file(void *buf, int64_t size)
       } else if (OB_FAIL(data_plane::tmp_file_open(io_.fd_, io_.dir_id_))) {
       } else {
         file_size_ = 0;
-        io_.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
         io_.io_timeout_ms_ = timeout_ms;
       }
     }
@@ -1410,7 +1409,6 @@ int ObChunkRowStore::read_file(void *buf, const int64_t size, const int64_t offs
     OX (ret = OB_ITER_END);
   } else {
     this->set_io(size, static_cast<char *>(buf));
-    io_.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     io_.io_timeout_ms_ = timeout_ms;
     data_plane::ObTmpFileIOHandle handle;
     if (0 == read_size

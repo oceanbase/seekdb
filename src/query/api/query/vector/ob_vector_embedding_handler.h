@@ -22,7 +22,6 @@
 #include "lib/lock/ob_latch.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/allocator/ob_allocator.h"
-#include "share/io/ob_io_define.h"
 #ifndef __EMSCRIPTEN__
 #include <optional>
 #include "rust/http_client.h"

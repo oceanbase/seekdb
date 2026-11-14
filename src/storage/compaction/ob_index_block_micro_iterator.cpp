@@ -162,16 +162,12 @@ int ObIndexBlockMicroIterator::init(
     read_info.offset_ = sstable->get_macro_offset();
     read_info.size_ = sstable->get_macro_read_size();
     read_info.io_desc_.set_mode(ObIOMode::READ);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
     read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_MICRO_ITER_IO);
     read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
     read_info.macro_block_id_ = macro_desc.macro_block_id_;
     
 
-    if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char*>(allocator_.alloc(read_info.size_)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret));
-    } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle_))) {
+    if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle_))) {
     } else if (OB_FAIL(macro_handle_.wait())) {
     } else if (OB_ISNULL(macro_handle_.get_buffer())
         || (OB_UNLIKELY(macro_handle_.get_data_size() != read_info.size_))) {

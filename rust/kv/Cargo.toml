@@ -8,5 +8,5 @@ description = "Local transactional storage with a disk backed copy-on-write B+ t
 [lib]
 crate-type = ["rlib"]
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+[dependencies]
+file-io = { path = "../file-io" }

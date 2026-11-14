@@ -1788,7 +1788,6 @@ int ObChunkDatumStore::write_file(void *buf, int64_t size)
       } else if (OB_FAIL(data_plane::tmp_file_open(io_.fd_, io_.dir_id_))) {
       } else {
         file_size_ = 0;
-        io_.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
         io_.io_timeout_ms_ = timeout_ms;
         LOG_INFO("open file success", K_(io_.fd), K_(io_.dir_id));
       }
@@ -1825,7 +1824,6 @@ int ObChunkDatumStore::aio_read_file(
   } else if (size > 0) {
     data_plane::ObTmpFileIOInfo tmp_io = io_;
     set_io(size, static_cast<char *>(buf), tmp_io);
-    tmp_io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     if (OB_FAIL(get_timeout(tmp_io.io_timeout_ms_))) {
     } else if (OB_FAIL(data_plane::tmp_file_aio_pread(tmp_io, offset, handle))) {
       if (OB_ITER_END != ret) {

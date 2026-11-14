@@ -36,10 +36,10 @@
 #include "log_io_adapter.h"
 namespace oceanbase
 {
+namespace storage_io { struct NamedOwnerHandle; }
 namespace common
 {
 class ObILogAllocatr;
-class ObIOManager;
 }
 namespace rpc
 {
@@ -47,10 +47,6 @@ namespace frame
 {
 class ObReqTransport;
 }
-}
-namespace share
-{
-class ObLocalDevice;
 }
 namespace palf
 {
@@ -84,10 +80,11 @@ public:
                              status_(Status::INVALID_STATUS),
                              cur_unrecyclable_log_disk_size_(0),
                              sequence_(-1),
+                             physical_pool_(nullptr),
                              disk_opts_lock_(common::ObLatchIds::PALF_ENV_LOCK) {}
   ~PalfDiskOptionsWrapper() { reset(); }
 
-  int init(const PalfDiskOptions &disk_opts);
+  int init(const PalfDiskOptions &disk_opts, ILogBlockPool *physical_pool);
   void reset();
   int update_disk_options(const PalfDiskOptions &disk_opts);
 
@@ -133,13 +130,6 @@ public:
     return is_shrinking(status_);
   }
 
-  void set_stop_writing_disk_options_with_status(const PalfDiskOptions &new_opts,
-                                                 const Status &status)
-  {
-    ObSpinLockGuard guard(disk_opts_lock_);
-    status_ = status;
-    disk_opts_for_stopping_writing_ = new_opts;
-  }
   static constexpr int64_t MB = 1024*1024ll;
   TO_STRING_KV(K_(disk_opts_for_stopping_writing), K_(disk_opts_for_recycling_blocks), K_(status),
                "cur_unrecyclable_log_disk_size(MB)", cur_unrecyclable_log_disk_size_/MB,
@@ -157,6 +147,7 @@ private:
   Status status_;
   int64_t cur_unrecyclable_log_disk_size_;
   int64_t sequence_;
+  ILogBlockPool *physical_pool_;
   mutable ObSpinLock disk_opts_lock_;
 };
 
@@ -203,8 +194,7 @@ public:
            common::ObILogAllocator *alloc_mgr,
            ILogBlockPool *log_block_pool,
            PalfMonitorCb *monitor,
-           common::ObIODevice *log_local_device,
-           common::ObIOManager *io_manager);
+           const storage_io::NamedOwnerHandle *log_files);
   // start function contains two meanings:
   //
   // 1. Start all the worker threads contained in PalfEnvImpl
@@ -253,14 +243,6 @@ public:
 private:
   int reload_palf_handle_impl_();
 
-  struct RemoveStaleIncompletePalfFunctor : public ObBaseDirFunctor {
-    RemoveStaleIncompletePalfFunctor(PalfEnvImpl *palf_env_impl);
-    ~RemoveStaleIncompletePalfFunctor();
-    int func(const char *entry_name) override;
-    PalfEnvImpl *palf_env_impl_;
-  };
-
-private:
   int create_palf_handle_impl_(const AccessMode &access_mode,
                                const PalfBaseInfo &palf_base_info,
                                IPalfHandleImpl *&palf_handle_impl);
@@ -273,9 +255,6 @@ private:
   int recycle_blocks_(bool &has_recycled);
   bool has_minimum_log_disk_capacity_() const;
   int remove_palf_handle_impl_();
-  int move_incomplete_palf_into_tmp_dir_();
-  int check_tmp_log_dir_exist_(bool &exist) const;
-  int remove_stale_incomplete_palf_();
 
   int init_log_io_worker_config_(LogIOWorkerConfig &config);
 
@@ -300,7 +279,6 @@ private:
   int64_t disk_not_enough_print_interval_in_loop_thread_;
 
   char log_dir_[common::MAX_PATH_SIZE];
-  char tmp_log_dir_[common::MAX_PATH_SIZE];
   common::ObAddr self_;
 
   IPalfHandleImpl *palf_handle_;

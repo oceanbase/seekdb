@@ -201,7 +201,7 @@ int ObTmpFileEvictionManager::pop_file_from_list_(const bool &is_meta, ObSNTmpFi
 {
   int ret = OB_SUCCESS;
   file_handle.reset();
-  ObITmpFile *file = nullptr;
+  ObSharedNothingTmpFile *file = nullptr;
   ObSpinLock &lock = is_meta ? meta_list_lock_ : data_list_lock_;
   TmpFileEvictionList &eviction_list = is_meta ? file_meta_eviction_list_ : file_data_eviction_list_;
 

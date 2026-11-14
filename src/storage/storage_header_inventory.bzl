@@ -505,10 +505,8 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
     "throttle/ob_throttle_info.h",
     "throttle/ob_throttle_unit.h",
     "throttle/ob_throttle_unit.ipp",
-    "tmp_file/ob_i_tmp_file.h",
-    "tmp_file/ob_i_tmp_file_manager.h",
+    "tmp_file/ob_tmp_file_types.h",
     "tmp_file/ob_shared_nothing_tmp_file.h",
-    "tmp_file/ob_sn_tmp_file_manager.h",
     "tmp_file/ob_tmp_file_block_manager.h",
     "tmp_file/ob_tmp_file_eviction_manager.h",
     "tmp_file/ob_tmp_file_flush_ctx.h",
@@ -582,7 +580,6 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
 
 
 STORAGE_SEMANTIC_HEADERS = [
-    "blocksstable/ob_io_bench_controller.h",
     "ls/ob_i_ls_runtime_adapter.h",
     "memtable/ob_i_multi_source_data_unit.h",
     "meta_mem/ob_i_storage_meta_obj.h",

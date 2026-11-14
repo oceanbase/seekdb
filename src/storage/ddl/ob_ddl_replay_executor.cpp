@@ -136,7 +136,6 @@ int ObDDLRedoReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
     bool can_skip = false;
     write_info.buffer_ = redo_info.data_buffer_.ptr();
     write_info.size_= redo_info.data_buffer_.length();
-    write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, config::_data_storage_io_timeout() / 1000L);
     macro_block.block_type_ = redo_info.block_type_;
     macro_block.logic_id_ = redo_info.logic_id_;
@@ -246,8 +245,6 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
     write_info.buffer_ = redo_info.data_buffer_.ptr();
     write_info.size_= redo_info.data_buffer_.length();
     write_info.offset_ = 0;
-    write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
-    write_info.io_desc_.set_sealed();
     write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, config::_data_storage_io_timeout() / 1000L);
     
 

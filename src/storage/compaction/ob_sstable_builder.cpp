@@ -43,11 +43,9 @@ int ObSSTableRebuildMicroBlockIter::prefetch()
       read_info.offset_ = 0;
       read_info.size_ = common::OB_DEFAULT_MACRO_BLOCK_SIZE;
       read_info.io_desc_.set_mode(ObIOMode::READ);
-      read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_MICRO_ITER_IO);
       read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
       read_info.macro_block_id_ = macro_id_array_.at(prefetch_idx_);
-      read_info.buf_ = io_buf_[io_index];
       
 
       if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_io_handle))) {
@@ -60,21 +58,10 @@ int ObSSTableRebuildMicroBlockIter::prefetch()
   return ret;
 }
 
-int ObSSTableRebuildMicroBlockIter::init()
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < PREFETCH_DEPTH; ++i) {
-    if (OB_ISNULL(io_buf_[i] = reinterpret_cast<char*>(io_allocator_.alloc(common::OB_DEFAULT_MACRO_BLOCK_SIZE)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "failed to alloc SSTableRebuildMicroBlockIter read info buffer", K(ret), K(i));
-    }
-  }
-  return ret;
-}
-
 int ObSSTableRebuildMicroBlockIter::open_next_macro_block()
 {
   int ret = OB_SUCCESS;
+  mirco_block_iter_.reset();
 
   if (OB_UNLIKELY(is_iter_end())) {
     ret = OB_ITER_END;
@@ -84,7 +71,6 @@ int ObSSTableRebuildMicroBlockIter::open_next_macro_block()
     ObDatumRange range;
     ObStorageObjectHandle &macro_io_handle = get_curr_macro_handle();
     range.set_whole_range();
-    mirco_block_iter_.reset();
 
     if (OB_FAIL(macro_io_handle.wait())) {
     } else if (OB_FAIL(mirco_block_iter_.open(
@@ -375,8 +361,7 @@ int ObSSTableRebuilder::rebuild_macro_block(const ObIArray<MacroBlockId> &macro_
     STORAGE_LOG(WARN, "unexpected null read info", K(ret));
   } else {
     ObSSTableRebuildMicroBlockIter micro_iter(macro_id_array, *index_read_info_);
-    if (OB_FAIL(micro_iter.init())) {
-    } else {
+    {
       blocksstable::ObDataMacroBlockMeta macro_meta;
       int64_t macro_id_idx = 0;
       while (OB_SUCC(ret) && OB_SUCC(iter.get_next_macro_block(macro_meta))) {

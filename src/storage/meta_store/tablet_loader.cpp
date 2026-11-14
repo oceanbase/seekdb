@@ -301,23 +301,14 @@ int TabletLoader::load_aggregate_tablets(const ObIArray<TabletLoadRange> &range_
   int ret = OB_SUCCESS;
   char *buf = nullptr;
   int64_t buf_len = 0;
-  ObArenaAllocator io_allocator("AggregateRep", OB_MALLOC_NORMAL_BLOCK_SIZE);
-  char *io_buf = nullptr;
   const int64_t io_buf_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-
-  if (OB_ISNULL(io_buf =
-      reinterpret_cast<char*>(io_allocator.alloc(io_buf_size)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  }
   for (int64_t i = 0; OB_SUCC(ret) && i < range_arr.count(); i++) {
     ObStorageObjectReadInfo read_info;
     ObStorageObjectHandle object_handle;
     read_info.offset_ = 0;
-    read_info.buf_ = io_buf;
     read_info.size_ = io_buf_size;
     read_info.io_timeout_ms_ = 20000; // 20s
     read_info.io_desc_.set_mode(ObIOMode::READ);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
     read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     read_info.macro_block_id_ = total_tablet_item_arr_[range_arr.at(i).first].addr_.block_id();
     

@@ -61,9 +61,8 @@ int ObLocalStorageMetaService::read_from_disk(
     return STORAGE_META_SERVICE.read_empty_shell(addr, allocator, buf, buf_len);
   }
   int ret = OB_SUCCESS;
-  ObObjectReadHandle read_handle(allocator);
+  ObObjectReadHandle read_handle;
   ObObjectReadInfo read_info;
-  read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
   read_info.addr_ = addr;
   if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, read_handle))) {

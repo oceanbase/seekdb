@@ -39,8 +39,6 @@ class ObAllVirtualServer : public common::ObVirtualTableScannerIterator
     MEM_ASSIGNED,
     DATA_DISK_CAPACITY,
     DATA_DISK_IN_USE,
-    DATA_DISK_HEALTH_STATUS,
-    DATA_DISK_ABNORMAL_TIME,
     LOG_DISK_CAPACITY,
     LOG_DISK_ASSIGNED,
     LOG_DISK_IN_USE,

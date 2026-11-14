@@ -18,7 +18,6 @@
 
 #include "storage/meta_store/storage_meta_service.h"
 #include "storage/blocksstable/ob_object_manager.h"
-#include "share/io/ob_io_manager.h"
 
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::common;
@@ -84,13 +83,6 @@ int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
       ret = OB_ITER_END;
     }
 
-    int temp_ret = OB_SUCCESS;
-    ObDeviceHealthStatus dhs = DEVICE_HEALTH_NORMAL;
-    int64_t data_disk_abnormal_time = 0;
-    if (OB_SUCCESS != (temp_ret = ObIOManager::get_instance().get_device_health_status(dhs,
-        data_disk_abnormal_time))) {
-    }
-
     if (OB_SUCC(ret)) {
       for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; ++cell_idx) {
         uint64_t col_id = output_column_ids_.at(cell_idx);
@@ -113,14 +105,6 @@ int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
           }
           case FREE_SIZE: {
             cells[cell_idx].set_int(OB_STORAGE_OBJECT_MGR.get_free_macro_block_count() *OB_STORAGE_OBJECT_MGR.get_macro_block_size());
-            break;
-          }
-          case IS_DISK_VALID: {
-            cells[cell_idx].set_int(DEVICE_HEALTH_NORMAL != dhs ? 0 : 1);
-            break;
-          }
-          case DISK_ERROR_BEGIN_TS: {
-            cells[cell_idx].set_int(DEVICE_HEALTH_NORMAL != dhs ? data_disk_abnormal_time : 0);
             break;
           }
           default: {

@@ -67,20 +67,9 @@ int ObServerReloadConfig::operator()()
     // Reload log configuration after applying the latest configuration values.
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
     }
-      ObIOConfig io_config;
-      int64_t cpu_cnt = config::cpu_count();
-      if (cpu_cnt <= 0) {
-        cpu_cnt = common::get_cpu_num();
+      if (OB_TMP_FAIL(OBSERVER.validate_io_threads())) {
+        LOG_WARN("changing I/O worker counts requires a restart", K(tmp_ret));
       }
-      io_config.disk_io_thread_count_ = config::disk_io_thread_count();
-      io_config.sync_io_thread_count_ = config::sync_io_thread_count();
-      // In the 2.x version, reuse the sys_bkgd_io_timeout configuration item to indicate the data disk io timeout time
-      // After version 3.1, use the data_storage_io_timeout configuration item.
-      io_config.data_storage_io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
-      io_config.data_storage_warning_tolerance_time_ = config::data_storage_warning_tolerance_time();
-      if (OB_TMP_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
-      }
-
       (void)reload_diagnose_info_config(config::enable_perf_event());
       (void)reload_trace_log_config(config::enable_record_trace_log());
 

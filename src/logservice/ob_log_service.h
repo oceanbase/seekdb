@@ -30,11 +30,10 @@
 
 namespace oceanbase
 {
+namespace storage_io { struct NamedOwnerHandle; }
 namespace common
 {
 class ObAddr;
-class ObIODevice;
-class ObIOManager;
 class ObILogAllocator;
 }
 
@@ -77,8 +76,8 @@ public:
       const common::ObAddr &self,
       ObILogStorage *log_storage,
       palf::ILogBlockPool *log_block_pool,
-      common::ObIODevice *log_local_device,
-      common::ObIOManager *io_manager,
+      const storage_io::NamedOwnerHandle *log_files,
+
       bool is_shared_storage_mode,
       int64_t replay_thread_quota,
       const ObLogRuntimeConfig &runtime_config);
@@ -95,8 +94,8 @@ public:
            common::ObILogAllocator *alloc_mgr,
            ObILogStorage *log_storage,
            palf::ILogBlockPool *log_block_pool,
-           common::ObIODevice *log_local_device,
-           common::ObIOManager *io_manager,
+           const storage_io::NamedOwnerHandle *log_files,
+
            bool is_shared_storage_mode,
            int64_t replay_thread_quota,
            const ObLogRuntimeConfig &runtime_config);

@@ -110,7 +110,51 @@ int ObSharedNothingTmpFile::InnerFlushInfo::init_by_tmp_file_flush_info(const Ob
 }
 
 ObSharedNothingTmpFile::ObSharedNothingTmpFile()
-    : ObITmpFile(),
+    : is_inited_(false),
+      dir_id_(ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID),
+      fd_(ObTmpFileGlobal::INVALID_TMP_FILE_FD),
+      is_deleting_(false),
+      is_sealed_(false),
+      ref_cnt_(0),
+      truncated_offset_(0),
+      read_offset_(0),
+      file_size_(0),
+      cached_page_nums_(0),
+      write_back_data_page_num_(0),
+      begin_page_id_(ObTmpFileGlobal::INVALID_PAGE_ID),
+      begin_page_virtual_id_(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID),
+      end_page_id_(ObTmpFileGlobal::INVALID_PAGE_ID),
+      diag_log_print_cnt_(0),
+      data_page_flush_level_(-1),
+      data_flush_node_(*this),
+      meta_lock_(common::ObLatchIds::TMP_FILE_LOCK),
+      stat_lock_(common::ObLatchIds::TMP_FILE_LOCK),
+      multi_write_lock_(common::ObLatchIds::TMP_FILE_LOCK),
+      last_page_lock_(common::ObLatchIds::TMP_FILE_LOCK),
+      wbp_(nullptr),
+      flush_prio_mgr_(nullptr),
+      page_idx_cache_(),
+      callback_allocator_(nullptr),
+      trace_id_(),
+      birth_ts_(-1),
+      label_(),
+      write_req_cnt_(0),
+      unaligned_write_req_cnt_(0),
+      write_persisted_tail_page_cnt_(0),
+      lack_page_cnt_(0),
+      last_modify_ts_(-1),
+      read_req_cnt_(0),
+      unaligned_read_req_cnt_(0),
+      total_truncated_page_read_cnt_(0),
+      total_kv_cache_page_read_cnt_(0),
+      total_uncached_page_read_cnt_(0),
+      total_wbp_page_read_cnt_(0),
+      truncated_page_read_hits_(0),
+      kv_cache_page_read_hits_(0),
+      uncached_page_read_hits_(0),
+      wbp_page_read_hits_(0),
+      total_read_size_(0),
+      last_access_ts_(-1),
       tmp_file_block_manager_(nullptr),
       page_cache_controller_(nullptr),
       eviction_mgr_(nullptr),
@@ -144,7 +188,7 @@ int ObSharedNothingTmpFile::init(const int64_t fd, const int64_t dir_id,
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(ObITmpFile::init(dir_id, fd, &pc_ctrl->get_write_buffer_pool(),
+  } else if (OB_FAIL(init_io_state_(dir_id, fd, &pc_ctrl->get_write_buffer_pool(),
                                       &pc_ctrl->get_flush_priority_mgr(),
                                       callback_allocator,
                                       wbp_index_cache_allocator,
@@ -184,7 +228,7 @@ void ObSharedNothingTmpFile::reset()
     data_eviction_node_.unlink();
     meta_eviction_node_.unlink();
     inner_flush_ctx_.reset();
-    ObITmpFile::reset();
+    reset_io_state_();
   }
 }
 
@@ -664,17 +708,16 @@ int ObSharedNothingTmpFile::load_disk_tail_page_and_rewrite_(ObTmpFileIOCtx &io_
       info.macro_block_id_ = macro_block_id;
       info.size_ = has_written_size;
       info.offset_ = last_page_begin_offset_in_block;
-      info.buf_ = page_buf;
-      info.io_callback_ = nullptr;
       info.io_timeout_ms_ = io_ctx.get_io_timeout_ms();
 
       if (OB_FAIL(mb_handle.async_read(info))) {
       } else if (OB_FAIL(mb_handle.wait())) {
-      } else if (mb_handle.get_data_size() < has_written_size) {
+      } else if (OB_ISNULL(mb_handle.get_buffer()) || mb_handle.get_data_size() < has_written_size) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_UNLIKELY(!io_ctx.check_buf_range_valid(write_buff, write_size))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
+        MEMCPY(page_buf, mb_handle.get_buffer(), has_written_size);
         // fill last page in memory
         MEMCPY(page_buf + has_written_size, write_buff, write_size);
       }
@@ -991,7 +1034,7 @@ int ObSharedNothingTmpFile::truncate(const int64_t truncate_offset)
   int ret = OB_SUCCESS;
   SpinWLockGuard truncate_lock_guard(truncate_lock_);
 
-  if (OB_FAIL(ObITmpFile::truncate(truncate_offset))) {
+  if (OB_FAIL(truncate_io_(truncate_offset))) {
   }
 
   return ret;

@@ -16,50 +16,33 @@
 
 #ifndef OCEANBASE_LOGSERVICE_LOG_IO_UTILS_
 #define OCEANBASE_LOGSERVICE_LOG_IO_UTILS_
+#include <string>
+#include "rust/file_io.h"
+#include "lib/string/ob_string.h"
 #include "share/log/palf/log_define.h"
 namespace oceanbase
 {
 namespace palf
 {
 
-int open_directory(const char *dir_path);
-
-int close_with_ret(const int fd);
-
-int rename_with_retry(const char *src_name, const char *dest_name);
-
-int renameat_with_retry(const int srd_dir_fd, const char *src_name,
-                        const int dest_dir_fd, const char *dest_name);
-
-int fsync_with_retry(const int dir_fd);
-
 class ObBaseDirFunctor
 {
 public:
-  // `entry_name` is the UTF-8 name of a directory entry; it is never "." or
-  // ".." and stays valid for the duration of the call.
-  virtual int func(const char *entry_name) = 0;
+  virtual int func(const common::ObString &name) = 0;
 };
 
 int scan_dir(const char *dir_name, ObBaseDirFunctor &functor);
 
-class GetBlockCountFunctor : public ObBaseDirFunctor
-{
-public:
-  GetBlockCountFunctor(const char *dir)
-    : dir_(dir), count_(0)
-  {
-  }
-  virtual ~GetBlockCountFunctor() = default;
+int scan_dir(const file_io::DirectoryHandle &directory, const char *path, ObBaseDirFunctor &functor);
+int directory_error(const file_io::FsError &error, const char *path = nullptr);
+int next_directory_entry(const file_io::DirectoryHandle &directory, const char *path,
+                         file_io::DirectoryCursor &cursor,
+                         file_io::DirectoryStep &entry,
+                         file_io::ObservationResult &observation);
+int open_parent_directory(const char *path, file_io::DirectoryHandle &parent, std::string &leaf);
+int entry_path(const char *parent, const common::ObString &name, char *output, size_t capacity);
 
-  int func(const char *entry_name) override final;
-	int64_t get_block_count() {return count_;}
-private:
-  const char *dir_;
-	int64_t count_;
-
-  DISALLOW_COPY_AND_ASSIGN(GetBlockCountFunctor);
-};
+int parse_block_name(const common::ObString &name, block_id_t &id);
 
 class TrimLogDirectoryFunctor : public ObBaseDirFunctor
 {
@@ -73,7 +56,7 @@ public:
   }
   virtual ~TrimLogDirectoryFunctor() = default;
 
-  int func(const char *entry_name) override final;
+  int func(const common::ObString &name) override final;
   block_id_t get_min_block_id() const { return min_block_id_; }
   block_id_t get_max_block_id() const { return max_block_id_; }
 private:
@@ -84,18 +67,6 @@ private:
 
   DISALLOW_COPY_AND_ASSIGN(TrimLogDirectoryFunctor);
 };
-
-bool check_rename_success(const char *src_name,
-                          const char *dest_name);
-bool check_renameat_success(const int src_dir_fd,
-                            const char *src_name,
-                            const int dest_dir_fd,
-                            const char *dest_name);
-int check_file_exist(const char *file_name,
-                     bool &exist);
-int check_file_exist(const int dir_fd,
-                     const char *file_name,
-                     bool &exist);
 
 } // end namespace palf
 } // end namespace oceanbase

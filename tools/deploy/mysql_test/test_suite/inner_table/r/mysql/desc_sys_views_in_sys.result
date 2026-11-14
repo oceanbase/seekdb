@@ -1970,18 +1970,6 @@ NDB_TRANSID	bigint(1)	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.NDB_TRANSID_MYSQL_CONNECTION_MAP limit 1);
 cnt
 1
-desc oceanbase.V$OB_GROUP_IO_STAT;
-Field	Type	Null	Key	Default	Extra
-GROUP_ID	bigint(20)	NO		NULL	
-GROUP_NAME	varchar(128)	NO		NULL	
-MODE	varchar(128)	NO		NULL	
-MIN_IOPS	bigint(20)	NO		NULL	
-MAX_IOPS	bigint(20)	NO		NULL	
-NORM_IOPS	bigint(20)	NO		NULL	
-REAL_IOPS	bigint(20)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_GROUP_IO_STAT limit 1);
-cnt
-1
 desc information_schema.TABLESPACES;
 Field	Type	Null	Key	Default	Extra
 TABLESPACE_NAME	varchar(0)	NO			

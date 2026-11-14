@@ -17,7 +17,6 @@ SDK_HEADERS = {
     "sanity_headers": {"hdrs": ["sanity/include/sanity/**/*.h"], "includes": ["sanity/include"]},
     "absl_headers": _headers("absl"),
     "boost_headers": _headers("boost"),
-    "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
     "curl_headers": _headers("curl") | {

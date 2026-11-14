@@ -71,14 +71,16 @@ public:
       ObStorageObjectHandle &object_handle);
   static int async_read_object(
       const ObStorageObjectReadInfo &read_info,
-      ObStorageObjectHandle &object_handle);
+      ObStorageObjectHandle &object_handle,
+      std::unique_ptr<storage_io::CallbackAdapter> callback = nullptr);
   static int async_write_object(
       const ObStorageObjectOpt &opt,
       const ObStorageObjectWriteInfo &write_info,
       ObStorageObjectHandle &object_handle);
   static int read_object(
       const ObStorageObjectReadInfo &read_info,
-      ObStorageObjectHandle &object_handle);
+      ObStorageObjectHandle &object_handle,
+      std::unique_ptr<storage_io::CallbackAdapter> callback = nullptr);
   static int write_object(
       const ObStorageObjectOpt &opt,
       const ObStorageObjectWriteInfo &write_info,

@@ -16,12 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "lib/file/path_operations.h"
 #include <cmath>
 #include <inttypes.h>
 #include <memory>
 
 #include "ob_select_into_op.h"
-#include "lib/utility/ob_platform_io.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -338,6 +338,8 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
                                 int64_t &pos)
 {
   int ret = OB_SUCCESS;
+  ObObjPrintParams dump_params;
+  dump_params.use_memcpy_ = true;
   const ObObj &field_str = field_str_;
   char closed_cht = char_enclose_;
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
@@ -358,7 +360,7 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
       ObDatum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
       } else if (OB_FAIL(datum->to_obj(cell, expr->obj_meta_))) {
-      } else if (OB_FAIL(cell.print_plain_str_literal(buf, buf_len, pos))) {
+      } else if (OB_FAIL(cell.print_plain_str_literal(buf, buf_len, pos, dump_params))) {
       } else if (0 != closed_cht && (!is_optional_ || ob_is_string_type(expr->datum_meta_.type_))) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%c", closed_cht))) {
         }
@@ -1065,7 +1067,7 @@ int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(data_writer->file_appender_.append(buf, pos, false))) {
+    if (OB_FAIL(data_writer->file_appender_.append(buf, pos))) {
     } else {
       //do nothing
     }
@@ -1209,20 +1211,18 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
   int ret = OB_SUCCESS;
   ObString file_path = file_name.split_on(file_name.reverse_find('/'));
   char full_path_buf[common::MAX_PATH_SIZE] = {0};
-  char *actual_path = nullptr;
   ObSqlString sql_str;
   ObString secure_file_priv;
   
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
-  } else if (0 != common::ob_absolute_path_utf8(sql_str.ptr(), full_path_buf,
-                                                sizeof(full_path_buf))) {
+  } else if (OB_SUCCESS != path_operations::resolve_path(sql_str.ptr(), full_path_buf,
+                                                         sizeof(full_path_buf))) {
     ret = OB_FILE_NOT_EXIST;
-  } else if (FALSE_IT(actual_path = full_path_buf)) {
   } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
                                                                 SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
-  } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
+  } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, full_path_buf))) {
     if (OB_ERR_NO_PRIVILEGE == ret) {
       ret = OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS;
       LOG_ERROR("failed to check secure path", K(ret), K(secure_file_priv));
