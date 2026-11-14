@@ -518,6 +518,34 @@ int ObDDLUtil::refresh_alter_table_arg(ObMultiVersionSchemaService &schema_servi
   return ret;
 }
 
+// SQL identifiers are quoted here in Share so DDL does not depend on the
+// SQL upper layer (in particular, sql/ob_sql_utils.h). Double embedded
+// backticks; raw %.*s interpolation produces invalid SQL for those names.
+namespace {
+int append_quoted_ddl_identifier(ObSqlString &sql, const ObString &name, const char *prefix = nullptr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql.append("`"))) {
+  } else if (prefix != nullptr && OB_FAIL(sql.append(prefix))) {
+  }
+  int64_t begin = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && i < name.length(); ++i) {
+    if (name.ptr()[i] == '`') {
+      if (i > begin && OB_FAIL(sql.append(name.ptr() + begin, i - begin))) {
+      } else if (OB_FAIL(sql.append("``"))) {
+      }
+      begin = i + 1;
+    }
+  }
+  if (OB_SUCC(ret) && begin < name.length()
+      && OB_FAIL(sql.append(name.ptr() + begin, name.length() - begin))) {
+  }
+  if (OB_SUCC(ret) && OB_FAIL(sql.append("`"))) {
+  }
+  return ret;
+}
+}  // namespace
+
 int ObDDLUtil::generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
     const bool with_origin_name,
@@ -549,31 +577,25 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
-  // append comma
-  if (with_comma) {
-    if (OB_FAIL(sql_string.append_fmt(", "))) {
-    }
+  if (with_comma && OB_FAIL(sql_string.append(", "))) {
   }
-  // append original column name
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
-      // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      // Preserve the cast for enum/set source data while quoting the identifier.
+      if (OB_FAIL(sql_string.append("cast("))) {
+      } else if (OB_FAIL(append_quoted_ddl_identifier(sql_string, column_name_info.column_name_))) {
+      } else if (OB_FAIL(sql_string.append(" as unsigned)"))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(append_quoted_ddl_identifier(sql_string, column_name_info.column_name_))) {
     }
   }
-  // append AS
-  if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt(" AS "))) {
-    }
+  if (OB_SUCC(ret) && with_origin_name && with_alias_name
+      && OB_FAIL(sql_string.append(" AS "))) {
   }
-  // append alias column name
-  if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
-    }
+  if (OB_SUCC(ret) && with_alias_name
+      && OB_FAIL(append_quoted_ddl_identifier(
+          sql_string, column_name_info.column_name_,
+          column_name_info.is_shadow_column_ ? "__SHADOW_" : nullptr))) {
   }
   return ret;
 }
