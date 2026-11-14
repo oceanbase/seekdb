@@ -42,9 +42,8 @@ int ObTabletObjLoadHelper::read_from_addr(
     ObObjectReadInfo read_info;
     read_info.addr_ = meta_addr;
     read_info.io_desc_.set_mode(ObIOMode::READ);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
-    ObObjectReadHandle io_handle(allocator);
+    ObObjectReadHandle io_handle;
     if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, io_handle))) {
     } else if (OB_FAIL(io_handle.wait())) {
     } else if (OB_FAIL(io_handle.get_data(allocator, buf, buf_len))) {

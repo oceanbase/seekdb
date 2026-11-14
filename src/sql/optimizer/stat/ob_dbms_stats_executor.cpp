@@ -1544,7 +1544,7 @@ int ObDbmsStatsExecutor::gather_system_stats(ObExecContext &ctx)
   } else if (io_benchmark.is_init()) {
     disk_seq_read_speed = io_benchmark.get_disk_seq_read_speed();
     disk_rnd_read_speed = io_benchmark.get_disk_rnd_read_speed();
-  } else if (OB_FAIL(io_benchmark.run_benchmark(ctx.get_allocator()))) {
+  } else if (OB_FAIL(io_benchmark.run_benchmark())) {
   } else {
     disk_seq_read_speed = io_benchmark.get_disk_seq_read_speed();
     disk_rnd_read_speed = io_benchmark.get_disk_rnd_read_speed();

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
-#include "share/ob_io_device_helper.h"
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #endif
@@ -216,7 +215,7 @@ int StorageMetaService::update_tablet(const ObTabletID &id, const ObMetaDiskAddr
   if (!id.is_valid() || !addr.is_valid() || !addr.is_block()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(encode_record(addr, payload))) {
-  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
+  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.fsync_block())) {
   } else {
     ret = write_tablet(id, NORMAL_TABLET, payload);
   }

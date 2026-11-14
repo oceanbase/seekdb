@@ -43,6 +43,18 @@ config_setting(
 )
 
 bool_flag(
+    name = "storage_io_ownership_test_support",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "storage_io_ownership_test_support_enabled",
+    flag_values = {":storage_io_ownership_test_support": "true"},
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
     name = "package_runtime",
     build_setting_default = False,
     visibility = ["//visibility:public"],

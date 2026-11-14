@@ -9,7 +9,7 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     edition = crate_edition(),
     version = "0.1.0",
-    deps = all_crate_deps(normal = True),
+    deps = all_crate_deps(normal = True) + ["//rust/file-io:file_io"],
     proc_macro_deps = all_crate_deps(proc_macro = True),
     aliases = aliases(),
     tags = ["no-remote"],

@@ -376,24 +376,7 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-cc_library(
-    name = "device_manager_interface",
-    hdrs = ["ob_device_manager.h"],
-    deps = [
-        "//src/oblib:oblib_foundation",
-    ],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = ["//src:__subpackages__"],
-)
 
-cc_library(
-    name = "local_io_config",
-    srcs = ["local_io_config.cpp"],
-    hdrs = ["local_io_config.h"],
-    deps = ["//src/oblib:oblib_foundation"],
-    visibility = ["//src:__subpackages__"],
-)
 
 cc_library(
     name = "startup_result",
@@ -401,16 +384,6 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-cc_library(
-    name = "io_device_interface",
-    hdrs = ["ob_io_device_helper.h"],
-    deps = [
-        "//src/oblib:oblib_foundation",
-    ],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = ["//src:__subpackages__"],
-)
 
 cc_library(
     name = "errsim_interface",
@@ -439,55 +412,23 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-_IO_UNITY_GROUP = select_unity_sources(
-    SHARE_UNITY_GROUPS,
-    "io",
-    [
-        "src/share/io/ob_io_define.cpp",
-        "src/share/io/io_schedule/ob_io_schedule_v2.cpp",
-        "src/share/io/ob_io_struct.cpp",
-        "src/share/io/ob_io_calibration.cpp",
-        "src/share/io/ob_io_manager.cpp",
-    ],
-)
-
-grouped_unity_cc_library(
-    name = "io",
-    unity_groups = [_IO_UNITY_GROUP],
-    public_hdrs = [
-        "io/io_schedule/ob_io_schedule_v2.h",
-        "io/ob_io_calibration.h",
-        "io/ob_io_define.h",
-        "io/ob_io_manager.h",
-        "io/ob_io_struct.h",
-    ],
+cc_library(
+    name = "io_request",
+    srcs = ["io_request.cpp"],
+    hdrs = ["io_request.h"],
     deps = [
-        ":core_types",
-        ":io_bench_controller_interface",
+        "//rust:storage_io_headers",
+        "//src/share:core_types",
         "//src/oblib:oblib_foundation",
-        "//src/oblib:oblib_restore",
+        "//src/oblib:oblib_base",
     ],
     implementation_deps = [
-        ":config_parser_interface",
-        ":device_manager_interface",
-        ":errsim_interface",
-        ":io_device_interface",
-        ":server_resource_types",
-        ":task_control",
-        ":tenant_runtime",
-        ":unit_config_interface",
-        "//bazel/third_party:libaio_headers",
-        "//src/oblib:oblib_base",
-        "//src/oblib:oblib_collections_primitives",
-        "//src/oblib:oblib_common",
-        "//src/oblib:oblib_compression",
+        ":error_codes",
+        "//rust:storage_io",
     ],
     features = ["layering_check"],
     tags = ["manual"],
-    visibility = [
-        "//src:__subpackages__",
-        "//unittest:__subpackages__",
-    ],
+    visibility = ["//src:__subpackages__", "//unittest:__subpackages__"],
 )
 
 cc_library(
@@ -523,6 +464,7 @@ cc_library(
     deps = [
         "//rust:local",
         ":_generated_inner_table_headers",
+        "//src/oblib:oblib_base",
         "//src/oblib:oblib_foundation",
     ],
     features = ["layering_check"],
@@ -565,7 +507,7 @@ grouped_unity_cc_library(
     implementation_deps = [
         ":cluster_version_interface",
         ":error_codes",
-        ":io",
+        "//src/share:io_request",
         ":local_storage_interface",
         ":resource_limit_interface",
         ":sql_persistence_support",
@@ -1575,7 +1517,6 @@ _SHARE_NATIVE_UNITY_SOURCES = unity_group_sources(
     _TABLET_REPLICA_TYPES_UNITY_GROUP,
     _TABLET_AUTOINCREMENT_TYPES_UNITY_GROUP,
     _ID_GENERATOR_UNITY_GROUP,
-    _IO_UNITY_GROUP,
     _CONFIG_UNITY_GROUP,
     _LS_RESTORE_STATUS_UNITY_GROUP,
     _RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP,
@@ -1602,7 +1543,6 @@ _SHARE_RUNTIME_GENERATED_DEPS = [
 ]
 
 _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
-    ":local_io_config",
     ":cache",
     ":config",
     ":config_parser_interface",
@@ -1612,14 +1552,12 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     ":debug_sync_broadcaster_interface",
     ":debug_sync_interface",
     ":delegate_interface",
-    ":device_manager_interface",
     ":errsim_interface",
     ":est_row_count_record",
     ":geo_cast_interface",
     ":geo_types",
     ":id_generator",
-    ":io",
-    ":io_device_interface",
+    "//src/share:io_request",
     ":json_access",
     ":lib_cache_namespace",
     ":lob_diff_interface",
@@ -1672,7 +1610,6 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     "//bazel/third_party:absl_headers",
     "//bazel/third_party:boost_headers",
     "//rust:http_client_headers",
-    "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
     "//rust:crypto_headers",
     "//bazel/third_party:roaring_headers",
@@ -1729,13 +1666,11 @@ _SHARE_UNIT_TEST_DEPS = [
     ":datum",
     ":debug_sync_broadcaster_interface",
     ":debug_sync_interface",
-    ":device_manager_interface",
     ":geo_algorithms",
     ":geo_cast_interface",
     ":geo_serialization",
     ":geo_visitors",
-    ":io",
-    ":io_device_interface",
+    "//src/share:io_request",
     ":memory_support",
     ":object_cast",
     ":schema_access",
@@ -1798,6 +1733,8 @@ grouped_unity_cc_library(
         "//rust:config_headers",
         "//rust:mvt_headers",
         "//rust:json",
+        "//rust:file_io_headers",
+        "//rust:storage_io_headers",
     ] + _SHARE_RUNTIME_COMPILE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",
@@ -1808,7 +1745,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_diagnostics_primitives",
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_io_primitives",
-        "//src/oblib:oblib_restore",
     ],
     features = ["layering_check"],
     tags = ["manual"],

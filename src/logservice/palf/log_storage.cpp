@@ -126,11 +126,13 @@ int LogStorage::writev(const LSN &lsn, const LogWriteBuf &write_buf, const SCN &
 
 int LogStorage::writev(const LSNArray &lsn_array,
                        const LogWriteBufArray &write_buf_array,
-                       const SCNArray &scn_array)
+                       const SCNArray &scn_array, int64_t &completed_count)
 {
   int ret = OB_SUCCESS;
+  completed_count = 0;
   int64_t count = lsn_array.count();
-  if (count <= 0 || false == lsn_array[0].is_valid() || OB_ISNULL(write_buf_array[0])
+  if (count <= 0 || write_buf_array.count() != count || scn_array.count() != count
+      || false == lsn_array[0].is_valid() || OB_ISNULL(write_buf_array[0])
       || (!scn_array[0].is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid argument", K(ret), K(count));
@@ -139,7 +141,8 @@ int LogStorage::writev(const LSNArray &lsn_array,
     int64_t merge_start_idx = 0;
     do {
       LSN lsn = lsn_array[merge_start_idx];
-      LogWriteBuf *write_buf = write_buf_array[merge_start_idx];
+      LogWriteBuf merged_write_buf(*write_buf_array[merge_start_idx]);
+      LogWriteBuf *write_buf = &merged_write_buf;
       SCN scn = scn_array[merge_start_idx];
       int64_t writable_size =
           (0 == curr_block_writable_size_ ? logical_block_size_ : curr_block_writable_size_)
@@ -177,9 +180,9 @@ int LogStorage::writev(const LSNArray &lsn_array,
       }
       if (OB_SUCC(ret) && OB_FAIL(writev(lsn, *write_buf, scn))) {
         PALF_LOG(ERROR, "writev failed", K(ret), K(scn), K(lsn_array), K(write_buf_array));
-      } else {
-        // update 'merge_start_idx' to 'idx_to_be_merged' after writev successfully.
+      } else if (OB_SUCC(ret)) {
         merge_start_idx = idx_to_be_merged;
+        completed_count = merge_start_idx;
       }
     } while (merge_start_idx < count && OB_SUCC(ret));
   }

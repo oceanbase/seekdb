@@ -417,6 +417,8 @@ fn large_payload_batch_fits_the_transaction_budget() {
         kv::Options {
             max_transaction_pages: 16384,
         },
+        file_io::DirectoryDurability::Required,
+        &mut file_io::DirectorySyncSummary::default(),
     )
     .unwrap();
     let mut tx = store.begin().unwrap();
@@ -491,4 +493,23 @@ fn concurrent_bridge_cursors_keep_snapshots_and_release_them_at_end() {
     // Exhausted C++ bridge handles may remain alive without pinning the store.
     let reopened = kv::Store::open(&directory.0).unwrap();
     assert_eq!(all(&reopened, Query::all(schema)).len(), 2);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn bridge_open_exposes_directory_failure_before_failed_store_is_dropped() {
+    let failed = crate::bridge::open_storage("/proc/self");
+    assert_ne!(failed.status(), 0);
+    let sync = failed.open_sync_error();
+    assert!(sync.stage == file_io::bridge::ffi::SyncStage::FlushFailed);
+    assert!(sync.primary.domain == file_io::bridge::ffi::ErrorDomain::Posix);
+    assert_eq!(sync.primary.native_code, 22);
+    assert!(failed.open_error().contains("/proc"));
+    assert_eq!(failed.directory_summary().count, 0);
+    let directory = Directory::new();
+    let opened = crate::bridge::open_storage(directory.0.to_str().unwrap());
+    assert_eq!(opened.status(), 0);
+    assert!(opened.open_sync_error().stage == file_io::bridge::ffi::SyncStage::Complete);
+    assert_eq!(opened.directory_summary().count, 0);
+    assert!(opened.open_error().is_empty());
 }

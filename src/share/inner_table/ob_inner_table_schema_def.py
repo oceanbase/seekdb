@@ -3002,8 +3002,6 @@ def_table_schema(
   ('total_size', 'int', 'false'),
   ('used_size', 'int', 'false'),
   ('free_size', 'int', 'false'),
-  ('is_disk_valid', 'int', 'false'),
-  ('disk_error_begin_ts', 'int', 'false'),
   ('allocated_size', 'int', 'false')
   ],  )
 
@@ -3677,56 +3675,23 @@ def_table_schema(
       ('execute_time', 'int')
                      ],  )
 
-def_table_schema(
-    owner             = 'jianyun.sjy',
-    table_name        = '__all_virtual_io_calibration_status',
-    table_id          = '11113',
-    table_type        = 'VIRTUAL_TABLE',
-    gm_columns        = [],
-    rowkey_columns    = [],
-    normal_columns    = [
-      ('storage_name',  'varchar:1024'),
-      ('status',        'varchar:256'),
-      ('start_time',    'timestamp'),
-      ('finish_time',   'timestamp')
-  ],    )
+# 11113: __all_virtual_io_calibration_status # removed calibration placeholder; ID reserved
+
+# 11114: __all_virtual_io_benchmark # removed always-empty benchmark; ID reserved
 
 def_table_schema(
     owner             = 'jianyun.sjy',
-    table_name        = '__all_virtual_io_benchmark',
-    table_id          = '11114',
-    table_type        = 'VIRTUAL_TABLE',
-    gm_columns        = [],
-    rowkey_columns    = [],
-    normal_columns    = [
-      ('storage_name',  'varchar:1024'),
-      ('mode',          'varchar:256'),
-      ('size',          'int'),
-      ('iops',          'int'),
-      ('mbps',          'int'),
-      ('latency',       'int')
-  ],    )
-
-
-def_table_schema(
-    owner             = 'jianyun.sjy',
-    table_name        = '__all_virtual_io_quota',
+    table_name        = '__all_virtual_io_stat',
     table_id          = '11115',
     table_type        = 'VIRTUAL_TABLE',
     gm_columns        = [],
     rowkey_columns    = [],
     normal_columns    = [
-      ('group_id',      'int'),
+      ('module_id',     'int'),
       ('mode',          'varchar:256'),
       ('size',          'int'),
-      ('min_iops',      'int'),
-      ('max_iops',      'int'),
-      ('real_iops',     'int'),
-      ('min_mbps',      'int'),
-      ('max_mbps',      'int'),
-      ('real_mbps',     'int'),
-      ('schedule_us',   'int'),
-      ('io_delay_us',   'int'),
+      ('iops',          'int'),
+      ('mbps',          'int'),
       ('total_us',      'int')
     ],    )
 
@@ -4859,8 +4824,6 @@ def_table_schema(
       ('mem_assigned', 'int'),
       ('data_disk_capacity', 'int'),
       ('data_disk_in_use', 'int'),
-      ('data_disk_health_status', 'varchar:OB_MAX_DEVICE_HEALTH_STATUS_STR_LENGTH'),
-      ('data_disk_abnormal_time', 'int'),
       ('log_disk_capacity', 'int'),
       ('log_disk_assigned', 'int'),
       ('log_disk_in_use', 'int'),
@@ -5876,24 +5839,8 @@ def_table_schema(
   ('limit_value', 'bigint')
   ],  )
 
-def_table_schema(
-  owner      = 'wyh329796',
-  table_name = '__all_virtual_group_io_stat',
-  table_id = '12483',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  rowkey_columns = [
-    ('group_id', 'int')
-  ],
-  normal_columns = [
-    ('group_name', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH'),
-    ('mode', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH'),
-    ('min_iops', 'int'),
-    ('max_iops', 'int'),
-    ('real_iops', 'int'),
-    ('norm_iops', 'int')
-                   ],  )
 
+# 12483: __all_virtual_group_io_stat removed with unused I/O QoS.
 # 21485: __all_virtual_storage_io_usage (abandoned)
 # 12486: __all_virtual_zone_storage (abandoned)
 
@@ -9102,13 +9049,8 @@ def_table_schema(
                         LOG_DISK_IN_USE,
                         DATA_DISK_CAPACITY,
                         DATA_DISK_IN_USE,
-                        DATA_DISK_HEALTH_STATUS,
                         MEMORY_LIMIT,
                         DATA_DISK_ALLOCATED,
-                        (CASE
-                            WHEN data_disk_abnormal_time > 0 THEN usec_to_time(data_disk_abnormal_time)
-                            ELSE NULL
-                         END) AS DATA_DISK_ABNORMAL_TIME,
                         (CASE
                             WHEN rpc_cert_expire_time > 0 THEN usec_to_time(rpc_cert_expire_time)
                             ELSE NULL
@@ -9345,13 +9287,13 @@ def_table_schema(
 
 # 21238: V$OB_DTL_INTERM_RESULT_MONITOR # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_dtl_interm_result_monitor)
 
-# 21239: GV$OB_IO_CALIBRATION_STATUS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_io_calibration_status)
+# 21239: GV$OB_IO_CALIBRATION_STATUS # removed; ID reserved
 
-# 21240: V$OB_IO_CALIBRATION_STATUS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_io_calibration_status)
+# 21240: V$OB_IO_CALIBRATION_STATUS # removed; ID reserved
 
-# 21241: GV$OB_IO_BENCHMARK # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_io_benchmark)
+# 21241: GV$OB_IO_BENCHMARK # removed; ID reserved
 
-# 21242: V$OB_IO_BENCHMARK # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_io_benchmark)
+# 21242: V$OB_IO_BENCHMARK # removed; ID reserved
 
 # 21243: GV$OB_IO_QUOTA
 # 21244: V$OB_IO_QUOTA
@@ -12446,30 +12388,9 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner           = 'wyh329796',
-  table_name      = 'V$OB_GROUP_IO_STAT',
-  table_id        = '21558',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  view_definition = """
-                      SELECT
-                        A.GROUP_ID AS GROUP_ID,
-                        A.GROUP_NAME AS GROUP_NAME,
-                        A.MODE AS MODE,
-                        A.MIN_IOPS AS MIN_IOPS,
-                        A.MAX_IOPS AS MAX_IOPS,
-                        A.NORM_IOPS AS NORM_IOPS,
-                        A.REAL_IOPS AS REAL_IOPS
-                      FROM
-                        OCEANBASE.__ALL_VIRTUAL_GROUP_IO_STAT AS A
-                    """.replace("\n", " ")
-)
 
-# 21559: GV$OB_GROUP_IO_STAT # removed (single-tenant GV/V collapse; folded into V$OB_GROUP_IO_STAT)
-
+# 21558: V$OB_GROUP_IO_STAT removed with unused I/O QoS.
+# 21559: GV$OB_GROUP_IO_STAT removed.
 # 21560: DBA_OB_STORAGE_IO_USAGE (abandoned)
 # 21561: CDB_OB_STORAGE_IO_USAGE (abandoned)
 

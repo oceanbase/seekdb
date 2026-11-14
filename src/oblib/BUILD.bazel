@@ -104,7 +104,6 @@ cc_library(
         "lib/cpu/ob_cpu_topology.h",
         "lib/encrypt/ob_encrypted_helper.h",
         "lib/file/ob_file.h",
-        "lib/file/ob_fileinfo_manager.h",
         "lib/function/ob_function.h",
         "lib/future/ob_future.h",
         "lib/guard/ob_light_shared_gaurd.h",
@@ -276,7 +275,6 @@ cc_library(
         ":oblib_encoding_primitives",
         ":oblib_foundation",
         ":oblib_memory_primitives",
-        "//bazel/third_party:libaio_headers",
     ],
     includes = ["."],
     features = ["layering_check"],
@@ -514,9 +512,8 @@ cc_library(
 cc_library(
     name = "oblib_io_primitives",
     hdrs = [
-        "lib/file/file_directory_utils.h",
+        "lib/file/path_operations.h",
         "lib/file/ob_string_util.h",
-        "lib/file/wasm_file.h",
     ],
     deps = select({
         "@platforms//os:windows": [":oblib_foundation"],
@@ -583,20 +580,6 @@ cc_library(
     visibility = _OBLIB_INTERFACE_VISIBILITY,
 )
 
-cc_library(
-    name = "oblib_restore",
-    hdrs = [
-        "lib/restore/ob_device_common.h",
-        "lib/restore/ob_io_device.h",
-    ],
-    deps = [
-        ":oblib_base",
-    ],
-    includes = ["."],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = _OBLIB_INTERFACE_VISIBILITY,
-)
 
 cc_library(
     name = "oblib_rpc",
@@ -662,7 +645,6 @@ _OBLIB_PRIVATE_HEADERS = [
     "lib/container/ob_paringheap.h",
     "lib/container/ob_ring_array.h",
     "lib/container/ob_ring_buffer.h",
-    "lib/file/config.h",
     "lib/hash/ob_multi_mod_ref_mgr.h",
     "lib/hash/ob_refered_map.h",
     "lib/lds/ob_lds_constructor.hpp",
@@ -698,10 +680,8 @@ cc_library(
         ":oblib_io_primitives",
         ":oblib_memory_primitives",
         ":oblib_mysql_protocol",
-        ":oblib_restore",
         ":oblib_rpc",
         ":oblib_vector",
-        "//bazel/third_party:libaio_headers",
         "//bazel/third_party:mariadb_headers",
         "//rust:crypto_headers",
         "//bazel/third_party:vsag_headers",
@@ -776,6 +756,7 @@ grouped_unity_cc_library(
         "//rust:crypto_headers",
         "//rust:logger",
         "//rust:number_parser",
+        "//rust:file_io",
     ],
     copts = OBLIB_CXX_COPTS + openmp_copts(),
     local_defines = OBLIB_LOCAL_DEFINES,
@@ -901,22 +882,6 @@ grouped_unity_cc_library(
     tags = ["manual"],
 )
 
-cc_library(
-    name = "_oblib_restore_impl",
-    srcs = standalone_sources(
-        OBLIB_STANDALONE_CXX_SOURCES,
-        "src/oblib/lib/restore:restore",
-    ),
-    implementation_deps = [
-        ":_oblib_implementation_headers",
-        ":oblib_foundation",
-        "//rust:crypto_headers",
-    ],
-    copts = OBLIB_CXX_COPTS,
-    local_defines = OBLIB_LOCAL_DEFINES,
-    features = ["layering_check"],
-    tags = ["manual"],
-)
 
 cc_library(
     name = "_malloc_hook_impl",
@@ -962,7 +927,6 @@ cc_library(
         ":_oblib_common_standalone_impl",
         ":_oblib_foundation_c_impl",
         ":_oblib_foundation_impl",
-        ":_oblib_restore_impl",
         ":_oblib_rpc_impl",
         ":_oblib_vector_impl",
         "//rust:compression",
@@ -1005,6 +969,7 @@ cc_library(
     name = "oblib_test_runtime",
     testonly = True,
     deps = [
+        "//rust:sql_nio",
         ":_malloc_hook_impl",
         ":_ob_malloc_impl",
         ":_oblib_bitmap_impl",
@@ -1012,7 +977,6 @@ cc_library(
         ":_oblib_common_standalone_impl",
         ":_oblib_foundation_c_impl",
         ":_oblib_foundation_impl",
-        ":_oblib_restore_impl",
         ":_oblib_rpc_impl",
         ":_oblib_vector_impl",
         "//bazel/third_party:libaio",

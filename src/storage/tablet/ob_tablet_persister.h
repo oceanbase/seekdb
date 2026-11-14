@@ -422,7 +422,6 @@ int ObTabletPersister::fill_write_info(
       write_info.buffer_ = buf;
       write_info.offset_ = 0;
       write_info.size_ = size;
-      write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
       if (OB_FAIL(write_infos.push_back(write_info))) {
       }
     }

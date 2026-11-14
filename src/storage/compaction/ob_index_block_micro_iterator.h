@@ -18,7 +18,7 @@
 #define OCEANBASE_COMPACTION_OB_INDEX_BLOCK_MICRO_ITERATOR_H_
 
 #include "common/ob_range.h"
-#include "share/io/ob_io_manager.h"
+#include "share/io_request.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/access/ob_table_read_info.h"
 #include "storage/blocksstable/ob_block_manager.h"

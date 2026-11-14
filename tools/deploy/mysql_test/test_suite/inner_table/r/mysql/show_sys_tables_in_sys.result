@@ -2618,37 +2618,17 @@ id	field	type	length	precision	nullable
 43	base_major_status	22	64	-1	0
 44	mds_filter_info	22	1024	-1	0
 45	execute_time	5	0	20	0
-table oceanbase.__all_virtual_io_calibration_status column_count 4 table_id 11113
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11113 order by column_id;
+table oceanbase.__all_virtual_io_stat column_count 8 table_id 11115
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11115 order by column_id;
 id	field	type	length	precision	nullable
-16	storage_name	22	1024	-1	0
-17	status	22	256	-1	0
-18	start_time	18	0	25	0
-19	finish_time	18	0	25	0
-table oceanbase.__all_virtual_io_benchmark column_count 6 table_id 11114
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11114 order by column_id;
-id	field	type	length	precision	nullable
-16	storage_name	22	1024	-1	0
+16	module_id	5	0	20	0
 17	mode	22	256	-1	0
 18	size	5	0	20	0
 19	iops	5	0	20	0
 20	mbps	5	0	20	0
-21	latency	5	0	20	0
-table oceanbase.__all_virtual_io_quota column_count 12 table_id 11115
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11115 order by column_id;
-id	field	type	length	precision	nullable
-16	group_id	5	0	20	0
-17	mode	22	256	-1	0
-18	size	5	0	20	0
-19	min_iops	5	0	20	0
-20	max_iops	5	0	20	0
-21	real_iops	5	0	20	0
-22	min_mbps	5	0	20	0
-23	max_mbps	5	0	20	0
-24	real_mbps	5	0	20	0
-25	schedule_us	5	0	20	0
-26	io_delay_us	5	0	20	0
-27	total_us	5	0	20	0
+21	schedule_us	5	0	20	0
+22	io_delay_us	5	0	20	0
+23	total_us	5	0	20	0
 table oceanbase.__all_virtual_server_compaction_event_history column_count 5 table_id 11116
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11116 order by column_id;
 id	field	type	length	precision	nullable
@@ -3712,16 +3692,6 @@ id	field	type	length	precision	nullable
 16	resource_name	22	128	-1	0
 17	limit_type	22	128	-1	0
 18	limit_value	5	0	20	0
-table oceanbase.__all_virtual_group_io_stat column_count 7 table_id 12483
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12483 order by column_id;
-id	field	type	length	precision	nullable
-16	group_id	5	0	20	0
-17	group_name	22	128	-1	0
-18	mode	22	128	-1	0
-19	min_iops	5	0	20	0
-20	max_iops	5	0	20	0
-21	real_iops	5	0	20	0
-22	norm_iops	5	0	20	0
 table oceanbase.__all_virtual_nic_info column_count 1 table_id 12487
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12487 order by column_id;
 id	field	type	length	precision	nullable

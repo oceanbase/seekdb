@@ -1,0 +1,18 @@
+[package]
+name = "storage-io"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Storage requests, resource accounting, and physical block files"
+
+[features]
+cxx = ["dep:cxx", "file-io/cxx"]
+ownership-test-support = ["file-io/ownership-test-support"]
+
+[dependencies]
+tokio = { version = "=1.52.3", default-features = false, features = ["rt"] }
+file-io = { path = "../file-io" }
+cxx = { version = "=1.0.202", optional = true }
+
+[dev-dependencies]
+libc = "=0.2.189"

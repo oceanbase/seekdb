@@ -77,11 +77,24 @@ public:
   /// CAS-based expansion up to the given limit.
   bool try_expand_one(int64_t limit)
   {
+    return try_expand_one(limit, []() { return false; });
+  }
+
+  template <typename Cancelled>
+  bool try_expand_one(int64_t limit, Cancelled cancelled)
+  {
+    if (cancelled()) {
+      return false;
+    }
     int64_t cur = total_cnt_.load(std::memory_order_relaxed);
     while (cur < limit) {
       if (total_cnt_.compare_exchange_weak(cur, cur + 1,
               std::memory_order_acq_rel, std::memory_order_relaxed)) {
         while (!self().do_add_worker()) {
+          if (cancelled()) {
+            total_cnt_.fetch_sub(1, std::memory_order_relaxed);
+            return false;
+          }
           ob_usleep(1000);
         }
         return true;

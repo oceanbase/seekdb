@@ -175,7 +175,7 @@ cc_library(
     deps = [
         ":vector_index_interface",
         "//src/oblib:oblib_foundation",
-        "//src/share:io",
+        "//src/share:io_request",
         "//src/share:json_access",
         "//src/share:runtime_context",
         "//src/share:tenant_runtime",
@@ -194,7 +194,6 @@ cc_library(
         "//src/oblib:oblib_concurrency_primitives",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_encoding_primitives",
-        "//src/oblib:oblib_restore",
     ],
 )
 

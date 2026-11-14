@@ -33,6 +33,7 @@
 #include "share/ob_version_parser.h"
 #include "share/system_variable/ob_system_variable_alias.h"
 #include "rootserver/ob_bootstrap.h"
+#include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ob_partition_exchange.h"
 #include "rootserver/ob_schema2ddl_sql.h"
 #include "rootserver/ob_index_builder.h"
@@ -1866,6 +1867,10 @@ int ObLocalManagementService::start_local_services_()
     FLOG_INFO("success to start ddl service", KR(ret));
   }
 
+  if (FAILEDx(retire_obsolete_io_tables_())) {
+    FLOG_WARN("failed to retire obsolete IO tables", KR(ret));
+  }
+
   if (FAILEDx(max_id_cache_mgr_.init(&sql_proxy_))) {
     FLOG_WARN("max id cache mgr start failed", KR(ret));
   } else {
@@ -1889,6 +1894,75 @@ int ObLocalManagementService::start_local_services_()
   FLOG_INFO("finish starting local services", KR(ret));
   return ret;
 }
+
+int ObLocalManagementService::retire_obsolete_io_tables_()
+{
+  int ret = OB_SUCCESS;
+  bool write_enabled = false;
+  if (OB_FAIL(share::ObShareUtil::is_server_write_enabled(write_enabled))) {
+  } else if (!write_enabled) {
+  } else if (OB_ISNULL(schema_service_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    struct RetiredTable {
+      uint64_t id;
+      const char *name;
+      const ObTableSchema *schema = nullptr;
+    };
+    RetiredTable tables[] = {
+      {11113, "__all_virtual_io_calibration_status"},
+      {11114, "__all_virtual_io_benchmark"}};
+    ObSchemaGetterGuard schema_guard;
+    bool has_obsolete_table = false;
+    if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tables); ++i) {
+      if (OB_FAIL(schema_guard.get_table_schema(tables[i].id, tables[i].schema))) {
+      } else if (nullptr != tables[i].schema) {
+        const ObTableSchema &table = *tables[i].schema;
+        if (table.get_table_id() != tables[i].id
+            || table.get_database_id() != OB_SYS_DATABASE_ID
+            || !table.is_vir_table()
+            || table.get_table_name_str() != ObString::make_string(tables[i].name)) {
+          ret = OB_SCHEMA_ERROR;
+          LOG_WARN("obsolete IO table identity mismatch", KR(ret), K(table));
+        } else {
+          has_obsolete_table = true;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && has_obsolete_table) {
+      ObMySQLTransaction trans;
+      ObDDLOperator ddl_operator(*schema_service_, sql_proxy_);
+      if (OB_FAIL(trans.start(&sql_proxy_))) {
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tables); ++i) {
+          if (nullptr != tables[i].schema
+              && OB_FAIL(ddl_operator.drop_table_for_not_dropped_schema(*tables[i].schema, trans))) {
+            LOG_WARN("failed to retire obsolete IO table", KR(ret), K(tables[i].id));
+          }
+        }
+        const int end_ret = trans.end(OB_SUCC(ret));
+        if (OB_SUCCESS != end_ret) {
+          LOG_WARN("failed to end obsolete IO table retirement transaction", KR(ret), K(end_ret));
+          if (OB_SUCC(ret)) {
+            ret = end_ret;
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        int64_t published_schema_version = OB_INVALID_VERSION;
+        if (OB_FAIL(ddl_service_.publish_schema_and_get_schema_version(published_schema_version))) {
+          LOG_WARN("failed to publish obsolete IO table retirement", KR(ret));
+        } else {
+          LOG_INFO("retired obsolete IO tables", K(published_schema_version));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObLocalManagementService::check_parallel_ddl_conflict(
     share::schema::ObSchemaGetterGuard &schema_guard,
     const obcall::ObDDLArg &arg)

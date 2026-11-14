@@ -21,14 +21,10 @@
 #include "lib/utility/ob_macro_utils.h"         //DISALLOW_COPY_AND_ASSIGN
 #include "share/log/palf/log_define.h"
 #include "palf_iterator.h"
-#include "lib/restore/ob_io_device.h"        // ObIOFd
+#include "log_io_adapter.h"
 #include "log_io_context.h"                     // LogIOContext
 namespace oceanbase
 {
-namespace common
-{
-class ObIOFd;
-}
 namespace palf
 {
 class ReadBuf;
@@ -55,7 +51,7 @@ private:
   offset_t limit_read_end_offset_by_block_size_(
       offset_t start_offset,
       offset_t end_offset) const;
-  int inner_pread_(const ObIOFd &read_io_fd,
+  int inner_pread_(const LogFile &read_file,
                    offset_t start_offset,
                    int64_t in_read_size,
                    char *read_buf,
@@ -74,9 +70,6 @@ private:
   LogIOAdapter *io_adapter_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(LogReader);
-  // TODO by runlin
-  // 1). LogCache;
-  // 2). Optimize open ObIOFd
 };
 } // end of logservice
 } // end of oceanbase

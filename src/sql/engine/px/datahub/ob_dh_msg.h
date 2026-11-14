@@ -20,7 +20,7 @@
 #include "sql/dtl/ob_dtl_msg.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/sort/ob_sort_basic_info.h"
-#include "sql/engine/ob_io_event_observer.h"
+#include "query/engine/ob_io_event_observer.h"
 #include "sql/engine/px/ob_dfo.h"
 
 namespace oceanbase

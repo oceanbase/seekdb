@@ -204,7 +204,7 @@ public:
   inline int64_t get_disk_rnd_read_speed() const { return disk_rnd_read_speed_; }
   static OptSystemIoBenchmark& get_instance();
 
-  int run_benchmark(ObIAllocator &allocator);
+  int run_benchmark();
   
 private:
   int64_t disk_seq_read_speed_;

@@ -21,7 +21,6 @@ namespace oceanbase
 namespace blocksstable
 {
 
-
 ObDataMacroBlockMergeWriter::ObDataMacroBlockMergeWriter()
     : ObMacroBlockWriter(true/*is_need_macro_buffer*/),
       curr_macro_logic_id_(),
@@ -48,10 +47,8 @@ int ObDataMacroBlockMergeWriter::open(
     const blocksstable::ObMacroSeqParam &macro_seq_param,
     const share::ObPreWarmerParam &pre_warm_param,
     ObIMacroBlockFlushCallback *callback,
-    ObIMacroBlockValidator *validator,
-    ObIODevice *device_handle)
+    ObIMacroBlockValidator *validator)
 {
-  UNUSED(device_handle);
   int ret = OB_SUCCESS;
 
   curr_macro_logic_id_.reset();
@@ -105,7 +102,6 @@ int ObDataMacroBlockMergeWriter::append_micro_block(
 
   return ret;
 }
-
 
 int ObDataMacroBlockMergeWriter::append_macro_block(
     const ObMacroBlockDesc &macro_desc,

@@ -42,18 +42,6 @@ ObSSTableRowWholeScanner::~ObSSTableRowWholeScanner()
   }
 }
 
-int ObSSTableRowWholeScanner::alloc_io_buf(compaction::ObCompactionBuffer &io_buf, int64_t buf_size)
-{
-  int ret = OB_SUCCESS;
-  int64_t size = common::OB_DEFAULT_MACRO_BLOCK_SIZE * PREFETCH_DEPTH;
-  if (OB_LIKELY(io_buf.is_inited())) {
-    if (OB_FAIL(io_buf.reserve(buf_size))) {
-    }
-  } else if (OB_FAIL(io_buf.init(common::OB_DEFAULT_MACRO_BLOCK_SIZE, buf_size))) {
-  }
-  return ret;
-}
-
 void ObSSTableRowWholeScanner::reset()
 {
   ObStoreRowIterator::reset();
@@ -249,8 +237,7 @@ int ObSSTableRowWholeScanner::open(
     MacroScanHandle &scan_handle = scan_handles_[0];
     scan_handle.reset();
 
-    if (OB_FAIL(alloc_io_buf(io_buf_[0], sstable_->get_macro_read_size()))) {
-    } else if (OB_FAIL(init_micro_scanner(&query_range))) {
+    if (OB_FAIL(init_micro_scanner(&query_range))) {
     } else {
       ObStorageObjectReadInfo read_info;
       scan_handle.start_row_offset_ = macro_desc.start_row_offset_;
@@ -262,9 +249,7 @@ int ObSSTableRowWholeScanner::open(
       read_info.offset_ = sstable_->get_macro_offset();
       read_info.size_ = sstable_->get_macro_read_size();
       read_info.io_desc_.set_mode(ObIOMode::READ);
-      read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
-      read_info.buf_ = io_buf_[0].data();
       read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
       
 
@@ -388,7 +373,6 @@ int ObSSTableRowWholeScanner::prefetch()
         ret = OB_SUCCESS;
       } else {
       }
-    } else if (OB_FAIL(alloc_io_buf(io_buf_[io_index], sstable_->get_macro_read_size()))) {
     } else {
       scan_handle.is_left_border_ = (0 == prefetch_macro_cursor_);
       scan_handle.is_right_border_ = false; // set right border correctly when open macro block
@@ -398,9 +382,7 @@ int ObSSTableRowWholeScanner::prefetch()
       read_info.offset_ = sstable_->get_macro_offset();
       read_info.size_ = sstable_->get_macro_read_size();
       read_info.io_desc_.set_mode(ObIOMode::READ);
-      read_info.io_desc_.set_wait_event(common::ObWaitEventIds::DB_FILE_COMPACT_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
-      read_info.buf_ = io_buf_[io_index].data();
       read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
       
 

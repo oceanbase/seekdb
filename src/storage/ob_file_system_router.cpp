@@ -16,14 +16,12 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_file_system_router.h"
-#include "share/ob_io_device_helper.h"
-#include "lib/file/file_directory_utils.h"
+#include "lib/file/path_operations.h"
 #include "lib/utility/ob_platform_io.h"
 #include "lib/string/ob_sql_string.h"
 
 namespace oceanbase {
 using namespace common;
-using namespace share;
 using namespace blocksstable;
 namespace storage {
 /**
@@ -115,8 +113,8 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
   ObSqlString tmp_dir;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_dir.assign(data_dir))) {
-    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tmp_dir.ptr()))) {
-    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
+    } else if (OB_FAIL(path_operations::create_full_path(tmp_dir.ptr()))) {
+    } else if (OB_FAIL(path_operations::to_absolute_path(tmp_dir))) {
     } else if (0 == strcmp(work_directory, tmp_dir.ptr())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_ERROR("data dir is same as work directory", K(ret), K(tmp_dir), KCSTRING(work_directory));
@@ -131,8 +129,8 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_dir.assign(redo_dir))) {
-    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tmp_dir.ptr()))) {
-    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
+    } else if (OB_FAIL(path_operations::create_full_path(tmp_dir.ptr()))) {
+    } else if (OB_FAIL(path_operations::to_absolute_path(tmp_dir))) {
     } else if (0 == strcmp(work_directory, tmp_dir.ptr())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_ERROR("clog/redo dir is same as work directory", K(ret), K(tmp_dir), KCSTRING(work_directory));
@@ -155,7 +153,7 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
       LOG_ERROR("construct sstable path fail", K(ret));
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(sstable_dir_))) {
+    } else if (OB_FAIL(path_operations::create_full_path(sstable_dir_))) {
     }
   }
 

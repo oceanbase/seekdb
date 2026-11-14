@@ -212,7 +212,7 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/checksum/ob_crc64.cpp",
                 "src/oblib/lib/cpu/ob_cpu_topology.cpp",
                 "src/oblib/lib/encrypt/ob_encrypted_helper.cpp",
-                "src/oblib/lib/file/file_directory_utils.cpp",
+                "src/oblib/lib/file/path_operations.cpp",
                 "src/oblib/lib/file/ob_file.cpp",
                 "src/oblib/lib/file/ob_string_util.cpp",
                 "src/oblib/lib/hash/ob_link_hashmap.cpp",
@@ -419,9 +419,6 @@ OBLIB_UNITY_GROUPS = {
 OBLIB_STANDALONE_CXX_SOURCES = {
     "src/oblib/common:oblib_common": [
         "src/oblib/common/timezone/ob_timezone_util.cpp",
-    ],
-    "src/oblib/lib/restore:restore": [
-        "src/oblib/lib/restore/ob_io_device.cpp",
     ],
     "src/oblib/lib:malloc_hook": [
         "src/oblib/lib/alloc/malloc_hook.cpp",

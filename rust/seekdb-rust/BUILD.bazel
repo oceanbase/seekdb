@@ -14,6 +14,8 @@ rust_static_library(
     }),
     deps = all_crate_deps(normal = True) + [
         "//rust/mvt",
+        "//rust/file-io:file_io",
+        "//rust/storage-io:storage_io",
         "//rust/config",
         "//rust/in-process:in_process",
         "//rust/local",

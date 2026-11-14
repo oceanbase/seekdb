@@ -19,7 +19,6 @@
 
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
-#include "share/io/ob_io_calibration.h"
 #include "data_plane/scheduler/ob_sys_task_stat.h"
 namespace oceanbase
 {
@@ -46,24 +45,6 @@ struct ObFlushCacheParam
   bool is_fine_grained_;
   ObLibCacheNameSpace ns_type_;
   uint64_t schema_id_;
-};
-
-struct ObRefreshIOCalibrationParam
-{
-  ObRefreshIOCalibrationParam()
-    : storage_name_(), only_refresh_(false), calibration_list_()
-  {}
-
-  bool is_valid() const
-  {
-    return !(only_refresh_ && calibration_list_.count() > 0);
-  }
-
-  TO_STRING_KV(K_(storage_name), K_(only_refresh), K_(calibration_list));
-
-  common::ObString storage_name_;
-  bool only_refresh_;
-  common::ObSArray<common::ObIOBenchResult> calibration_list_;
 };
 
 class ObFreezeStmt : public ObSystemCmdStmt
@@ -159,11 +140,7 @@ public:
   ObRefreshIOCalibraitonStmt() : ObSystemCmdStmt(stmt::T_REFRESH_IO_CALIBRATION) {}
   virtual ~ObRefreshIOCalibraitonStmt() {}
 
-  ObRefreshIOCalibrationParam &get_param() { return param_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(param));
-private:
-  ObRefreshIOCalibrationParam param_;
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
 };
 
 class ObSwitchRoleStmt : public ObSystemCmdStmt

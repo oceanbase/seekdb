@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "share/ob_io_device_helper.h"
 #include "ob_object_manager.h"
+#include "storage/blocksstable/ob_block_manager.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 
 namespace oceanbase
@@ -67,7 +67,7 @@ ObObjectManager::~ObObjectManager()
 
 int ObObjectManager::init(const int64_t macro_object_size)
 {
-  int ret = OB_SERVER_BLOCK_MGR.init(&LOCAL_DEVICE_INSTANCE, macro_object_size);
+  int ret = OB_SERVER_BLOCK_MGR.init(macro_object_size);
   if (OB_SUCC(ret)) {
     macro_object_size_ = macro_object_size;
     is_inited_ = true;
@@ -119,9 +119,10 @@ int ObObjectManager::alloc_object(const ObStorageObjectOpt &opt, ObStorageObject
 
 int ObObjectManager::async_read_object(
     const ObStorageObjectReadInfo &read_info,
-    ObStorageObjectHandle &object_handle)
+    ObStorageObjectHandle &object_handle,
+    std::unique_ptr<storage_io::CallbackAdapter> callback)
 {
-  return object_handle.async_read(read_info);
+  return object_handle.async_read(read_info, std::move(callback));
 }
 
 int ObObjectManager::async_write_object(
@@ -140,10 +141,11 @@ int ObObjectManager::async_write_object(
 
 int ObObjectManager::read_object(
     const ObStorageObjectReadInfo &read_info,
-    ObStorageObjectHandle &object_handle)
+    ObStorageObjectHandle &object_handle,
+    std::unique_ptr<storage_io::CallbackAdapter> callback)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(async_read_object(read_info, object_handle))) {
+  if (OB_FAIL(async_read_object(read_info, object_handle, std::move(callback)))) {
   } else if (OB_FAIL(object_handle.wait())) {
   }
   return ret;

@@ -358,13 +358,13 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
     cost_threshold_us = 1000.0 * std::max(static_cast<uint64_t>(10), parallel_min_scan_time_threshold);
     parallel_degree_limit = std::max(parallel_degree_limit, static_cast<uint64_t>(1));
   }
-  BEGIN_OPT_TRACE(sql_ctx->session_info_, "");
+  BEGIN_OPT_TRACE(sql_ctx->session_info_, "", ret);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cost_tsc_info.calculate_table_dop(range_row_count, range_row_count, part_cnt,
                                                        cost_threshold_us, parallel_degree_limit,
                                                        table_dop))) {
   }
-  END_OPT_TRACE(sql_ctx->session_info_);
+  END_OPT_TRACE(sql_ctx->session_info_, ret);
   return ret;
 }
 

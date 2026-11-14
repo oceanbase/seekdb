@@ -39,10 +39,8 @@ int ObExternalFileWriter::open_file()
 int ObExternalFileWriter::close_file()
 {
   int ret = OB_SUCCESS;
-  if (file_appender_.is_opened() && OB_FAIL(file_appender_.fsync())) {
-    LOG_WARN("failed to do fsync", K(ret));
-  } else {
-    file_appender_.close();
+  if (OB_FAIL(file_appender_.finish())) {
+    LOG_WARN("failed to finish output file", K(ret));
   }
   if (OB_SUCC(ret)) {
     is_file_opened_ = false;
@@ -153,7 +151,7 @@ int ObCsvFileWriter::flush_to_storage(const char *data, int64_t data_len)
   int ret = OB_SUCCESS;
   if (data == NULL || data_len == 0) {
   } else if (!is_file_opened_ && OB_FAIL(open_file())) {
-  } else if (OB_FAIL(file_appender_.append(data, data_len, false))) {
+  } else if (OB_FAIL(file_appender_.append(data, data_len))) {
   }
   return ret;
 }

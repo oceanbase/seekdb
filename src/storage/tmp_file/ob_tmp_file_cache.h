@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_CACHE_H_
 #define OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_CACHE_H_
 
+#include "share/io_request.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
 #include "share/cache/ob_kv_storecache.h"
 
@@ -224,8 +225,8 @@ public:
   public:
     ObITmpPageIOCallback(const common::ObIOCallbackType type);
     virtual ~ObITmpPageIOCallback();
-    virtual int alloc_data_buf(const char *io_data_buffer, const int64_t data_size) override;
-    const char *get_data() override { return data_buf_; }
+    int alloc_data_buf(const char *io_data_buffer, const int64_t data_size);
+    const char *get_data() const override { return data_buf_; }
 
   protected:
     friend class ObTmpPageCache;
@@ -243,9 +244,7 @@ public:
   public:
     ObTmpCachedReadPageIOCallback();
     ~ObTmpCachedReadPageIOCallback();
-    int64_t size() const override { return sizeof(*this); }
-    int inner_process(const char *data_buffer, const int64_t size) override;
-    const char *get_cb_name() const override { return "ObTmpCachedReadPageIOCallback"; }
+    int process(const char *data_buffer, const int64_t size) override;
     TO_STRING_KV("callback_type:", "ObTmpCachedReadPageIOCallback", KP(data_buf_));
     DISALLOW_COPY_AND_ASSIGN(ObTmpCachedReadPageIOCallback);
   private:
@@ -258,9 +257,7 @@ public:
   public:
     ObTmpAggregatePageIOCallback();
     ~ObTmpAggregatePageIOCallback();
-    int64_t size() const override { return sizeof(*this); }
-    int inner_process(const char *data_buffer, const int64_t size) override;
-    const char *get_cb_name() const override { return "ObTmpAggregatePageIOCallback"; }
+    int process(const char *data_buffer, const int64_t size) override;
     TO_STRING_KV("callback_type:", "ObTmpAggregatePageIOCallback", KP(data_buf_));
     DISALLOW_COPY_AND_ASSIGN(ObTmpAggregatePageIOCallback);
   private:
@@ -274,9 +271,7 @@ public:
   public:
     ObTmpDirectReadPageIOCallback() : ObITmpPageIOCallback(ObIOCallbackType::TMP_DIRECT_READ_PAGE_CALLBACK) {}
     ~ObTmpDirectReadPageIOCallback() {}
-    int64_t size() const override { return sizeof(*this); }
-    int inner_process(const char *data_buffer, const int64_t size) override;
-    const char *get_cb_name() const override { return "ObTmpDirectReadPageIOCallback"; }
+    int process(const char *data_buffer, const int64_t size) override;
     TO_STRING_KV("callback_type:", "ObTmpDirectReadPageIOCallback", KP(data_buf_));
     DISALLOW_COPY_AND_ASSIGN(ObTmpDirectReadPageIOCallback);
   };
@@ -306,7 +301,7 @@ public:
   int init_read(const blocksstable::MacroBlockId &macro_block_id, const int64_t read_size, const int64_t begin_offset,
                 common::ObIOFlag io_flag, const int64_t io_timeout_ms, blocksstable::ObStorageObjectHandle *handle);
   bool is_valid();
-  int async_read(ObTmpPageCache::ObITmpPageIOCallback *callback);
+  int async_read(std::unique_ptr<storage_io::CallbackAdapter> callback);
   OB_INLINE int64_t get_begin_offset() const { return begin_offset_; }
   TO_STRING_KV(K(is_inited_), K(macro_block_id_), K(read_size_), K(begin_offset_),
                K(io_desc_), K(io_timeout_ms_), KP(object_handle_));
