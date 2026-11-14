@@ -49,7 +49,7 @@ public:
     return scan_.next_batch(limit, rows);
   }
 
-  void rescan() override { scan_.rescan(); }
+  FileStatus rescan() override { return scan_.rescan(); }
 
   const std::vector<ColumnSchema> &columns() const override { return scan_.columns(); }
 

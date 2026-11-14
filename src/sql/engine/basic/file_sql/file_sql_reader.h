@@ -41,6 +41,25 @@ enum class FileFormat
   PARQUET,
 };
 
+// The resource limits of a scan. The framework owns them, a format module
+// only reads the limits that apply to it. The defaults are the limits that
+// the modules of member C use on their own.
+struct FileScanLimits
+{
+  // The largest number of columns a file may have.
+  size_t max_columns = 4096;
+  // The largest number of rows a scan may return.
+  size_t max_rows = 64 * 1024 * 1024;
+  // The largest number of row groups a parquet file may have.
+  size_t max_row_groups = 4096;
+  // The largest number of bytes a batch of rows may hold.
+  size_t max_batch_bytes = 32 * 1024 * 1024;
+  // The largest number of bytes a decompressed page may hold.
+  size_t max_page_bytes = 64 * 1024 * 1024;
+  // The largest number of bytes a single line of a file may hold.
+  size_t max_line_bytes = 16 * 1024 * 1024;
+};
+
 // Options a table function accepts. Only the options of the requested format
 // are read, the others keep their default value.
 struct FileScanOptions
@@ -54,6 +73,11 @@ struct FileScanOptions
   char quote = '"';
   char escape = '"';
   bool skip_blank_lines = false;
+  // The columns to read. An empty list means every column of the file. Only
+  // the parquet module uses it, it is the column pruning of the file.
+  std::vector<std::string> projection;
+  // The bounds of the scan.
+  FileScanLimits limits;
 };
 
 // One row of a scanned file. The value type is the one of the shared schema
@@ -78,7 +102,8 @@ public:
   virtual FileStatus next_batch(size_t limit, std::vector<FileTableRow> &rows) = 0;
 
   // Restart the scan at the first data row. The schema is not inferred again.
-  virtual void rescan() = 0;
+  // A failure is reported, the caller must not go on with a half rewound scan.
+  virtual FileStatus rescan() = 0;
 
   virtual const std::vector<ColumnSchema> &columns() const = 0;
 };

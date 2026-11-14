@@ -49,3 +49,21 @@ if(EXISTS "${FILE_SQL_SRC}/file_sql_jsonl.cpp")
     "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/basic.jsonl"
     "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/simple.parquet.b64")
 endif()
+if(EXISTS "${FILE_SQL_SRC}/file_sql_adapters.cpp")
+  # The adapters map the options of the framework onto the options of the
+  # format modules, so the test needs the reader of the framework as well.
+  add_library(file_sql_reader "${FILE_SQL_SRC}/file_sql_reader.cpp")
+  target_include_directories(file_sql_reader PUBLIC "${FILE_SQL_SRC}")
+  target_link_libraries(file_sql_reader PUBLIC file_sql_types)
+  target_compile_options(file_sql_reader PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+  add_library(file_sql_adapters "${FILE_SQL_SRC}/file_sql_adapters.cpp")
+  target_include_directories(file_sql_adapters PUBLIC "${FILE_SQL_SRC}")
+  target_link_libraries(file_sql_adapters PUBLIC file_sql_types)
+  target_compile_options(file_sql_adapters PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+  add_executable(test_file_sql_adapters test_file_sql_adapters.cpp)
+  target_link_libraries(test_file_sql_adapters PRIVATE
+    file_sql_adapters file_sql_reader file_sql_jsonl file_sql_parquet_lib)
+  add_test(NAME file_sql_adapters COMMAND test_file_sql_adapters
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/basic.jsonl"
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/simple.parquet.b64")
+endif()
