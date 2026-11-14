@@ -1,0 +1,22 @@
+DROP TABLE IF EXISTS vector_inlist_dedup;
+CREATE TABLE vector_inlist_dedup(id INT PRIMARY KEY, category INT, embedding VECTOR(3),
+VECTOR INDEX vec_idx(embedding) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO vector_inlist_dedup VALUES (1,1,'[1,0,0]'),(2,2,'[2,0,0]'),
+(3,3,'[3,0,0]'),(4,4,'[0.1,0,0]'),(5,NULL,'[0.2,0,0]');
+Query Plan
+===========================================================================
+|ID|OPERATOR                                          |NAME               |
+---------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)|vector_inlist_dedup|
+===========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([vector_inlist_dedup.id]), filter([vector_inlist_dedup.category IN (1, 2, 3)]), rowset=16
+      access([vector_inlist_dedup.id], [vector_inlist_dedup.category]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([vector_inlist_dedup.id]), range(MIN ; MAX)always true
+id
+1
+2
+3
+DROP TABLE vector_inlist_dedup;

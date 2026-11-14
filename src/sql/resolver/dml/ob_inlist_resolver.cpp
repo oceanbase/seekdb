@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashmap.h"
 
 namespace oceanbase
 {
@@ -275,10 +276,12 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObStmt *stmt,
                                                   ObIAllocator &alloc,
                                                   bool &is_question_mark,
-                                                  bool &is_enable)
+                                                  bool &is_enable,
+                                                  const ParseNode *&resolved_in_list)
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  resolved_in_list = &in_list;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -350,6 +353,88 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+    }
+  }
+  if (OB_SUCC(ret) && is_enable && !is_prepare_stmt && threshold > 1
+      && T_OP_ROW != left_expr.get_expr_type() && NULL != stmt) {
+    if (OB_FAIL(deduplicate_integer_inlist(in_list, param_store, threshold,
+                                          *stmt->get_query_ctx(), alloc, resolved_in_list))) {
+    } else if (resolved_in_list != &in_list) {
+      // The distinct count is below the threshold. Resolve an ordinary IN expression.
+      is_enable = false;
+    }
+  }
+  return ret;
+}
+
+int ObInListResolver::deduplicate_integer_inlist(const ParseNode &in_list,
+                                                const ParamStore *param_store,
+                                                const int64_t threshold,
+                                                ObQueryCtx &query_ctx,
+                                                ObIAllocator &alloc,
+                                                const ParseNode *&resolved_in_list)
+{
+  int ret = OB_SUCCESS;
+  bool is_valid = true;
+  const bool is_param = T_QUESTIONMARK == in_list.children_[0]->type_;
+  hash::ObHashMap<int64_t, int64_t> first_rows;
+  ObSEArray<ParseNode *, 8> distinct_nodes;
+  ObSEArray<ObPCParamEqualInfo, 8> equal_params;
+  if (!is_param && T_INT != in_list.children_[0]->type_) {
+    is_valid = false;
+  } else if (OB_FAIL(first_rows.create(threshold, ObModIds::OB_SQL_COMPILE))) {
+  }
+  // Stop once there are enough distinct values to retain the values-table rewrite.
+  for (int64_t i = 0; OB_SUCC(ret) && is_valid && distinct_nodes.count() < threshold
+                       && i < in_list.num_child_; ++i) {
+    ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+    int64_t first_row = -1;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (is_param) {
+      if (T_QUESTIONMARK != node->type_ || NULL == param_store
+          || node->value_ < 0 || node->value_ >= param_store->count()
+          || !param_store->at(node->value_).is_int()) {
+        is_valid = false;
+      } else {
+        value = param_store->at(node->value_).get_int();
+      }
+    } else if (T_INT != node->type_) {
+      is_valid = false;
+    } else {
+      value = node->value_;
+    }
+    if (OB_SUCC(ret) && is_valid) {
+      const int hash_ret = first_rows.get_refactored(value, first_row);
+      if (OB_HASH_NOT_EXIST == hash_ret) {
+        if (OB_FAIL(first_rows.set_refactored(value, i))) {
+        } else if (OB_FAIL(distinct_nodes.push_back(node))) {
+        }
+      } else if (OB_SUCCESS != hash_ret) {
+        ret = hash_ret;
+      } else if (is_param) {
+        // Keep original parameter indexes and guard every removed occurrence on cache hits.
+        ObPCParamEqualInfo equal_info;
+        equal_info.first_param_idx_ = in_list.children_[first_row]->value_;
+        equal_info.second_param_idx_ = node->value_;
+        if (OB_FAIL(equal_params.push_back(equal_info))) {
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && is_valid && distinct_nodes.count() < threshold) {
+    ParseNode *deduped_list = NULL;
+    if (OB_ISNULL(deduped_list = new_node(&alloc, T_EXPR_LIST, distinct_nodes.count()))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, &in_list, deduped_list))) {
+    } else if (OB_FAIL(append(query_ctx.all_equal_param_constraints_, equal_params))) {
+    } else {
+      deduped_list->num_child_ = distinct_nodes.count();
+      for (int64_t i = 0; i < distinct_nodes.count(); ++i) {
+        deduped_list->children_[i] = distinct_nodes.at(i);
+      }
+      resolved_in_list = deduped_list;
     }
   }
   return ret;
