@@ -278,6 +278,8 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
         if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
         } else if (OB_ISNULL(index_schema)) {
           ret = common::OB_ERR_UNEXPECTED;
+        } else if (index_schema->is_in_deleting()) {
+          // Auxiliary tables may already be dropped while the index schema is retained.
         } else if (!schema::is_vec_index_id_type(index_schema->get_index_type())) {
           // skip non-vector-index-id tables
         } else {
