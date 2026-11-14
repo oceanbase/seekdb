@@ -26,6 +26,9 @@ namespace oceanbase
 namespace common
 {
 
+// Escape embedded backticks without adding delimiters. With no backticks, dst refers to src.
+int escape_mysql_identifier(ObIAllocator &allocator, const ObString &src, ObString &dst);
+
 // ObSqlString only used to concatenate SQL strings, for example:
 //
 //   ObSqlString sql;
