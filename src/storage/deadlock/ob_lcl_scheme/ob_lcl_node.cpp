@@ -543,6 +543,7 @@ int ObLCLNode::process_lcl_state(const int64_t lclv,
   #define PRINT_WRAPPER KR(ret), K(*this), K(lclv), K(label), K(send_ts)
   int ret = OB_SUCCESS;
   bool detected_flag = false;
+  bool forward_state = false;
   int64_t lclv_snapshot = INVALID_VALUE;
   ObLCLLabel public_label_snapshot;
   BlockList blocklist_snapshot;
@@ -567,12 +568,25 @@ int ObLCLNode::process_lcl_state(const int64_t lclv,
           (void)get_state_snapshot_(blocklist_snapshot, lclv_snapshot, public_label_snapshot);
         }
       } else {// LCLS
+        const int64_t previous_lclv = lclv_;
+        const ObLCLLabel previous_label = public_label_;
         if (CLICK() && OB_SUCC(process_lcls_state_(lclv, label, detected_flag))) {
           CLICK();
           (void)get_state_snapshot_(blocklist_snapshot, lclv_snapshot, public_label_snapshot);
+          forward_state = !detected_flag &&
+                          (lclv_ != previous_lclv || public_label_ < previous_label);
         }
       }
       ret = OB_SUCCESS;
+    }
+    // A periodic scan can happen after the current label period has already expired.
+    // Forward only changes in LCLS so an unchanged state cannot keep circulating.
+    if (forward_state && ATOMIC_LOAD(&count_down_allow_detect_) == 0 &&
+        current_ts >= allow_detect_time_ &&
+        if_phase_match_(ObClockGenerator::getRealClock(), send_ts)) {
+      if (OB_FAIL(broadcast_(blocklist_snapshot, lclv_snapshot, public_label_snapshot))) {
+        DETECT_LOG_(WARN, "forward local lcl state failed", PRINT_WRAPPER);
+      }
     }
     if (detected_flag) {
       CLICK();
