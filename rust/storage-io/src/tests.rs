@@ -43,7 +43,7 @@ impl Directory {
             &self.path(),
             BlockConfig {
                 block_size: BLOCK,
-                initial_size: BLOCK * count,
+                initial_size: crate::FileSize::Bytes(BLOCK * count),
                 direct_io: false,
                 punch_holes,
             },
@@ -134,7 +134,7 @@ fn direct_block_file_reopens_and_transfers_aligned_regions() {
     let directory = Directory::new();
     let config = BlockConfig {
         block_size: BLOCK,
-        initial_size: BLOCK * 3,
+        initial_size: crate::FileSize::Bytes(BLOCK * 3),
         direct_io: true,
         punch_holes: false,
     };
@@ -463,7 +463,7 @@ fn reopening_through_an_alias_waits_for_all_regions_to_retire() {
     drop(owner);
     let config = BlockConfig {
         block_size: BLOCK,
-        initial_size: BLOCK * 2,
+        initial_size: crate::FileSize::Bytes(BLOCK * 2),
         direct_io: false,
         punch_holes: true,
     };
@@ -602,7 +602,7 @@ fn partial_creation_extension_is_closed_then_removed() {
         &directory.path(),
         BlockConfig {
             block_size: BLOCK,
-            initial_size: BLOCK * 3,
+            initial_size: crate::FileSize::Bytes(BLOCK * 3),
             direct_io: false,
             punch_holes: false,
         },
@@ -644,7 +644,7 @@ fn failed_creation_cleanup_preserves_both_errors_and_partial_file() {
             &directory.path(),
             BlockConfig {
                 block_size: BLOCK,
-                initial_size: BLOCK * 3,
+                initial_size: crate::FileSize::Bytes(BLOCK * 3),
                 direct_io: false,
                 punch_holes: false,
             },
@@ -717,7 +717,7 @@ fn opening_valid_existing_file_never_extends_or_removes_it() {
         &directory.path(),
         BlockConfig {
             block_size: BLOCK,
-            initial_size: BLOCK * 99,
+            initial_size: crate::FileSize::Bytes(BLOCK * 99),
             direct_io: false,
             punch_holes: false,
         },
@@ -740,7 +740,7 @@ fn opening_invalid_existing_file_does_not_reinitialize_it() {
     fs::write(directory.path(), &data).unwrap();
     let config = BlockConfig {
         block_size: BLOCK,
-        initial_size: BLOCK * 3,
+        initial_size: crate::FileSize::Bytes(BLOCK * 3),
         direct_io: false,
         punch_holes: false,
     };
@@ -797,7 +797,7 @@ fn reopening_rejects_partial_file_length() {
             &directory.path(),
             BlockConfig {
                 block_size: BLOCK,
-                initial_size: BLOCK * 3,
+                initial_size: crate::FileSize::Bytes(BLOCK * 3),
                 direct_io: false,
                 punch_holes: false,
             },
@@ -821,7 +821,7 @@ fn reopens_cpp_database_without_modifying_header_or_length() {
         &path,
         BlockConfig {
             block_size: 2 * 1024 * 1024,
-            initial_size: 0,
+            initial_size: crate::FileSize::Bytes(0),
             direct_io: false,
             punch_holes: false,
         },
@@ -862,7 +862,7 @@ fn production_maximum_inventory_reopens_a_sparse_file_without_reserving_capacity
         &directory.path(),
         BlockConfig {
             block_size,
-            initial_size: 0,
+            initial_size: crate::FileSize::Bytes(0),
             direct_io: false,
             punch_holes: false,
         },
@@ -901,7 +901,7 @@ fn every_post_create_failure_cleans_owned_entry_and_allows_retry() {
             &directory.path(),
             BlockConfig {
                 block_size: BLOCK,
-                initial_size: BLOCK * 3,
+                initial_size: crate::FileSize::Bytes(BLOCK * 3),
                 direct_io: false,
                 punch_holes: false,
             },
@@ -941,7 +941,7 @@ fn cleanup_keeps_primary_and_fixed_secondary_errors() {
             &directory.path(),
             BlockConfig {
                 block_size: BLOCK,
-                initial_size: BLOCK * 3,
+                initial_size: crate::FileSize::Bytes(BLOCK * 3),
                 direct_io: false,
                 punch_holes: false,
             },
@@ -977,7 +977,7 @@ fn substituted_entry_is_never_removed_after_creation_failure() {
         &path,
         BlockConfig {
             block_size: BLOCK,
-            initial_size: BLOCK * 3,
+            initial_size: crate::FileSize::Bytes(BLOCK * 3),
             direct_io: false,
             punch_holes: false,
         },
@@ -1032,7 +1032,7 @@ fn creation_parent_sync_failure_is_typed_and_removes_only_new_file() {
             &directory.path(),
             BlockConfig {
                 block_size: BLOCK,
-                initial_size: BLOCK * 3,
+                initial_size: crate::FileSize::Bytes(BLOCK * 3),
                 direct_io: false,
                 punch_holes: false,
             },
@@ -1082,7 +1082,7 @@ fn compatibility_summary_survives_later_creation_allocation_failure() {
         &directory.path(),
         BlockConfig {
             block_size: BLOCK,
-            initial_size: BLOCK * 3,
+            initial_size: crate::FileSize::Bytes(BLOCK * 3),
             direct_io: false,
             punch_holes: false,
         },
@@ -1103,4 +1103,266 @@ fn compatibility_summary_survives_later_creation_allocation_failure() {
     eprintln!("Windows failed-open directory observations: {summary:?}");
     assert_eq!(summary.first().is_none(), summary.count() == 0);
     assert!(!directory.path().exists());
+}
+
+fn growth_policy(max_blocks: u64) -> GrowthPolicy {
+    GrowthPolicy {
+        max_bytes: BLOCK * max_blocks,
+        next_bytes: 0,
+        usage_upper_percent: 90,
+    }
+}
+
+#[test]
+fn allocation_grows_on_exhaustion_and_observes_changed_policy() {
+    let directory = Directory::new();
+    let owner = directory.open(2, false).finish_marking().unwrap();
+    let first = owner
+        .allocate_with_growth(growth_policy(2), SpaceBudget::default())
+        .unwrap();
+    assert_eq!(first, index(1));
+    assert!(matches!(
+        owner.allocate_with_growth(growth_policy(2), SpaceBudget::default()),
+        Err(BlockError::Exhausted)
+    ));
+    let second = owner
+        .allocate_with_growth(growth_policy(3), SpaceBudget::default())
+        .unwrap();
+    assert_eq!(second, index(2));
+    assert_eq!(owner.snapshot().capacity, BLOCK * 3);
+    let before = owner.snapshot();
+    let mut unaligned_limit = growth_policy(3);
+    unaligned_limit.max_bytes += BLOCK - 1;
+    assert!(matches!(
+        owner.allocate_with_growth(unaligned_limit, SpaceBudget::default()),
+        Err(BlockError::Exhausted)
+    ));
+    assert_eq!(owner.snapshot(), before);
+}
+
+#[test]
+fn allocation_reclaims_retired_lease_before_trying_growth() {
+    let directory = Directory::new();
+    let owner = directory.open(2, false).finish_marking().unwrap();
+    let first = owner.allocate().unwrap();
+    let lease = owner.region(first, 0..BLOCK).unwrap();
+    assert!(matches!(
+        owner.release(first).unwrap(),
+        ReleaseOutcome::Pending
+    ));
+    assert!(matches!(
+        owner.allocate_with_growth(growth_policy(2), SpaceBudget::default()),
+        Err(BlockError::Exhausted)
+    ));
+    drop(lease);
+    let impossible_budget = SpaceBudget {
+        reserved_bytes: u64::MAX,
+    };
+    assert_eq!(
+        owner
+            .allocate_with_growth(growth_policy(4), impossible_budget)
+            .unwrap(),
+        first
+    );
+    assert_eq!(owner.snapshot().capacity, BLOCK * 2);
+}
+
+#[test]
+fn failed_allocation_growth_preserves_capacity_and_allocated_data() {
+    let directory = Directory::new();
+    let owner = directory.open(2, false).finish_marking().unwrap();
+    let first = owner.allocate().unwrap();
+    let region = owner.region(first, 0..BLOCK).unwrap();
+    region.write_at(b"retained", 0).result.unwrap();
+    let before = owner.snapshot();
+    assert!(matches!(
+        owner.allocate_with_growth(
+            growth_policy(4),
+            SpaceBudget {
+                reserved_bytes: u64::MAX
+            }
+        ),
+        Err(BlockError::Exhausted)
+    ));
+    assert_eq!(owner.snapshot(), before);
+    assert_eq!(fs::metadata(directory.path()).unwrap().len(), BLOCK * 2);
+    let mut bytes = [0; 8];
+    region.read_at(&mut bytes, 0).result.unwrap();
+    assert_eq!(&bytes, b"retained");
+    assert_ne!(
+        owner
+            .allocate_with_growth(growth_policy(4), SpaceBudget::default())
+            .unwrap(),
+        first
+    );
+}
+
+#[test]
+fn concurrent_allocations_grow_without_duplicate_blocks_or_exceeding_limit() {
+    let directory = Directory::new();
+    let owner = directory.open(2, false).finish_marking().unwrap();
+    let barrier = std::sync::Barrier::new(16);
+    let mut allocated = std::thread::scope(|scope| {
+        let tasks: Vec<_> = (0..16)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    owner
+                        .allocate_with_growth(growth_policy(17), SpaceBudget::default())
+                        .unwrap()
+                })
+            })
+            .collect();
+        tasks
+            .into_iter()
+            .map(|task| task.join().unwrap().get())
+            .collect::<Vec<_>>()
+    });
+    allocated.sort_unstable();
+    assert_eq!(allocated, (1..17).collect::<Vec<_>>());
+    assert_eq!(owner.snapshot().capacity, BLOCK * 17);
+    assert_eq!(owner.snapshot().free_blocks, 0);
+    assert!(matches!(
+        owner.allocate_with_growth(growth_policy(17), SpaceBudget::default()),
+        Err(BlockError::Exhausted)
+    ));
+}
+
+#[test]
+fn manual_resize_rounds_preserves_data_and_does_not_require_auto_growth() {
+    let directory = Directory::new();
+    let owner = directory.open(2, false).finish_marking().unwrap();
+    let first = owner.allocate().unwrap();
+    owner
+        .region(first, 0..BLOCK)
+        .unwrap()
+        .write_at(b"keep", 0)
+        .result
+        .unwrap();
+    owner
+        .resize(
+            FileSize::Bytes(BLOCK * 5 + BLOCK - 1),
+            SpaceBudget::default(),
+        )
+        .unwrap();
+    assert_eq!(owner.snapshot().capacity, BLOCK * 5);
+    owner
+        .resize(
+            FileSize::Bytes(BLOCK * 5),
+            SpaceBudget {
+                reserved_bytes: u64::MAX,
+            },
+        )
+        .unwrap();
+    assert!(owner
+        .resize(FileSize::Bytes(BLOCK * 3), SpaceBudget::default())
+        .is_err());
+    assert_eq!(owner.snapshot().capacity, BLOCK * 5);
+    let mut bytes = [0; 4];
+    owner
+        .region(first, 0..BLOCK)
+        .unwrap()
+        .read_at(&mut bytes, 0)
+        .result
+        .unwrap();
+    assert_eq!(&bytes, b"keep");
+    drop(owner);
+    assert_eq!(directory.open(2, false).snapshot().capacity, BLOCK * 5);
+}
+
+#[test]
+fn periodic_growth_leaves_healthy_capacity_unchanged_then_refills_low_space() {
+    let directory = Directory::new();
+    let owner = directory.open(20, false).finish_marking().unwrap();
+    owner
+        .extend_if_needed(growth_policy(40), SpaceBudget::default())
+        .unwrap();
+    assert_eq!(owner.snapshot().capacity, BLOCK * 20);
+    let allocated = owner.allocate_many(12).unwrap();
+    assert_eq!(allocated.len(), 12);
+    owner
+        .extend_if_needed(growth_policy(40), SpaceBudget::default())
+        .unwrap();
+    assert_eq!(owner.snapshot().capacity, BLOCK * 40);
+    assert_eq!(owner.snapshot().free_blocks, 27);
+    for block in allocated {
+        assert!(owner.region(block, 0..BLOCK).is_ok());
+    }
+}
+
+#[test]
+fn capacity_admission_preserves_usage_limit_and_header_accounting() {
+    let directory = Directory::new();
+    let owner = directory.open(4, false).finish_marking().unwrap();
+    let budget = SpaceBudget::default();
+    assert_eq!(owner.used_percentage(0, BLOCK * 4, budget).unwrap(), 25);
+    assert_eq!(owner.used_percentage(BLOCK, BLOCK * 4, budget).unwrap(), 50);
+    assert!(matches!(
+        owner.check_usage(BLOCK, BLOCK * 4, budget, 50),
+        Err(BlockError::Exhausted)
+    ));
+    assert!(owner.check_usage(BLOCK * 9, BLOCK * 4, budget, 100).is_ok());
+    assert_eq!(
+        owner.maximum_capacity(
+            BLOCK * 8,
+            SpaceBudget {
+                reserved_bytes: u64::MAX
+            }
+        ),
+        BLOCK * 4
+    );
+    assert_eq!(owner.used_percentage(0, BLOCK * 8, budget).unwrap(), -75);
+}
+
+#[test]
+fn percentage_sizing_excludes_filesystem_and_metadata_reservations() {
+    let space = file_io::Space {
+        capacity: BLOCK * 1000,
+        free: BLOCK * 400,
+        available: BLOCK * 300,
+    };
+    let budget = SpaceBudget {
+        reserved_bytes: BLOCK * 100,
+    };
+    assert_eq!(
+        FileSize::DiskPercentage(25)
+            .resolve(BLOCK, 0, space, budget)
+            .unwrap(),
+        BLOCK * 200
+    );
+    assert!(matches!(
+        FileSize::DiskPercentage(30).resolve(BLOCK, 0, space, budget),
+        Err(BlockError::Exhausted)
+    ));
+    assert_eq!(
+        FileSize::DiskPercentage(30)
+            .resolve(BLOCK, BLOCK * 50, space, budget)
+            .unwrap(),
+        BLOCK * 240
+    );
+    assert!(FileSize::DiskPercentage(100)
+        .resolve(BLOCK, 0, space, budget)
+        .is_err());
+}
+
+#[test]
+fn reopening_ignores_creation_percentage_and_reservation() {
+    let directory = Directory::new();
+    drop(directory.open(4, false));
+    let reopened = UnmarkedBlockFile::open(
+        &directory.path(),
+        BlockConfig {
+            block_size: BLOCK,
+            initial_size: FileSize::DiskPercentage(0),
+            direct_io: false,
+            punch_holes: false,
+        },
+        SpaceBudget {
+            reserved_bytes: u64::MAX,
+        },
+        file_io::DirectoryDurability::Required,
+        &mut file_io::DirectorySyncSummary::default(),
+    )
+    .unwrap();
+    assert_eq!(reopened.snapshot().capacity, BLOCK * 4);
 }

@@ -83,6 +83,7 @@ fn block_file(service: &ServiceHandle, directory: &Directory) -> (Box<BlockOwner
                 &ffi::BlockOptions {
                     block_size: 8192,
                     initial_size: 32768,
+                    initial_percentage: 0,
                     reserved_bytes: 0,
                     punch_holes: false,
                 }
@@ -92,9 +93,15 @@ fn block_file(service: &ServiceHandle, directory: &Directory) -> (Box<BlockOwner
             == ffi::BlockCode::Ok
     );
     assert!((owner.finish_marking().code) == ffi::BlockCode::Ok);
-    let mut indices = Vec::new();
-    assert!((owner.allocate_blocks(1, &mut indices).code) == ffi::BlockCode::Ok);
-    (owner, indices[0])
+    let mut index = 0;
+    let policy = ffi::BlockGrowth {
+        max_bytes: 32768,
+        next_bytes: 0,
+        reserved_bytes: 0,
+        usage_upper_percent: 90,
+    };
+    assert!((owner.allocate_block(&policy, &mut index).code) == ffi::BlockCode::Ok);
+    (owner, index)
 }
 
 #[test]
@@ -156,6 +163,7 @@ fn data_owner_can_reopen_after_close_without_old_result_aliasing_new_file() {
                 &ffi::BlockOptions {
                     block_size: 8192,
                     initial_size: 32768,
+                    initial_percentage: 0,
                     reserved_bytes: 0,
                     punch_holes: false,
                 }

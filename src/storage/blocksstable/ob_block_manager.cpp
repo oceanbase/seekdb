@@ -38,51 +38,6 @@ using namespace oceanbase::share;
 
 namespace oceanbase {
 namespace blocksstable {
-namespace
-{
-int calc_auto_extend_size(int64_t &cur_datafile_size,
-                          int64_t &actual_extend_size)
-{
-  int ret = OB_SUCCESS;
-  const int64_t datafile_maxsize = config::datafile_maxsize();
-  const int64_t datafile_next = config::datafile_next();
-  const int64_t datafile_size =
-      OB_STORAGE_OBJECT_MGR.get_total_macro_block_count()
-      * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-
-  if (OB_UNLIKELY(datafile_maxsize <= 0) || OB_UNLIKELY(datafile_size <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t extend_size = 0;
-    const int64_t max_extend_file = datafile_maxsize - datafile_size;
-    if (0 == datafile_next) {
-      const int64_t datafile_next_scale_limit = 1L * 1024 * 1024 * 1024;
-      extend_size = MIN(datafile_size, datafile_next_scale_limit);
-    } else {
-      const int64_t datafile_next_minsize = 32 * 1024 * 1024;
-      if (datafile_next < datafile_next_minsize) {
-        const int64_t min_extend_size = datafile_maxsize * 10 / 100;
-        extend_size = MIN(min_extend_size, datafile_next_minsize);
-      } else {
-        extend_size = datafile_next;
-      }
-    }
-    actual_extend_size = MIN(extend_size, max_extend_file);
-    if (actual_extend_size <= 0) {
-      ret = OB_SERVER_OUTOF_DISK_SPACE;
-      if (REACH_TIME_INTERVAL(300 * 1000 * 1000L)) {
-        LOG_INFO("no more disk space to extend",
-                 K(ret), K(datafile_maxsize), K(datafile_size));
-      }
-    } else {
-      actual_extend_size += datafile_size;
-      cur_datafile_size = datafile_size;
-    }
-  }
-  return ret;
-}
-} // namespace
-
 /**
  * ------------------------------------ObMacroBlockRewriteSeqGenerator-------------------------------------
  */
@@ -122,8 +77,8 @@ ObBlockManager::ObBlockManager()
       marker_status_(), marker_lock_(), is_mark_sweep_enabled_(false),
       sweep_lock_(), mark_block_task_(*this), inspect_bad_block_task_(*this),
       timer_(), bad_block_lock_(), data_file_(storage_io::new_block_owner()),
-      data_path_{}, sstable_dir_{}, initial_file_size_(0), disk_percentage_(0), blk_seq_generator_(),
-      alloc_num_(0), group_id_(0), is_inited_(false), is_started_(false) {}
+      data_path_{}, initial_file_size_(0), disk_percentage_(0), blk_seq_generator_(),
+      alloc_num_(0), is_inited_(false), is_started_(false) {}
 
 ObBlockManager::~ObBlockManager() { destroy(); }
 
@@ -134,7 +89,7 @@ int ObBlockManager::prepare_file(const storage_io::ServiceHandle &service,
   int ret = OB_SUCCESS;
   if (data_path_[0] != '\0') { return OB_INIT_TWICE; }
   if (data_dir == nullptr || sstable_dir == nullptr || data_dir[0] == '\0'
-      || sstable_dir[0] == '\0' || STRLEN(sstable_dir) >= sizeof(sstable_dir_)
+      || sstable_dir[0] == '\0' || STRLEN(sstable_dir) >= OB_MAX_FILE_NAME_LENGTH
       || block_size < DIO_READ_ALIGN_SIZE || block_size % DIO_READ_ALIGN_SIZE != 0
       || initial_size < 0 || disk_percentage < 0 || disk_percentage >= 100) {
     return OB_INVALID_ARGUMENT;
@@ -152,7 +107,6 @@ int ObBlockManager::prepare_file(const storage_io::ServiceHandle &service,
     return ret;
   }
   STRNCPY(data_path_, path, sizeof(data_path_));
-  STRNCPY(sstable_dir_, sstable_dir, sizeof(sstable_dir_));
   default_block_size_ = block_size;
   initial_file_size_ = initial_size;
   disk_percentage_ = disk_percentage;
@@ -163,45 +117,39 @@ int ObBlockManager::open_file(int64_t reserved_size)
 {
   int ret = OB_SUCCESS;
   if (reserved_size < 0) { return OB_INVALID_ARGUMENT; }
-  bool exists = false;
-  int64_t initial_size = 0;
   const rust::Slice<const uint8_t> path{
       reinterpret_cast<const uint8_t *>(data_path_), STRLEN(data_path_)};
-  if (OB_FAIL(convert_file_error(file_io::exists_path(path, exists)))) {
-  } else if (!exists && OB_FAIL(calculate_file_size(initial_file_size_, disk_percentage_,
-      reserved_size, 0, initial_size))) {
-  } else {
-    storage_io::BlockOptions options{};
-    options.block_size = default_block_size_;
-    options.initial_size = initial_size;
-    options.reserved_bytes = reserved_size;
-    options.punch_holes = config::_enable_block_file_punch_hole();
-    auto opened = data_file_->open_blocks(path, options);
-    ret = convert_block_status(opened.status);
-    if (ret != OB_SUCCESS) {
-      LOG_WARN("data file open failed", K(ret), K(data_path_),
-          "native_error", opened.primary_error.native_code, "error", opened.primary_error.message.c_str());
-    }
-    auto &summary = opened.directory_summary;
-    if (summary.count != 0) {
-      LOG_WARN("directory durability unconfirmed; only first failure detail retained", K(ret),
-          "failed_flush_count", summary.count, "count_is_lower_bound", summary.count == UINT64_MAX,
-          "first_path", ObString(static_cast<int32_t>(summary.first_path.size()),
-              reinterpret_cast<const char *>(summary.first_path.data())),
-          "native_error", summary.first_error.native_code, "error", summary.first_error.message.c_str());
-    }
-    if (opened.sync.stage != file_io::SyncStage::Complete) {
-      LOG_WARN("data file creation directory sync failed", K(ret), K(data_path_),
-          "stage", static_cast<int>(opened.sync.stage), "native_error", opened.sync.primary.native_code,
-          "error", opened.sync.primary.message.c_str(), "close_error", opened.sync.close.native_code);
-    }
-    if (opened.cleanup_close.domain != file_io::ErrorDomain::None
-        || opened.cleanup_remove.domain != file_io::ErrorDomain::None
-        || opened.cleanup_sync.stage != file_io::SyncStage::Complete) {
-      LOG_WARN("data file creation cleanup failed", K(ret), K(data_path_),
-          "close_error", opened.cleanup_close.native_code, "remove_error", opened.cleanup_remove.native_code,
-          "sync_error", opened.cleanup_sync.primary.native_code, "sync_close_error", opened.cleanup_sync.close.native_code);
-    }
+  storage_io::BlockOptions options{};
+  options.block_size = default_block_size_;
+  options.initial_size = initial_file_size_;
+  options.initial_percentage = disk_percentage_;
+  options.reserved_bytes = reserved_size;
+  options.punch_holes = config::_enable_block_file_punch_hole();
+  auto opened = data_file_->open_blocks(path, options);
+  ret = convert_block_status(opened.status);
+  if (ret != OB_SUCCESS) {
+    LOG_WARN("data file open failed", K(ret), K(data_path_),
+        "native_error", opened.primary_error.native_code, "error", opened.primary_error.message.c_str());
+  }
+  auto &summary = opened.directory_summary;
+  if (summary.count != 0) {
+    LOG_WARN("directory durability unconfirmed; only first failure detail retained", K(ret),
+        "failed_flush_count", summary.count, "count_is_lower_bound", summary.count == UINT64_MAX,
+        "first_path", ObString(static_cast<int32_t>(summary.first_path.size()),
+            reinterpret_cast<const char *>(summary.first_path.data())),
+        "native_error", summary.first_error.native_code, "error", summary.first_error.message.c_str());
+  }
+  if (opened.sync.stage != file_io::SyncStage::Complete) {
+    LOG_WARN("data file creation directory sync failed", K(ret), K(data_path_),
+        "stage", static_cast<int>(opened.sync.stage), "native_error", opened.sync.primary.native_code,
+        "error", opened.sync.primary.message.c_str(), "close_error", opened.sync.close.native_code);
+  }
+  if (opened.cleanup_close.domain != file_io::ErrorDomain::None
+      || opened.cleanup_remove.domain != file_io::ErrorDomain::None
+      || opened.cleanup_sync.stage != file_io::SyncStage::Complete) {
+    LOG_WARN("data file creation cleanup failed", K(ret), K(data_path_),
+        "close_error", opened.cleanup_close.native_code, "remove_error", opened.cleanup_remove.native_code,
+        "sync_error", opened.cleanup_sync.primary.native_code, "sync_close_error", opened.cleanup_sync.close.native_code);
   }
   return ret;
 }
@@ -211,7 +159,6 @@ int ObBlockManager::close_file()
   const int ret = convert_storage_error(data_file_->close_blocks());
   if (ret == OB_SUCCESS) {
     data_path_[0] = '\0';
-    sstable_dir_[0] = '\0';
   }
   return ret;
 }
@@ -258,81 +205,45 @@ void ObBlockManager::release_block(uint64_t index)
   }
 }
 
-int ObBlockManager::calculate_file_size(int64_t suggested, int64_t percentage,
-    int64_t reserved, int64_t current, int64_t &result) const
-{
-  if (suggested < 0 || percentage < 0 || percentage >= 100 || reserved < 0
-      || current < 0 || default_block_size_ <= 0) { return OB_INVALID_ARGUMENT; }
-  const auto space = file_io::read_space({reinterpret_cast<const uint8_t *>(sstable_dir_), STRLEN(sstable_dir_)});
-  if (space.error != 0) { return convert_file_error(space.error); }
-  const int64_t available = std::max(int64_t{0}, static_cast<int64_t>(space.available) - reserved);
-  const int64_t usable = std::max(int64_t{0}, static_cast<int64_t>(space.capacity + space.available - space.free) - reserved);
-  const int64_t requested = suggested > 0 ? suggested : usable * percentage / 100;
-  if (requested <= default_block_size_) { return OB_INVALID_ARGUMENT; }
-  result = lower_align(requested, default_block_size_);
-  if (result > current + available) { return OB_SERVER_OUTOF_DISK_SPACE; }
-  return OB_SUCCESS;
-}
-
-int64_t ObBlockManager::get_max_block_size(int64_t reserved_size) const
-{
-  const int64_t current = get_total_block_size();
-  const int64_t configured = config::datafile_maxsize();
-  if (configured < current || default_block_size_ <= 0) { return current; }
-  const auto space = file_io::read_space({reinterpret_cast<const uint8_t *>(sstable_dir_), STRLEN(sstable_dir_)});
-  if (space.error != 0) { return current; }
-  const int64_t available = std::max(int64_t{0}, static_cast<int64_t>(space.available));
-  const int64_t maximum = std::max(current, current + available - reserved_size);
-  return lower_align(std::min(maximum, configured), default_block_size_);
-}
-
-int ObBlockManager::get_data_disk_used_percentage(int64_t required_size, int64_t &percent) const
+int ObBlockManager::make_growth_policy(storage_io::BlockGrowth &policy) const
 {
   int ret = OB_SUCCESS;
-  int64_t reserved_size = 0;
-  if (!is_mark_sweep_enabled()) { return OB_NOT_INIT; }
-  if (required_size < 0) { return OB_INVALID_ARGUMENT; }
-  if (OB_FAIL(STORAGE_META_SERVICE.get_reserved_size(reserved_size))) { return ret; }
-  storage_io::BlockStats stats{};
-  if (OB_FAIL(convert_block_status(data_file_->block_stats(stats)))) { return ret; }
-  if (stats.total_blocks == 0 || default_block_size_ <= 0) { return OB_NOT_INIT; }
-  const int64_t maximum = get_max_macro_block_count(reserved_size);
-  const int64_t total = stats.total_blocks;
-  const int64_t free = stats.free_blocks + std::max(int64_t{0}, maximum - total);
-  const int64_t required_count = required_size / default_block_size_;
-  percent = 100 - 100 * (free - required_count) / total;
-  return ret;
-}
-
-int ObBlockManager::check_space_full(int64_t required_size, bool alarm_if_space_full) const
-{
-  int ret = OB_SUCCESS;
-  int64_t used_percent = 0;
-  if (OB_FAIL(get_data_disk_used_percentage(required_size, used_percent))) { return ret; }
-  const int64_t limit = config::data_disk_usage_limit_percentage();
-  if (limit != 100 && used_percent >= limit) {
-    ret = OB_SERVER_OUTOF_DISK_SPACE;
-    if (alarm_if_space_full && REACH_TIME_INTERVAL(24 * 3600LL * 1000 * 1000)) {
-      LOG_DBA_ERROR_V2(OB_SHARE_OUTOF_DISK_SPACE, ret,
-          "disk is almost full. required size is ", required_size,
-          " and used percent is ", used_percent, "%. ",
-          "[suggestion] Increase the datafile_size or datafile_disk_percentage parameter. ");
-    }
+  int64_t reserved = 0;
+  if (OB_FAIL(STORAGE_META_SERVICE.get_reserved_size(reserved))) {
+  } else {
+    policy.max_bytes = config::datafile_maxsize();
+    policy.next_bytes = config::datafile_next();
+    policy.usage_upper_percent = config::_datafile_usage_upper_bound_percentage();
+    policy.reserved_bytes = reserved;
   }
   return ret;
 }
 
-int ObBlockManager::check_write_limited() const
+int64_t ObBlockManager::get_max_block_size(int64_t reserved_size) const
 {
+  uint64_t maximum = 0;
+  const int64_t configured = std::max(int64_t{0}, config::datafile_maxsize());
+  if (reserved_size < 0 || OB_SUCCESS != convert_block_status(
+      data_file_->maximum_block_capacity(configured, reserved_size, maximum))) {
+    return get_total_block_size();
+  }
+  return static_cast<int64_t>(maximum);
+}
+
+int ObBlockManager::check_space_full(int64_t required_size, bool alarm_if_space_full) const
+{
+  if (!is_mark_sweep_enabled()) { return OB_NOT_INIT; }
+  if (required_size < 0) { return OB_INVALID_ARGUMENT; }
   int ret = OB_SUCCESS;
-  int64_t used_percent = 0;
-  if (OB_FAIL(get_data_disk_used_percentage(0, used_percent))) { return ret; }
-  const int64_t limit = config::data_disk_write_limit_percentage();
-  if (limit != 0 && used_percent >= limit) {
-    ret = OB_SERVER_OUTOF_DISK_SPACE;
-    if (REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
-      LOG_WARN("disk is full, user write should be stopped", K(ret), K(used_percent), K(limit));
-    }
+  int64_t reserved = 0;
+  if (OB_FAIL(STORAGE_META_SERVICE.get_reserved_size(reserved))) { return ret; }
+  ret = convert_block_status(data_file_->check_block_space(required_size,
+      config::datafile_maxsize(), reserved, config::data_disk_usage_limit_percentage()));
+  if (ret == OB_SERVER_OUTOF_DISK_SPACE && alarm_if_space_full
+      && REACH_TIME_INTERVAL(24 * 3600LL * 1000 * 1000)) {
+    LOG_DBA_ERROR_V2(OB_SHARE_OUTOF_DISK_SPACE, ret,
+        "disk is almost full. required size is ", required_size,
+        ". [suggestion] Increase the datafile_size or datafile_disk_percentage parameter. ");
   }
   return ret;
 }
@@ -424,37 +335,14 @@ void ObBlockManager::destroy() {
   marker_status_.reset();
   blk_seq_generator_.reset();
   ATOMIC_STORE(&alloc_num_, 0);
-  group_id_ = 0;
   is_inited_ = false;
 }
 
 int ObBlockManager::inner_alloc_block(uint64_t &index) {
-  int ret = OB_SUCCESS;
-  bool need_retry = true;
-  // retry loop: keep trying until success or extend fails
-  while (need_retry) {
-    rust::Vec<uint64_t> indices;
-    ret = convert_block_status(data_file_->allocate_blocks(1, indices));
-    if (ret == OB_SUCCESS) {
-      if (indices.empty()) { ret = OB_SERVER_OUTOF_DISK_SPACE; }
-      else if (indices.size() != 1) { ret = OB_ERR_UNEXPECTED; }
-      else { index = indices[0]; }
-    }
-    if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
-      const int tmp_ret = extend_file_size_if_need();
-      if (OB_SUCCESS == tmp_ret || OB_EAGAIN == tmp_ret) {
-        // need to retry
-      } else {
-        ret = OB_SERVER_OUTOF_DISK_SPACE;
-        need_retry = false;
-        LOG_ERROR("The data file disk space is exhausted. Please expand the capacity by resizing datafile!!!",
-                  K(ret), K(tmp_ret));
-      }
-    } else {
-      need_retry = false;
-    }
-  }
-  return ret;
+  storage_io::BlockGrowth policy{};
+  const int ret = make_growth_policy(policy);
+  return ret == OB_SUCCESS
+      ? convert_block_status(data_file_->allocate_block(policy, index)) : ret;
 }
 
 int ObBlockManager::alloc_object(ObStorageObjectHandle &object_handle) {
@@ -745,11 +633,12 @@ int ObBlockManager::resize_file(const int64_t new_data_file_size,
     LOG_INFO("mark and sweep is disabled, do not resize file at present");
   } else {
     SpinWLockGuard sweep_guard(sweep_lock_);
-    int64_t size = 0;
-    if (OB_FAIL(calculate_file_size(new_data_file_size, new_data_file_disk_percentage,
-        reserved_size, get_total_block_size(), size))) {
+    if (new_data_file_size < 0 || new_data_file_disk_percentage < 0
+        || new_data_file_disk_percentage >= 100) {
+      ret = OB_INVALID_ARGUMENT;
     } else {
-      ret = convert_block_status(data_file_->grow_blocks(size, reserved_size));
+      ret = convert_block_status(data_file_->resize_blocks(
+          new_data_file_size, new_data_file_disk_percentage, reserved_size));
     }
   }
   return ret;
@@ -1425,67 +1314,12 @@ int ObBlockManager::InspectBadBlockTask::check_block(
 }
 
 int ObBlockManager::extend_file_size_if_need() {
-  int ret = OB_SUCCESS;
-  int64_t reserved_size = 0;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(STORAGE_META_SERVICE.get_reserved_size(
-                 reserved_size))) {
-  } else if (!check_can_be_extend(reserved_size)) {
-    ret = OB_SERVER_OUTOF_DISK_SPACE;
-  } else {
-    const int64_t total_block_cnt =
-        OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
-    const int64_t free_block_cnt = get_free_macro_block_count();
-    const int64_t usage_upper_bound_percentage =
-        config::_datafile_usage_upper_bound_percentage();
-    const int64_t free_block_cnt_to_extend =
-        total_block_cnt - total_block_cnt * usage_upper_bound_percentage / 100;
-    // here we can see auto extend disk premise:
-    // 1. free_block_cnt ratio is less than one percentage (default 10%)
-    // 2. free_block_cnt is less than one value (512 = 1G)
-    if (free_block_cnt_to_extend < free_block_cnt &&
-        (free_block_cnt > AUTO_EXTEND_LEAST_FREE_BLOCK_CNT)) {
-    } else {
-      LOG_INFO("Start to do auto ssblock file extend.", K(total_block_cnt),
-               K(free_block_cnt), K(free_block_cnt_to_extend),
-               K(usage_upper_bound_percentage));
-
-      int64_t suggest_extend_size = 0;
-      int64_t datafile_disk_percentage = 0;
-      int64_t cur_datafile_size = 0;
-
-      if (OB_FAIL(calc_auto_extend_size(
-              cur_datafile_size, suggest_extend_size))) {
-      } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.resize_local_device(
-                     cur_datafile_size, suggest_extend_size, datafile_disk_percentage,
-                     reserved_size))) {
-      }
-    }
-  }
-  return ret;
-}
-
-bool ObBlockManager::check_can_be_extend(const int64_t reserved_size) {
-  bool can_be_extended = false;
-
-  const int64_t datafile_maxsize = config::datafile_maxsize();
-  const int64_t current_block_file_size = get_total_block_size();
-  if (OB_UNLIKELY(datafile_maxsize <= 0) ||
-      OB_UNLIKELY(current_block_file_size <= 0)) {
-  } else if (datafile_maxsize <= current_block_file_size) {
-  } else {
-    const int64_t max_block_cnt = get_max_macro_block_count(reserved_size);
-    const int64_t current_block_cnt =
-        OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
-    if (max_block_cnt <= current_block_cnt) {
-    } else {
-      can_be_extended = true;
-    }
-  }
-
-  return can_be_extended;
+  if (IS_NOT_INIT) { return OB_NOT_INIT; }
+  if (!is_mark_sweep_enabled()) { return OB_SUCCESS; }
+  storage_io::BlockGrowth policy{};
+  const int ret = make_growth_policy(policy);
+  return ret == OB_SUCCESS
+      ? convert_block_status(data_file_->extend_blocks(policy)) : ret;
 }
 
 static inline int64_t get_disk_allowed_iops(const int64_t macro_block_size) {

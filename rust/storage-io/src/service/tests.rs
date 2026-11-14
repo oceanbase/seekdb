@@ -271,7 +271,7 @@ fn native_service_retires_block_lease_before_consumed_buffer_is_released() {
         &directory.0.join("blocks"),
         BlockConfig {
             block_size: 4096,
-            initial_size: 8192,
+            initial_size: crate::FileSize::Bytes(8192),
             direct_io: true,
             punch_holes: true,
         },
@@ -428,7 +428,7 @@ fn block_owner(directory: &Directory) -> crate::BlockFile {
         &directory.0.join("blocks"),
         BlockConfig {
             block_size: 4096,
-            initial_size: 8192,
+            initial_size: crate::FileSize::Bytes(8192),
             direct_io: false,
             punch_holes: false,
         },
@@ -777,7 +777,7 @@ fn fallible_preparation_retains_last_target_and_charge_until_guard_is_released()
                 &directory.0.join("geometry"),
                 BlockConfig {
                     block_size: 4096,
-                    initial_size: 8192,
+                    initial_size: crate::FileSize::Bytes(8192),
                     direct_io: false,
                     punch_holes: false,
                 },

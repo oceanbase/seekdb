@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{BlockError, HEADER_PAGE_SIZE, encode_block_header, validate_block_header};
-use file_io::{AlignedBuffer, Allocation, ExclusiveFile, Transfer, allocate};
+use crate::{
+    capacity, encode_block_header, validate_block_header, BlockError, FileSize, GrowthPolicy,
+    HEADER_PAGE_SIZE,
+};
+use file_io::{allocate, AlignedBuffer, Allocation, ExclusiveFile, Transfer};
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io;
@@ -40,7 +43,7 @@ impl BlockIndex {
 #[derive(Clone, Copy, Debug)]
 pub struct BlockConfig {
     pub block_size: u64,
-    pub initial_size: u64,
+    pub initial_size: FileSize,
     pub direct_io: bool,
     pub punch_holes: bool,
 }
@@ -196,11 +199,16 @@ impl UnmarkedBlockFile {
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
-        let (file, mut created) = match file_io::open_read_write(path) {
-            Ok(file) => (file, None),
+        let (file, mut created, initial_size) = match file_io::open_read_write(path) {
+            Ok(file) => (file, None, 0),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                block_count(config.initial_size, config.block_size)?;
-                check_space(parent_path, config.initial_size, budget)?;
+                let initial_size = config.initial_size.resolve(
+                    config.block_size,
+                    0,
+                    file_io::space(parent_path)?,
+                    budget,
+                )?;
+                block_count(initial_size, config.block_size)?;
                 let parent = file_io::Directory::open_with(
                     parent_path,
                     file_io::BindingRequirement::ResolvedPathAllowed,
@@ -217,6 +225,7 @@ impl UnmarkedBlockFile {
                         name,
                         identity: None,
                     }),
+                    initial_size,
                 )
             }
             Err(error) => return Err(error.into()),
@@ -254,7 +263,7 @@ impl UnmarkedBlockFile {
             }
             let mut page = AlignedBuffer::zeroed(HEADER_PAGE_SIZE, HEADER_PAGE_SIZE)?;
             if created.is_some() {
-                extend(file.as_file(), config.initial_size)?;
+                extend(file.as_file(), initial_size)?;
                 encode_block_header(config.block_size, page.as_mut_slice())?;
                 file_io::write_all_at(file.as_file(), page.as_slice(), 0)?;
                 #[cfg(test)]
@@ -397,6 +406,11 @@ impl UnmarkedBlockFile {
     pub fn snapshot(&self) -> BlockSnapshot {
         self.inner.snapshot()
     }
+
+    pub fn maximum_capacity(&self, max_bytes: u64, budget: SpaceBudget) -> u64 {
+        self.inner
+            .maximum_capacity(&self.inner.lock(), max_bytes, budget)
+    }
 }
 
 fn cleanup_creation(
@@ -486,6 +500,39 @@ impl BlockFile {
         Ok(BlockIndex(index as u64))
     }
 
+    /// Allocates one block, growing the file when reusable blocks are exhausted.
+    /// The supplied policy is fixed for this operation; later calls may use a new one.
+    pub fn allocate_with_growth(
+        &self,
+        policy: GrowthPolicy,
+        budget: SpaceBudget,
+    ) -> Result<BlockIndex, BlockError> {
+        policy.validate()?;
+        let mut state = self.inner.lock();
+        self.inner.reclaim_retired(&mut state);
+        if state.free.is_empty() {
+            self.inner.extend(&mut state, policy, budget)?;
+        }
+        let index = state.free.pop_front().ok_or(BlockError::Exhausted)?;
+        state.slots[index] = Slot::Allocated { leases: 0 };
+        Ok(BlockIndex(index as u64))
+    }
+
+    /// Uses the caller's existing maintenance schedule; no worker is created.
+    pub fn extend_if_needed(
+        &self,
+        policy: GrowthPolicy,
+        budget: SpaceBudget,
+    ) -> Result<(), BlockError> {
+        policy.validate()?;
+        let mut state = self.inner.lock();
+        self.inner.reclaim_retired(&mut state);
+        if policy.needs_growth(state.slots.len() as u64, state.free.len() as u64) {
+            self.inner.extend(&mut state, policy, budget)?;
+        }
+        Ok(())
+    }
+
     pub fn allocate_many(&self, count: usize) -> Result<Vec<BlockIndex>, BlockError> {
         let mut state = self.inner.lock();
         self.inner.reclaim_retired(&mut state);
@@ -535,13 +582,60 @@ impl BlockFile {
         self.inner.snapshot()
     }
 
+    /// Returns current capacity when filesystem capacity cannot be queried.
+    pub fn maximum_capacity(&self, max_bytes: u64, budget: SpaceBudget) -> u64 {
+        self.inner
+            .maximum_capacity(&self.inner.lock(), max_bytes, budget)
+    }
+
+    pub fn used_percentage(
+        &self,
+        required_bytes: u64,
+        max_bytes: u64,
+        budget: SpaceBudget,
+    ) -> Result<i64, BlockError> {
+        let state = self.inner.lock();
+        capacity::used_percentage(
+            self.inner.block_size,
+            state.slots.len() as u64,
+            state.free.len() as u64,
+            self.inner.maximum_capacity(&state, max_bytes, budget),
+            required_bytes,
+        )
+    }
+
+    pub fn check_usage(
+        &self,
+        required_bytes: u64,
+        max_bytes: u64,
+        budget: SpaceBudget,
+        limit_percent: u8,
+    ) -> Result<i64, BlockError> {
+        if limit_percent > 100 {
+            return Err(BlockError::InvalidInput("invalid datafile usage limit"));
+        }
+        let used = self.used_percentage(required_bytes, max_bytes, budget)?;
+        if limit_percent != 100 && used >= i64::from(limit_percent) {
+            return Err(BlockError::Exhausted);
+        }
+        Ok(used)
+    }
+
+    /// Explicit resizing is constrained by available space, not the automatic-growth maximum.
+    pub fn resize(&self, size: FileSize, budget: SpaceBudget) -> Result<(), BlockError> {
+        let mut state = self.inner.lock();
+        let target = size.resolve(
+            self.inner.block_size,
+            self.inner.capacity(&state),
+            file_io::space(&self.inner.path)?,
+            budget,
+        )?;
+        self.inner
+            .grow_with(&mut state, target, budget, extend_and_sync)
+    }
+
     pub fn grow(&self, target_bytes: u64, budget: SpaceBudget) -> Result<(), BlockError> {
-        self.grow_with(target_bytes, budget, |file, range| {
-            if !range.is_empty() {
-                file_io::extend_file(file, range.end)?;
-            }
-            file.sync_all()
-        })
+        self.grow_with(target_bytes, budget, extend_and_sync)
     }
 
     pub(crate) fn grow_with(
@@ -550,8 +644,59 @@ impl BlockFile {
         budget: SpaceBudget,
         extend_and_sync: impl FnOnce(&File, Range<u64>) -> io::Result<()>,
     ) -> Result<(), BlockError> {
-        let count = block_count(target_bytes, self.inner.block_size)?;
         let mut state = self.inner.lock();
+        self.inner
+            .grow_with(&mut state, target_bytes, budget, extend_and_sync)
+    }
+}
+
+fn extend_and_sync(file: &File, range: Range<u64>) -> io::Result<()> {
+    if !range.is_empty() {
+        file_io::extend_file(file, range.end)?;
+    }
+    file.sync_all()
+}
+
+impl Inner {
+    fn capacity(&self, state: &State) -> u64 {
+        state.slots.len() as u64 * self.block_size
+    }
+
+    fn maximum_capacity(&self, state: &State, max_bytes: u64, budget: SpaceBudget) -> u64 {
+        let current = self.capacity(state);
+        if max_bytes <= current {
+            return current;
+        }
+        match file_io::space(&self.path) {
+            Ok(space) => {
+                capacity::maximum_capacity(current, self.block_size, max_bytes, space, budget)
+            }
+            Err(_) => current,
+        }
+    }
+
+    fn extend(
+        &self,
+        state: &mut State,
+        policy: GrowthPolicy,
+        budget: SpaceBudget,
+    ) -> Result<(), BlockError> {
+        let current = self.capacity(state);
+        if self.maximum_capacity(state, policy.max_bytes, budget) <= current {
+            return Err(BlockError::Exhausted);
+        }
+        let target = policy.target(current, self.block_size)?;
+        self.grow_with(state, target, budget, extend_and_sync)
+    }
+
+    fn grow_with(
+        &self,
+        state: &mut State,
+        target_bytes: u64,
+        budget: SpaceBudget,
+        extend_and_sync: impl FnOnce(&File, Range<u64>) -> io::Result<()>,
+    ) -> Result<(), BlockError> {
+        let count = block_count(target_bytes, self.block_size)?;
         let old_count = state.slots.len();
         if count < old_count {
             return Err(BlockError::InvalidInput(
@@ -561,28 +706,21 @@ impl BlockFile {
         if count == old_count {
             return Ok(());
         }
-        let actual_size = self.inner.file.as_file().metadata()?.len();
-        check_space(
-            &self.inner.path,
-            target_bytes.saturating_sub(actual_size),
-            budget,
-        )?;
+        let actual_size = self.file.as_file().metadata()?.len();
+        check_space(&self.path, target_bytes.saturating_sub(actual_size), budget)?;
         state.slots.try_reserve_exact(count - old_count)?;
         let free_capacity = count - state.free.len();
         state.free.try_reserve(free_capacity)?;
         let retired_capacity = count - state.retired.len();
         state.retired.try_reserve(retired_capacity)?;
         extend_and_sync(
-            self.inner.file.as_file(),
+            self.file.as_file(),
             actual_size.min(target_bytes)..target_bytes,
         )?;
         state.slots.resize_with(count, || Slot::Free);
         state.free.extend(old_count..count);
         Ok(())
     }
-}
-
-impl Inner {
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().expect("physical block state poisoned")
     }

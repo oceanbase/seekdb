@@ -17,8 +17,8 @@ use super::{
     requests::{self, FileSession, ServiceHandle},
 };
 use crate::{
-    BlockConfig, BlockError, BlockFile, BlockIndex, BlockRegion, ReleaseOutcome, SpaceBudget,
-    UnmarkedBlockFile,
+    BlockConfig, BlockError, BlockFile, BlockIndex, BlockRegion, FileSize, GrowthPolicy,
+    ReleaseOutcome, SpaceBudget, UnmarkedBlockFile,
 };
 use file_io::bridge::{error_number, legacy_path};
 use std::{
@@ -43,6 +43,26 @@ pub fn new_block_owner() -> Box<BlockOwner> {
         state: Mutex::new(State::Empty),
         session: FileSession::default(),
     })
+}
+
+fn file_size(bytes: u64, percentage: u8) -> FileSize {
+    if bytes == 0 {
+        FileSize::DiskPercentage(percentage)
+    } else {
+        FileSize::Bytes(bytes)
+    }
+}
+
+fn space_budget(reserved_bytes: u64) -> SpaceBudget {
+    SpaceBudget { reserved_bytes }
+}
+
+fn growth_policy(policy: &ffi::BlockGrowth) -> GrowthPolicy {
+    GrowthPolicy {
+        max_bytes: policy.max_bytes,
+        next_bytes: policy.next_bytes,
+        usage_upper_percent: policy.usage_upper_percent,
+    }
 }
 
 fn code_status(code: ffi::BlockCode) -> ffi::BlockStatus {
@@ -181,7 +201,10 @@ impl BlockOwner {
                             &legacy_path(path)?,
                             BlockConfig {
                                 block_size: options.block_size,
-                                initial_size: options.initial_size,
+                                initial_size: file_size(
+                                    options.initial_size,
+                                    options.initial_percentage,
+                                ),
                                 direct_io: endpoint.direct_io,
                                 punch_holes: options.punch_holes,
                             },
@@ -313,20 +336,28 @@ impl BlockOwner {
         }
     }
 
-    pub fn allocate_blocks(&self, count: usize, out: &mut Vec<u64>) -> ffi::BlockStatus {
-        out.clear();
+    fn with_ready<T>(
+        &self,
+        action: impl FnOnce(&BlockFile) -> Result<T, BlockError>,
+    ) -> Result<T, ffi::BlockStatus> {
         let state = self.lock();
-        let file = match &*state {
-            State::Empty => return code_status(ffi::BlockCode::NotOpen),
-            State::Marking(_) => return failure(BlockError::InvalidInput("marking not finished")),
-            State::Ready(file) => file,
-        };
-        result_status((|| {
-            let capacity = usize::try_from(file.snapshot().total_blocks).unwrap_or(usize::MAX);
-            out.try_reserve(count.min(capacity))?;
-            out.extend(file.allocate_many(count)?.into_iter().map(BlockIndex::get));
-            Ok(())
-        })())
+        match &*state {
+            State::Empty => Err(code_status(ffi::BlockCode::NotOpen)),
+            State::Marking(_) => Err(failure(BlockError::InvalidInput("marking not finished"))),
+            State::Ready(file) => action(file).map_err(failure),
+        }
+    }
+
+    pub fn allocate_block(&self, policy: &ffi::BlockGrowth, out: &mut u64) -> ffi::BlockStatus {
+        match self.with_ready(|file| {
+            file.allocate_with_growth(growth_policy(policy), space_budget(policy.reserved_bytes))
+        }) {
+            Ok(index) => {
+                *out = index.get();
+                code_status(ffi::BlockCode::Ok)
+            }
+            Err(status) => status,
+        }
     }
 
     pub fn release_block(&self, index: u64) -> ffi::BlockRelease {
@@ -356,18 +387,42 @@ impl BlockOwner {
         })
     }
 
-    pub fn grow_blocks(&self, bytes: u64, reserved: u64) -> ffi::BlockStatus {
+    pub fn extend_blocks(&self, policy: &ffi::BlockGrowth) -> ffi::BlockStatus {
+        self.with_ready(|file| {
+            file.extend_if_needed(growth_policy(policy), space_budget(policy.reserved_bytes))
+        })
+        .map_or_else(|status| status, |()| code_status(ffi::BlockCode::Ok))
+    }
+
+    pub fn resize_blocks(&self, bytes: u64, percentage: u8, reserved: u64) -> ffi::BlockStatus {
+        self.with_ready(|file| file.resize(file_size(bytes, percentage), space_budget(reserved)))
+            .map_or_else(|status| status, |()| code_status(ffi::BlockCode::Ok))
+    }
+
+    pub fn maximum_block_capacity(
+        &self,
+        max_bytes: u64,
+        reserved: u64,
+        out: &mut u64,
+    ) -> ffi::BlockStatus {
         let state = self.lock();
-        match &*state {
-            State::Empty => code_status(ffi::BlockCode::NotOpen),
-            State::Marking(_) => failure(BlockError::InvalidInput("marking not finished")),
-            State::Ready(file) => result_status(file.grow(
-                bytes,
-                SpaceBudget {
-                    reserved_bytes: reserved,
-                },
-            )),
-        }
+        *out = match &*state {
+            State::Empty => return code_status(ffi::BlockCode::NotOpen),
+            State::Marking(file) => file.maximum_capacity(max_bytes, space_budget(reserved)),
+            State::Ready(file) => file.maximum_capacity(max_bytes, space_budget(reserved)),
+        };
+        code_status(ffi::BlockCode::Ok)
+    }
+
+    pub fn check_block_space(
+        &self,
+        required: u64,
+        max_bytes: u64,
+        reserved: u64,
+        limit: u8,
+    ) -> ffi::BlockStatus {
+        self.with_ready(|file| file.check_usage(required, max_bytes, space_budget(reserved), limit))
+            .map_or_else(|status| status, |_| code_status(ffi::BlockCode::Ok))
     }
 
     pub fn block_stats(&self, stats: &mut ffi::BlockStats) -> ffi::BlockStatus {
@@ -414,34 +469,6 @@ pub(super) fn checked_region(
     let index = BlockIndex::new(index)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     owner.region(index, offset..end)
-}
-
-pub fn read_block(owner: &BlockOwner, index: u64, offset: u64, bytes: &mut [u8]) -> ffi::IoResult {
-    let transfer = match checked_region(owner, index, offset, bytes.len()) {
-        Ok(region) => region.read_at(bytes, 0),
-        Err(error) => file_io::Transfer {
-            bytes: 0,
-            result: Err(error),
-        },
-    };
-    ffi::IoResult {
-        bytes: transfer.bytes,
-        error: transfer.result.err().map_or(0, error_number),
-    }
-}
-
-pub fn write_block(owner: &BlockOwner, index: u64, offset: u64, bytes: &[u8]) -> ffi::IoResult {
-    let transfer = match checked_region(owner, index, offset, bytes.len()) {
-        Ok(region) => region.write_at(bytes, 0),
-        Err(error) => file_io::Transfer {
-            bytes: 0,
-            result: Err(error),
-        },
-    };
-    ffi::IoResult {
-        bytes: transfer.bytes,
-        error: transfer.result.err().map_or(0, error_number),
-    }
 }
 
 #[cfg(test)]

@@ -56,8 +56,7 @@ ObObjectManager &ObObjectManager::get_instance()
 
 ObObjectManager::ObObjectManager()
   : is_inited_(false),
-    macro_object_size_(0),
-    resize_file_lock_()
+    macro_object_size_(0)
 {
 }
 
@@ -180,37 +179,6 @@ int ObObjectManager::dec_ref(const MacroBlockId &object_id) const
     ret = OB_NOT_INIT;
   } else {
     ret = OB_SERVER_BLOCK_MGR.dec_ref(object_id);
-  }
-  return ret;
-}
-
-int ObObjectManager::resize_local_device(
-    const int64_t expected_current_size,
-    const int64_t new_device_size,
-    const int64_t new_device_disk_percentage,
-    const int64_t reserved_size)
-{
-  int ret = OB_SUCCESS;
-  lib::ObMutexGuard guard(resize_file_lock_); // lock resize file opt
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    const int64_t current_size = OB_SERVER_BLOCK_MGR.get_total_block_size();
-    if (expected_current_size != current_size) {
-      ret = OB_EAGAIN;
-    } else {
-      ret = OB_SERVER_BLOCK_MGR.resize_file(new_device_size, new_device_disk_percentage, reserved_size);
-    }
-  }
-  return ret;
-}
-
-int ObObjectManager::check_disk_space_available()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
   }
   return ret;
 }

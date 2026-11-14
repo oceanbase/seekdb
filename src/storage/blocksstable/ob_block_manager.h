@@ -162,7 +162,6 @@ public:
   int validate_io_threads(size_t worker_threads) const;
   int fsync_block();
   int check_space_full(int64_t required_size, bool alarm_if_space_full = true) const;
-  int check_write_limited() const;
   int submit_read(const MacroBlockId &id, int64_t offset, int64_t size,
       const common::ObIOFlag &flag, int64_t timeout_us,
       std::unique_ptr<storage_io::CallbackAdapter> callback, common::ObIOHandle &handle);
@@ -278,7 +277,6 @@ private:
 
   static const int64_t RECYCLE_DELAY_US = 30 * 1000 * 1000; // 30s
   static const int64_t INSPECT_DELAY_US = 1  * 1000 * 1000; // 1s
-  static const int64_t AUTO_EXTEND_LEAST_FREE_BLOCK_CNT = 8; // 16M
 
   typedef common::ObLinearHashMap<MacroBlockId, BlockInfo, common::UniqueMemMgrTag> BlockMap;
   typedef common::ObLinearHashMap<MacroBlockId, bool> MacroBlkIdMap;
@@ -405,16 +403,12 @@ private:
   void enable_mark_sweep() { ATOMIC_SET(&is_mark_sweep_enabled_, true); }
   bool is_mark_sweep_enabled() const { return ATOMIC_LOAD(&is_mark_sweep_enabled_); }
 
-  int  extend_file_size_if_need();
-  bool check_can_be_extend(
-      const int64_t reserved_size);
+  int extend_file_size_if_need();
   int inner_alloc_block(uint64_t &index);
   void release_block(uint64_t index);
   int open_file(int64_t reserved_size);
-  int calculate_file_size(int64_t suggested, int64_t percentage, int64_t reserved,
-      int64_t current, int64_t &result) const;
+  int make_growth_policy(storage_io::BlockGrowth &policy) const;
   int64_t get_max_block_size(int64_t reserved_size) const;
-  int get_data_disk_used_percentage(int64_t required_size, int64_t &percent) const;
 
 private:
   class MarkBlockTask : public common::ObTimerTask
@@ -478,14 +472,10 @@ private:
 
   rust::Box<storage_io::BlockOwner> data_file_;
   char data_path_[common::OB_MAX_FILE_NAME_LENGTH];
-  char sstable_dir_[common::OB_MAX_FILE_NAME_LENGTH];
   int64_t initial_file_size_;
   int64_t disk_percentage_;
   ObMacroBlockRewriteSeqGenerator blk_seq_generator_;
   int64_t alloc_num_;
-
-  // for resource_isolation
-  uint64_t group_id_;
 
   bool is_inited_;
   bool is_started_;

@@ -1272,12 +1272,6 @@ int ObServer::start()
         LOG_ERROR("fail to get runtime log disk size", KR(ret));
       }
     }
-    // Validate local disk capacity after the storage runtime is ready.
-    if (FAILEDx(OB_STORAGE_OBJECT_MGR.check_disk_space_available())) {
-      LOG_ERROR("failed to check disk space available", K(ret));
-    } else {
-      LOG_INFO("success to check disk space available");
-    }
     if (FAILEDx(log_block_mgr_.start(effective_log_disk_size))) {
       LOG_ERROR("fail to start log pool", KR(ret));
     } else {
