@@ -8252,3 +8252,186 @@ int ObOptimizerUtil::eliminate_implicit_cast_for_range(ObRawExpr *&left,
   }
   return ret;
 }
+
+namespace
+{
+// 同列等值 OR 的分支越多，逐行求值越贵（每行都要把每个分支单独算一遍），
+// 而 IN 走哈希查找。分支数达到该阈值时把 "col = c1 OR col = c2 OR ..." 改写成 "col IN (c1, c2, ...)"。
+const int64_t MIN_OR_CHILDREN_TO_IN = 4;
+
+int flatten_or_leaves(ObRawExpr *expr, ObIArray<ObRawExpr *> &leaves)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> pending;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null expr", K(ret));
+  } else if (OB_FAIL(pending.push_back(expr))) {
+    LOG_WARN("failed to push back expr", K(ret));
+  }
+  while (OB_SUCC(ret) && pending.count() > 0) {
+    ObRawExpr *cur_expr = pending.at(pending.count() - 1);
+    pending.pop_back();
+    if (OB_ISNULL(cur_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get null expr", K(ret));
+    } else if (T_OP_OR == cur_expr->get_expr_type()) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < cur_expr->get_param_count(); ++i) {
+        if (OB_FAIL(pending.push_back(cur_expr->get_param_expr(i)))) {
+          LOG_WARN("failed to push back param expr", K(ret), K(i));
+        }
+      }
+    } else if (OB_FAIL(leaves.push_back(cur_expr))) {
+      LOG_WARN("failed to push back leaf", K(ret));
+    }
+  }
+  return ret;
+}
+
+int try_convert_or_expr_to_in(ObRawExprFactory &expr_factory,
+                              const ObSQLSessionInfo *session_info,
+                              ObRawExpr *&expr,
+                              bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  ObSEArray<ObRawExpr *, 16> leaves;
+  ObSEArray<ObRawExpr *, 16> const_exprs;
+  ObColumnRefRawExpr *column_expr = NULL;
+  bool can_convert = true;
+  if (OB_ISNULL(expr) || OB_ISNULL(session_info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(expr));
+  } else if (T_OP_OR != expr->get_expr_type()) {
+    // do nothing
+  } else if (OB_FAIL(flatten_or_leaves(expr, leaves))) {
+    LOG_WARN("failed to flatten or leaves", K(ret));
+  } else if (leaves.count() < MIN_OR_CHILDREN_TO_IN) {
+    // 分支太少，改写收益不明显，保持原样
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && can_convert && i < leaves.count(); ++i) {
+      ObRawExpr *leaf = leaves.at(i);
+      ObRawExpr *col = NULL;
+      ObRawExpr *val = NULL;
+      if (OB_ISNULL(leaf) || T_OP_EQ != leaf->get_expr_type() ||
+          2 != leaf->get_param_count()) {
+        can_convert = false;
+      } else {
+        ObRawExpr *left = leaf->get_param_expr(0);
+        ObRawExpr *right = leaf->get_param_expr(1);
+        if (OB_ISNULL(left) || OB_ISNULL(right)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get null param expr", K(ret));
+        } else if (left->is_column_ref_expr() && right->is_const_expr()) {
+          col = left;
+          val = right;
+        } else if (right->is_column_ref_expr() && left->is_const_expr()) {
+          col = right;
+          val = left;
+        } else {
+          can_convert = false;
+        }
+        if (OB_SUCC(ret) && can_convert) {
+          ObColumnRefRawExpr *cur_column = static_cast<ObColumnRefRawExpr *>(col);
+          if (!col->get_result_type().is_integer_type() ||
+              !val->get_result_type().is_integer_type()) {
+            can_convert = false;
+          } else if (NULL == column_expr) {
+            column_expr = cur_column;
+          } else if (column_expr->get_table_id() != cur_column->get_table_id() ||
+                     column_expr->get_column_id() != cur_column->get_column_id()) {
+            can_convert = false;
+          }
+          if (OB_SUCC(ret) && can_convert && OB_FAIL(const_exprs.push_back(val))) {
+            LOG_WARN("failed to push back const expr", K(ret));
+          }
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && can_convert && NULL != column_expr) {
+    ObOpRawExpr *in_expr = NULL;
+    ObOpRawExpr *in_list = NULL;
+    if (OB_FAIL(expr_factory.create_raw_expr(T_OP_ROW, in_list)) ||
+        OB_FAIL(expr_factory.create_raw_expr(T_OP_IN, in_expr))) {
+      LOG_WARN("failed to create raw expr", K(ret));
+    } else if (OB_ISNULL(in_expr) || OB_ISNULL(in_list)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get null raw expr", K(ret));
+    } else if (OB_FAIL(in_list->init_param_exprs(const_exprs.count()))) {
+      LOG_WARN("failed to init param exprs", K(ret));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < const_exprs.count(); ++i) {
+        if (OB_FAIL(in_list->add_param_expr(const_exprs.at(i)))) {
+          LOG_WARN("failed to add param expr", K(ret), K(i));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(in_expr->set_param_exprs(column_expr, in_list))) {
+        LOG_WARN("failed to set param exprs", K(ret));
+      } else if (OB_FAIL(in_expr->formalize(session_info))) {
+        LOG_WARN("failed to formalize in expr", K(ret));
+      } else {
+        expr = in_expr;
+        trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int inner_convert_or_to_in(ObRawExprFactory &expr_factory,
+                           const ObSQLSessionInfo *session_info,
+                           ObRawExpr *&expr,
+                           bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null expr", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      bool child_happened = false;
+      if (OB_FAIL(SMART_CALL(inner_convert_or_to_in(expr_factory, session_info,
+                                                    expr->get_param_expr(i), child_happened)))) {
+        LOG_WARN("failed to convert child expr", K(ret), K(i));
+      } else {
+        trans_happened |= child_happened;
+      }
+    }
+    if (OB_SUCC(ret) && T_OP_OR == expr->get_expr_type()) {
+      bool happened = false;
+      if (OB_FAIL(try_convert_or_expr_to_in(expr_factory, session_info, expr, happened))) {
+        LOG_WARN("failed to try convert or expr to in", K(ret));
+      } else {
+        trans_happened |= happened;
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+
+int ObOptimizerUtil::convert_or_to_in(ObRawExprFactory &expr_factory,
+                                      const ObSQLSessionInfo *session_info,
+                                      ObIArray<ObRawExpr *> &exprs,
+                                      bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(session_info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null session info", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+    bool happened = false;
+    if (OB_FAIL(SMART_CALL(inner_convert_or_to_in(expr_factory, session_info,
+                                                  exprs.at(i), happened)))) {
+      LOG_WARN("failed to convert or to in", K(ret), K(i));
+    } else {
+      trans_happened |= happened;
+    }
+  }
+  return ret;
+}

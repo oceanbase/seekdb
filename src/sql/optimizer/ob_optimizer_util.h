@@ -92,6 +92,12 @@ class ObTableMetaInfo;
 class ObOptimizerUtil
 {
 public:
+  // 把 "col = c1 OR col = c2 OR ..." 改写成 "col IN (c1, c2, ...)"，降低逐行过滤代价。
+  static int convert_or_to_in(ObRawExprFactory &expr_factory,
+                              const ObSQLSessionInfo *session_info,
+                              ObIArray<ObRawExpr *> &exprs,
+                              bool &trans_happened);
+
   static int is_prefix_ordering(const ObIArray<OrderItem> &first,
                                 const ObIArray<OrderItem> &second,
                                 const EqualSets &equal_sets,
