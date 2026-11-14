@@ -309,7 +309,7 @@ jobs:
           systemd-analyze verify --man=no /usr/lib/systemd/system/seekdb.service
           sed -i 's/^cpu_count=.*/cpu_count=2/' /etc/seekdb/seekdb.cnf
           cat >> /etc/seekdb/seekdb.cnf <<'CONFIG'
-          memory_limit=2G
+          memory_budget=2G
           datafile_size=1G
           log_disk_size=2G
           CONFIG
@@ -329,9 +329,12 @@ jobs:
           trap cleanup EXIT
           /usr/libexec/seekdb/scripts/seekdb_systemd_start > /tmp/seekdb-start.log 2>&1 &
           pid=$!
-          python3 - <<'PY'
+          python3 - "$pid" <<'PY'
+          from pathlib import Path
+          import sys
           import time
           import pymysql
+          status_file = Path("/proc") / sys.argv[1] / "stat"
           deadline = time.monotonic() + 240
           while True:
               try:
@@ -339,6 +342,12 @@ jobs:
                       password="", connect_timeout=2, read_timeout=10, write_timeout=10, autocommit=True)
                   break
               except pymysql.err.OperationalError:
+                  try:
+                      state = status_file.read_text().rsplit(") ", 1)[1][0]
+                  except FileNotFoundError:
+                      raise RuntimeError("seekdb exited before accepting connections")
+                  if state == "Z":
+                      raise RuntimeError("seekdb exited before accepting connections")
                   if time.monotonic() >= deadline:
                       raise
                   time.sleep(2)
