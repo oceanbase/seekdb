@@ -1654,6 +1654,9 @@ int ObSelectResolver::expand_target_list(
   } else if (table_item.is_json_table()) {
     if (OB_FAIL(resolve_all_json_table_columns(table_item, &column_items))) {
     }
+  } else if (table_item.is_file_table()) {
+    if (OB_FAIL(resolve_all_file_table_columns(table_item, &column_items))) {
+    }
   } else if (table_item.is_values_table()) {
     if (OB_ISNULL(get_stmt()) || OB_UNLIKELY(get_stmt()->get_column_size() == 0)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1843,6 +1846,18 @@ int ObSelectResolver::resolve_all_json_table_columns(
   if (OB_ISNULL(column_items)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(resolve_json_table_column_all_items(table_item, *column_items))) {
+  }
+  return ret;
+}
+
+int ObSelectResolver::resolve_all_file_table_columns(
+  const TableItem &table_item, ObIArray<ColumnItem> *column_items)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(column_items)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ret = resolve_file_table_column_all_items(table_item, *column_items);
   }
   return ret;
 }

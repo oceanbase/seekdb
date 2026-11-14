@@ -540,6 +540,7 @@ public:
   int get_force_parallel_ddl_dop(uint64_t &v) const;
   int get_px_shared_hash_join(bool &shared_hash_join) const;
   int get_secure_file_priv(common::ObString &v) const;
+  int get_enable_file_sql(bool &v) const;
   int get_sql_safe_updates(bool &v) const;
   int get_opt_dynamic_sampling(uint64_t &v) const;
   int get_regexp_stack_limit(int64_t &v) const;
