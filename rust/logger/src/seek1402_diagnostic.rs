@@ -33,6 +33,7 @@ pub fn copy(bytes: &[u8]) {
     capture.seen += 1;
     if capture.failed || capture.bytes + bytes.len() as u64 > LIMIT {
         capture.failed = true;
+        publish(capture);
         return;
     }
     match capture.file.as_mut().unwrap().write_all(bytes) {
@@ -42,14 +43,20 @@ pub fn copy(bytes: &[u8]) {
         }
         Err(_) => capture.failed = true,
     }
+    publish(capture);
 }
 
-// The controller must stop the workload and request logger flush before sealing this snapshot.
+// Publish under the record mutex; standalone native _Exit bypasses logger teardown.
+// The controller must observe writer exit before checking this snapshot.
 // A missing/stale snapshot, failed=true, or seen!=written invalidates capture completeness.
 pub fn snapshot() {
     let sink = sink();
     let mut guard = sink.lock().unwrap_or_else(|e| e.into_inner());
     let Some(capture) = guard.as_mut() else { return; };
+    publish(capture);
+}
+
+fn publish(capture: &mut Capture) {
     if let Some(file) = capture.file.as_mut() {
         if file.sync_data().is_err() { capture.failed = true; }
     }
