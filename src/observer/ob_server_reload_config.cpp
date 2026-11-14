@@ -94,9 +94,7 @@ int ObServerReloadConfig::operator()()
     if (OB_TMP_FAIL(ObServerUtils::get_data_disk_info_in_config(data_disk_size,
                                                                 data_disk_percentage))) {
     } else if (OB_TMP_FAIL(STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
-    } else if (OB_TMP_FAIL(OB_STORAGE_OBJECT_MGR.resize_local_device(
-        OB_STORAGE_OBJECT_MGR.get_total_macro_block_count()
-            * OB_STORAGE_OBJECT_MGR.get_macro_block_size(),
+    } else if (OB_TMP_FAIL(OB_SERVER_BLOCK_MGR.resize_file(
         data_disk_size, data_disk_percentage, reserved_size))) {
     }
 

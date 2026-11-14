@@ -22,7 +22,7 @@ use statistics::{
 };
 mod requests;
 use crate::Request;
-use blocks::{new_block_owner, read_block, write_block, BlockOwner};
+use blocks::{new_block_owner, BlockOwner};
 pub use ffi::RequestOptions;
 use file_io::toggle_worker_fault_delay;
 pub use requests::{new_service_handle, ServiceHandle};
@@ -91,8 +91,16 @@ pub mod ffi {
     struct BlockOptions {
         block_size: u64,
         initial_size: u64,
+        initial_percentage: u8,
         reserved_bytes: u64,
         punch_holes: bool,
+    }
+
+    struct BlockGrowth {
+        max_bytes: u64,
+        next_bytes: u64,
+        reserved_bytes: u64,
+        usage_upper_percent: u8,
     }
 
     struct BlockOpenResult {
@@ -305,13 +313,30 @@ pub mod ffi {
         fn mark_blocks(self: &BlockOwner, indices: &[u64]) -> BlockStatus;
         fn restart_marking(self: &BlockOwner) -> BlockStatus;
         fn finish_marking(self: &BlockOwner) -> BlockStatus;
-        fn allocate_blocks(self: &BlockOwner, count: usize, out: &mut Vec<u64>) -> BlockStatus;
+        fn allocate_block(self: &BlockOwner, policy: &BlockGrowth, out: &mut u64) -> BlockStatus;
         fn release_block(self: &BlockOwner, index: u64) -> BlockRelease;
         fn sync_blocks(self: &BlockOwner) -> BlockStatus;
-        fn grow_blocks(self: &BlockOwner, bytes: u64, reserved_bytes: u64) -> BlockStatus;
+        fn extend_blocks(self: &BlockOwner, policy: &BlockGrowth) -> BlockStatus;
+        fn resize_blocks(
+            self: &BlockOwner,
+            bytes: u64,
+            percentage: u8,
+            reserved_bytes: u64,
+        ) -> BlockStatus;
+        fn maximum_block_capacity(
+            self: &BlockOwner,
+            max_bytes: u64,
+            reserved_bytes: u64,
+            out: &mut u64,
+        ) -> BlockStatus;
+        fn check_block_space(
+            self: &BlockOwner,
+            required_bytes: u64,
+            max_bytes: u64,
+            reserved_bytes: u64,
+            limit_percent: u8,
+        ) -> BlockStatus;
         fn block_stats(self: &BlockOwner, stats: &mut BlockStats) -> BlockStatus;
-        fn read_block(owner: &BlockOwner, index: u64, offset: u64, bytes: &mut [u8]) -> IoResult;
-        fn write_block(owner: &BlockOwner, index: u64, offset: u64, bytes: &[u8]) -> IoResult;
         fn metric_integer(value: f64) -> Metric;
         fn metric_mbps(iops: i64, size: i64) -> Metric;
         type ServiceHandle;

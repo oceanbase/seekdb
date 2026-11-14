@@ -13,6 +13,8 @@
 // limitations under the License.
 
 mod block_file;
+mod capacity;
+pub use capacity::{FileSize, GrowthPolicy};
 mod named;
 pub use named::{NamedOpenedFile, NamedOwner, NamedSnapshot, OwnerPhase};
 #[cfg(any(test, feature = "ownership-test-support"))]

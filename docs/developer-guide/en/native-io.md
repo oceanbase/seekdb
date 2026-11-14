@@ -34,11 +34,36 @@ Database callback callers transfer a `std::unique_ptr<storage_io::CallbackAdapte
 
 Cloning a handle shares the same request and result. Dropping the final handle cancels pending work or drains an executing callback. Physical retirement can finish later. A retained result does not require executor threads to stay alive after service shutdown.
 
+## Physical block ownership
+
+`storage-io::BlockFile` owns the file, published capacity, free blocks, pending releases and I/O region leases under one state mutex. The `capacity` module contains value types and arithmetic, not another stateful manager. Native Rust callers use the same operations as the generated CXX adapter:
+
+```rust,ignore
+let block = file.allocate_with_growth(
+    GrowthPolicy {
+        max_bytes: maximum,
+        next_bytes: increment,
+        usage_upper_percent: 90,
+    },
+    SpaceBudget { reserved_bytes: metadata_headroom },
+)?;
+```
+
+A single-block allocation drains retired leases, uses a free block, or expands and synchronizes the file before publishing new blocks. Exhaustion returns a typed error; success always returns a block. The separate native `allocate_many` operation intentionally permits a short batch, including an empty batch. C++ production allocation does not adapt that batch interface into a single-block operation.
+
+`FileSize::Bytes` and `FileSize::DiskPercentage` describe initial creation and explicit resizing. Existing files retain their on-disk size when opened. Manual resize is limited by available space and cannot shrink; the automatic-growth maximum does not restrict it. `extend_if_needed` implements pre-expansion from the existing C++ maintenance timer. Capacity observations and usage admission use the same Rust state and formulas. C++ no longer owns an expected-size retry protocol or a separate resize mutex.
+
+Configuration values and the metadata headroom are passed per operation. Rust does not retain another mutable configuration copy. Headroom is a disk-space allowance, not allocated memory or a filesystem reservation. Actual filesystem operations can still fail after a capacity check; capacity becomes allocatable only after successful extension and synchronization. A failed extension may leave a longer physical file without publishing its extra blocks.
+
+No reclamation thread is added. Releasing an unleased block makes it reusable immediately, including optional hole punching. If a released block has outstanding I/O leases, its final lease drop only queues the block. The next allocation or existing maintenance call drains that queue. With no subsequent call, reclamation remains pending; there is no periodic Rust worker promising prompt disk-space return.
+
+Business liveness remains a distinct responsibility: C++ owns full `MacroBlockId` identity, handle references, recovery registration and the Tablet/SSTable/temp-file root traversal. Its mark/sweep protocol decides when to release a physical block. Rust leases then prevent reuse until actual I/O users retire. These two reference counts are not duplicate authoritative copies of the same state. Moving the business registry later requires switching allocation adoption, recovery and collection together; it must not introduce a parallel registry or collapse full identities to physical indices.
+
 ## Database integration
 
 The database uses three C++ integration points. The old `src/share/io` directory and its manager, service, channel, request descriptor, and statistics wrappers are removed.
 
-- `ObBlockManager` owns a generated `BlockOwner`. It prepares the data path during server initialization, then opens the block file after metadata reservations are available. It owns database capacity policy and converts `MacroBlockId` into a block operation. The three-word persisted block identifier is unchanged.
+- `ObBlockManager` owns a generated `BlockOwner`. It prepares the data path during server initialization, then opens the block file after metadata reservations are available. It supplies configuration and metadata reservation inputs, maintains business block references, and converts `MacroBlockId` into a block operation. Rust owns physical capacity decisions and allocation. The three-word persisted block identifier is unchanged.
 - `ObServerLogBlockMgr` owns a generated `NamedOwnerHandle` for the PALF file inventory. Each opened PALF file owns a generated `NamedFile`. `LogIOAdapter` provides the existing synchronous PALF contract using that file. Rust preserves synchronous write durability when opening writable log files, including the worker fallback.
 - `share/io_request.h` provides common error conversion, request options, and `ObIOHandle`. The handle owns only a generated request. `ObIOFlag` contains business module, direction, and worker preference metadata. Cache-specific output access and callbacks remain in their storage modules.
 
@@ -61,7 +86,7 @@ flowchart TD
     Q --> H[ObIOHandle and business callbacks]
 ```
 
-Other C++ files still participate in I/O. `ObBlockManager` manages database block allocation and capacity. `ObServerLogBlockMgr` integrates PALF inventory with server settings. PALF workers order log tasks, and storage callbacks decode blocks and populate caches. Their domain responsibilities remain separate from Rust request execution. Removing the generic device framework does not remove these callers or migrate their storage formats.
+Other C++ files still participate in I/O. `ObBlockManager` maintains database block identities, business references, recovery and reachability traversal; it delegates physical allocation and capacity management to Rust. `ObServerLogBlockMgr` integrates PALF inventory with server settings. PALF workers order log tasks, and storage callbacks decode blocks and populate caches. Their domain responsibilities remain separate from Rust request execution. Removing the generic device framework does not remove these callers or migrate their storage formats.
 
 
 ## C++ integration and consumers

@@ -46,7 +46,7 @@ fn failed_new_file_extension_removes_the_file_and_allows_retry() {
     let path = directory.join("block_file");
     let config = BlockConfig {
         block_size: BLOCK,
-        initial_size: BLOCK * 3,
+        initial_size: storage_io::FileSize::Bytes(BLOCK * 3),
         direct_io: false,
         punch_holes: false,
     };
@@ -94,7 +94,7 @@ fn failed_new_file_extension_removes_the_file_and_allows_retry() {
     let owner = UnmarkedBlockFile::open(
         &path,
         BlockConfig {
-            initial_size: BLOCK * 99,
+            initial_size: storage_io::FileSize::Bytes(BLOCK * 99),
             ..config
         },
         SpaceBudget::default(),

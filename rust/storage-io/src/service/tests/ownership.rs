@@ -19,7 +19,7 @@ use std::path::Path;
 fn config() -> BlockConfig {
     BlockConfig {
         block_size: 4096,
-        initial_size: 8192,
+        initial_size: crate::FileSize::Bytes(8192),
         direct_io: false,
         punch_holes: false,
     }
