@@ -531,9 +531,14 @@ int ObIndexBuilderUtil::adjust_expr_index_args(
   int ret = OB_SUCCESS;
   if (ObSimpleTableSchemaV2::is_spatial_index(arg.index_type_)) {
     ObSEArray<ObColumnSchemaV2*, 2>  spatial_cols;
+    const uint64_t old_max_column_id = data_schema.get_max_used_column_id();
     if (OB_FAIL(adjust_spatial_args(arg, data_schema, allocator, spatial_cols))) {
-    } else if (OB_FAIL(gen_columns.push_back(spatial_cols.at(0)))) {
-    } else if (OB_FAIL(gen_columns.push_back(spatial_cols.at(1)))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < spatial_cols.count(); ++i) {
+        if (spatial_cols.at(i)->get_column_id() > old_max_column_id
+            && OB_FAIL(gen_columns.push_back(spatial_cols.at(i)))) {
+        }
+      }
     }
   } else if (ObIndexBuilderUtil::is_do_create_dense_vec_index(arg.index_type_) || is_vec_spiv_index_aux(arg.index_type_)) {
     if (OB_FAIL(ObVecIndexBuilderUtil::check_vec_index_allowed(arg.index_type_, data_schema))) {
@@ -962,6 +967,12 @@ int ObIndexBuilderUtil::generate_spatial_cellid_column(
         name_pos, "__cellid"))) {
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
         name_pos, "_%" PRId64 "", geo_col_id))) {
+    } else if (OB_NOT_NULL(cellid_col = data_schema.get_column_schema(ObString(name_pos, col_name_buf)))) {
+      if (!cellid_col->is_hidden() || !cellid_col->is_virtual_generated_column()
+          || !cellid_col->is_spatial_cellid_column() || cellid_col->get_geo_col_id() != geo_col_id) {
+        ret = OB_ERR_COLUMN_DUPLICATE;
+        LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, static_cast<int32_t>(name_pos), col_name_buf);
+      }
     } else if (OB_FAIL(databuff_printf(cellid_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
         def_pos, "SPATIAL_CELLID(`%s`)", col_schema.get_column_name()))) {
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {
@@ -1016,6 +1027,13 @@ int ObIndexBuilderUtil::generate_spatial_mbr_column(
         name_pos, "__mbr"))) {
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
         name_pos, "_%" PRId64 "", geo_col_id))) {
+    } else if (OB_NOT_NULL(mbr_col = data_schema.get_column_schema(ObString(name_pos, col_name_buf)))) {
+      if (!mbr_col->is_hidden() || !mbr_col->is_virtual_generated_column()
+          || !mbr_col->is_spatial_generated_column() || mbr_col->get_data_type() != ObVarcharType
+          || mbr_col->get_geo_col_id() != geo_col_id) {
+        ret = OB_ERR_COLUMN_DUPLICATE;
+        LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, static_cast<int32_t>(name_pos), col_name_buf);
+      }
     } else if (OB_FAIL(databuff_printf(mbr_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
         def_pos, "SPATIAL_MBR(`%s`)", col_schema.get_column_name()))) {
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {
