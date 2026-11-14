@@ -1,0 +1,374 @@
+name: Package seekdb
+run-name: Package ${{ inputs.platform }} / ${{ inputs.linux_glibc }} / ${{ inputs.binary_run_id && format('binary run {0}', inputs.binary_run_id) || inputs.version || 'source version' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platforms to build
+        type: choice
+        default: linux-x86_64
+        options: [all, linux-x86_64, linux-aarch64, macos-arm64, windows-x86_64, android-arm64, ios, ios-arm64, ios-simulator-arm64]
+      linux_glibc:
+        description: Linux compatibility baseline
+        type: choice
+        default: '2.17'
+        options: ['2.17', '2.28', both]
+      version:
+        description: Package version (empty uses the source or reused binary version)
+        type: string
+      formats:
+        description: Linux system packages (all choices also export the binary archive)
+        type: choice
+        default: all
+        options: [all, binary, rpm, deb]
+      binary_run_id:
+        description: Existing run ID to reuse Linux binaries for RPM/DEB (empty builds binaries)
+        type: string
+      jobs:
+        description: Local build parallelism (0 selects hosted-runner defaults)
+        type: number
+        default: 0
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: package-${{ github.ref }}-${{ inputs.platform }}-${{ inputs.linux_glibc }}-${{ inputs.binary_run_id || 'build' }}
+  cancel-in-progress: false
+
+env:
+  RUSTUP_DIST_SERVER: https://static.rust-lang.org
+  RUSTUP_UPDATE_ROOT: https://static.rust-lang.org/rustup
+  RUSTUP_INIT_URL: https://sh.rustup.rs
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      linux_matrix: ${{ steps.matrix.outputs.linux_matrix }}
+      has_linux: ${{ steps.matrix.outputs.has_linux }}
+      has_ios_pair: ${{ steps.matrix.outputs.has_ios_pair }}
+      version: ${{ steps.matrix.outputs.version }}
+      release: ${{ steps.matrix.outputs.release }}
+      binary_run_id: ${{ steps.matrix.outputs.binary_run_id }}
+      binary_source_commit: ${{ steps.matrix.outputs.binary_source_commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select and validate targets
+        id: matrix
+        env:
+          PACKAGE_PLATFORM: ${{ inputs.platform }}
+          PACKAGE_GLIBC: ${{ inputs.linux_glibc }}
+          PACKAGE_VERSION: ${{ inputs.version }}
+          PACKAGE_FORMATS: ${{ inputs.formats }}
+          PACKAGE_BINARY_RUN_ID: ${{ inputs.binary_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/package.py matrix
+
+  binary:
+    name: binary-${{ matrix.id }}
+    needs: prepare
+    if: needs.prepare.outputs.binary_run_id == ''
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PACKAGE_OS: ${{ matrix.os }}
+      PACKAGE_ARCH: ${{ matrix.arch }}
+      PACKAGE_GLIBC: ${{ matrix.glibc }}
+      LINUX_PROFILE: ${{ matrix.profile }}
+      PACKAGE_APPLE_SDK: ${{ matrix.sdk }}
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
+      PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
+      BUILD_JOBS: ${{ inputs.jobs }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Free unused tools on disposable Linux runners
+        if: runner.os == 'Linux' && runner.environment == 'github-hosted'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h "$GITHUB_WORKSPACE"
+      - name: Set up Windows build utilities
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & C:\msys64\usr\bin\bash.exe -lc 'pacman -S --needed --noconfirm make'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+      - name: Install Linux build utilities
+        if: runner.os == 'Linux'
+        run: |
+          packages=(rpm2cpio cpio make binutils patchelf)
+          if [[ "$LINUX_PROFILE" == el7 ]]; then
+            # EL7 Clang needs libtinfo.so.5, which Ubuntu 24 no longer ships.
+            archive=https://archive.ubuntu.com/ubuntu
+            if [[ "$RUNNER_ARCH" == ARM64 ]]; then archive=https://ports.ubuntu.com/ubuntu-ports; fi
+            for suite in jammy jammy-updates jammy-security; do
+              echo "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] $archive $suite universe"
+            done | sudo tee /etc/apt/sources.list.d/seekdb-compat.list >/dev/null
+            # Allow only libtinfo5 from the older release.
+            printf 'Package: *\nPin: release n=jammy\nPin-Priority: -1\n\nPackage: libtinfo5\nPin: release n=jammy\nPin-Priority: 500\n' |
+              sudo tee /etc/apt/preferences.d/seekdb-compat >/dev/null
+            packages+=(libtinfo5)
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y "${packages[@]}"
+      - name: Set up Conda sysroot
+        id: conda
+        if: matrix.os == 'linux'
+        uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+        with:
+          micromamba-version: ${{ matrix.micromamba }}
+          micromamba-root-path: ${{ github.workspace }}/.ci-cache/micromamba
+          environment-name: sysroot
+          create-args: >-
+            --override-channels -c conda-forge --strict-channel-priority
+            ${{ matrix.conda_spec }}
+          init-shell: none
+          generate-run-shell: false
+          cache-downloads: false
+          cache-environment: false
+      - name: Validate sysroot and configure Clang
+        if: matrix.os == 'linux'
+        env:
+          CONDA_ENVIRONMENT: ${{ steps.conda.outputs.environment-path }}
+        run: python .github/scripts/package.py sysroot
+      - name: Configure dependency cache key
+        id: keys
+        run: python .github/scripts/package.py environment
+      - name: Restore dependency SDK
+        id: sdk
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            deps/3rd
+            deps/android
+            ${{ matrix.os == 'ios' && 'deps/ios' || '' }}
+          key: package-sdk-v1-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
+          # iOS base libraries must match the selected Xcode/SDK exactly.
+          restore-keys: ${{ matrix.os != 'ios' && format('package-sdk-v1-{0}-', matrix.id) || '' }}
+      - name: Clear incomplete SDK restore
+        if: steps.sdk.outputs.cache-matched-key == ''
+        run: |
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          for path in (Path('deps/3rd'), Path('deps/android'), Path('deps/ios')):
+              if path.exists():
+                  shutil.rmtree(path)
+          PY
+      - name: Initialize dependencies
+        run: python .github/scripts/package.py initialize
+      - name: Save initialized SDK
+        if: steps.sdk.outputs.cache-hit != 'true' && steps.sdk.outputs.cache-primary-key != ''
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            deps/3rd
+            deps/android
+            ${{ matrix.os == 'ios' && 'deps/ios' || '' }}
+          key: ${{ steps.sdk.outputs.cache-primary-key }}
+      - name: Compile seekdb once
+        id: build
+        run: |
+          # Keep MSYS utilities out of the cache action's tar/zstd pipeline.
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            export PATH="/c/msys64/usr/bin:$PATH"
+            command -v make
+            make --version
+          fi
+          python .github/scripts/package.py build
+      - name: Export verified binary distribution
+        run: python .github/scripts/package.py export
+      - name: Upload binary distribution
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: binary-${{ matrix.id }}
+          path: |
+            dist/seekdb-binary-*
+            dist/seekdb-framework-*
+            dist/obshell.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload separate debug information
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: debug-info-${{ matrix.id }}
+          path: dist/seekdb-debug-info-*
+          if-no-files-found: error
+          compression-level: 0
+      - name: Stop Bazel
+        if: always() && steps.build.outcome != 'skipped'
+        run: python .github/scripts/package.py shutdown
+
+  ios-xcframework:
+    name: ios-xcframework
+    needs: [prepare, binary]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.has_ios_pair == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: binary-ios*
+          merge-multiple: true
+          path: input
+      - name: Combine verified iOS frameworks without compiling
+        run: python3 .github/scripts/package.py xcframework
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-xcframework
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+
+  system-packages:
+    name: package-${{ matrix.id }}
+    needs: [prepare, binary]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.has_linux == 'true' && inputs.formats != 'binary'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.linux_matrix) }}
+    env:
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
+      PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
+      PACKAGE_FORMAT: ${{ matrix.format }}
+      PACKAGE_DISTRIBUTION: ${{ matrix.distribution }}
+      PACKAGE_ARCH: ${{ matrix.arch }}
+      PACKAGE_GLIBC: ${{ matrix.glibc }}
+      BINARY_RUN_ID: ${{ needs.prepare.outputs.binary_run_id || github.run_id }}
+      BINARY_SOURCE_COMMIT: ${{ needs.prepare.outputs.binary_source_commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: binary-${{ matrix.binary_id }}
+          run-id: ${{ env.BINARY_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: input
+      - name: Install packaging tools
+        run: sudo apt-get update -qq && sudo apt-get install -y rpm binutils dpkg-dev file
+      - name: Package the existing binary without initializing or compiling
+        run: |
+          mkdir -p .ci-cache
+          python3 .github/scripts/package.py system
+      - name: Validate the installed DEB on its target distribution
+        if: matrix.format == 'deb'
+        timeout-minutes: 15
+        env:
+          PACKAGE_IMAGE: ${{ matrix.image }}
+        run: |
+          case "$PACKAGE_ARCH" in
+            x86_64) docker_arch=amd64 ;;
+            aarch64) docker_arch=arm64 ;;
+          esac
+          docker run --rm -i --platform "linux/$docker_arch" \
+            --ulimit nofile=65536:65536 --ulimit stack=-1:-1 \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/dist,target=/packages,readonly" \
+            "$PACKAGE_IMAGE" bash -s <<'SH'
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive TELEMETRY_MODE=0
+          cat /etc/os-release
+          apt-get update -qq
+          apt-get install -y --no-install-recommends /packages/*.deb python3-pymysql
+          seekdb --version
+          systemd-analyze verify --man=no /usr/lib/systemd/system/seekdb.service
+          sed -i 's/^cpu_count=.*/cpu_count=2/' /etc/seekdb/seekdb.cnf
+          cat >> /etc/seekdb/seekdb.cnf <<'CONFIG'
+          memory_budget=2G
+          datafile_size=1G
+          log_disk_size=2G
+          CONFIG
+          pid=""
+          cleanup() {
+            status=$?
+            if [[ -n "$pid" ]]; then
+              MAINPID="$pid" /usr/libexec/seekdb/scripts/seekdb_systemd_stop || true
+              wait "$pid" || true
+            fi
+            if [[ "$status" != 0 ]]; then
+              tail -n 80 /tmp/seekdb-start.log || true
+              tail -n 80 /var/lib/seekdb/log/*.log || true
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          /usr/libexec/seekdb/scripts/seekdb_systemd_start > /tmp/seekdb-start.log 2>&1 &
+          pid=$!
+          python3 - "$pid" <<'PY'
+          from pathlib import Path
+          import sys
+          import time
+          import pymysql
+          status_file = Path("/proc") / sys.argv[1] / "stat"
+          deadline = time.monotonic() + 240
+          while True:
+              try:
+                  connection = pymysql.connect(host="127.0.0.1", port=2881, user="root",
+                      password="", connect_timeout=2, read_timeout=10, write_timeout=10, autocommit=True)
+                  break
+              except pymysql.err.OperationalError:
+                  try:
+                      state = status_file.read_text().rsplit(") ", 1)[1][0]
+                  except FileNotFoundError:
+                      raise RuntimeError("seekdb exited before accepting connections")
+                  if state == "Z":
+                      raise RuntimeError("seekdb exited before accepting connections")
+                  if time.monotonic() >= deadline:
+                      raise
+                  time.sleep(2)
+          with connection:
+              with connection.cursor() as cursor:
+                  cursor.execute("CREATE DATABASE packaging_smoke")
+                  cursor.execute("CREATE TABLE packaging_smoke.t (id INT PRIMARY KEY, v VARCHAR(32))")
+                  cursor.execute("INSERT INTO packaging_smoke.t VALUES (1, 'ready')")
+                  cursor.execute("SELECT v FROM packaging_smoke.t WHERE id = 1")
+                  assert cursor.fetchone() == ("ready",)
+                  cursor.execute("DROP DATABASE packaging_smoke")
+          print("Installed seekdb passed SQL read/write checks")
+          PY
+          MAINPID="$pid" /usr/libexec/seekdb/scripts/seekdb_systemd_stop
+          wait "$pid"
+          pid=""
+          SH
+      - name: Upload system packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: system-packages-${{ matrix.id }}
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0

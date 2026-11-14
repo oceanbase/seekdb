@@ -1,0 +1,31 @@
+{
+  "timezone": {
+    "url": "https://raw.githubusercontent.com/oceanbase/oceanbase/93a1074b0ccc5ab9dadd25e5b3bf447aadcca19b/tools/timezone_V1.log",
+    "sha256": "84bb2c709e06b6f62623dacac0f5cb870c88df6562bc347cce318c58b1d7e9d8"
+  },
+  "micromamba": "2.8.1-0",
+  "linux_sysroots": {
+    "x86_64": {
+      "2.17": {
+        "spec": "sysroot_linux-64=2.17=h0157908_18",
+        "sha256": "69ab5804bdd2e8e493d5709eebff382a72fab3e9af6adf93a237ccf8f7dbd624"
+      },
+      "2.28": {
+        "spec": "sysroot_linux-64=2.28=he3f20f0_9",
+        "sha256": "e2c4c08188bc543756ce2cf596b9547a241398b0ddce1cef77aa93847f22a97e"
+      }
+    },
+    "aarch64": {
+      "2.17": {
+        "spec": "sysroot_linux-aarch64=2.17=h68829e0_18",
+        "sha256": "1e478bfd87c296829e62f0cae37e591568c2dcfc90ee6228c285bb1c7130b915"
+      },
+      "2.28": {
+        "spec": "sysroot_linux-aarch64=2.28=h585391f_9",
+        "sha256": "1bd2db6b2e451247bab103e4a0128cf6c7595dd72cb26d70f7fadd9edd1d1bc3"
+      }
+    }
+  },
+  "android_ndk": "27.3.13750724",
+  "ios_minimum_os": "18.0"
+}

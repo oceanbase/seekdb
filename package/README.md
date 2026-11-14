@@ -1,0 +1,236 @@
+# GitHub packaging
+
+After `.github/workflows/package.yml` is merged into the default branch, open
+**Actions → Package seekdb → Run workflow**. Select a source branch/tag that
+contains the workflow, then choose:
+
+| Input | Values |
+| --- | --- |
+| Platform | Linux x86_64/aarch64, macOS arm64, Windows x86_64, Android arm64, iOS device/simulator arm64, or all |
+| Linux glibc | 2.17, 2.28, or both |
+| Version | Empty uses `VERSION` from `bazel/compile_config.bzl`, or the reused binary's version |
+| Formats | Binary archive only, RPM, DEB, or both system formats |
+| Binary run ID | Empty builds binaries; a previous run ID reuses its Linux binaries for RPM/DEB |
+| Jobs | 0 selects one job on macOS/iOS and two elsewhere; other values are passed to Bazel |
+
+The workflow builds O2 with line tables and the package runtime configuration,
+then separates debug symbols before exporting the runtime files.
+Each target compiles seekdb once. Download the `binary-*` artifacts for stripped
+portable archives and checksums, and `debug-info-*` for their separate symbols.
+Linux `system-packages-<distribution>-<arch>` artifacts each contain one RPM or
+DEB, its checksum, and `packaging-info.json`. These packages reuse the binary
+archives and the SDK's obshell without another SDK initialization or engine
+build. Other targets produce portable archives.
+Select `ios` to build device and simulator frameworks in parallel, or select
+`ios-arm64` / `ios-simulator-arm64` individually. `all` includes both iOS variants.
+The `binary-ios*` artifacts contain verified `SeekDB.framework` ZIPs. When both
+variants are selected, the `ios-xcframework` job downloads those archives and
+combines them into one `SeekDB.xcframework` ZIP without compiling the engine again.
+Framework packages include a Clang module map; the workflow type-checks a Swift
+import for each SDK before publishing the archives.
+Artifacts use the repository's default retention period; the workflow does
+not publish a release.
+System packaging selects the following target distributions:
+
+| Distribution | Format | Binary input | Version revision suffix |
+| --- | --- | --- | --- |
+| EL7 | RPM | Selected glibc 2.17 binary | `.el7` |
+| EL8 | RPM | Selected glibc 2.28 binary | `.el8` |
+| Debian 12 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+debian12` |
+| Debian 13 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+debian13` |
+| Ubuntu 22.04 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+ubuntu22.04` |
+| Ubuntu 24.04 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+ubuntu24.04` |
+| Ubuntu 26.04 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+ubuntu26.04` |
+
+Each selected architecture produces an EL7 RPM for glibc 2.17 and/or an EL8 RPM
+for glibc 2.28, plus all five DEB targets when requested. All targets cover
+amd64 and arm64. With both glibc variants,
+DEB uses only the 2.28 input so a distribution/architecture never receives two
+different packages with the same version. For example,
+`system-packages-debian12-x86_64` contains the Debian 12 amd64 package, while
+`system-packages-el7-aarch64` contains the EL7 aarch64 package. Binary/debug
+artifact names keep their original architecture and glibc identifiers.
+
+Each DEB job also installs its package in the corresponding official Debian or
+Ubuntu container on the native runner architecture. APT resolves the package's
+system dependencies, then the job checks `--version`, validates the systemd unit,
+starts the installed service helper, creates/inserts/reads a SQL table, and stops
+the database through the packaged stop helper. This verifies the five supported
+userlands on amd64/arm64 without another engine compilation. The container does
+not boot systemd as PID 1, so full service-manager and host-kernel certification
+remain separate. Runtime-check images and dependencies are not added to the
+Actions dependency cache.
+
+To repackage an existing binary, enter its original workflow run ID in
+**Binary run ID**, select a Linux platform and matching glibc baseline, and
+choose RPM, DEB, or both. Use the numeric ID from the original run's URL.
+The workflow skips the binary jobs and downloads
+that run's matching `binary-*` artifact, including obshell. Dependency SDK
+initialization, toolchain setup, and compilation are skipped. The selected
+branch supplies the packaging code. Leave Version empty to retain the binary's
+version, or specify the same version explicitly. Each run generates a new package
+timestamp automatically. The original run must still retain every selected artifact.
+
+Repackaging verifies the source run's commit, manifest/checksums, architecture,
+and glibc baseline. Missing, expired, or mismatched artifacts fail the job.
+System-package artifacts include `packaging-info.json`, which records the target
+distribution, format, full package version, and binary run/commit/build time
+separately from the packaging commit and package timestamp.
+
+RPM and DEB replace the numeric release counter with a seconds-resolution UTC
+timestamp (`YYYYMMDDTHHMMSSZ`). The workflow generates it once for all native
+packages in the run. For example:
+
+```text
+seekdb-1.4.0.0-20261112T100530Z.el7.x86_64.rpm
+seekdb-1.4.0.0-20261112T100530Z.el8.x86_64.rpm
+seekdb_1.4.0.0-20261112T100530Z+debian12_amd64.deb
+seekdb_1.4.0.0-20261112T100530Z+debian13_amd64.deb
+seekdb_1.4.0.0-20261112T100530Z+ubuntu22.04_amd64.deb
+seekdb_1.4.0.0-20261112T100530Z+ubuntu24.04_amd64.deb
+seekdb_1.4.0.0-20261112T100530Z+ubuntu26.04_amd64.deb
+seekdb-binary-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
+seekdb-debug-info-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
+seekdb-framework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
+seekdb-framework-1.4.0.0-ios18.0-simulator-arm64-20261112T100530Z-sdb0123456789ab.zip
+seekdb-xcframework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
+```
+
+Portable binary archives retain their UTC export timestamp before the source SHA
+and omit the numeric release. Local `package/package.py` and RPM/DEB/TGZ wrappers
+also generate a UTC package timestamp by default; `--package-timestamp` can supply
+one explicitly. The wrappers no longer require a positional release; an old
+fourth positional release is accepted and ignored.
+
+Local RPM/DEB commands require `--distribution`: RPM accepts `el7` or `el8`,
+and DEB accepts `debian12`, `debian13`, `ubuntu22.04`, `ubuntu24.04`, or
+`ubuntu26.04`. The distribution is part of both
+the filename and RPM Release / DEB Version metadata. For example:
+
+```bash
+python3 package/package.py rpm --version 1.4.0.0 --distribution el7 \
+  --binary-package /path/to/seekdb-binary.tar.gz --obshell-bin /path/to/obshell --output dist
+python3 package/package.py deb --version 1.4.0.0 --distribution debian12 \
+  --binary-package /path/to/seekdb-binary.tar.gz --obshell-bin /path/to/obshell --output dist
+```
+
+The RPM/DEB shell wrappers accept the same option and reject missing or mismatched
+distributions before initializing dependencies or building. RPM source builds
+also select the matching EL7/EL8 SDK. Packaging checks the input binary's declared
+glibc baseline and the actual GLIBC requirements of all staged ELF files,
+including obshell, against the target distribution. EL7/EL8 use glibc limits
+2.17/2.28; Debian 12/13 use 2.36/2.41; Ubuntu 22.04/24.04/26.04 use
+2.35/2.39/2.43. These are validation limits, not new compilation baselines.
+All five DEB targets reuse the same selected Linux binary. The label
+identifies the packaging target; it does not replace runtime certification on
+that distribution.
+
+The RPM retains the previous release's explicit dependencies on `libaio` and
+`systemd`, with ELF ABI requirements generated by RPM. It uses the distribution's
+`libaio` instead of bundling it or producing a `seekdb-libs` RPM. Install the local
+RPM with `dnf install ./seekdb-<version>-<timestamp>.el8.<arch>.rpm` (or `yum install` for EL7)
+to download missing dependencies from the configured distribution repositories.
+The DEB retains `libaio1 | libaio1t64, systemd` from the released Ubuntu 22.04
+and Debian 12 packages. It also uses system libaio, with a private compatibility
+link for the `libaio1t64` SONAME on amd64/arm64. Install it using
+`apt install ./seekdb_<version>-<timestamp>+debian12_<arch>.deb` (or the
+`+ubuntu22.04` variant) to fetch missing dependencies.
+Portable binary archives still include their runtime libraries.
+
+## Debug symbols
+
+All distributed runtime binaries are stripped, including bundled native libraries
+and obshell. This applies to binary archives, RPM/DEB/TGZ payloads, iOS frameworks,
+and XCFrameworks. RPM no longer generates a separate `seekdb-debuginfo` RPM;
+symbols are exported once alongside the portable binary instead.
+
+Each `seekdb-debug-info` archive uses the same platform, UTC export timestamp,
+and source SHA as its matching binary/framework archive. Its manifest records
+the stripped binary hashes and symbol paths; the runtime manifest records the
+debug archive's name and SHA-256. Both archives have file manifests and checksum
+sidecars. The available information comes from the O2 line-table build, rather
+than a separate full-debug compilation.
+
+- Linux and Android: `.debug` files, with GNU debuglink references in the stripped
+  binaries. The symbol tree mirrors the runtime paths, including bundled libraries.
+- macOS and iOS: dSYM bundles with UUIDs verified against the stripped Mach-O files.
+  Stripping preserves exported symbols and re-signs modified Mach-O files ad hoc.
+- Windows: the linker's PDB is copied into the symbol archive. EXE/DLL files retain
+  only their external CodeView/PDB reference, not embedded debugging data.
+
+iOS exports one symbol ZIP per SDK; these dSYMs also match the corresponding
+device/simulator slices in the XCFramework. The combined framework contains no
+dSYMs. RPM/DEB consumers use the stripped binary and do not download symbol archives.
+Repackaging an older binary archive also strips its payload, without rebuilding
+the engine or altering the original archive. To preserve symbols, retain its
+original unstripped binary if it predates separate symbol exports.
+
+## Compatibility
+
+- Linux builds run directly on the Ubuntu runners with Conda-provided glibc
+  2.17 or 2.28 sysroots, using the EL7 or EL8 dependency SDK respectively.
+  Conda supplies system headers and libraries; the environment is not activated
+  and compilation still uses seekdb's bundled Clang/Bazel toolchain. The host
+  tools' runtime requirements do not set the engine's glibc floor. The exporter
+  checks actual ELF symbol requirements, and system packaging also checks obshell.
+  For existing native executables, dependency collection follows RPATH,
+  LD_LIBRARY_PATH, RUNPATH, eligible loader-cache entries, and default directories;
+  explicit runtime search directories precede the cache, and implicit SDK paths
+  are fallbacks. Duplicate source-library aliases are rejected rather than copied
+  into separate DSO instances with independent globals/TLS.
+- macOS builds target 13.0 and validate the executable and every bundled dylib.
+- Windows builds retain `/MD` and the Windows 10 compatibility target. The
+  bundled non-system DLLs and CRT are checked during export. A future VSAG
+  integration can switch seekdb and its dependencies to `/MT` together.
+- Android builds target API 26, use NDK 27.3.13750724, and require Android ELF
+  API notes and at least 16 KiB load alignment. Non-system dependencies must
+  be linked statically for the current exporter.
+- iOS builds target 18.0 for arm64 devices and arm64 simulators, using the
+  runner's selected Xcode and the repository's existing framework target.
+  A dedicated host profile supplies parser tools and fallback headers without
+  downloading the standalone LLVM compiler, obshell, or client utilities.
+  Packaging checks the Mach-O platform, deployment target, public ABI exports,
+  source revision, build metadata, and system-only dynamic dependencies. The
+  XCFramework job also verifies the source/version and complete file checksums
+  of both inputs. Apps sign the embedded framework when they are built.
+
+The timezone resource, micromamba version, Conda sysroot versions/builds, and iOS deployment target
+are pinned in `.github/packaging.json`. The timezone and installed sysroot
+package records are checked against their pinned SHA-256 values before use.
+The workflow uses the public upstream Bazel download URLs with their existing
+integrity checks instead of the developer proxy configuration.
+
+## Dependency cache
+
+The workflow restores and saves one dependency cache containing `deps/3rd`,
+`deps/android`, and `deps/ios`. These directories hold the extracted SDKs and their
+downloaded archives in `pkg/`. The cache key includes the target, dependency
+manifests, and initializer. `init` rechecks the manifest identity when an older
+same-target snapshot is restored, reusing its downloaded archives as needed.
+iOS keys additionally include the base-library recipe, deployment target, Xcode
+version, and selected SDK version. iOS restores require an exact cache key;
+device and simulator dependencies use separate targets. Only dependencies under
+`deps/` are persisted; source-SDK Bazel outputs are built with the engine and are
+not uploaded as a separate cache.
+The initialized SDK is saved before compilation. Cache restore/save steps have
+a five-minute limit and do not block builds on failure. An incomplete restore
+is removed before initializing dependencies again. Windows adds MSYS utilities
+to the compilation step's PATH only, keeping the cache tools independent.
+
+Conda, Rust/Cargo, the Android NDK, Bazel downloads, Homebrew, timezone data,
+and compilation outputs are not persisted between workflow runs. Additional
+caches can be evaluated after measuring the actual workflow costs.
+
+For machines outside Actions, `build.py init --linux-profile el7` can select
+the EL7 dependency SDK on a newer Linux host. Set `SEEKDB_SYSROOT` to a complete
+matching sysroot before building; selecting older dependency archives alone
+does not lower the compiler's system headers or link libraries. For example,
+after installing `sysroot_linux-64=2.17` into a Conda environment, point
+`SEEKDB_SYSROOT` at `<environment>/x86_64-conda-linux-gnu/sysroot`.
+The common toolchain stages required empty library-search directories in its
+own repository; the supplied sysroot can be read-only and is not modified.
+
+Full engine builds need substantial RAM and disk. The runner labels are in
+`.github/scripts/package.py`; use suitable larger/self-hosted runners there
+if standard hosted runners are too small. Runtime certification on the oldest
+supported systems is separate from the workflow's build and packaging checks.

@@ -29,6 +29,7 @@ build --experimental_writable_outputs
 # Native generators and Cargo build scripts use installed SDK utilities.
 build:windows --action_env=PATH
 build:macos --action_env=PATH
+build:macos --action_env=MACOSX_DEPLOYMENT_TARGET=13.0
 build:windows --repo_env=BAZEL_WIN32_WINNT=/D_WIN32_WINNT=0x0A00
 build:windows --platforms=//bazel/platforms:windows_x86_64
 build:windows --host_platform=//bazel/platforms:windows_x86_64
@@ -45,7 +46,9 @@ build:O2 --compilation_mode=opt
 # Apple's fastbuild/dbg DEBUG macro conflicts with seekdb's DEBUG log level.
 build:macos --copt=-UDEBUG
 build:macos --macos_minimum_os=13.0
+build:macos --copt=-Werror=unguarded-availability
 build:android --platforms=//bazel/platforms:android_arm64
+build:android --copt=-Werror=unguarded-availability
 build:ios --platforms=@apple_support//platforms:ios_arm64
 build:ios --ios_minimum_os=18.0
 build:ios --//src/standby:enable_standby=false

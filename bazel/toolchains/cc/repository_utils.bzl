@@ -6,9 +6,9 @@ def host_substitutions(ctx):
         "@HOST_CPU@": {"amd64": "x86_64", "x86_64": "x86_64", "aarch64": "aarch64", "arm64": "aarch64"}[ctx.os.arch],
     }
 
-def builtin_include_directories(ctx, compiler):
+def builtin_include_directories(ctx, compiler, flags = []):
     result = ctx.execute(
-        [compiler, "-E", "-x", "c++", "/dev/null", "-v"],
+        [compiler] + flags + ["-E", "-x", "c++", "/dev/null", "-v"],
         environment = {"LC_ALL": "C"},
     )
     if result.return_code:

@@ -52,7 +52,8 @@ def host_profile():
         if arch == "aarch64" or arm.stdout.strip() == "1":
             arch = "arm64"
         major = int(subprocess.check_output(["sw_vers", "-productVersion"], universal_newlines=True).split(".")[0])
-        release = next((v for v in (27, 15, 13) if major >= v), None)
+        # The dependency ABI follows the release baseline, not the build host.
+        release = 13 if major >= 13 else None
         tag = "macos%s.%s" % (release, arch)
     elif system == "Linux":
         release = {}
@@ -102,7 +103,12 @@ def packages(profile):
 
 
 def download(url, archive):
-    partial = archive.with_name(archive.name + ".download")
+    if url.startswith("http://mirrors.oceanbase.com/"):
+        url = "https://" + url[len("http://"):]
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(prefix=archive.name + ".download-", dir=archive.parent)
+    os.close(descriptor)
+    partial = Path(name)
     try:
         with urllib.request.urlopen(url, timeout=60) as source, partial.open("wb") as output:
             shutil.copyfileobj(source, output)
@@ -147,11 +153,22 @@ def populate(profile, destination, key, archive_directory):
             print("Preparing " + filename, flush=True)
             archive = stage / "pkg" / filename
             cached = archive_directory / filename
-            if cached.is_file():
+            if os.environ.get("DEP_DOWNLOAD_DIR"):
+                downloads = Path(os.environ["DEP_DOWNLOAD_DIR"]).expanduser().resolve()
+                cached = downloads / hashlib.sha256(url.encode()).hexdigest() / filename
+                if not cached.is_file():
+                    download(url, cached)
+                shutil.copyfile(cached, archive)
+            elif cached.is_file():
                 shutil.copyfile(cached, archive)
             else:
                 download(url, archive)
-            unpack(archive, stage)
+            try:
+                unpack(archive, stage)
+            except subprocess.CalledProcessError:
+                if os.environ.get("DEP_DOWNLOAD_DIR"):
+                    cached.unlink()
+                raise
         (stage / key).touch()
         (stage / "DONE").touch()
         remove_directory(destination)
@@ -213,6 +230,8 @@ def main(arguments):
     targets.add_argument("--ios", action="store_true")
     targets.add_argument("--wasm", action="store_true")
     parser.add_argument("--simulator", action="store_true")
+    parser.add_argument("--linux-profile", choices=("el7", "el8", "el9", "al8"),
+                        help="Linux dependency ABI profile, independently of the build host")
     options = parser.parse_args(arguments)
     if options.simulator and not options.ios:
         parser.error("--simulator requires --ios")
@@ -226,7 +245,15 @@ def main(arguments):
         ).returncode:
             raise ValueError("iOS SDK unavailable; install Xcode and set DEVELOPER_DIR to its Contents/Developer directory")
 
-    profile = host_profile()
+    if options.linux_profile:
+        if platform.system() != "Linux":
+            parser.error("--linux-profile requires a Linux build host")
+        arch = {"arm64": "aarch64"}.get(platform.machine().lower(), platform.machine().lower())
+        profile = PROFILES / ("oceanbase.%s.%s.deps" % (options.linux_profile, arch))
+        if not profile.is_file():
+            parser.error("dependency profile is unavailable: " + profile.name)
+    else:
+        profile = host_profile()
     rust_target = None
     if options.android:
         rust_target = "aarch64-linux-android"

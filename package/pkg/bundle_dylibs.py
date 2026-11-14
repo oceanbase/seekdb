@@ -17,10 +17,10 @@ def loader_path(path, binary, executable):
                 .replace("@executable_path", str(executable.parent)))
 
 
-def bundle(prefix, executable):
+def bundle(prefix, executable, staged_executable=None):
     libraries = prefix / "lib/seekdb"
     libraries.mkdir(parents=True, exist_ok=True)
-    pending = deque([(executable, prefix / "bin" / executable.name, ())])
+    pending = deque([(executable, staged_executable or prefix / "bin" / executable.name, ())])
     visited = set()
     origins = {}
     signed = []
@@ -63,4 +63,9 @@ def bundle(prefix, executable):
 
 
 if __name__ == "__main__":
-    bundle(Path(sys.argv[1]), Path(sys.argv[2]))
+    prefix, original = Path(sys.argv[1]), Path(sys.argv[2])
+    bundle(prefix, original)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import binary
+    staged = prefix / "bin" / original.name
+    binary.macos_binaries(prefix, binary.architecture(staged, "macos"), executable=staged)
