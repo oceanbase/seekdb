@@ -236,3 +236,20 @@ WITH t3 AS (
 SELECT * FROM t3;
 
 drop table t1;
+drop table t2;
+
+# New enhancements: JSON args, nested prompts, repeated placeholders, invalid placeholders, Unicode/escapes
+select ai_prompt('Hello {0}, data: {1}', 'World', json_array(1, 2, 3));
+select ai_prompt('Obj: {0}', json_object('key', 'val'));
+select ai_prompt('Outer {0}', ai_prompt('Inner {0}', 'test'));
+select ai_prompt('Repeat {0} and {0} again', 'alpha');
+select ai_prompt('Unicode: 世界 🚀 \n \t \" \\ \0');
+
+--error 5083
+select ai_prompt('Out of bounds {5}', 'a');
+--error 5083
+select ai_prompt('Negative {-1}', 'a');
+--error 5083
+select ai_prompt('Malformed {abc}', 'a');
+--error 5083
+select ai_prompt('Malformed {}', 'a');
