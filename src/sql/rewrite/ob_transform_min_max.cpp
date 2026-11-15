@@ -25,6 +25,25 @@ namespace oceanbase
 namespace sql
 {
 
+namespace
+{
+// True when the statement reads a file table. The columns of a file table
+// are the columns of the file, they are not the columns of a table of the
+// schema, so the transforms that move the columns of a table into a view
+// cannot be done for them.
+bool has_file_table(const ObSelectStmt &select_stmt)
+{
+  bool found = false;
+  for (int64_t i = 0; !found && i < select_stmt.get_table_size(); ++i) {
+    const TableItem *table_item = select_stmt.get_table_item(i);
+    if (OB_NOT_NULL(table_item) && table_item->is_file_table()) {
+      found = true;
+    }
+  }
+  return found;
+}
+} // namespace
+
 ObTransformMinMax::ObTransformMinMax(ObTransformerCtx *ctx)
     : ObTransformRule(ctx, TransMethod::POST_ORDER, T_FAST_MINMAX)
 {
@@ -71,6 +90,11 @@ int ObTransformMinMax::check_transform_validity(ObTransformerCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (select_stmt->has_recursive_cte()) {
     OPT_TRACE("stmt has recusive cte");
+  } else if (has_file_table(*select_stmt)) {
+    // The columns of a file table are the columns of the file. The transform
+    // builds a view of the table and removes the column items of the table
+    // from the statement, so the file table would lose its columns.
+    OPT_TRACE("the statement reads a file table");
   } else if (select_stmt->get_from_item_size() != 1 || select_stmt->get_from_item(0).is_joined_
              || select_stmt->get_aggr_item_size() < 1 || !select_stmt->is_scala_group_by()
              || select_stmt->is_contains_assignment()
