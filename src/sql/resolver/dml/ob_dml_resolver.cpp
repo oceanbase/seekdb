@@ -3914,7 +3914,22 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
                                         : std::string(secure_file_priv.ptr(), secure_file_priv.length());
       const std::string user_path = (NULL == path.ptr()) ? std::string()
                                                         : std::string(path.ptr(), path.length());
-      const file_sql::PathCode code = file_sql::check_secure_path(secure_dir, user_path, canonical_path);
+      file_sql::PathCode code = file_sql::PathCode::OK;
+      if (file_sql::FileFormat::GLOB == file_format) {
+        // The glob function discovers the files of a pattern, the matches do
+        // not exist when the statement is resolved, so the pattern is
+        // canonicalized without touching the file system.
+        std::string canonical_pattern;
+        if (!file_sql::lexical_canonicalize_path(user_path, canonical_pattern)) {
+          code = file_sql::PathCode::NOT_FOUND;
+        } else if (!file_sql::path_is_under(secure_dir, canonical_pattern)) {
+          code = file_sql::PathCode::ACCESS_DENIED;
+        } else {
+          canonical_path = canonical_pattern;
+        }
+      } else {
+        code = file_sql::check_secure_path(secure_dir, user_path, canonical_path);
+      }
       if (file_sql::PathCode::OK != code) {
         if (file_sql::PathCode::ACCESS_DENIED == code) {
           ret = OB_ERR_NO_PRIVILEGE;
@@ -3951,7 +3966,15 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
     options.skip_blank_lines = skip_blank_lines;
     FILE *input = NULL;
     file_sql::FileTableScanner *scanner = NULL;
-    if (NULL == (input = ::fopen(canonical_path.c_str(), "rb"))) {
+    if (file_sql::FileFormat::GLOB == file_format) {
+      // The glob function has one column, the column file, the value of the
+      // column is the full path of a file.
+      file_sql::ColumnSchema column;
+      column.name = "file";
+      column.type = file_sql::ScalarType::VARCHAR;
+      column.nullable = false;
+      columns.push_back(column);
+    } else if (NULL == (input = ::fopen(canonical_path.c_str(), "rb"))) {
       ret = OB_FILE_NOT_EXIST;
       LOG_USER_ERROR(OB_FILE_NOT_EXIST, "cannot open the file %s", canonical_path.c_str());
     } else if (NULL == (scanner = file_sql::create_file_scanner(file_format))) {

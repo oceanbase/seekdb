@@ -14,6 +14,7 @@
 
 #include "sql/engine/basic/ob_file_table_op.h"
 
+#include "sql/engine/basic/file_sql/file_sql_path.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -89,6 +90,43 @@ int ObFileTableOp::open_file()
   int ret = OB_SUCCESS;
   const ObFileTableSpec &spec = MY_SPEC;
   file_sql::FileFormat format = static_cast<file_sql::FileFormat>(spec.file_format_);
+  if (file_sql::FileFormat::GLOB == format) {
+    // The glob function discovers the files of a pattern, there is no file to
+    // open. Every file of the pattern is a row of the table.
+    ObString secure_file_priv;
+    const ObSQLSessionInfo *session_info = get_exec_ctx().get_my_session();
+    if (OB_ISNULL(session_info) || OB_FAIL(session_info->get_secure_file_priv(secure_file_priv))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const std::string secure_dir = (NULL == secure_file_priv.ptr())
+                                        ? std::string()
+                                        : std::string(secure_file_priv.ptr(), secure_file_priv.length());
+      const std::string pattern = (NULL == spec.path_.ptr())
+                                     ? std::string()
+                                     : std::string(spec.path_.ptr(), spec.path_.length());
+      std::vector<std::string> files;
+      const file_sql::PathCode code = file_sql::expand_glob_pattern(pattern, secure_dir, files);
+      if (file_sql::PathCode::OK != code) {
+        ret = OB_FILE_NOT_EXIST;
+        LOG_USER_ERROR(OB_FILE_NOT_EXIST,
+                       "cannot expand the pattern %s: %s",
+                       pattern.c_str(),
+                       file_sql::path_code_message(code));
+      } else {
+        for (const std::string &file : files) {
+          file_sql::FileTableRow row;
+          file_sql::ScalarValue value;
+          value.type = file_sql::ScalarType::VARCHAR;
+          value.is_null = false;
+          value.text = file;
+          row.push_back(value);
+          rows_.push_back(row);
+        }
+        row_index_ = 0;
+      }
+    }
+    return ret;
+  }
   if (OB_ISNULL(input_)) {
     if (NULL == (input_ = ::fopen(spec.path_.ptr(), "rb"))) {
       ret = OB_FILE_NOT_EXIST;
@@ -143,6 +181,10 @@ int ObFileTableOp::check_schema()
 {
   int ret = OB_SUCCESS;
   const ObFileTableSpec &spec = MY_SPEC;
+  if (OB_ISNULL(scanner_)) {
+    // The glob function does not read a file, it has no schema to check.
+    return ret;
+  }
   const std::vector<file_sql::ColumnSchema> &columns = scanner_->columns();
   if (columns.size() != spec.column_exprs_.count()) {
     // The file changed after the schema was inferred, the plan does not match
@@ -200,6 +242,11 @@ void ObFileTableOp::destroy()
 int ObFileTableOp::fetch_batch()
 {
   int ret = OB_SUCCESS;
+  if (file_sql::FileFormat::GLOB == static_cast<file_sql::FileFormat>(MY_SPEC.file_format_)) {
+    // The rows of a glob are built when the file is opened.
+    ret = OB_ITER_END;
+    return ret;
+  }
   rows_.clear();
   row_index_ = 0;
   // The text of the columns of the previous batch is not needed any more.

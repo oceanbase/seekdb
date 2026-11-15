@@ -39,6 +39,9 @@ enum class FileFormat
   CSV,
   JSONL,
   PARQUET,
+  // The glob function discovers the files of a pattern, it does not read a
+  // file, so it has no scanner.
+  GLOB,
 };
 
 // The resource limits of a scan. The framework owns them, a format module

@@ -253,6 +253,11 @@ PathCode expand_glob_pattern(const std::string &pattern,
     std::string canonical;
     const PathCode code = canonicalize_path(glob_result.gl_pathv[i], canonical);
     if (PathCode::OK != code) {
+      if (PathCode::NOT_REGULAR_FILE == code) {
+        // A pattern matches the directories of the directory as well, they
+        // are not files, so they are not part of the result.
+        continue;
+      }
       result = code;
       break;
     }

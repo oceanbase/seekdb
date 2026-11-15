@@ -147,6 +147,10 @@ bool parse_file_format(const std::string &name, FileFormat &format)
     format = FileFormat::PARQUET;
     return true;
   }
+  if (0 == ::strcasecmp(name.c_str(), "glob")) {
+    format = FileFormat::GLOB;
+    return true;
+  }
   return false;
 }
 

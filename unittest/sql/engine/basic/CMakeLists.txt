@@ -61,8 +61,11 @@ if(EXISTS "${FILE_SQL_SRC}/file_sql_adapters.cpp")
   target_link_libraries(file_sql_adapters PUBLIC file_sql_types)
   target_compile_options(file_sql_adapters PRIVATE -Wall -Wextra -Werror -fno-exceptions)
   add_executable(test_file_sql_adapters test_file_sql_adapters.cpp)
+  # The reader of the framework registers the scanners of the format modules,
+  # so the reader has to be linked before the adapters. The reader reads the
+  # CSV module, so the CSV module has to be linked as well.
   target_link_libraries(test_file_sql_adapters PRIVATE
-    file_sql_adapters file_sql_reader file_sql_jsonl file_sql_parquet_lib)
+    file_sql_reader file_sql_adapters file_sql_csv file_sql_jsonl file_sql_parquet_lib)
   add_test(NAME file_sql_adapters COMMAND test_file_sql_adapters
     "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/basic.jsonl"
     "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/simple.parquet.b64")
