@@ -2472,9 +2472,11 @@ int ObDASIterUtils::create_mvi_lookup_tree(ObTableScanParam &scan_param,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObDASUtils::find_target_das_def(attach_ctdef, attach_rtdef, DAS_OP_TABLE_LOOKUP, lookup_ctdef, lookup_rtdef))) {
-    // multivalue index scan and don't need to index back lookup.
-    ret = OB_SUCCESS;
-    iter_tree = sort_iter;
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      // multivalue index scan and don't need to index back lookup.
+      ret = OB_SUCCESS;
+      iter_tree = sort_iter;
+    }
   } else if (!in_vec_pre_filter && OB_FAIL(create_local_lookup_sub_tree(scan_param, alloc, lookup_ctdef->get_rowkey_scan_ctdef(), lookup_rtdef->get_rowkey_scan_rtdef(),
                                                   lookup_ctdef->get_lookup_scan_ctdef(), lookup_rtdef->get_lookup_scan_rtdef(), lookup_ctdef,
                                                   lookup_rtdef, related_tablet_ids, trans_desc, snapshot, related_tablet_ids.lookup_tablet_id_, sort_iter, iter_tree))) {
