@@ -5542,10 +5542,14 @@ int ObStaticEngineCG::generate_spec(ObLogFileTable &op, ObFileTableSpec &spec,
   const ObFileTableDef *file_def = op.get_file_def();
   if (OB_ISNULL(file_def) || OB_ISNULL(op.get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(spec.column_exprs_.prepare_allocate(op.get_stmt()->get_column_size()))) {
+  } else if (OB_FAIL(spec.column_exprs_.prepare_allocate(file_def->columns_.count()))) {
   } else {
-    // The columns of the file are the columns of the table item, they are
-    // filled in the order of the column items of the table.
+    // The columns of the file are the columns of the table item. The column
+    // id of a column of a file table is the index of the column in the file,
+    // so the expression of a column is put at the place of the column in the
+    // file. A column that the plan does not use keeps an empty place, the
+    // operator reads the value of the file and writes it only into the
+    // expressions that the plan uses.
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_stmt()->get_column_size(); ++i) {
       const ColumnItem *col_item = op.get_stmt()->get_column_item(i);
       ObExpr *rt_expr = NULL;
@@ -5554,24 +5558,41 @@ int ObStaticEngineCG::generate_spec(ObLogFileTable &op, ObFileTableSpec &spec,
       } else if (col_item->table_id_ != op.get_table_id()
                  || !col_item->expr_->is_explicited_reference()) {
         continue;
+      } else if (col_item->column_id_ >= spec.column_exprs_.count()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("the column of a file table has an unexpected id",
+                 K(col_item->column_id_), K(spec.column_exprs_.count()));
       } else if (OB_FAIL(mark_expr_self_produced(col_item->expr_))) {
       } else if (OB_FAIL(generate_rt_expr(*col_item->expr_, rt_expr))) {
       } else if (OB_ISNULL(rt_expr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(spec.column_exprs_.push_back(rt_expr))) {
-      } else { /* do nothing */ }
+      } else {
+        spec.column_exprs_.at(col_item->column_id_) = rt_expr;
+      }
     }
     if (OB_SUCC(ret)) {
-      spec.path_ = file_def->path_;
-      spec.format_ = file_def->format_;
-      spec.header_ = file_def->header_;
-      spec.sample_size_ = file_def->sample_size_;
-      spec.null_string_ = file_def->null_string_;
-      spec.delimiter_ = file_def->delimiter_;
-      spec.quote_ = file_def->quote_;
-      spec.escape_ = file_def->escape_;
-      spec.skip_blank_lines_ = file_def->skip_blank_lines_;
-      spec.file_format_ = file_def->file_format_;
+      // The strings of the definition of the table live in the memory of the
+      // statement. The plan of a file table outlives the statement, it is
+      // kept in the plan cache and it is run after the statement is gone,
+      // so the strings are copied into the memory of the plan.
+      if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
+                                   file_def->path_,
+                                   spec.path_))) {
+      } else if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
+                                         file_def->format_,
+                                         spec.format_))) {
+      } else if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
+                                         file_def->null_string_,
+                                         spec.null_string_))) {
+      } else {
+        spec.header_ = file_def->header_;
+        spec.sample_size_ = file_def->sample_size_;
+        spec.delimiter_ = file_def->delimiter_;
+        spec.quote_ = file_def->quote_;
+        spec.escape_ = file_def->escape_;
+        spec.skip_blank_lines_ = file_def->skip_blank_lines_;
+        spec.file_format_ = file_def->file_format_;
+      }
     }
   }
   return ret;

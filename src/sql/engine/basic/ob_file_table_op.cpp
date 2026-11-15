@@ -230,8 +230,9 @@ int ObFileTableOp::write_row(const file_sql::FileTableRow &row)
     for (int64_t i = 0; OB_SUCC(ret) && i < row.size(); ++i) {
       ObExpr *expr = spec.column_exprs_.at(i);
       if (OB_ISNULL(expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        break;
+        // The plan does not use this column of the file, the value of the
+        // column is not needed.
+        continue;
       }
       ObDataType data_type;
       data_type.set_obj_type(expr->datum_meta_.type_);
