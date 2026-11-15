@@ -2118,6 +2118,24 @@ int ObSqlParameterization::mark_tree(ParseNode *tree ,SqlInfo &sql_info)
       if (OB_FAIL(mark_args(tree, mark_arr, ARGS_NUMBER_TWO, sql_info))) {
       }
     }
+  } else if (T_FILE_TABLE_EXPRESSION == tree->type_) {
+    // The arguments of a file table are the path of the file and the options
+    // of the reader. They are part of the identity of the table, a plan that
+    // reads another file must not be reused for this one, so they must not
+    // become parameters of the plan.
+    if (4 != tree->num_child_) {
+      ret = OB_INVALID_ARGUMENT;
+      SQL_PC_LOG(WARN, "invalid file table expr argument", K(ret), K(tree->num_child_));
+    } else {
+      // The children are the name of the function, the list of the
+      // arguments, the alias and a child that is always empty.
+      const int64_t ARGS_NUMBER_FOUR = 4;
+      // The third child is the alias, it is empty when the table
+      // function has no alias, so it is not marked.
+      bool mark_arr[ARGS_NUMBER_FOUR] = {1, 1, 0, 0};
+      if (OB_FAIL(mark_args(tree, mark_arr, ARGS_NUMBER_FOUR, sql_info))) {
+      }
+    }
   } else { /*do nothing*/ }
   return ret;
 }
