@@ -627,7 +627,8 @@ int ObDMLResolver::check_column_json_type(ParseNode *tab_col, bool &is_json_cst,
           ret = OB_INVALID_ARGUMENT;
         } else if (FALSE_IT(column_expr = the_col_item.get_expr())) {
         } else if (table_item->is_json_table() || table_item->is_temp_table()
-                    || table_item->is_generated_table() || table_item->is_function_table()) {
+                    || table_item->is_generated_table() || table_item->is_function_table()
+                    || table_item->is_file_table()) {
           if (only_is_json > 0) {
             ObColumnRefRawExpr* col_expr = the_col_item.get_expr();
             if (OB_NOT_NULL(col_expr)) {
@@ -932,6 +933,11 @@ int ObDMLResolver::get_target_column_list(ObSEArray<ColumnItem, 4> &target_list,
         }
       } else if (tmp_table_item->is_json_table()) {
         if (OB_FAIL(resolve_json_table_column_all_items(*tmp_table_item, column_items))) {
+        }
+      } else if (tmp_table_item->is_file_table()) {
+        // The columns of a file table are the columns of the file, they are
+        // in the column items of the statement.
+        if (OB_FAIL(resolve_file_table_column_all_items(*tmp_table_item, column_items))) {
         }
       } else {
         // not set error code, public routine new type may enter here
@@ -3093,6 +3099,12 @@ int ObDMLResolver::resolve_single_table_column_item(const TableItem &table_item,
   } else if (table_item.is_json_table()) {
     if (OB_FAIL(resolve_json_table_column_item(table_item, column_name, col_item))) {
     }
+  } else if (table_item.is_file_table()) {
+    // The columns of a file table are the columns of the file, they are in
+    // the column items of the statement.
+    if (OB_ISNULL(col_item = stmt->get_column_item(table_item.table_id_, column_name))) {
+      ret = OB_ERR_BAD_FIELD_ERROR;
+    }
   } else if (table_item.is_values_table()) {
     if (OB_ISNULL(col_item = stmt->get_column_item(table_item.table_id_, column_name))) {
       ret = OB_ERR_BAD_FIELD_ERROR;
@@ -3686,6 +3698,25 @@ int ObDMLResolver::unnest_table_add_column(TableItem *&table_item, ColumnItem *&
 
   return ret;
 }
+// Read a flag of a file table. The value is a number, a boolean is a number
+// as well. The value of a boolean literal is a tinyint with a flag and the
+// method that reads an integer refuses it.
+int ObDMLResolver::read_file_table_flag(const ObObj &value, int64_t &flag)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(value.get_int(flag))) {
+    // The value of a boolean literal is a tinyint, the method that reads an
+    // integer refuses it.
+    bool boolean_value = false;
+    if (OB_FAIL(value.get_bool(boolean_value))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      flag = boolean_value ? 1 : 0;
+    }
+  }
+  return ret;
+}
+
 int ObDMLResolver::resolve_file_table_option_value(const ParseNode &option_node, ObObj &value)
 {
   int ret = OB_SUCCESS;
@@ -3764,7 +3795,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
       }
       if (0 == option_name.case_compare("header")) {
         int64_t flag = 0;
-        if (OB_FAIL(value.get_int(flag))) {
+        if (OB_FAIL(read_file_table_flag(value, flag))) {
           ret = OB_ERR_PARSER_SYNTAX;
           LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX, "the option header of a file table must be a number");
         } else {
@@ -3815,7 +3846,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
         }
       } else if (0 == option_name.case_compare("skip_blank_lines")) {
         int64_t flag = 0;
-        if (OB_FAIL(value.get_int(flag))) {
+        if (OB_FAIL(read_file_table_flag(value, flag))) {
           ret = OB_ERR_PARSER_SYNTAX;
           LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX, "the option skip_blank_lines of a file table must be a number");
         } else {

@@ -211,6 +211,8 @@ public:
   int resolve_file_table_item(const ParseNode &table_node, TableItem *&table_item);
   int resolve_file_table_column_all_items(const TableItem &table_item, ObIArray<ColumnItem> &col_items);
   int resolve_file_table_option_value(const ParseNode &option_node, ObObj &value);
+  // Read a flag of a file table, a boolean is a number as well.
+  static int read_file_table_flag(const ObObj &value, int64_t &flag);
   int generate_file_table_output_column_item(TableItem *table_item,
                                                 const ObDataType &data_type,
                                                 const ObString &column_name,
