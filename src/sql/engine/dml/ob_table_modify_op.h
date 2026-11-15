@@ -19,6 +19,7 @@
 
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_column_utils.h"
 #include "sql/session/ob_inner_sql_connection.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/dml/ob_fk_checker.h"
@@ -249,6 +250,13 @@ public:
   void clear_dml_evaluated_flag(int64_t parent_cnt, ObExpr **parent_exprs);
   void clear_dml_evaluated_flag(ObExpr *clear_expr);
 
+  // AI column maintenance. The task rows are written through the session's
+  // inner connection so that they live in the same transaction as the DML.
+  int ai_column_after_insert(const ObInsCtDef &ins_ctdef);
+  int ai_column_after_update(const ObUpdCtDef &upd_ctdef);
+  int ai_column_after_delete(const ObDelCtDef &del_ctdef);
+  int ai_column_flush_vector_invalidations();
+
   ObDMLModifyRowsList& get_dml_modify_row_list() { return dml_modify_rows_;}
   int submit_all_dml_task();
 
@@ -313,7 +321,27 @@ public:
   ObDMLModifyRowsList dml_modify_rows_;
   ObSEArray<ObForeignKeyChecker *, 4> fk_checkers_;
   ObChunkDatumStore::ShadowStoredRow last_store_row_;
+  uint64_t ai_vector_table_id_;
+  common::ObSEArray<common::ObString, 4> ai_vector_predicates_;
 private:
+  int ai_column_load_specs(uint64_t table_id, common::ObIArray<ObAiColumnSpec> &specs);
+  int ai_column_build_predicate(const ObDMLBaseCtDef &ctdef,
+                                const ExprFixedArray &row,
+                                common::ObString &predicate);
+  int ai_column_write_tasks(uint64_t table_id,
+                            const common::ObIArray<ObAiColumnSpec> &specs,
+                            const common::ObString &predicate,
+                            uint64_t request_id,
+                            bool only_dep_changed,
+                            bool force_all,
+                            const common::ObIArray<uint64_t> *updated_cids);
+  int ai_column_delete_tasks(uint64_t table_id,
+                             const common::ObIArray<ObAiColumnSpec> &specs,
+                             const common::ObString &predicate);
+  int ai_column_invalidate_rows(uint64_t table_id,
+                                const ObAiColumnSpec &spec,
+                                const common::ObString &predicate);
+  int ai_column_execute_inner_write(const char *sql);
   ObSQLSessionInfo::StmtSavedValue *saved_session_;
   char saved_session_buf_[sizeof(ObSQLSessionInfo::StmtSavedValue)] __attribute__((aligned (16)));;
 

@@ -83,8 +83,11 @@ public:
       avg_doc_len_est_spec_(alloc),
       mode_flag_(NATURAL_LANGUAGE_MODE),
       flags_(0),
-      field_boost_expr_(nullptr) {}
+      field_boost_expr_(nullptr),
+      count_only_(false) {}
   bool need_calc_relevance() const { return nullptr != relevance_expr_; }
+  // rows-only scan: the consumer of this scan only uses the number of produced rows.
+  bool count_only() const { return count_only_; }
   bool need_proj_relevance_score() const { return nullptr != relevance_proj_col_; }
   bool need_inv_idx_agg() const { return has_inv_agg_ && need_calc_relevance(); }
   bool need_block_max_scan() const { return has_block_max_scan_; }
@@ -165,7 +168,8 @@ public:
                        K_(token_col),
                        K_(block_max_spec),
                        K_(mode_flag),
-                       KPC_(field_boost_expr));
+                       KPC_(field_boost_expr),
+                       K_(count_only));
 
   ObExpr *search_text_;
   ObExpr *inv_scan_domain_id_col_;
@@ -195,6 +199,7 @@ public:
     };
   };
   ObExpr *field_boost_expr_;
+  bool count_only_; // rows-only scan flag
 };
 
 struct ObDASIRScanRtDef : ObDASAttachRtDef

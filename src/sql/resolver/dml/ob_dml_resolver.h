@@ -27,6 +27,9 @@ namespace oceanbase
 {
 namespace sql
 {
+struct ObFileTableRows;
+struct ObFileReadOptions;
+
 class ObEqualAnalysis;
 class ObChildStmtResolver;
 class ObDelUpdStmt;
@@ -205,6 +208,23 @@ public:
   int resolve_joined_table_item(const ParseNode &parse_node, JoinedTable *&joined_table);
   int resolve_function_table_item(const ParseNode &table_node,
                                   TableItem *&table_item);
+  int resolve_file_table_item(const ParseNode &table_node,
+                              TableItem *&table_item);
+  int resolve_file_table_args(const ParseNode *arg_list,
+                               const int64_t format,
+                               ObFileReadOptions &options,
+                               ObString &path);
+  bool is_file_table_named_arg(const ParseNode &arg) const;
+  int resolve_file_table_arg_value(const ParseNode &node, ObString &value);
+  int file_table_obj_to_text(const ObObj &obj, ObString &text);
+  int unquote_literal(const ObString &literal, ObString &value);
+  int normalize_datetime_text(const ObString &text, ObString &normalized);
+  int apply_file_table_named_arg(const ParseNode *arg, ObFileReadOptions &options);
+  int build_file_table_values(const ObFileTableRows &file_rows, ObValuesTableDef &table_def);
+  int build_describe_rows(ObFileTableRows &file_rows);
+  int gen_file_table_column_items(const ObFileTableRows &file_rows, TableItem &table_item);
+  int text_to_obj(const ObString &text, const int32_t type,
+                  const ObTimeZoneInfo *tz_info, ObObjParam &obj);
   int resolve_json_table_item(const ParseNode &table_node,
                               TableItem *&table_item);
   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);

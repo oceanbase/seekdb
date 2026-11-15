@@ -1894,7 +1894,51 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
 
   if (OB_SUCC(ret)) {
     root_ctdef = ir_scan_ctdef;
-    if (OB_FAIL(generate_text_ir_spec_exprs(tr_info, *ir_scan_ctdef))) {
+    // rows-only scan: the score is not referenced, no topk ordering was pushed down and the
+    // operator projects no column at all, so nothing but the number of rows is consumed.
+    //
+    // The pushed match filter is skipped in this mode, therefore it must carry nothing but the
+    // match expression itself. A filter of the shape "match AND something else" is a different
+    // predicate: dropping it would silently drop that conjunct and inflate the count. Such a
+    // shape also fails can_skip_text_retrieval_relevance() in the optimizer (it only accepts the
+    // bare match expression, or a single-parameter T_OP_BOOL wrapper around it), but the check is
+    // repeated here so that "skip the score" and "skip the filter and the row projection" stay
+    // two independent decisions instead of one transitive one.
+    bool match_filter_is_bare_match = false;
+    if (nullptr != tr_info.pushdown_match_filter_ && nullptr != tr_info.match_expr_) {
+      if (tr_info.pushdown_match_filter_ == tr_info.match_expr_) {
+        match_filter_is_bare_match = true;
+      } else if (1 == tr_info.pushdown_match_filter_->get_param_count()
+                 && tr_info.match_expr_ == tr_info.pushdown_match_filter_->get_param_expr(0)) {
+        match_filter_is_bare_match = true;
+      }
+    }
+    // Hardening (master 21:40): a bare pushdown match does not prove that the scan needs
+    // nothing else. `MATCH(..) AND category = 1` used to reach this point with the residual
+    // predicate sitting in a separate scan-level filter, and dropping the id projection then
+    // left that filter with nothing to evaluate (OB_ERR_UNEXPECTED). Enumerating the unsafe
+    // shapes is not reliable, so every extra guard below fails OPEN to the legacy path.
+    bool no_residual_scan_filter = true;
+    bool stmt_cond_is_bare_match = false;
+    if (OB_ISNULL(op.get_stmt())) {
+      no_residual_scan_filter = false;
+    } else {
+      no_residual_scan_filter = (0 == op.get_filter_exprs().count()
+                                 && 0 == op.get_pushdown_filter_exprs().count());
+      const common::ObIArray<ObRawExpr *> &co_conds = op.get_stmt()->get_condition_exprs();
+      if (1 == co_conds.count()) {
+        stmt_cond_is_bare_match = (co_conds.at(0) == tr_info.pushdown_match_filter_
+                                   || co_conds.at(0) == tr_info.match_expr_);
+      }
+    }
+    const bool no_index_back_lookup = !op.get_index_back();
+    const bool count_only = !tr_info.need_calc_relevance_ && !tr_info.need_sort()
+                            && match_filter_is_bare_match
+                            && op.get_output_exprs().empty()
+                            && no_residual_scan_filter
+                            && stmt_cond_is_bare_match
+                            && no_index_back_lookup;
+    if (OB_FAIL(generate_text_ir_spec_exprs(tr_info, *ir_scan_ctdef, count_only))) {
     } else {
       const ObCostTableScanInfo *est_cost_info = op.get_est_cost_info();
       int partition_row_cnt = 0;
@@ -2995,10 +3039,12 @@ int ObTscCgService::generate_spiv_block_max_spec(
 }
 
 int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_info,
-                                                ObDASIRScanCtDef &text_ir_scan_ctdef)
+                                                ObDASIRScanCtDef &text_ir_scan_ctdef,
+                                                const bool count_only)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObExpr *, 4> result_output;
+  text_ir_scan_ctdef.count_only_ = count_only;
   if (OB_ISNULL(tr_info.match_expr_) || OB_ISNULL(tr_info.relevance_expr_) ||
       OB_ISNULL(tr_info.docid_or_rowkey_column_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3026,7 +3072,7 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
           text_ir_scan_ctdef.get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_.at(doc_id_col_idx);
       text_ir_scan_ctdef.inv_scan_doc_length_col_ =
           text_ir_scan_ctdef.get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_.at(doc_length_col_idx);
-      if (OB_FAIL(result_output.push_back(text_ir_scan_ctdef.inv_scan_domain_id_col_))) {
+      if (!count_only && OB_FAIL(result_output.push_back(text_ir_scan_ctdef.inv_scan_domain_id_col_))) {
       }
     }
   }
@@ -3040,7 +3086,7 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
     }
   }
 
-  if (OB_SUCC(ret) && nullptr != tr_info.pushdown_match_filter_) {
+  if (OB_SUCC(ret) && !count_only && nullptr != tr_info.pushdown_match_filter_) {
     if (OB_FAIL(cg_.generate_rt_expr(*tr_info.pushdown_match_filter_, text_ir_scan_ctdef.match_filter_))) {
     }
   }
@@ -3057,7 +3103,8 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
     }
   }
 
-  if (OB_SUCC(ret) && (tr_info.need_calc_relevance_ || nullptr != tr_info.pushdown_match_filter_)) {
+  if (OB_SUCC(ret) && !count_only &&
+      (tr_info.need_calc_relevance_ || nullptr != tr_info.pushdown_match_filter_)) {
     if (OB_FAIL(cg_.generate_rt_expr(*tr_info.match_expr_,
                                             text_ir_scan_ctdef.relevance_proj_col_))) {
     } else if (OB_ISNULL(text_ir_scan_ctdef.relevance_proj_col_)) {

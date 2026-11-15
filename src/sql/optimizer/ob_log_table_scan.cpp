@@ -704,7 +704,7 @@ int ObLogTableScan::extract_pushdown_filters(ObIArray<ObRawExpr*> &nonpushdown_f
         } else if (is_vec_adaptive_scan()) {
           add_to_scan_filter = true;
         }
-      } else if (is_text_retrieval_scan() && need_text_retrieval_calc_relevance()) {
+      } else if (is_text_retrieval_scan()) {
         if (OB_FAIL(nonpushdown_filters.push_back(filters.at(i)))) {
         } else if (is_vec_adaptive_scan()) {
           add_to_scan_filter = true;
@@ -2354,8 +2354,10 @@ int ObLogTableScan::extract_text_retrieval_access_expr(ObTextRetrievalInfo &tr_i
   } else if (OB_FAIL(exprs.push_back(tr_info.token_cnt_column_))) {
   } else if (OB_FAIL(exprs.push_back(tr_info.docid_or_rowkey_column_))) {
   } else if (OB_FAIL(exprs.push_back(tr_info.doc_length_column_))) {
-  } else if (OB_FAIL(exprs.push_back(tr_info.total_doc_cnt_->get_param_expr(0)))) {
-  } else if (OB_FAIL(exprs.push_back(tr_info.related_doc_cnt_->get_param_expr(0)))) {
+  } else if (tr_info.need_calc_relevance_
+      && OB_FAIL(exprs.push_back(tr_info.total_doc_cnt_->get_param_expr(0)))) {
+  } else if (tr_info.need_calc_relevance_
+      && OB_FAIL(exprs.push_back(tr_info.related_doc_cnt_->get_param_expr(0)))) {
   }
   return ret;
 }
@@ -2514,6 +2516,17 @@ int ObLogTableScan::get_text_retrieval_calc_exprs(ObTextRetrievalInfo &tr_info,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tr_info.match_expr_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (!tr_info.need_calc_relevance_) {
+    // C7: the relevance score is not required, the aggregate and the relevance
+    // expressions are not accessed by the storage layer any more.
+    if (OB_FAIL(all_exprs.push_back(tr_info.match_expr_))) {
+    } else if (nullptr != tr_info.pushdown_match_filter_
+        && OB_FAIL(all_exprs.push_back(tr_info.pushdown_match_filter_))) {
+    } else if (nullptr != tr_info.topk_limit_expr_
+        && OB_FAIL(all_exprs.push_back(tr_info.topk_limit_expr_))) {
+    } else if (nullptr != tr_info.topk_offset_expr_
+        && OB_FAIL(all_exprs.push_back(tr_info.topk_offset_expr_))) {
+    }
   } else if (OB_FAIL(all_exprs.push_back(tr_info.related_doc_cnt_))) {
   } else if (OB_FAIL(all_exprs.push_back(tr_info.total_doc_cnt_))) {
   } else if (OB_FAIL(all_exprs.push_back(tr_info.relevance_expr_))) {

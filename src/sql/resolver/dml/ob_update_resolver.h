@@ -47,6 +47,10 @@ public:
 private:
   int resolve_table_list(const ParseNode &parse_tree);
   int generate_update_table_info(ObTableAssignment &table_assign);
+  int add_ai_column_invalidation_assignments(
+      const share::schema::ObTableSchema &table_schema,
+      const TableItem &table_item,
+      common::ObIArray<ObAssignment> &assignments);
   int check_multi_update_table_conflict();
   int check_join_update_conflict();
   int is_join_table_update(const ObDMLStmt *stmt, bool &is_multi_table);

@@ -17,8 +17,13 @@
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 
+#include "lib/alloc/ob_malloc_allocator.h"
+#include "lib/allocator/ob_fifo_allocator.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_bucket_lock.h"
+#include "storage/fts/dict/ob_ft_cache_container.h"
+#include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
 namespace oceanbase
@@ -93,10 +98,28 @@ private:
 };
 
 class ObFTCacheRangeContainer;
+
+// A built-in dictionary never changes within a process, so the parsed
+// dictionary object is built once and then shared by all the parses.
+struct ObFTCachedDictEntry
+{
+  ObFTCachedDictEntry(ObIAllocator &alloc) : container_(alloc), dict_(nullptr) {}
+  ObFTCacheRangeContainer container_;
+  ObIFTDict *dict_;
+};
+
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub()
+      : is_inited_(false),
+        dict_map_(),
+        rw_dict_lock_(),
+        dict_allocator_(),
+        dict_cache_map_(),
+        rw_dict_cache_lock_()
+  {
+  }
   ~ObFTDictHub() {}
 
   int init();
@@ -106,6 +129,10 @@ public:
   int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
+  // Returns the shared dictionary of the given descriptor.  The dictionary
+  // is owned by the hub, the caller must not free it.
+  int get_or_build_dict(const ObFTDictDesc &desc, ObIFTDict *&dict);
 
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
@@ -118,6 +145,11 @@ private:
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+
+  // caches the built dictionary objects, keyed by the dictionary type
+  common::ObFIFOAllocator dict_allocator_;
+  hash::ObHashMap<ObFTDictInfoKey, ObFTCachedDictEntry *> dict_cache_map_;
+  ObBucketLock rw_dict_cache_lock_;
 };
 
 } //  namespace storage

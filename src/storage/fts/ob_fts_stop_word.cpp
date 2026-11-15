@@ -71,26 +71,47 @@ void ObStopWordChecker::destroy()
   }
 }
 
+static inline bool is_plain_ascii(const common::ObString &str)
+{
+  const char *ptr = str.ptr();
+  const int64_t len = str.length();
+  for (int64_t i = 0; i < len; ++i) {
+    if (0 != (static_cast<unsigned char>(ptr[i]) & 0x80)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
+    const common::ObString src_str = word.get_word().get_string();
+    // A word that is already plain ASCII and already uses the stopword set's
+    // collation is converted to itself, so the temporary arena and the
+    // charset conversion are pure overhead.  This is the hot path: the check
+    // runs once per token.
+    if (word.get_collation_type() == stopword_type_.get_collation_type()
+        && is_plain_ascii(src_str)) {
+      cmp_str = src_str;
     } else {
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      // do nothing set out with in if type is the same.
+      if (OB_FAIL(common::ObCharset::charset_convert(
+                                         allocator,
+                                         src_str,
+                                         word.get_collation_type(),
+                                         stopword_type_.get_collation_type(),
+                                         cmp_str))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
       ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
       ret = stopword_set_.exist_refactored(converted);
       if (OB_HASH_NOT_EXIST == ret) {

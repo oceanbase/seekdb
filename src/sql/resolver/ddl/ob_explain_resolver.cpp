@@ -26,6 +26,10 @@ const static int64_t EXPLAIN_DISPLAY_OPTION = 1;
 const static int64_t EXPLAIN_INTO_TABLE = 2;
 const static int64_t EXPLAIN_STMT_ID = 3;
 const static int64_t EXPLAIN_CHILD_STMT = 4;
+namespace oceanbase
+{
+namespace sql
+{
 int ObExplainResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -145,3 +149,6 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
 
   return ret;
 }
+
+} // namespace sql
+} // namespace oceanbase

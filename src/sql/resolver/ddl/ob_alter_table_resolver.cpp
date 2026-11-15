@@ -25,6 +25,10 @@
 #include "sql/session/ob_local_session_var.h"
 #include "query/command/ob_root_command_service.h"
 #include "query/vector/ob_vector_index_util.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_column_utils.h"
+#include <algorithm>
+#include <cctype>
+#include <string>
 
 namespace oceanbase
 {
@@ -451,6 +455,51 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
                 has_drop_column = tmp_has_drop_column;
               }
               ++alter_column_times;
+            }
+            break;
+          }
+        case T_AI_COLUMN_RETRY_STMT: {
+            if (node.num_child_ > 1) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                             "combining AI COLUMN RETRY with another ALTER action");
+            } else if (OB_ISNULL(action_node->children_)
+                       || action_node->num_child_ != 2
+                       || OB_ISNULL(action_node->children_[0])) {
+              ret = OB_ERR_UNEXPECTED;
+            } else {
+              ParseNode *col_node = action_node->children_[0];
+              ObString column_name(col_node->str_len_, col_node->str_value_);
+              ObSqlString spec_name;
+              const ObColumnSchemaV2 *column =
+                  table_schema_->get_column_schema(column_name);
+              if (OB_FAIL(spec_name.append_fmt("%s%.*s", ObAiColumnUtils::SPEC_PREFIX,
+                                               column_name.length(),
+                                               column_name.ptr()))) {
+              } else if (OB_ISNULL(column)
+                         || OB_ISNULL(table_schema_->get_column_schema(
+                             spec_name.string()))) {
+                ret = OB_NOT_SUPPORTED;
+                LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                               "retrying a column that is not an AI column");
+              } else {
+                ObString predicate;
+                ParseNode *where_node = action_node->children_[1];
+                if (OB_NOT_NULL(where_node)) {
+                  const ObString &query = session_info_->get_current_query_string();
+                  std::string lower(query.ptr(), query.length());
+                  std::transform(lower.begin(), lower.end(), lower.begin(),
+                                 [](unsigned char c) { return std::tolower(c); });
+                  size_t retry_pos = lower.find("retry");
+                  size_t pos = lower.find("where",
+                                          std::string::npos == retry_pos ? 0 : retry_pos);
+                  if (std::string::npos != pos && pos + 5 < query.length()) {
+                    predicate.assign_ptr(query.ptr() + pos + 5,
+                                         static_cast<int32_t>(query.length() - pos - 5));
+                  }
+                }
+                alter_table_stmt->set_ai_column_retry(column_name, predicate);
+              }
             }
             break;
           }
@@ -3403,6 +3452,7 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
   } else {
     AlterColumnSchema alter_column_schema;
     ObColumnResolveStat stat;
+    const int64_t ai_spec_count_before = ai_column_specs_.count();
     for (int i = 0; OB_SUCC(ret) && i < node.num_child_; ++i) {
       alter_column_schema.reset();
       alter_column_schema.alter_type_ = OB_DDL_ADD_COLUMN;
@@ -3461,7 +3511,65 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
         }
       }
     }
+    for (int64_t i = ai_spec_count_before; OB_SUCC(ret) && i < ai_column_specs_.count(); ++i) {
+      if (OB_FAIL(add_ai_hidden_columns_for_alter(alter_table_stmt,
+                                                  add_column_names_set,
+                                                  ai_column_specs_.at(i)))) {
+      }
+    }
     add_column_cnt_++;
+  }
+  return ret;
+}
+
+int ObAlterTableResolver::add_ai_hidden_columns_for_alter(
+    ObAlterTableStmt *alter_table_stmt,
+    ObColumnNameSet &add_column_names_set,
+    const ObAiColumnSpec &spec)
+{
+  int ret = OB_SUCCESS;
+  ObString spec_text;
+  if (OB_ISNULL(alter_table_stmt) || OB_ISNULL(session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ObAiColumnUtils::build_spec_text(spec, *allocator_, spec_text))) {
+  } else {
+    for (int64_t kind = 0; OB_SUCC(ret) && kind < 3; ++kind) {
+      AlterColumnSchema column;
+      ObSqlString column_name;
+      const char *prefix = 0 == kind ? ObAiColumnUtils::STATE_PREFIX
+                         : 1 == kind ? ObAiColumnUtils::REQUEST_PREFIX
+                                     : ObAiColumnUtils::SPEC_PREFIX;
+      column.reset();
+      column.alter_type_ = OB_DDL_ADD_COLUMN;
+      column.set_nullable(true);
+      column.set_is_hidden(true);
+      if (OB_FAIL(column_name.append_fmt("%s%.*s", prefix, spec.result_column_.length(),
+                                         spec.result_column_.ptr()))) {
+      } else if (OB_FAIL(column.set_column_name(column_name.string()))) {
+      } else if (0 == kind || 1 == kind) {
+        column.set_data_type(ObIntType);
+        column.set_charset_type(CHARSET_BINARY);
+        column.set_collation_type(CS_TYPE_BINARY);
+      } else {
+        ObAccuracy accuracy;
+        column.set_data_type(ObVarcharType);
+        accuracy.set_length(1024);
+        column.set_accuracy(accuracy);
+        column.set_charset_type(CHARSET_UTF8MB4);
+        column.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+        if (OB_FAIL(column.set_comment(spec_text))) {
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ObColumnSchemaHashWrapper col_key(column.get_column_name_str());
+        if (OB_FAIL(add_column_names_set.set_refactored(col_key))) {
+          if (OB_HASH_EXIST == ret) {
+            ret = OB_ERR_COLUMN_DUPLICATE;
+          }
+        } else if (OB_FAIL(alter_table_stmt->add_column(column))) {
+        }
+      }
+    }
   }
   return ret;
 }

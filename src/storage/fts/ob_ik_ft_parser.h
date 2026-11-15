@@ -46,7 +46,10 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        dict_main_owned_(true),
+        dict_quan_owned_(true),
+        dict_stop_owned_(true)
   {
   }
 
@@ -106,6 +109,12 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+
+  // whether the dictionary object is owned by this parser.  A dictionary
+  // shared by the dict hub is not owned by the parser.
+  bool dict_main_owned_;
+  bool dict_quan_owned_;
+  bool dict_stop_owned_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

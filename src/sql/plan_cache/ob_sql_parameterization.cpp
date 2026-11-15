@@ -341,6 +341,12 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
     ret_bool = true;
   } else if (T_VEC_INDEX_PARAMS == tree->type_) {
     ret_bool = true;
+  } else if (T_FILE_TABLE_EXPRESSION == tree->type_) {
+    // The file name and its read options decide what a file table contains, and
+    // the rows are materialized while the statement is resolved. Leaving them
+    // out of the plan cache key would let a cached plan for one file answer a
+    // query for another, so the whole expression stays unparameterized.
+    ret_bool = true;
   } else {
     // do nothing
   }
@@ -2106,6 +2112,21 @@ int ObSqlParameterization::mark_tree(ParseNode *tree ,SqlInfo &sql_info)
       const int64_t ARGS_NUMBER_FIVE = 5;
       bool mark_arr[ARGS_NUMBER_FIVE] = {0, 1, 1, 1, 1};
       if (OB_FAIL(mark_args(tree, mark_arr, ARGS_NUMBER_FIVE, sql_info))) {
+      }
+    }
+  } else if (T_FILE_TABLE_EXPRESSION == tree->type_) {
+    // The argument list names the file and its read options, and the file
+    // contents are materialized while the statement is resolved. Parameterizing
+    // the path would let a cached plan for one file answer a query for another,
+    // so the whole argument list stays in the SQL text and therefore in the
+    // plan cache key.
+    if (3 != tree->num_child_) {
+      ret = OB_INVALID_ARGUMENT;
+      SQL_PC_LOG(WARN, "invalid file table expr argument", K(ret), K(tree->num_child_));
+    } else {
+      const int64_t ARGS_NUMBER_THREE = 3;
+      bool mark_arr[ARGS_NUMBER_THREE] = {1, 0, 0};
+      if (OB_FAIL(mark_args(tree, mark_arr, ARGS_NUMBER_THREE, sql_info))) {
       }
     }
   } else if (T_FUN_SYS_TREAT == tree->type_) {

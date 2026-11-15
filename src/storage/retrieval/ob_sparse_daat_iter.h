@@ -91,6 +91,7 @@ protected:
   virtual int process_collected_row(const ObDatum &id_datum, const double relevance);
   virtual int filter_on_demand(const int64_t count, const double relevance, bool &need_project);
   virtual int cache_result(int64_t &count, const ObDatum &id_datum, const double relevance);
+  virtual int cache_count_result(int64_t &count);
   virtual int project_results(const int64_t count);
   int init_merge_heap(const int64_t count);
 protected:

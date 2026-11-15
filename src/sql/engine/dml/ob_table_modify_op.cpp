@@ -19,8 +19,13 @@
 #include "ob_table_modify_op.h"
 #include "share/ob_autoincrement_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
+#include "observer/ob_inner_sql_connection.h"
+#include "observer/ai_service/ob_ai_column_worker.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/dml/ob_dml_service.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/inner_table/ob_inner_table_schema.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -623,6 +628,8 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
     execute_single_row_(false),
     dml_modify_rows_(ctx.get_allocator()),
     last_store_row_(),
+    ai_vector_table_id_(OB_INVALID_ID),
+    ai_vector_predicates_(),
     saved_session_(NULL)
 {
   obj_print_params_ = CREATE_OBJ_PRINT_PARAM(ctx_.get_my_session());
@@ -1152,6 +1159,364 @@ int ObTableModifyOp::perform_batch_fk_check()
     } else if (OB_FAIL(fk_checker->do_fk_check_batch(all_has_result))) {
     } else if (!all_has_result) {
       ret = OB_ERR_NO_REFERENCED_ROW;
+    }
+  }
+  return ret;
+}
+
+namespace
+{
+
+int append_ai_task_string(ObSqlString &sql, const char *data, int64_t len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql.append("'"))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < len; ++i) {
+      if ('\'' == data[i] || '\\' == data[i]) {
+        if (OB_FAIL(sql.append("\\"))) {
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(sql.append_fmt("%c", data[i]))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(sql.append("'"))) {
+    }
+  }
+  return ret;
+}
+
+} // anonymous namespace
+
+int ObTableModifyOp::ai_column_load_specs(uint64_t table_id,
+                                          ObIArray<ObAiColumnSpec> &specs)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table_schema = nullptr;
+  ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
+  if (OB_ISNULL(schema_service)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema))) {
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ObAiColumnUtils::load_table_ai_columns(
+                 *table_schema, ctx_.get_allocator(), specs))) {
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_build_predicate(const ObDMLBaseCtDef &ctdef,
+                                               const ExprFixedArray &row,
+                                               ObString &predicate)
+{
+  int ret = OB_SUCCESS;
+  const ObDASDMLBaseCtDef &das_ctdef = ctdef.das_base_ctdef_;
+  const uint64_t data_table_id = das_ctdef.index_tid_;
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table_schema = nullptr;
+  ObSqlString sql;
+  if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(data_table_id, table_schema))) {
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_UNLIKELY(row.count() < das_ctdef.rowkey_cnt_
+                         || das_ctdef.column_ids_.count() < das_ctdef.rowkey_cnt_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < das_ctdef.rowkey_cnt_; ++i) {
+      const ObColumnSchemaV2 *column =
+          table_schema->get_column_schema(das_ctdef.column_ids_.at(i));
+      ObDatum *datum = nullptr;
+      ObObj obj;
+      char *buf = nullptr;
+      int64_t buf_len = 0;
+      int64_t buf_pos = 0;
+      if (OB_ISNULL(column)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(row.at(i)->eval(eval_ctx_, datum))) {
+      } else if (OB_ISNULL(datum)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(datum->to_obj(obj, row.at(i)->obj_meta_))) {
+      } else if (OB_FAIL(obj.print_sql_literal(buf, buf_len, buf_pos,
+                                               ctx_.get_allocator(),
+                                               get_obj_print_params()))) {
+      } else if (OB_FAIL(sql.append_fmt("%s`%.*s` = ",
+                     i > 0 ? " and " : "",
+                     column->get_column_name_str().length(),
+                     column->get_column_name_str().ptr()))) {
+      } else if (OB_FAIL(sql.append_fmt("%.*s", static_cast<int32_t>(buf_pos), buf))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ob_write_string(ctx_.get_allocator(),
+                                  ObString(sql.length(), sql.ptr()), predicate))) {
+    }
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_execute_inner_write(const char *sql)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *outer_session = ctx_.get_my_session();
+  if (OB_ISNULL(outer_session) || OB_ISNULL(sql)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    if (OB_ISNULL(inner_conn_)) {
+      if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_owned_session(
+              false, 0, inner_conn_guard_))) {
+      } else if (OB_ISNULL(inner_conn_ = as_inner_sql_connection(
+                     inner_conn_guard_.get_ptr()))) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      observer::ObInnerSQLConnection *inner_conn =
+          static_cast<observer::ObInnerSQLConnection *>(inner_conn_);
+      ObSQLSessionInfo &inner_session = inner_conn->get_session();
+      int64_t affected_rows = 0;
+      bool old_autocommit = true;
+      // Execute the system-table write through an inner session that joins
+      // the caller's transaction, so the task row shares its commit/rollback.
+      inner_session.get_tx_desc() = outer_session->get_tx_desc();
+      if (OB_FAIL(inner_session.get_autocommit(old_autocommit))) {
+      } else if (OB_FAIL(inner_session.set_autocommit(false))) {
+      } else {
+        ret = inner_conn_->execute_write(ObString::make_string(sql),
+                                         affected_rows, true);
+      }
+      inner_session.get_tx_desc() = nullptr;
+      if (OB_SUCC(ret) && OB_FAIL(inner_session.set_autocommit(old_autocommit))) {
+      }
+      if (OB_FAIL(ret)) {
+        LOG_WARN("failed to execute ai column inner write", K(ret), K(sql));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_write_tasks(
+    uint64_t table_id,
+    const ObIArray<ObAiColumnSpec> &specs,
+    const ObString &predicate,
+    uint64_t request_id,
+    bool only_dep_changed,
+    bool force_all,
+    const ObIArray<uint64_t> *updated_cids)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < specs.count(); ++i) {
+    const ObAiColumnSpec &spec = specs.at(i);
+    bool affected = force_all || !only_dep_changed;
+    for (int64_t j = 0; !affected && OB_NOT_NULL(updated_cids)
+                        && j < updated_cids->count(); ++j) {
+      for (int64_t k = 0; !affected && k < spec.dependency_column_ids_.count(); ++k) {
+        affected = updated_cids->at(j) == spec.dependency_column_ids_.at(k);
+      }
+    }
+    if (!affected) {
+      continue;
+    }
+    ObSqlString sql;
+    if (OB_FAIL(sql.append_fmt(
+            "DELETE FROM oceanbase.%s WHERE table_id = %lu AND column_id = %lu"
+            " AND rowkey_predicate = ", OB_ALL_AI_COLUMN_TASK_TNAME,
+            table_id, spec.result_column_id_))) {
+    } else if (OB_FAIL(append_ai_task_string(sql, predicate.ptr(), predicate.length()))) {
+    } else if (OB_FAIL(ai_column_execute_inner_write(sql.ptr()))) {
+    } else {
+      sql.reuse();
+      if (OB_FAIL(sql.append_fmt(
+              "INSERT INTO oceanbase.%s (task_id, table_id, column_id, request_id,"
+              " rowkey_predicate, state, retry_count, eligible_ts,"
+              " request_version, result) VALUES (%u, %lu, %lu, %u, ",
+              OB_ALL_AI_COLUMN_TASK_TNAME,
+              ObAiColumnUtils::next_task_id(), table_id, spec.result_column_id_,
+              static_cast<uint32_t>(request_id) & 0x7FFFFFFFU))) {
+      } else if (OB_FAIL(append_ai_task_string(sql, predicate.ptr(), predicate.length()))) {
+      } else if (OB_FAIL(sql.append(", 0, 0, now(6), 0, NULL)"))) {
+      } else if (OB_FAIL(ai_column_execute_inner_write(sql.ptr()))) {
+      } else {
+        // The task is visible once the DML commits. Wake the worker up so it
+        // claims the task right away: a task that is invalidated again before
+        // the next poll tick would otherwise never be claimed at all.
+        ObAiColumnWorker::get_instance().notify_task_created();
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_delete_tasks(
+    uint64_t table_id,
+    const ObIArray<ObAiColumnSpec> &specs,
+    const ObString &predicate)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < specs.count(); ++i) {
+    ObSqlString sql;
+    if (OB_FAIL(sql.append_fmt(
+            "DELETE FROM oceanbase.%s WHERE table_id = %lu AND column_id = %lu"
+            " AND rowkey_predicate = ", OB_ALL_AI_COLUMN_TASK_TNAME,
+            table_id, specs.at(i).result_column_id_))) {
+    } else if (OB_FAIL(append_ai_task_string(sql, predicate.ptr(), predicate.length()))) {
+    } else if (OB_FAIL(ai_column_execute_inner_write(sql.ptr()))) {
+    }
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_invalidate_rows(
+    uint64_t table_id,
+    const ObAiColumnSpec &spec,
+    const ObString &predicate)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table_schema = nullptr;
+  const ObDatabaseSchema *database_schema = nullptr;
+  if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema))) {
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(schema_guard.get_database_schema(
+                 table_schema->get_database_id(), database_schema))) {
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObSqlString sql;
+    if (OB_FAIL(sql.append_fmt(
+            "UPDATE `%.*s`.`%.*s` SET `%.*s` = NULL, `%s%.*s` = 0 WHERE %.*s",
+            database_schema->get_database_name_str().length(),
+            database_schema->get_database_name_str().ptr(),
+            table_schema->get_table_name_str().length(),
+            table_schema->get_table_name_str().ptr(),
+            spec.result_column_.length(), spec.result_column_.ptr(),
+            ObAiColumnUtils::STATE_PREFIX, spec.result_column_.length(),
+            spec.result_column_.ptr(),
+            predicate.length(), predicate.ptr()))) {
+    } else if (OB_FAIL(ai_column_execute_inner_write(sql.ptr()))) {
+    }
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_flush_vector_invalidations()
+{
+  int ret = OB_SUCCESS;
+  if (ai_vector_predicates_.empty()) {
+    // nothing to do
+  } else {
+    ObSEArray<ObAiColumnSpec, 4> specs;
+    if (OB_FAIL(ai_column_load_specs(ai_vector_table_id_, specs))) {
+      LOG_WARN("failed to load ai columns for vector invalidation", K(ret));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < specs.count(); ++i) {
+        if (3 != specs.at(i).prompt_type_) {
+          continue;
+        }
+        for (int64_t j = 0; OB_SUCC(ret) && j < ai_vector_predicates_.count(); ++j) {
+          if (OB_FAIL(ai_column_invalidate_rows(ai_vector_table_id_, specs.at(i),
+                                                ai_vector_predicates_.at(j)))) {
+          }
+        }
+      }
+    }
+    ai_vector_predicates_.reset();
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_after_insert(const ObInsCtDef &ins_ctdef)
+{
+  int ret = OB_SUCCESS;
+  if (!ins_ctdef.is_primary_index_) {
+  } else {
+    ObSEArray<ObAiColumnSpec, 4> specs;
+    const uint64_t table_id = ins_ctdef.das_ctdef_.index_tid_;
+    ObString predicate;
+    if (OB_FAIL(ai_column_load_specs(table_id, specs))) {
+      // System tables are maintained during bootstrap before the runtime
+      // schema is ready. They never carry AI columns, so skip the check.
+      LOG_WARN("skip ai column maintenance", K(ret), K(table_id));
+      ret = OB_SUCCESS;
+    } else if (specs.empty()) {
+    } else if (OB_FAIL(ai_column_build_predicate(ins_ctdef, ins_ctdef.new_row_,
+                                                 predicate))) {
+    } else if (OB_FAIL(ai_column_write_tasks(table_id, specs, predicate,
+                                             ObAiColumnUtils::next_request_id(),
+                                             false, false, nullptr))) {
+    }
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_after_update(const ObUpdCtDef &upd_ctdef)
+{
+  int ret = OB_SUCCESS;
+  if (!upd_ctdef.is_primary_index_) {
+  } else {
+    ObSEArray<ObAiColumnSpec, 4> specs;
+    const uint64_t table_id = upd_ctdef.dupd_ctdef_.index_tid_;
+    ObString predicate;
+    if (OB_FAIL(ai_column_load_specs(table_id, specs))) {
+      LOG_WARN("skip ai column maintenance", K(ret), K(table_id));
+      ret = OB_SUCCESS;
+    } else if (specs.empty()) {
+    } else if (OB_FAIL(ai_column_build_predicate(upd_ctdef, upd_ctdef.new_row_,
+                                                 predicate))) {
+    } else if (OB_FAIL(ai_column_write_tasks(
+                   table_id, specs, predicate,
+                   ObAiColumnUtils::next_request_id(), true,
+                   upd_ctdef.das_base_ctdef_.is_update_pk_,
+                   &upd_ctdef.dupd_ctdef_.updated_column_ids_))) {
+    } else {
+      bool vector_affected = upd_ctdef.das_base_ctdef_.is_update_pk_;
+      for (int64_t i = 0; !vector_affected && i < specs.count(); ++i) {
+        const ObAiColumnSpec &spec = specs.at(i);
+        if (3 != spec.prompt_type_) {
+          continue;
+        }
+        for (int64_t j = 0; !vector_affected
+                            && j < upd_ctdef.dupd_ctdef_.updated_column_ids_.count(); ++j) {
+          const uint64_t cid = upd_ctdef.dupd_ctdef_.updated_column_ids_.at(j);
+          for (int64_t k = 0; !vector_affected
+                              && k < spec.dependency_column_ids_.count(); ++k) {
+            vector_affected = cid == spec.dependency_column_ids_.at(k);
+          }
+        }
+      }
+      if (vector_affected) {
+        ai_vector_table_id_ = table_id;
+        if (OB_FAIL(ai_vector_predicates_.push_back(predicate))) {
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableModifyOp::ai_column_after_delete(const ObDelCtDef &del_ctdef)
+{
+  int ret = OB_SUCCESS;
+  if (!del_ctdef.is_primary_index_) {
+  } else {
+    ObSEArray<ObAiColumnSpec, 4> specs;
+    const uint64_t table_id = del_ctdef.das_ctdef_.index_tid_;
+    ObString predicate;
+    if (OB_FAIL(ai_column_load_specs(table_id, specs))) {
+      LOG_WARN("skip ai column maintenance", K(ret), K(table_id));
+      ret = OB_SUCCESS;
+    } else if (specs.empty()) {
+    } else if (OB_FAIL(ai_column_build_predicate(del_ctdef, del_ctdef.old_row_,
+                                                 predicate))) {
+    } else if (OB_FAIL(ai_column_delete_tasks(table_id, specs, predicate))) {
     }
   }
   return ret;

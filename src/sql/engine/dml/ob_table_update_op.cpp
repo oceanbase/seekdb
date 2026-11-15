@@ -332,6 +332,7 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
       } else if (OB_FAIL(calc_tablet_loc(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc))) {
       } else if (OB_FAIL(ObDMLService::update_row(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc, dml_rtctx_,
                                                  modify_row.old_row_, modify_row.new_row_, modify_row.full_row_))) {
+      } else if (upd_rtdef.is_row_changed_ && OB_FAIL(ai_column_after_update(upd_ctdef))) {
       } else if (need_after_row_process(upd_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
       } else {
         ++upd_rtdef.found_rows_;
@@ -436,6 +437,8 @@ int ObTableUpdateOp::write_rows_post_proc(int last_errno)
     if (OB_SUCC(ret) && (config::_enable_defensive_check() > 0)) {
       if (OB_FAIL(check_update_affected_row())) {
       }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ai_column_flush_vector_invalidations())) {
     }
   }
 

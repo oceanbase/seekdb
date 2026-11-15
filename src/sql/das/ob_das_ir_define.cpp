@@ -90,7 +90,8 @@ OB_DEF_SERIALIZE(ObDASIRScanCtDef)
     topk_limit_expr_,
     topk_offset_expr_,
     token_col_,
-    field_boost_expr_);
+    field_boost_expr_,
+    count_only_);
   if (OB_SUCC(ret) && has_block_max_scan_) {
     OB_UNIS_ENCODE(block_max_spec_);
   }
@@ -120,7 +121,8 @@ OB_DEF_DESERIALIZE(ObDASIRScanCtDef)
     topk_limit_expr_,
     topk_offset_expr_,
     token_col_,
-    field_boost_expr_);
+    field_boost_expr_,
+    count_only_);
   if (OB_SUCC(ret) && has_block_max_scan_) {
     OB_UNIS_DECODE(block_max_spec_);
   }
@@ -149,7 +151,8 @@ OB_DEF_SERIALIZE_SIZE(ObDASIRScanCtDef)
     topk_limit_expr_,
     topk_offset_expr_,
     token_col_,
-    field_boost_expr_);
+    field_boost_expr_,
+    count_only_);
   if (has_block_max_scan_) {
     OB_UNIS_ADD_LEN(block_max_spec_);
   }

@@ -28,6 +28,7 @@
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_index_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_column_utils.h"
 
 namespace oceanbase
 {
@@ -542,6 +543,20 @@ protected:
   int resolve_normal_column_attribute_foreign_key(ObColumnSchemaV2 &column,
                                                   ParseNode *attrs_node,
                                                   ObCreateTableStmt *create_table_stmt);
+  int resolve_ai_column_attribute(share::schema::ObColumnSchemaV2 &column,
+                                  ParseNode *attr_node,
+                                  ObColumnResolveStat &resolve_stat);
+  int parse_ai_column_options(ParseNode *with_node, int64_t &max_retries);
+  int build_ai_column_normalized_expr(ParseNode *expr_node,
+                                      const common::ObString &func_name,
+                                      int64_t prompt_type,
+                                      common::ObString &normalized_expr);
+  int print_ai_expr_node(ParseNode *node, common::ObSqlString &sql);
+  int collect_ai_expr_column_refs(ParseNode *node,
+                                  common::ObIArray<common::ObString> &deps,
+                                  bool &refers_to_ai_column);
+  int check_ai_column_dependency(const common::ObString &column_name,
+                                 bool &is_ai_column);
   int resolve_generated_column_attribute(share::schema::ObColumnSchemaV2 &column,
                                          ParseNode *attrs_node,
                                          ObColumnResolveStat &reslove_stat);
@@ -881,6 +896,9 @@ protected:
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;
   ObSemiStructEncodingType semistruct_encoding_type_;
+  common::ObSEArray<ObAiColumnSpec, 4> ai_column_specs_;
+  bool cur_column_is_vector_;
+  int64_t cur_vector_dim_;
 private:
   template <typename STMT>
   DISALLOW_COPY_AND_ASSIGN(ObDDLResolver);
