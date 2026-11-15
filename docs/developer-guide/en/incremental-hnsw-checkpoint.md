@@ -141,9 +141,9 @@ Sections:
 - `footer` — CRC32 of every preceding byte plus the total length. A row whose
   footer does not verify is ignored, not partially applied.
 
-The bundled roaring version exposes the portable API
-(`deps/3rd/vcpkg/x64-windows/include/roaring/roaring64map.hh`), so both bitmap
-sections are endian-stable and forward-compatible.
+The bundled roaring version exposes the portable serialization API
+(`roaring64_bitmap_portable_serialize()`), so both bitmap sections are
+endian-stable and forward-compatible.
 
 ### Coverage boundary
 
@@ -280,7 +280,7 @@ Under the Option 1 contract the sequence is:
 5. Release the gate. Compute the footer over the staged bytes and publish.
 
 Steps 1-4 are inside one critical section, so the graph, the membership bitmap and
-the visibility bitmap in the payload all come from the same generation. The hold is
+the visibility bitmaps in the payload all come from the same generation. The hold is
 the serialize plus the bitmap copies; that is the price of the contract, and it is
 why admission refuses the attempt instead of letting it start and then stall every
 insert.
@@ -372,7 +372,7 @@ generation always has membership inside the union of the visibility views. A pay
 that fails the test is a checkpoint of a graph that ran ahead of its baseline — the
 state an unlocked capture produces whenever it overlaps the replay path.
 
-On failure nothing is partially applied: the graph, both membership bitmaps and both
+On failure nothing is partially applied: the graph, the membership bitmap and both
 visibility bitmaps are all discarded, and replay runs from the snapshot SCN. The
 degraded path also has to clear `incr_data_->last_read_scn_` and
 `incr_data_->last_dml_scn_`, because `is_pruned_read_index_id()` (`:1126`) is true
@@ -448,10 +448,11 @@ disables background checkpointing and preserves today's behaviour.
 Resource admission has two dimensions. The first is memory: the staging buffer plus
 the bitmap copies (the membership bitmap and both visibility bitmaps), and, only if
 the immutable-generation option is ever enabled, the second graph. The check must use
-the same admission path as snapshot serialization. The second is the stall budget: under the phase-1 contract the
-mutation gate is held across the serialize, so an underestimated memory check that
-lets the task start and then fails mid-serialize is worse than deferring — it blocks
-every writer for the whole attempt and then publishes nothing.
+the same admission path as snapshot serialization. The second is the stall budget:
+under the phase-1 contract the mutation gate is held across the serialize, so an
+underestimated memory check that lets the task start and then fails mid-serialize is
+worse than deferring — it blocks every writer for the whole attempt and then
+publishes nothing.
 
 Deferral is not failure. When admission is denied the task records a deferred
 attempt with its reason and returns without advancing the watermark, so the next
@@ -616,3 +617,7 @@ mutation-gate hold justifies building the immutable-generation option.
     that depended on the old state.
   - Corrected the `ObPluginVectorIndexLoadScheduler` reference in "Naming" from
     `:219`, which is `checkpoint_handler()`, to the class declaration at `:188-191`.
+  - Corrected two slips in the new text: the restore fallback discards one
+    incremental membership bitmap, not two, and the roaring portability claim now
+    names `roaring64_bitmap_portable_serialize()` instead of an untracked
+    `deps/3rd/vcpkg/...` header path that cannot be checked from the repository.
