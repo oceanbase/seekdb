@@ -18471,7 +18471,7 @@ NAME_OB '(' file_table_arg_list ')' relation_name
 file_table_arg_list:
 file_table_arg
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_EXPR_LIST, 2, 1, $1);
+  malloc_list_node($$, result->malloc_pool_, T_EXPR_LIST, 2, 1, $1);
 }
 | file_table_arg_list ',' file_table_arg
 {
