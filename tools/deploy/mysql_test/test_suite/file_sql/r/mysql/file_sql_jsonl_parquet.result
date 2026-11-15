@@ -1,0 +1,44 @@
+# enable_file_sql defaults to OFF
+default_enabled
+0
+# JSONL union schema and missing fields
+id	name	score	active	day	note
+1	Alice	98.5	1	NULL	NULL
+2	Bob	NULL	0	2026-08-02	NULL
+3	Chen	90	1	NULL	ok
+# JSONL accepts the read_ndjson alias
+row_count
+3
+# JSONL aggregates over the inferred schema
+row_count	id_sum	score_avg	active_count
+3	6	94.25	2
+# JSONL filter and limit
+id	name
+# Parquet scan and aggregate push through projected columns
+row_count	min_c1	max_c1	sum_c1
+7	0	6	21
+# Parquet schema is taken from the footer
+Query Plan
+==========================================
+|ID|OPERATOR  |NAME|EST.ROWS|EST.TIME(us)|
+------------------------------------------
+|0 |FILE TABLE|    |199     |1           |
+==========================================
+Outputs & filters:
+-------------------------------------
+  0 - output([.c1]), filter(nil)
+# Cross format join between the CSV and the JSONL schema
+csv_name	jsonl_name
+Alice	Alice
+Bob	Bob
+Chen	Chen
+# Cross format left join keeps every CSV row
+id	name	note
+1	Alice	NULL
+2	Bob	NULL
+3	Chen	ok
+# Inner join between the CSV and the Parquet schema
+id	name	c1
+1	Alice	1
+2	Bob	2
+3	Chen	3
