@@ -18484,8 +18484,10 @@ simple_expr
 {
   $$ = $1;
 }
-| NAME_OB '=' simple_expr
+| column_name COMP_EQ simple_expr
 {
+  // The name of an option is a column name, so that an option whose name is
+  // a keyword of the parser, the option format for example, is accepted.
   ParseNode *name_node = NULL;
   malloc_terminal_node(name_node, result->malloc_pool_, T_IDENT);
   dup_node_string($1, name_node, result->malloc_pool_);
