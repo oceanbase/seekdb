@@ -247,6 +247,30 @@ void ObCSAsyncIndexProcessor::handle_insert_or_write_error_(
   }
 }
 
+int ObCSAsyncIndexProcessor::check_index_dropped_(uint64_t index_id_table_id, bool &is_dropped)
+{
+  int ret = common::OB_SUCCESS;
+  is_dropped = false;
+  schema::ObSchemaGetterGuard latest_guard;
+  int64_t latest_version = common::OB_INVALID_VERSION;
+  const schema::ObTableSchema *latest_index_schema = nullptr;
+  ObMultiVersionSchemaService *schema_service =
+      nullptr != ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()
+          ? ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()
+          : nullptr;
+  if (OB_ISNULL(schema_service)) {
+    ret = common::OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(schema_service->get_full_runtime_schema_guard(latest_guard))) {
+  } else if (OB_FAIL(latest_guard.get_schema_version(latest_version))) {
+  } else if (latest_version < ctx_.schema_version_) {
+    ret = common::OB_SCHEMA_EAGAIN;
+  } else if (OB_FAIL(latest_guard.get_table_schema(index_id_table_id, latest_index_schema))) {
+  } else {
+    is_dropped = OB_ISNULL(latest_index_schema) || latest_index_schema->is_in_deleting();
+  }
+  return ret;
+}
+
 int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
     uint64_t table_id,
     schema::ObSchemaGetterGuard &schema_guard,
@@ -357,7 +381,14 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                       }
                     }
                     if (OB_SUCC(ret) && delta_buffer_table_id == common::OB_INVALID_ID) {
-                      ret = common::OB_ERR_UNEXPECTED;
+                      bool is_dropped = false;
+                      if (OB_FAIL(check_index_dropped_(index_id_table_id, is_dropped))) {
+                      } else if (is_dropped) {
+                        // Delta can be renamed before index-id in the historical schema.
+                        break;
+                      } else {
+                        ret = common::OB_ERR_UNEXPECTED;
+                      }
                     }
                   }
                 }
