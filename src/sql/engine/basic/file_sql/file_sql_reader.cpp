@@ -110,6 +110,10 @@ FileTableScanner *create_file_scanner(FileFormat format)
     // available.
     return create_csv_scanner();
   }
+  // The scanners of the other formats are in their own modules. The call
+  // registers them, it is idempotent, and it makes the module of the
+  // adapters a part of the binary.
+  register_builtin_file_scanners();
   ScannerRegistry &registry = scanner_registry();
   FileScannerFactory factory = nullptr;
   {

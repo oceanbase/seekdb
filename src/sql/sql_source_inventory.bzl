@@ -1663,6 +1663,7 @@ SQL_SIMD_UNITY_GROUPS = [
 ]
 
 SQL_STANDALONE_SOURCES = [
+    struct(path = "src/sql/engine/basic/file_sql/file_sql_adapters.cpp", language = "c++", kind = "source"),
     struct(path = "src/sql/engine/basic/file_sql/file_sql_csv.cpp", language = "c++", kind = "source"),
     struct(path = "src/sql/engine/basic/file_sql/file_sql_jsonl.cpp", language = "c++", kind = "source"),
     struct(path = "src/sql/engine/basic/file_sql/file_sql_parquet.cpp", language = "c++", kind = "source"),

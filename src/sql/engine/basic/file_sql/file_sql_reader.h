@@ -115,6 +115,12 @@ using FileScannerFactory = FileTableScanner *(*)();
 FileStatus register_file_scanner(FileFormat format, FileScannerFactory factory);
 void unregister_file_scanner(FileFormat format);
 
+// Registers the scanners of the format modules that are not part of the
+// framework itself. The modules register themselves when they are loaded,
+// this function makes the registration happen before the first scan. The
+// call is idempotent.
+FileStatus register_builtin_file_scanners();
+
 // Create a scanner for `format`. Returns NULL when no module is registered.
 FileTableScanner *create_file_scanner(FileFormat format);
 

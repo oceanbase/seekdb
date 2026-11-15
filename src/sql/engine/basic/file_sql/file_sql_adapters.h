@@ -34,11 +34,6 @@ namespace sql
 namespace file_sql
 {
 
-// Registers the scanners of the format modules that are not part of the
-// framework itself. The call is idempotent and it must happen before the
-// first scan of a file.
-FileStatus register_builtin_file_scanners();
-
 } // namespace file_sql
 } // namespace sql
 } // namespace oceanbase
