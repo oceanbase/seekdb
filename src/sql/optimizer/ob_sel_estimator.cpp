@@ -2927,6 +2927,255 @@ int ObBtwSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
   return ret;
 }
 
+namespace
+{
+// 整型（含无符号整型）判断
+inline bool is_est_integer_type(ObObjType obj_type)
+{
+  return ob_is_integer_type(obj_type);
+}
+
+// 无符号整型判断
+inline bool is_est_unsigned_integer_type(ObObjType obj_type)
+{
+  return obj_type >= ObUTinyIntType && obj_type <= ObUInt64Type;
+}
+
+// 从 ObObj 中取精确整数值：整型直接取值；浮点型要求本身就是精确整数
+bool get_est_exact_int_value(const ObObj &obj, int64_t &value)
+{
+  if (obj.is_null() || obj.is_ext()) {
+    return false;
+  }
+  const ObObjType obj_type = obj.get_type();
+  if (is_est_integer_type(obj_type)) {
+    if (is_est_unsigned_integer_type(obj_type)) {
+      const uint64_t uint_value = obj.get_uint64();
+      if (uint_value > static_cast<uint64_t>(INT64_MAX)) {
+        return false;
+      }
+      value = static_cast<int64_t>(uint_value);
+    } else {
+      value = obj.get_int();
+    }
+    return true;
+  } else if (ob_is_float_type(obj_type) || ob_is_double_type(obj_type)) {
+    const double double_value = obj.get_double();
+    // 排除 NaN 以及超出精确整数表示范围(2^53)的取值
+    if (double_value != double_value
+        || double_value > 9007199254740992.0
+        || double_value < -9007199254740992.0) {
+      return false;
+    }
+    const int64_t int_value = static_cast<int64_t>(double_value >= 0 ? double_value + 0.5 : double_value - 0.5);
+    if (static_cast<double>(int_value) != double_value) {
+      return false;
+    }
+    value = int_value;
+    return true;
+  }
+  return false;
+}
+
+// 整型常量表达式取值
+bool get_est_int_const_value(const OptSelectivityCtx &ctx, const ObRawExpr *expr, int64_t &value)
+{
+  if (OB_ISNULL(expr) || !expr->is_static_scalar_const_expr()
+      || !is_est_integer_type(expr->get_result_type().get_type())) {
+    return false;
+  }
+  ObObj const_obj;
+  bool got_result = false;
+  if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx.get_opt_ctx().get_exec_ctx(),
+                                                        expr,
+                                                        const_obj,
+                                                        got_result,
+                                                        ctx.get_allocator()))) {
+    return false;
+  }
+  if (!got_result) {
+    return false;
+  }
+  return get_est_exact_int_value(const_obj, value);
+}
+
+// 判断推导出的界是否落在列类型的取值范围内
+bool is_est_bound_in_column_range(ObObjType col_type, int64_t bound_value)
+{
+  switch (col_type) {
+    case ObTinyIntType:
+      return bound_value >= -128 && bound_value <= 127;
+    case ObSmallIntType:
+      return bound_value >= -32768 && bound_value <= 32767;
+    case ObMediumIntType:
+      return bound_value >= -8388608 && bound_value <= 8388607;
+    case ObInt32Type:
+      return bound_value >= -2147483648LL && bound_value <= 2147483647LL;
+    case ObIntType:
+      return true;
+    case ObUTinyIntType:
+      return bound_value >= 0 && bound_value <= 255;
+    case ObUSmallIntType:
+      return bound_value >= 0 && bound_value <= 65535;
+    case ObUMediumIntType:
+      return bound_value >= 0 && bound_value <= 16777215;
+    case ObUInt32Type:
+      return bound_value >= 0 && bound_value <= 4294967295LL;
+    case ObUInt64Type:
+      return bound_value >= 0;
+    default:
+      return false;
+  }
+}
+
+// 尝试把表达式归一化为仿射形式 scale * col + offset。
+// 只支持整型精确的加、减、乘组合；除法、取模、浮点常量等一律不支持，
+// 以保证归一化前后谓词的语义完全一致。
+bool extract_est_affine_arith_expr(const OptSelectivityCtx &ctx,
+                                   const ObRawExpr *expr,
+                                   const ObColumnRefRawExpr *&col_expr,
+                                   int64_t &scale,
+                                   int64_t &offset)
+{
+  col_expr = NULL;
+  scale = 1;
+  offset = 0;
+  if (OB_ISNULL(expr)) {
+    return false;
+  }
+  const ObRawExpr *cur_expr = expr;
+  if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(cur_expr, cur_expr))) {
+    return false;
+  }
+  if (cur_expr->is_column_ref_expr()) {
+    col_expr = static_cast<const ObColumnRefRawExpr *>(cur_expr);
+    return true;
+  }
+  if (!cur_expr->is_op_expr()) {
+    return false;
+  }
+  const ObOpRawExpr *op_expr = static_cast<const ObOpRawExpr *>(cur_expr);
+  if (2 != op_expr->get_param_count()) {
+    return false;
+  }
+  const ObItemType op_type = op_expr->get_expr_type();
+  if (T_OP_ADD != op_type && T_OP_MINUS != op_type && T_OP_MUL != op_type) {
+    return false;
+  }
+  const ObRawExpr *left_expr = op_expr->get_param_expr(0);
+  const ObRawExpr *right_expr = op_expr->get_param_expr(1);
+  int64_t left_const = 0;
+  int64_t right_const = 0;
+  const bool left_is_const = get_est_int_const_value(ctx, left_expr, left_const);
+  const bool right_is_const = get_est_int_const_value(ctx, right_expr, right_const);
+  if (left_is_const == right_is_const) {
+    // 两边都是常量，或者两边都不是常量，都不属于「单列仿射」形式
+    return false;
+  }
+  const ObRawExpr *var_expr = left_is_const ? right_expr : left_expr;
+  const int64_t const_value = left_is_const ? left_const : right_const;
+  const ObColumnRefRawExpr *var_col = NULL;
+  int64_t var_scale = 0;
+  int64_t var_offset = 0;
+  if (!extract_est_affine_arith_expr(ctx, var_expr, var_col, var_scale, var_offset)
+      || OB_ISNULL(var_col)) {
+    return false;
+  }
+  col_expr = var_col;
+  if (T_OP_ADD == op_type) {
+    if (__builtin_add_overflow(var_offset, const_value, &offset)) {
+      return false;
+    }
+    scale = var_scale;
+  } else if (T_OP_MINUS == op_type) {
+    if (left_is_const) {
+      // const - expr => -scale * col + (const - offset)
+      if (__builtin_sub_overflow(const_value, var_offset, &offset)
+          || __builtin_mul_overflow(var_scale, -1, &scale)) {
+        return false;
+      }
+    } else {
+      // expr - const
+      if (__builtin_sub_overflow(var_offset, const_value, &offset)) {
+        return false;
+      }
+      scale = var_scale;
+    }
+  } else {
+    // expr * const 或 const * expr，const 不能为 0
+    if (0 == const_value
+        || __builtin_mul_overflow(var_scale, const_value, &scale)
+        || __builtin_mul_overflow(var_offset, const_value, &offset)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// 把「算术表达式 vs 常量」归一化成「列 vs 常量」，使列的统计信息（直方图）能够生效。
+// 例如 ((age + 0) + 0) > 10 归一化成 age > 10。
+// 本函数只影响选择性估算，不会改变谓词的执行语义。
+void normalize_est_arith_operand(const OptSelectivityCtx &ctx,
+                                 const ObRawExpr *&var_expr,
+                                 ObItemType &cmp_type,
+                                 ObObj &const_value)
+{
+  if (OB_ISNULL(var_expr) || var_expr->is_column_ref_expr()) {
+    return;
+  }
+  if (!IS_RANGE_CMP_OP(cmp_type) && T_OP_EQ != cmp_type && T_OP_NSEQ != cmp_type) {
+    return;
+  }
+  // between 的上下界需要同时变换，这里不做处理，保持原有行为
+  if (T_OP_BTW == cmp_type || T_OP_NOT_BTW == cmp_type) {
+    return;
+  }
+  // 只处理整型表达式，避免浮点、decimal 的语义差异
+  if (!is_est_integer_type(var_expr->get_result_type().get_type())) {
+    return;
+  }
+  int64_t cmp_value = 0;
+  if (!get_est_exact_int_value(const_value, cmp_value)) {
+    return;
+  }
+  const ObColumnRefRawExpr *col_expr = NULL;
+  int64_t scale = 1;
+  int64_t offset = 0;
+  if (!extract_est_affine_arith_expr(ctx, var_expr, col_expr, scale, offset)
+      || OB_ISNULL(col_expr) || 0 == scale) {
+    return;
+  }
+  const ObObjType col_type = col_expr->get_result_type().get_type();
+  if (!is_est_integer_type(col_type)) {
+    return;
+  }
+  // scale * col + offset CMP const  等价于  col CMP' (const - offset) / scale
+  int64_t numerator = 0;
+  if (__builtin_sub_overflow(cmp_value, offset, &numerator)) {
+    return;
+  }
+  if (0 != (numerator % scale)) {
+    // 推导出的界不是整数，无法直接用整数列的直方图表达，保持原有行为
+    return;
+  }
+  const int64_t bound_value = numerator / scale;
+  if (!is_est_bound_in_column_range(col_type, bound_value)) {
+    return;
+  }
+  ObObj new_const_value;
+  if (is_est_unsigned_integer_type(col_type)) {
+    new_const_value.set_uint(col_type, static_cast<uint64_t>(bound_value));
+  } else {
+    new_const_value.set_int(col_type, bound_value);
+  }
+  if (scale < 0) {
+    cmp_type = get_opposite_compare_type(cmp_type);
+  }
+  var_expr = col_expr;
+  const_value = new_const_value;
+}
+} // namespace
+
 int ObNormalRangeSelEstimator::get_expr_range(const OptSelectivityCtx &ctx,
                                               const ObRawExpr &qual,
                                               const ObRawExpr *&expr,
@@ -2973,6 +3222,9 @@ int ObNormalRangeSelEstimator::get_expr_range(const OptSelectivityCtx &ctx,
     is_valid = false;
   }
   if (OB_SUCC(ret) && is_valid) {
+    // 归一化「算术表达式 vs 常量」为「列 vs 常量」，使列的统计信息（直方图）能够生效。
+    // 例如 ((age + 0) + 0) > 10 归一化成 age > 10，避免选择性估算退化成 DEFAULT_INEQ_SEL。
+    normalize_est_arith_operand(ctx, expr, type, const_value1);
     if (IS_RANGE_CMP_OP(type) || T_OP_EQ == type || T_OP_NSEQ == type) {
       range.set_bound(type, const_value1);
     } else if (T_OP_NE == type) {

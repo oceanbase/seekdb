@@ -1,0 +1,100 @@
+# ---- issue 1538: equivalent arithmetic filters must get the same selectivity ----
+alter system set vector_memory_limit = 0;
+drop table if exists t_arith_filter;
+drop table if exists t_arith_s1;
+drop table if exists t_arith_s2;
+drop table if exists t_arith_s3;
+drop table if exists t_arith_s4;
+create table t_arith_s1(a int primary key);
+insert into t_arith_s1 values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+create table t_arith_s2 like t_arith_s1;
+insert into t_arith_s2 select a1.a * 10 + a2.a from t_arith_s1 a1, t_arith_s1 a2;
+create table t_arith_s3 like t_arith_s1;
+insert into t_arith_s3 select a1.a * 100 + a2.a from t_arith_s2 a1, t_arith_s2 a2;
+create table t_arith_s4(a int primary key);
+insert into t_arith_s4 values (1),(2),(3),(4);
+create table t_arith_filter(id int primary key, age int not null, embedding vector(3), vector index idx_vec(embedding) with (distance=l2, type=hnsw, lib=vsag));
+insert into t_arith_filter select s3.a * 4 + s4.a, (s3.a * 4 + s4.a) % 1000 + 1, concat('[', (s3.a % 1000), '.25, ', (s4.a * 25), '.5, 0.125]') from t_arith_s3 s3, t_arith_s4 s4;
+select count(*) from t_arith_filter;
+count(*)
+40000
+call dbms_stats.gather_table_stats('test', 't_arith_filter');
+# the plain column filter and every arithmetically equivalent filter must select the same vector scan operator
+explain select id from t_arith_filter where age > 10 order by l2_distance(embedding, '[0.5, 0.2, 0.3]') approximate limit 10;
+Query Plan
+=<PLAN-SEP>
+<PLAN-HEADER>
+--<PLAN-SEP>
+<OP=POST-ITERATIVE-FILTER>
+=<PLAN-SEP>
+<OUTPUTS>
+--<PLAN-SEP>
+<FILTER-LINE>
+<ACCESS-LINE>
+<INDEX-BACK-LINE>
+<RANGE-KEY-LINE>
+explain select id from t_arith_filter where ((age + 0) + 0) > 10 order by l2_distance(embedding, '[0.5, 0.2, 0.3]') approximate limit 10;
+Query Plan
+=<PLAN-SEP>
+<PLAN-HEADER>
+--<PLAN-SEP>
+<OP=POST-ITERATIVE-FILTER>
+=<PLAN-SEP>
+<OUTPUTS>
+--<PLAN-SEP>
+<FILTER-LINE>
+<ACCESS-LINE>
+<INDEX-BACK-LINE>
+<RANGE-KEY-LINE>
+explain select id from t_arith_filter where (age + 2) > 12 order by l2_distance(embedding, '[0.5, 0.2, 0.3]') approximate limit 10;
+Query Plan
+=<PLAN-SEP>
+<PLAN-HEADER>
+--<PLAN-SEP>
+<OP=POST-ITERATIVE-FILTER>
+=<PLAN-SEP>
+<OUTPUTS>
+--<PLAN-SEP>
+<FILTER-LINE>
+<ACCESS-LINE>
+<INDEX-BACK-LINE>
+<RANGE-KEY-LINE>
+explain select id from t_arith_filter where ((age * 1) * 1) > 10 order by l2_distance(embedding, '[0.5, 0.2, 0.3]') approximate limit 10;
+Query Plan
+=<PLAN-SEP>
+<PLAN-HEADER>
+--<PLAN-SEP>
+<OP=POST-ITERATIVE-FILTER>
+=<PLAN-SEP>
+<OUTPUTS>
+--<PLAN-SEP>
+<FILTER-LINE>
+<ACCESS-LINE>
+<INDEX-BACK-LINE>
+<RANGE-KEY-LINE>
+explain select id from t_arith_filter where (age - 2) > 8 order by l2_distance(embedding, '[0.5, 0.2, 0.3]') approximate limit 10;
+Query Plan
+=<PLAN-SEP>
+<PLAN-HEADER>
+--<PLAN-SEP>
+<OP=POST-ITERATIVE-FILTER>
+=<PLAN-SEP>
+<OUTPUTS>
+--<PLAN-SEP>
+<FILTER-LINE>
+<ACCESS-LINE>
+<INDEX-BACK-LINE>
+<RANGE-KEY-LINE>
+explain select id from t_arith_filter where (age * 2) > 20 order by l2_distance(embedding, '[0.5, 0.2, 0.3]') approximate limit 10;
+Query Plan
+=<PLAN-SEP>
+<PLAN-HEADER>
+--<PLAN-SEP>
+<OP=POST-ITERATIVE-FILTER>
+=<PLAN-SEP>
+<OUTPUTS>
+--<PLAN-SEP>
+<FILTER-LINE>
+<ACCESS-LINE>
+<INDEX-BACK-LINE>
+<RANGE-KEY-LINE>
