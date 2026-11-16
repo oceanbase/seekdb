@@ -36,7 +36,9 @@
 
 ## Testing
 
-- Prefer adding regression and correctness coverage to the repository's established test suites and test directories.
+- Add unit tests only for the internal Rust implementation of the seekdb product.
+- Do not add unit tests for any other component, including C++ code and Rust FFI or CXX bridge layers exposed to C++, even when those layers live in a product Rust crate.
+- Validate other components through integration tests, mysqltest cases, or actual execution instead of adding unit tests. Use the repository's established test suites and test directories where applicable.
 - Keep test-only and benchmark-only files out of `tools/`.
 - Do not add tests for developer tools or scripts, including build, code-generation, packaging, and dependency-preparation tools, regardless of where the tests would live.
 - Validate tool and script changes by running the relevant commands and inspecting their outputs or generated artifacts.
