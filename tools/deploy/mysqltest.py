@@ -15,6 +15,7 @@ import sys
 import time
 
 import sdb
+from mysql_test import mds_accounting
 
 
 CASE_TIMEOUT = 3600
@@ -404,6 +405,8 @@ def run_case(args, deploy_dir, case, tmp_dir, log_dir):
         reject_file = None
     print("[ RUN      ] {}".format(case_name), flush=True)
     started = time.monotonic()
+    mds_start = (mds_accounting.snapshot(args.base_dir)
+                 if case.name == "fts_index.create_table_with_fts_index" else None)
     try:
         result = subprocess.run(
             command,
@@ -445,6 +448,14 @@ def run_case(args, deploy_dir, case, tmp_dir, log_dir):
                 ),
                 file=sys.stderr,
             )
+
+    if return_code == 0 and mds_start is not None:
+        try:
+            count = mds_accounting.check(args.base_dir, mds_start)
+            output += "MDS empty-cache rollback accounting: {} checked\n".format(count)
+        except (OSError, RuntimeError) as exc:
+            return_code = 1
+            output += "MDS accounting regression failed: {}\n".format(exc)
 
     if output and not trailing_whitespace_ignored:
         print(output, end="" if output.endswith("\n") else "\n", flush=True)

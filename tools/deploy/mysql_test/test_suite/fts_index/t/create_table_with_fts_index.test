@@ -293,4 +293,17 @@ CREATE TABLE table_create_with_ik(a CHAR(255), FULLTEXT(a) WITH PARSER ik);
 DROP TABLE table_create_with_ik;
 
 
+# A real REGISTER_SUCC quota rejection must roll back the MDS byte count too.
+# The native runner checks the rollback record, not just this SQL error.
+--disable_query_log
+let $mds_original_tablet_limit = query_get_value(SELECT value FROM oceanbase.__all_virtual_sys_parameter_stat WHERE name = '_max_tablet_cnt_per_gb' LIMIT 1, value, 1);
+ALTER SYSTEM SET _max_tablet_cnt_per_gb = 1000;
+--error ER_TOO_MANY_PARTITIONS_ERROR
+CREATE TABLE mds_quota_probe (
+  id BIGINT PRIMARY KEY, body TEXT,
+  FULLTEXT INDEX f(body) WITH PARSER SPACE LOCAL
+) PARTITION BY HASH(id) PARTITIONS 4096;
+eval ALTER SYSTEM SET _max_tablet_cnt_per_gb = $mds_original_tablet_limit;
+--enable_query_log
+
 disconnect sys_conn;
