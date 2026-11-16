@@ -224,6 +224,7 @@ private:
   int resolve_vector_index_info_(uint64_t table_id,
       schema::ObSchemaGetterGuard &schema_guard,
       common::ObIArray<ObCSVecIndexInfo> &vec_infos);
+  int check_index_dropped_(uint64_t index_id_table_id, bool &is_dropped);
   int get_or_cache_vec_index_info_(uint64_t table_id,
       schema::ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<ObCSVecIndexInfo> *&out_vec_infos_ptr);

@@ -33,7 +33,8 @@ public:
   static int refresh(
           ObPLExecCtx &ctx,
           sql::ParamStore &params,
-          common::ObObj &result);
+          common::ObObj &result,
+          int64_t abs_timeout_us);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDBMSIndexManager);
 };

@@ -15,11 +15,9 @@
  */
 
 #define USING_LOG_PREFIX PL
-#include "rust/config.h"
 #include "ob_dbms_index_manager.h"
 #include "query/change_stream/ob_change_stream_service.h"
-#include "share/rc/ob_server_runtime.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/time/ob_time_utility.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -29,28 +27,27 @@ using namespace oceanbase::sql;
 int ObDBMSIndexManager::refresh(
     ObPLExecCtx &ctx,
     sql::ParamStore &params,
-    common::ObObj &result)
+    common::ObObj &result,
+    const int64_t abs_timeout_us)
 {
   LOG_INFO("call dbms_index_manager.refresh");
   int ret = OB_SUCCESS;
   UNUSED(params);
   UNUSED(result);
 
-  ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
-  const int64_t timeout_us = config::internal_sql_execute_timeout();
   query::ObIChangeStreamService *change_stream =
       OB_ISNULL(ctx.exec_ctx_)
           ? nullptr
           : ctx.exec_ctx_->get_change_stream_service();
 
-  if (OB_ISNULL(ctx.exec_ctx_)) {
+  if (ObTimeUtility::current_time() >= abs_timeout_us) {
+    ret = OB_TIMEOUT;
+  } else if (OB_ISNULL(ctx.exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(mysql_proxy)) {
-    ret = OB_NOT_INIT;
   } else if (OB_ISNULL(change_stream)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(change_stream->wait_until_refreshed(
-                 *mysql_proxy, timeout_us))) {
+                 abs_timeout_us))) {
   }
   return ret;
 }

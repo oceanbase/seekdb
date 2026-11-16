@@ -365,11 +365,10 @@ storage::ObIVectorIndexRuntime *ObServer::vector_index_runtime()
 }
 
 int ObServer::wait_until_refreshed(
-    common::ObMySQLProxy &mysql_proxy,
-    const int64_t timeout_us)
+    const int64_t abs_timeout_us)
 {
   return share::ObChangeStreamMgr::wait_refresh_scn(
-      mysql_proxy, timeout_us);
+      abs_timeout_us);
 }
 
 int ObServer::get_min_dep_lsn(palf::LSN &min_dep_lsn)
