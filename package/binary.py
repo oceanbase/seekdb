@@ -451,7 +451,7 @@ def write(prefix, output, version, release, source_commit, metadata, kind="seekd
         kind, version, system, metadata["arch"], abi, built_at.strftime("%Y%m%dT%H%M%SZ"), source_commit[:12])
     if metadata["os"] == "windows":
         target = output / (name + ".zip")
-        with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED, strict_timestamps=False) as archive:
             for path in sorted(prefix.rglob("*")):
                 archive.write(path, path.relative_to(prefix).as_posix())
     else:
