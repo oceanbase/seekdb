@@ -300,6 +300,14 @@ int ObFileTableOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret)) {
     if (row_index_ < rows_.size()) {
+      // The expressions of the operator are evaluated again for every row.
+      // The flag that remembers that an expression was evaluated is not
+      // cleared by the framework when the operator is driven row by row, so
+      // the filter of the statement would be evaluated only for the first row
+      // of the file and its result would be used for every other row. The
+      // other operators that produce rows clear the flag themselves, see
+      // ObValuesTableAccessOp::inner_get_next_row().
+      clear_evaluated_flag();
       ret = write_row(rows_.at(row_index_++));
       break;
     }

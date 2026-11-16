@@ -14,6 +14,24 @@ row_count	id_sum	score_avg	active_count
 3	6	94.25	2
 # JSONL filter and limit
 id	name
+2	Bob
+# JSONL filter keeps every row that satisfies the condition
+id	name
+2	Bob
+3	Chen
+id	name
+2	Bob
+id	name
+1	Alice
+3	Chen
+row_count
+3
+# CSV filter keeps every row that satisfies the condition
+id	name
+2	Bob
+3	Chen
+id	name
+2	Bob
 # Parquet scan and aggregate push through projected columns
 row_count	min_c1	max_c1	sum_c1
 7	0	6	21

@@ -38,6 +38,31 @@ eval select id, name
       order by id
       limit 1;
 
+--echo # JSONL filter keeps every row that satisfies the condition
+eval select id, name
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where id > 1
+      order by id;
+eval select id, name
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where name = 'Bob';
+eval select id, name
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where name <> 'Bob'
+      order by id;
+eval select count(*) as row_count
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where id is not null;
+
+--echo # CSV filter keeps every row that satisfies the condition
+eval select id, name
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+      where id > 1
+      order by id;
+eval select id, name
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+      where name = 'Bob';
+
 --echo # Parquet scan and aggregate push through projected columns
 eval select count(*) AS row_count, min(c1) AS min_c1,
             max(c1) AS max_c1, sum(c1) AS sum_c1
