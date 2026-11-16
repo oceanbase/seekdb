@@ -720,6 +720,7 @@ int ObStaticEngineCG::generate_calc_exprs(
       if (!(raw_expr->is_column_ref_expr())
           && !(raw_expr->is_column_ref_expr()
                && !need_flatten_gen_col)
+          && T_OP_ROW != raw_expr->get_expr_type()
           && !raw_expr->is_op_pseudo_column_expr()
           && !has_exist_in_array(dep_exprs, flattened_cur_exprs_arr.at(i))
           && (raw_expr->has_flag(CNT_VOLATILE_CONST)
