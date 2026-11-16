@@ -89,6 +89,7 @@ _WINDOWS_HEADER_LIBRARIES = {
 }
 
 def _windows_libraries():
+    cc_import(name = "gtest_archive", static_library = "lib/gtest.lib")
     for name, (interface, dll, deps) in _WINDOWS_SHARED.items():
         cc_import(
             name = name,

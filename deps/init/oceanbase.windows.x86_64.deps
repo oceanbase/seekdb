@@ -4,6 +4,7 @@ arch=x86_64
 repo=https://mirrors.oceanbase.com/oceanbase/development-kit/windows/11/x86_64
 
 [deps]
+gtest-1.14.0-bin-windows-x86_64-md-20261106-75e97b8357c0.tar.gz url=https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-windows-x86_64-md-20261106-75e97b8357c0.tar.gz sha256=723d2d3e1cb0021cb4249b8d7e096ae49d40530b68abca187be03cb5f3914c79
 devdeps-zlib-20260506.tar.gz
 devdeps-dirent-20260506.tar.gz
 devdeps-pthreads-20260506.tar.gz
