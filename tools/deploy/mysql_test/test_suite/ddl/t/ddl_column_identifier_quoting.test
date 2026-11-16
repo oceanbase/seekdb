@@ -1,0 +1,83 @@
+# Regression for #1469: shared DDL must quote names without SQL-layer dependencies.
+# Index backfill covers escaped names, aliases and ENUM/SET unique indexes.
+connection default;
+SET NAMES utf8mb4;
+SET ob_query_timeout = 60000000;
+
+--disable_query_log
+--disable_result_log
+DROP TABLE IF EXISTS ddl_column_identifier_quoting;
+DROP TABLE IF EXISTS ddl_partition_identifier_quoting;
+DROP TABLE IF EXISTS ddl_vector_identifier_quoting;
+--enable_result_log
+--enable_query_log
+
+CREATE TABLE ddl_column_identifier_quoting (
+  `id``key` INT PRIMARY KEY,
+  `a``b` INT,
+  `two````ticks` INT,
+  `列``名` INT,
+  `enum``` ENUM('red', 'blue'),
+  ```set` SET('x', 'y'),
+  normal_col INT
+);
+INSERT INTO ddl_column_identifier_quoting VALUES
+  (1, 11, 101, 1001, 'red', 'x', 7),
+  (2, 22, 202, 2002, 'blue', 'y', 8),
+  (3, NULL, NULL, NULL, NULL, 'x,y', 9);
+
+CREATE INDEX idx_single_tick ON ddl_column_identifier_quoting (`a``b`);
+CREATE INDEX idx_two_ticks ON ddl_column_identifier_quoting (`two````ticks`);
+CREATE INDEX idx_unicode ON ddl_column_identifier_quoting (`列``名`);
+CREATE UNIQUE INDEX idx_enum ON ddl_column_identifier_quoting (`enum```);
+CREATE UNIQUE INDEX idx_set ON ddl_column_identifier_quoting (```set`);
+CREATE INDEX idx_normal ON ddl_column_identifier_quoting (normal_col);
+
+SELECT `id``key` AS id, `a``b` AS val FROM ddl_column_identifier_quoting
+  FORCE INDEX(idx_single_tick) WHERE `a``b` IS NOT NULL ORDER BY `id``key`;
+SELECT `id``key` AS id, `two````ticks` AS val FROM ddl_column_identifier_quoting
+  FORCE INDEX(idx_two_ticks) WHERE `two````ticks` IS NOT NULL ORDER BY `id``key`;
+SELECT `id``key` AS id, `列``名` AS val FROM ddl_column_identifier_quoting
+  FORCE INDEX(idx_unicode) WHERE `列``名` IS NOT NULL ORDER BY `id``key`;
+SELECT `id``key` AS id, `enum``` AS val FROM ddl_column_identifier_quoting
+  FORCE INDEX(idx_enum) WHERE `enum``` IS NOT NULL ORDER BY `id``key`;
+SELECT `id``key` AS id, ```set` AS val FROM ddl_column_identifier_quoting
+  FORCE INDEX(idx_set) WHERE ```set` IS NOT NULL ORDER BY `id``key`;
+SELECT `id``key` AS id, `enum``` + 0 AS enum_ordinal, ```set` + 0 AS set_bits,
+  normal_col FROM ddl_column_identifier_quoting ORDER BY `id``key`;
+SELECT `id``key` AS id FROM ddl_column_identifier_quoting
+  FORCE INDEX(idx_normal) WHERE normal_col = 8;
+
+--disable_result_log
+--error 1062
+INSERT INTO ddl_column_identifier_quoting (`id``key`, `enum```) VALUES (4, 'red');
+--error 1062
+INSERT INTO ddl_column_identifier_quoting (`id``key`, ```set`) VALUES (4, 'x');
+--enable_result_log
+SELECT COUNT(*) AS row_count FROM ddl_column_identifier_quoting;
+
+CREATE TABLE ddl_partition_identifier_quoting (
+  `key``id` INT PRIMARY KEY,
+  `v``alue` INT
+) PARTITION BY RANGE COLUMNS (`key``id`)
+  (PARTITION p0 VALUES LESS THAN (2), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO ddl_partition_identifier_quoting VALUES (1, 10), (2, 20);
+CREATE INDEX idx_partition_tick ON ddl_partition_identifier_quoting (`v``alue`);
+SELECT `key``id` AS id, `v``alue` AS val FROM ddl_partition_identifier_quoting
+  FORCE INDEX(idx_partition_tick) WHERE `v``alue` >= 10 ORDER BY `key``id`;
+
+CREATE TABLE ddl_vector_identifier_quoting (
+  `id``key` INT PRIMARY KEY,
+  v VECTOR(3),
+  VECTOR INDEX idx_vector(v) WITH (distance=l2, type=hnsw, lib=vsag)
+);
+INSERT INTO ddl_vector_identifier_quoting VALUES
+  (1, '[1,0,0]'), (2, '[0,1,0]'), (3, '[0,0,1]');
+CALL dbms_vector.rebuild_index('idx_vector', 'ddl_vector_identifier_quoting', 'v', 0);
+SELECT `id``key` AS id, v FROM ddl_vector_identifier_quoting ORDER BY `id``key`;
+SELECT `id``key` AS nearest_id FROM ddl_vector_identifier_quoting
+  ORDER BY l2_distance(v, '[1,0,0]') APPROXIMATE LIMIT 1;
+
+DROP TABLE ddl_vector_identifier_quoting;
+DROP TABLE ddl_partition_identifier_quoting;
+DROP TABLE ddl_column_identifier_quoting;
