@@ -21,6 +21,13 @@ Linux `system-packages-<distribution>-<arch>` artifacts each contain one RPM or
 DEB, its checksum, and `packaging-info.json`. These packages reuse the binary
 archives and the SDK's obshell without another SDK initialization or engine
 build. Other targets produce portable archives.
+
+Windows uses `/MD` and the pinned seekdb-deps jemalloc 5.3.1 and VSAG 0.16.20
+archives. Dependency initialization verifies their SHA-256 checksums, and Bazel
+links the prebuilt allocator without running configure or make. The binary ZIP
+includes OpenMP and the MSVC runtime DLLs, along with the dependency licenses, lock file, and SDK build manifest. The workflow extracts the ZIP and runs `seekdb.exe --version`
+before uploading it.
+
 Select `ios` to build device and simulator frameworks in parallel, or select
 `ios-arm64` / `ios-simulator-arm64` individually. `all` includes both iOS variants.
 The `binary-ios*` artifacts contain verified `SeekDB.framework` ZIPs. When both
