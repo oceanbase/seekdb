@@ -216,6 +216,20 @@ jobs:
           path: dist/seekdb-debug-info-*
           if-no-files-found: error
           compression-level: 0
+      - name: Preserve completed Windows build after packaging failure
+        if: failure() && runner.os == 'Windows' && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-build-inputs
+          path: |
+            build/bin/src/observer/seekdb/
+            build/bin/src/share/inner_table/sys_package/bazel_generated/syspack_release/
+            deps/3rd/jemalloc/manifest.json
+            deps/3rd/jemalloc/share/licenses/
+            deps/3rd/vsag/manifest.json
+            deps/3rd/vsag/share/licenses/
+          if-no-files-found: error
+          compression-level: 0
       - name: Stop Bazel
         if: always() && steps.build.outcome != 'skipped'
         run: python .github/scripts/package.py shutdown
