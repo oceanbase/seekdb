@@ -121,3 +121,5 @@ set @json_nested_document = null;
 select json_contains('[[2],1]', '1') as nested_scalar, json_contains('[{"a":2},1]', '[1]') as candidate_array, json_contains('[[3],1,2]', '[1,2]') as multiple_candidates, json_contains('{"b":{}}', '{"b":{"x":2}}') as empty_first, json_contains('{"a":1,"b":{}}', '{"a":1,"b":{"x":2}}') as empty_after_match;
 select json_extract(json_array(repeat('x',300),-1),'$[1]') as constructed_negative, json_extract(cast(concat('["',repeat('x',300),'",-1]') as json),'$[1]') as parsed_negative;
 select json_search('{"a":"leaf","nested":{"a":"leaf"}}','all','leaf',null,'$**.a') as recursive_locations;
+# JSON_TYPE length must be valid for CASE and cover its longest type name.
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('9223372036854775808' AS JSON)) ELSE JSON_TYPE(CAST('9223372036854775808' AS JSON)) END AS type_name;
