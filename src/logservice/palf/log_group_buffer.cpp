@@ -156,9 +156,11 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
   } else if (lsn < start_lsn) {
     PALF_LOG_RET(WARN, OB_INVALID_ARGUMENT, "lsn is less than start_lsn", K(bool_ret), K(lsn), K_(start_lsn));
   } else if (end_lsn > reuse_lsn + (observed_capacity = get_available_buffer_size())) {
-    seek1402_capture().add(2, total_len, lsn.val_, ref_reuse_lsn.val_,
-        observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
-        (reuse_lsn + observed_capacity).val_, OB_SUCCESS);
+    if (seek1402_capture().admission_scope) {
+      seek1402_capture().add(2, total_len, lsn.val_, ref_reuse_lsn.val_,
+          observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
+          (reuse_lsn + observed_capacity).val_, OB_SUCCESS);
+    }
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
       PALF_LOG_RET(WARN, OB_EAGAIN, "end_lsn is larger than max reuse pos", K(bool_ret), K(lsn), K(end_lsn),
           K(reuse_lsn), K_(available_buffer_size));

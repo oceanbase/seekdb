@@ -8,6 +8,7 @@ struct Seek1402Capture {
   struct Record { int64_t kind; uint64_t value[8]; };
   bool active = false;
   bool abort_scope = false;
+  bool admission_scope = false;
   int64_t count = 0;
   int64_t dropped = 0;
   Record records[8];
@@ -42,6 +43,18 @@ inline Seek1402Capture &seek1402_capture() {
   static thread_local Seek1402Capture capture;
   return capture;
 }
+class Seek1402AdmissionScope {
+public:
+  Seek1402AdmissionScope() : capture_(seek1402_capture()), previous_(capture_.admission_scope) {
+    capture_.admission_scope = true;
+  }
+  ~Seek1402AdmissionScope() { capture_.admission_scope = previous_; }
+  Seek1402AdmissionScope(const Seek1402AdmissionScope &) = delete;
+  Seek1402AdmissionScope &operator=(const Seek1402AdmissionScope &) = delete;
+private:
+  Seek1402Capture &capture_;
+  bool previous_;
+};
 class Seek1402AbortScope {
 public:
   explicit Seek1402AbortScope(bool abort) : capture_(seek1402_capture()), previous_(capture_.abort_scope) {

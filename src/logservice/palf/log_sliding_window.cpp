@@ -219,7 +219,10 @@ bool LogSlidingWindow::can_submit_new_log_(const int64_t valid_log_size, LSN &ls
   if (OB_SUCCESS != (tmp_ret = lsn_allocator_.get_curr_end_lsn(curr_end_lsn))) {
     PALF_LOG_RET(WARN, tmp_ret, "get_curr_end_lsn failed", K(tmp_ret), K_(self), K(valid_log_size));
   // Use committed_lsn as the lower bound of the reusable starting point.
-  } else if (!group_buffer_.can_handle_new_log(curr_end_lsn, valid_log_size, curr_committed_end_lsn)) {
+  } else if (!([&]() {
+    Seek1402AdmissionScope admission_scope;
+    return group_buffer_.can_handle_new_log(curr_end_lsn, valid_log_size, curr_committed_end_lsn);
+  }())) {
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
       PALF_LOG_RET(WARN, OB_ERR_UNEXPECTED, "group_buffer_ cannot handle new log now", K(tmp_ret), K_(self),
           K(valid_log_size), K(curr_end_lsn), K(curr_committed_end_lsn),
