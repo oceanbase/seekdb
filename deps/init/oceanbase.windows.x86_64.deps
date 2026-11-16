@@ -3,6 +3,12 @@ os=windows
 arch=x86_64
 repo=https://mirrors.oceanbase.com/oceanbase/development-kit/windows/11/x86_64
 
+[target-jemalloc]
+repo=https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1
+
+[target-vsag]
+repo=https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20
+
 [deps]
 devdeps-zlib-20260506.tar.gz
 devdeps-dirent-20260506.tar.gz
@@ -12,7 +18,8 @@ devdeps-abseil-20260506.tar.gz
 devdeps-boost-geometry-20260506.tar.gz
 devdeps-roaring-20260506.tar.gz
 devdeps-openssl-20260414.tar.gz
-devdeps-vsag-20260416.tar.gz
+jemalloc-5.3.1-bin-windows-x86_64-md-20261114T020301+0000-845c8920ddfb.tar.gz target=jemalloc prefix=jemalloc sha256=c4613853aabe251fa5abf12dec68bd468cf47551735185f1270ae228bd9cef49
+vsag-0.16.20-bin-windows-x86_64-md-20261114T022500+0000-24707283d449.tar.gz target=vsag prefix=vsag sha256=49b1a01fb56bcd8d19b301cffd926ac078c92332fe4ddff5aba70ab1289fdbd8
 
 [tools]
 obdevtools-llvm-18.1.8-20260414.tar.gz

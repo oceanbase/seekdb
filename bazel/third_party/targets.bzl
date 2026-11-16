@@ -89,6 +89,8 @@ _WINDOWS_HEADER_LIBRARIES = {
 }
 
 def _windows_libraries():
+    native.filegroup(name = "jemalloc_archive", srcs = ["jemalloc/lib/jemalloc.lib"])
+    native.filegroup(name = "jemalloc_header", srcs = ["jemalloc/include/jemalloc/jemalloc.h"])
     for name, (interface, dll, deps) in _WINDOWS_SHARED.items():
         cc_import(
             name = name,

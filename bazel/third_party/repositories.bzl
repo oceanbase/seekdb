@@ -32,6 +32,7 @@ def _windows_sdk(repository_ctx):
         "openssl/bin": "openssl_bin",
         "vsag/lib": "vsag",
         "vsag/bin": "vsag_bin",
+        "jemalloc": "jemalloc",
         "tools/llvm18": "devtools",
     }.items():
         repository_ctx.symlink(sdk + "/" + source, destination)

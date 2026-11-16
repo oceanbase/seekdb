@@ -123,6 +123,10 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
     if layout == "windows":
         if not binary_package:
             copy(ROOT / "package/msi/seekdb.cnf", config / "seekdb.cnf")
+            for dependency in ("jemalloc", "vsag"):
+                sdk = dependencies / dependency
+                shutil.copytree(sdk / "share/licenses", destination / "licenses", dirs_exist_ok=True)
+                copy(sdk / "manifest.json", share / "dependencies" / (dependency + ".json"))
         helpers.mkdir(parents=True, exist_ok=True)
         return
     profile = ROOT / ("package/linux/profile" if layout in ("linux", "android") else "package/pkg/launchd/profile")

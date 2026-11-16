@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build and expose the native artifacts from seekdb-jemalloc-sys."""
+"""Expose the pinned Windows SDK or seekdb-jemalloc-sys native artifacts."""
 
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
@@ -22,15 +22,22 @@ load("//bazel:platforms.bzl", "PLATFORM_ATTRS", "target_platform")
 def _jemalloc_build_impl(ctx):
     windows = target_platform(ctx).os == "windows"
     archive_name = "jemalloc.lib" if windows else "libjemalloc_pic.a"
-    built_archive = "jemalloc_s.lib" if windows else "libjemalloc_pic.a"
     archive = ctx.actions.declare_file("jemalloc/lib/" + archive_name)
     public_header = ctx.actions.declare_file("jemalloc/include/jemalloc/jemalloc.h")
-    output = ctx.attr.build_script[BuildInfo].out_dir
+    if windows:
+        inputs = [ctx.file.windows_archive, ctx.file.windows_header]
+        arguments = [ctx.file.windows_archive.path, archive.path, ctx.file.windows_header.path, public_header.path]
+        command = 'cp "$1" "$2" && cp "$3" "$4"'
+    else:
+        output = ctx.attr.build_script[BuildInfo].out_dir
+        inputs = [output]
+        arguments = [output.path, archive.path, public_header.path]
+        command = 'cp "$1/jemalloc-build/lib/libjemalloc_pic.a" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"'
     ctx.actions.run_shell(
-        inputs = [output],
+        inputs = inputs,
         outputs = [archive, public_header],
-        arguments = [output.path, archive.path, public_header.path, built_archive],
-        command = 'cp "$1/jemalloc-build/lib/$4" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"',
+        arguments = arguments,
+        command = command,
         mnemonic = "JemallocArtifacts",
         use_default_shell_env = windows,
     )
@@ -45,17 +52,31 @@ def _jemalloc_build_impl(ctx):
 _jemalloc_build = rule(
     implementation = _jemalloc_build_impl,
     attrs = {
-        "build_script": attr.label(default = "@external_crates//:jemalloc_build", providers = [BuildInfo]),
+        "build_script": attr.label(providers = [BuildInfo]),
+        "windows_archive": attr.label(allow_single_file = True),
+        "windows_header": attr.label(allow_single_file = True),
     } | PLATFORM_ATTRS,
 )
 
 def jemalloc(name):
-    """Expose the native outputs of the rules_rust build script to C++."""
+    """Expose jemalloc's native archive and headers to C++."""
     build_target = "_%s_build" % name
     public_header_target = "%s_public_header" % name
 
     _jemalloc_build(
         name = build_target,
+        build_script = select({
+            "@platforms//os:windows": None,
+            "//conditions:default": "@external_crates//:jemalloc_build",
+        }),
+        windows_archive = select({
+            "@platforms//os:windows": "@third_party_native//:jemalloc_archive",
+            "//conditions:default": None,
+        }),
+        windows_header = select({
+            "@platforms//os:windows": "@third_party_native//:jemalloc_header",
+            "//conditions:default": None,
+        }),
         target_compatible_with = select({
             "@platforms//os:linux": [],
             "@platforms//os:macos": [],

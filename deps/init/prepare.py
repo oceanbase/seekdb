@@ -95,8 +95,10 @@ def packages(profile):
             continue
         for line in lines:
             filename, *options = line.split()
-            target = dict(option.split("=", 1) for option in options).get("target", "default")
-            result.append((filename, repositories[target] + "/" + filename))
+            options = dict(option.split("=", 1) for option in options)
+            target = options.get("target", "default")
+            result.append((filename, repositories[target] + "/" + filename,
+                           options.get("prefix", ""), options.get("sha256")))
     if not result:
         raise ValueError("Empty dependencies profile: " + str(profile))
     return result
@@ -149,7 +151,7 @@ def populate(profile, destination, key, archive_directory):
     with tempfile.TemporaryDirectory(prefix=".deps-", dir=destination.parent) as temporary:
         stage = Path(temporary) / "3rd"
         (stage / "pkg").mkdir(parents=True)
-        for filename, url in packages(profile):
+        for filename, url, prefix, checksum in packages(profile):
             print("Preparing " + filename, flush=True)
             archive = stage / "pkg" / filename
             cached = archive_directory / filename
@@ -163,8 +165,14 @@ def populate(profile, destination, key, archive_directory):
                 shutil.copyfile(cached, archive)
             else:
                 download(url, archive)
+            if checksum and hashlib.sha256(archive.read_bytes()).hexdigest() != checksum:
+                if cached.is_file():
+                    cached.unlink()
+                raise ValueError("Dependency SHA-256 mismatch: " + filename)
+            prefix = stage / prefix
+            prefix.mkdir(parents=True, exist_ok=True)
             try:
-                unpack(archive, stage)
+                unpack(archive, prefix)
             except subprocess.CalledProcessError:
                 if os.environ.get("DEP_DOWNLOAD_DIR"):
                     cached.unlink()

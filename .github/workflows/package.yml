@@ -103,12 +103,6 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           df -h "$GITHUB_WORKSPACE"
-      - name: Set up Windows build utilities
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          & C:\msys64\usr\bin\bash.exe -lc 'pacman -S --needed --noconfirm make'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
         if: runner.os == 'Windows'
         with:
@@ -192,16 +186,19 @@ jobs:
           key: ${{ steps.sdk.outputs.cache-primary-key }}
       - name: Compile seekdb once
         id: build
-        run: |
-          # Keep MSYS utilities out of the cache action's tar/zstd pipeline.
-          if [[ "$RUNNER_OS" == Windows ]]; then
-            export PATH="/c/msys64/usr/bin:$PATH"
-            command -v make
-            make --version
-          fi
-          python .github/scripts/package.py build
+        run: python .github/scripts/package.py build
       - name: Export verified binary distribution
         run: python .github/scripts/package.py export
+      - name: Check the packaged Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Get-Item dist/seekdb-binary-*.zip
+          $destination = Join-Path $env:RUNNER_TEMP 'seekdb-package-check'
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath $destination
+          $executable = Get-ChildItem $destination -Filter seekdb.exe -Recurse
+          & $executable.FullName --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload binary distribution
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
