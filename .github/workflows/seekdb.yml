@@ -8,10 +8,6 @@ on:
   pull_request:
     branches: [master, develop]
     types: [opened, reopened, synchronize, ready_for_review]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
   schedule:
     - cron: '30 9 * * *'
 
@@ -25,9 +21,45 @@ env:
   SEEKDB_CACHE_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb/_cache
 
 jobs:
+  # 路径过滤下沉到 job 级：Markdown-only PR 也会创建 skipped check run，
+  # 避免 branch protection 的 required check（如 collect）永远 pending。
+  changes:
+    name: changes
+    if: ${{ github.repository_owner == 'oceanbase' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ci: ${{ steps.decide.outputs.ci }}
+    steps:
+      - name: Decide whether to run code CI
+        id: decide
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.setOutput('ci', 'true');
+              return;
+            }
+            const ignored = (path) =>
+              path.endsWith('.md') ||
+              path.startsWith('docs/') ||
+              path.startsWith('.github/ISSUE_TEMPLATE/');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            // PR files API 最多返回 3000 个文件；超出时保守执行完整 CI。
+            const runCi = files.length >= 3000 || files.some((f) => !ignored(f.filename));
+            core.info(`Changed files: ${files.length}; run code CI: ${runCi}`);
+            core.setOutput('ci', String(runCi));
   seekdb-setup:
     name: setup
-    if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    needs: changes
+    if: ${{ github.repository_owner == 'oceanbase' && needs.changes.outputs.ci == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: arc-runner-k8s-ci-org-25c100g
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
