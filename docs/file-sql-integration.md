@@ -153,10 +153,35 @@ file_table_path_arg
 映射到 `ER_SYNTAX_ERROR`，即 `1149`，与官方用例的期望不符。
 语义解析阶段的那段检查保留为兜底，消息与原来一致。
 
+## 表函数被拒绝时 observer 崩溃
+
+`read_csv` 被拒绝时，解析阶段没有表项，而 FROM 子句的循环在 `resolve_table` 失败后
+仍然使用了表项，下一句解引用了空指针，observer 以 SIGSEGV 退出：
+
+```
+ERROR 2013 (HY000): Lost connection to MySQL server during query
+```
+
+这会让官方用例的第一条（关闭开关时的 `read_csv`，期望 `1235`）直接打挂 server。
+修法是 FROM 子句的循环在表解析失败时停止，和 update 解析器的写法一致：
+
+```cpp
+const int table_ret = resolve_table(*table_node, table_item);
+session_info_->set_table_name_hidden(old_flag);
+if (OB_FAIL(table_ret)) {
+  ret = table_ret;
+  break;
+}
+```
+
+修复后关闭开关时的 `read_csv` 返回 `1235`，observer 存活。
+
 ## 尚未解决的部分
 
 - `DESCRIBE` 与 `COPY` 还没有实现，属于 ① 与 ⑥ 的评分项；`glob` 已由
-  `lab2/jsonl-parquet` 实现。
+  `lab2/jsonl-parquet` 实现。`DESCRIBE` 在本版本的语法里是 `EXPLAIN` 的别名，
+  `describe select * from read_csv(...)` 返回的是执行计划，不是官方用例期望的
+  `column_name`、`column_type`、`null`、`key`、`default`、`extra` 六列。
 - 资源上限目前是框架里的常量，还没有做成会话变量。
 - 框架的路径校验只在解析阶段做一次，执行阶段重新打开文件之前没有再校验一次，
   两次之间文件被换成指向别处的软链接不会被发现。
