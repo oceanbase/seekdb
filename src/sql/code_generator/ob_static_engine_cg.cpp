@@ -5574,16 +5574,23 @@ int ObStaticEngineCG::generate_spec(ObLogFileTable &op, ObFileTableSpec &spec,
       // The strings of the definition of the table live in the memory of the
       // statement. The plan of a file table outlives the statement, it is
       // kept in the plan cache and it is run after the statement is gone,
-      // so the strings are copied into the memory of the plan.
+      // so the strings are copied into the memory of the plan. The path is
+      // written as a C string, the operator hands it to fopen() which reads
+      // it until the zero byte. Without the zero byte the file name of the
+      // plan runs into the memory behind it and the open fails with the
+      // error File not exist, depending on the content of the heap.
       if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
                                    file_def->path_,
-                                   spec.path_))) {
+                                   spec.path_,
+                                   true))) {
       } else if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
                                          file_def->format_,
-                                         spec.format_))) {
+                                         spec.format_,
+                                         true))) {
       } else if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
                                          file_def->null_string_,
-                                         spec.null_string_))) {
+                                         spec.null_string_,
+                                         true))) {
       } else {
         spec.header_ = file_def->header_;
         spec.sample_size_ = file_def->sample_size_;
