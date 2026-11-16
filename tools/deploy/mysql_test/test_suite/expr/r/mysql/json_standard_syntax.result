@@ -272,10 +272,10 @@ json_set('{"a":[1,2]}', '$.a[0]', 9, '$.a[1]', 8)
 {"a": [9, 8]}
 select json_schema_valid(json_object('enum',json_array(time '12:00:00.000001')),json_extract(json_array(time '12:00:00.000002'),'$[0]'));
 json_schema_valid(json_object('enum',json_array(time '12:00:00.000001')),json_extract(json_array(time '12:00:00.000002'),'$[0]'))
-1
+0
 select json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'));
 json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'))
-0
+1
 prepare json_table_nested_scan from 'select * from json_table(?, ''$[*]'' columns(nested path ''$.a[*]'' columns(nested path ''$.b[*]'' columns(v int path ''$'')))) jt';
 set @json_nested_document = '[{"a":[{"b":[1,2]}]},{"a":[{"b":[3]}]}]';
 execute json_table_nested_scan using @json_nested_document;
