@@ -406,7 +406,7 @@ END_P SET_VAR DELIMITER
 %type <node> sort_list sort_key opt_asc_desc sort_list_for_group_by sort_key_for_group_by opt_asc_desc_for_group_by sort_list_opt_null sort_key_opt_null opt_asc_desc_null
 %type <node> opt_query_expression_option_list query_expression_option_list query_expression_option opt_distinct opt_distinct_or_all opt_separator projection
 %type <node> from_list table_references table_reference table_factor normal_relation_factor dot_relation_factor relation_factor
-%type <node> file_table_expr file_table_arg_list file_table_arg
+%type <node> file_table_expr file_table_arg_list file_table_path_arg file_table_option_arg
 %type <node> relation_factor_in_hint relation_factor_in_hint_list relation_factor_in_pq_hint opt_relation_factor_in_hint_list relation_factor_in_use_join_hint_list
 %type <node> relation_factor_in_leading_hint_list joined_table tbl_name table_subquery table_subquery_alias
 %type <node> relation_factor_with_star relation_with_star_list opt_with_star
@@ -18469,22 +18469,30 @@ NAME_OB '(' file_table_arg_list ')' relation_name
 ;
 
 file_table_arg_list:
-file_table_arg
+file_table_path_arg
 {
   malloc_list_node($$, result->malloc_pool_, T_EXPR_LIST, 2, 1, $1);
 }
-| file_table_arg_list ',' file_table_arg
+| file_table_arg_list ',' file_table_option_arg
 {
   push_back_list(result->malloc_pool_, result, $$, $1, $3);
 }
 ;
 
-file_table_arg:
+/*
+  The first argument is the path of the file, the arguments after it are
+  named options. A second positional argument is refused by the parser, so
+  that it is reported as a syntax error of the statement.
+*/
+file_table_path_arg:
 simple_expr
 {
   $$ = $1;
 }
-| column_name COMP_EQ simple_expr
+;
+
+file_table_option_arg:
+column_name COMP_EQ simple_expr
 {
   // The name of an option is a column name, so that an option whose name is
   // a keyword of the parser, the option format for example, is accepted.

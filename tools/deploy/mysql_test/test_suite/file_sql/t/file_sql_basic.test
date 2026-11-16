@@ -20,7 +20,7 @@ set session enable_file_sql = ON;
 --echo # syntax and format validation
 --disable_result_log
 eval select count(*) from read_csv('$FILE_SQL_DATA_DIR/basic.csv');
---error 1149
+--error 1064
 eval select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', 'xml');
 --error 1235
 eval select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', sample_size = 10);

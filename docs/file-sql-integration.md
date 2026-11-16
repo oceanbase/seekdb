@@ -128,9 +128,35 @@ void rescan() override { scan_.rescan(); }
 用例的有效性做过验证：把适配层里"空批次转 `END`"的转换去掉后，测试报 8 条 FAIL，
 确认这条用例覆盖的正是会挂死的那条路径。
 
+## 第二个位置参数在解析期被拒绝
+
+表函数的第一个参数是路径，其余参数必须是具名选项。第二个位置参数由语法分析器拒绝，
+语句报解析错误 `1064`，与 `file_sql_basic.test` 的期望一致：
+
+```sql
+select * from read_csv('/path/basic.csv', 'xml');        -- ERROR 1064 (syntax error)
+select * from read_csv('/path/basic.csv', sample_size = 10);  -- ERROR 1235
+```
+
+改法是把参数列表拆成路径参数与选项参数两个产生式，非首元素只能是
+`column_name COMP_EQ simple_expr`：
+
+```
+file_table_arg_list:
+file_table_path_arg
+| file_table_arg_list ',' file_table_option_arg
+;
+```
+
+语法分析器给出的错误码是 `OB_ERR_PARSE_SQL`，映射到 `ER_PARSE_ERROR`，即 `1064`；
+改之前语法分析器不拒绝第二个位置参数，由语义解析阶段报 `OB_ERR_PARSER_SYNTAX`，
+映射到 `ER_SYNTAX_ERROR`，即 `1149`，与官方用例的期望不符。
+语义解析阶段的那段检查保留为兜底，消息与原来一致。
+
 ## 尚未解决的部分
 
-- A 的框架里 `glob`、`DESCRIBE`、`COPY` 还没有实现，属于 ① 与 ⑥ 的评分项。
+- `DESCRIBE` 与 `COPY` 还没有实现，属于 ① 与 ⑥ 的评分项；`glob` 已由
+  `lab2/jsonl-parquet` 实现。
 - 资源上限目前是框架里的常量，还没有做成会话变量。
 - 框架的路径校验只在解析阶段做一次，执行阶段重新打开文件之前没有再校验一次，
   两次之间文件被换成指向别处的软链接不会被发现。
