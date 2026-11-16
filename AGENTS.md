@@ -34,6 +34,10 @@
 
 - For pull request or diff review tasks, read and follow `.agents/skills/code-review/SKILL.md`.
 
+## Pull Request Submission
+
+- For pull request preparation, description, submission, and description-update tasks, read and follow `.agents/skills/submit-pull-request/SKILL.md`.
+
 ## Testing
 
 - Prefer adding regression and correctness coverage to the repository's established test suites and test directories.
