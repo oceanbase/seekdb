@@ -1,0 +1,57 @@
+# Copyright (c) 2025 OceanBase.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: dependency-platform-checks
+
+on:
+  pull_request:
+    paths:
+      - 'deps.lock.json'
+      - 'deps/init/**'
+      - 'deps/external/**'
+      - 'bazel/third_party/**'
+      - 'bazel/sdk_sources/**'
+      - '.github/workflows/dependency-platform-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  apple:
+    name: ${{ matrix.platform }}
+    runs-on: macos-15
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-arm64
+            init: ''
+            config: ''
+          - platform: ios-arm64
+            init: '--ios'
+            config: '--config=ios'
+    env:
+      RUSTUP_DIST_SERVER: https://static.rust-lang.org
+      RUSTUP_UPDATE_ROOT: https://static.rust-lang.org/rustup
+      RUSTUP_INIT_URL: https://sh.rustup.rs
+      SEEKDB_DEPS_GITHUB_PROXY_PREFIX: ''
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show build environment
+        run: uname -a; xcodebuild -version; df -h .
+      - name: Initialize dependencies
+        run: python3 build.py init ${{ matrix.init }}
+      - name: Build seekdb
+        run: python3 build.py build ${{ matrix.config }} --jobs=2 seekdb
