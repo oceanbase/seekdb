@@ -6,20 +6,20 @@
         "sha256": "1c56becb2d54655fdc79f3edf3a78e1ea2705f700481f58d8a9c1c5cc261e9b1"
       },
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-android-arm64-v8a-api26-20261113T073702%2B0000-655b9e5f1178.tar.gz",
-        "sha256": "955a9e3b28ea5e7f2d10301879ec2983b1b162be0ade1202377a3c1f9bb31883"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-android-arm64-v8a-api26-20261116T070344%2B0000-97588f036a3a.tar.gz",
+        "sha256": "6508edba1550b02f8e11c8d898b9bb79f69dd376158452f7ed13123357c51868"
       }
     },
     "ios-arm64-device-min18": {
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-ios-arm64-device-min18-20261113T073702%2B0000-655b9e5f1178.tar.gz",
-        "sha256": "f8dd7eaef04b17ed79ecbb38663a8b56ff1234867fa8dc7e95b4b5df5c93deee"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-ios-arm64-device-min18-20261116T070344%2B0000-97588f036a3a.tar.gz",
+        "sha256": "f3da41f8752b0781377b7283c0112bbf81c3f24b7c68c6c3a949ceb1bfdaed33"
       }
     },
     "ios-arm64-simulator-min18": {
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-ios-arm64-simulator-min18-20261113T073702%2B0000-655b9e5f1178.tar.gz",
-        "sha256": "ce2bdda31a2e6871c08c589a75a4328e88d118e681924963d0f0a06a8b9f43c5"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-ios-arm64-simulator-min18-20261116T070344%2B0000-97588f036a3a.tar.gz",
+        "sha256": "e708ec65aecaea1ed45e799990fa08147b12ea97f399d241192405c358ac9908"
       }
     },
     "linux-aarch64-glibc217": {
@@ -32,8 +32,8 @@
         "sha256": "80343fd4b97c62c9689007d3229f0ea05f8d062b10136a6f094787e154d678ee"
       },
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-linux-aarch64-glibc217-20261113T073702%2B0000-655b9e5f1178.tar.gz",
-        "sha256": "501c730180d77b070de5f36dc401fef6bb32a4ba6d7da990dea432f5b1280dba"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-linux-aarch64-glibc217-20261116T070344%2B0000-97588f036a3a.tar.gz",
+        "sha256": "e30183e23d29f477936c1ee5f3ef92467003ee62e0ce42195e082e3744b0033c"
       }
     },
     "linux-x86_64-glibc217": {
@@ -46,8 +46,8 @@
         "sha256": "041ae2dce281770af17c18bec4dbcb3b0524e88366217eca38c0f797c15e64d9"
       },
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-linux-x86_64-glibc217-20261113T073702%2B0000-655b9e5f1178.tar.gz",
-        "sha256": "e9e2037601f2cc6f46a0e3b843ca12f77f13a2cefa1ba49338b9d531971843d2"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-linux-x86_64-glibc217-20261116T070344%2B0000-97588f036a3a.tar.gz",
+        "sha256": "d9b9d2d7f6122d6e4a2e60c46afa2ec7d3e3858db42c194687d234fd4f086a53"
       }
     },
     "macos-arm64-min13": {
@@ -56,14 +56,14 @@
         "sha256": "9acb925380fdb1c326513f1fe2a718cbccefa196bc12cf7e36aaa02d131c3473"
       },
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-macos-arm64-min13-20261113T073702%2B0000-655b9e5f1178.tar.gz",
-        "sha256": "2a9ebe59b7d26975e65985af4247f105f97784322b0b000deb30feaa0ea53ea6"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-macos-arm64-min13-20261116T070344%2B0000-97588f036a3a.tar.gz",
+        "sha256": "8dc91f3b7618656e1b9bcd58bab694bcf2995e54a0eba704ca9e9f4477508b8c"
       }
     },
     "wasm32-emscripten": {
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-wasm32-emscripten-20261113T073702%2B0000-655b9e5f1178.tar.gz",
-        "sha256": "62891c4f3de67bd215771b34c842a35c8034bb78a562fca37945d81d4fe8962d"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-wasm32-emscripten-20261116T070344%2B0000-97588f036a3a.tar.gz",
+        "sha256": "9d7996cc0564c0646da9e1f4c31bd093dd045084d5f556e6d49c901cf76d8e2b"
       }
     },
     "windows-x86_64-md": {
@@ -72,8 +72,8 @@
         "sha256": "c4613853aabe251fa5abf12dec68bd468cf47551735185f1270ae228bd9cef49"
       },
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-windows-x86_64-md-20261116T024308%2B0000-e8260eea65ea.tar.gz",
-        "sha256": "e713992579a7cff08f01efa862fcd14aac9633afea9d53088a53a173d7dabd87"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-windows-x86_64-md-20261116T070344%2B0000-97588f036a3a.tar.gz",
+        "sha256": "e1f27d782f614caad7a24ae19a2fcb40f64a63405b1ae9ea1cfd427b7c8191aa"
       }
     }
   }
