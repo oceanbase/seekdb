@@ -156,6 +156,9 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
   } else if (lsn < start_lsn) {
     PALF_LOG_RET(WARN, OB_INVALID_ARGUMENT, "lsn is less than start_lsn", K(bool_ret), K(lsn), K_(start_lsn));
   } else if (end_lsn > reuse_lsn + (observed_capacity = get_available_buffer_size())) {
+    seek1402_capture().first_space_comparison(total_len, lsn.val_, ref_reuse_lsn.val_,
+        observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
+        (reuse_lsn + observed_capacity).val_, false);
     if (seek1402_capture().admission_scope) {
       seek1402_capture().add(2, total_len, lsn.val_, ref_reuse_lsn.val_,
           observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
@@ -167,6 +170,9 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
     }
   } else {
     bool_ret = true;
+    seek1402_capture().first_space_comparison(total_len, lsn.val_, ref_reuse_lsn.val_,
+        observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
+        (reuse_lsn + observed_capacity).val_, true);
     seek1402_capture().recover_space(total_len, lsn.val_, ref_reuse_lsn.val_,
         observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
         (reuse_lsn + observed_capacity).val_);

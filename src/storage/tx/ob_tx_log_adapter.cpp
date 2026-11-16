@@ -122,6 +122,14 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
           "v2", event.value[2], "v3", event.value[3], "v4", event.value[4],
           "v5", event.value[5], "v6", event.value[6], "v7", event.value[7]);
     }
+    if (capture.first_space_present) {
+      const auto &event = capture.first_space;
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC first space comparison", KP(cb), K(size),
+          "v0", event.value[0], "v1", event.value[1], "v2", event.value[2],
+          "v3", event.value[3], "v4", event.value[4], "v5", event.value[5],
+          "v6", event.value[6], "passed", event.value[7],
+          K(diagnostic_begin_us), K(diagnostic_end_us));
+    }
     if (capture.recovery_present) {
       const auto &event = capture.recovery;
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC space comparison recovery", KP(cb), K(size),
@@ -133,6 +141,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     if (capture.abort_scope) {
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred capture completeness", KP(cb), K(size),
           "recorded", capture.count, "dropped", capture.dropped, "scope_abort", true,
+          "first_space_comparison", capture.first_space_present,
           "capture_mode", "first_last_per_kind", "observed", capture.total, "space_recovery", capture.recovery_present, "space_capture", "comparison_operands",
           "retry_count", retry_cnt, K(ret), K(diagnostic_begin_us), K(diagnostic_end_us));
     }
