@@ -200,7 +200,18 @@ int ObAiServiceProxy::build_ai_endpoint_(ObArenaAllocator &allocator, ObMySQLRes
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "endpoint_name", name);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "ai_model_name", ai_model_name);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "url", url);
-  EXTRACT_VARCHAR_FIELD_MYSQL(result, "access_key", access_key);
+  // An endpoint may legitimately have no access key, e.g. an Ollama model
+  // server running on the local host. Such a column is stored as SQL NULL,
+  // so read it leniently and keep an empty string as the value. Reading it
+  // strictly would make the whole endpoint unreadable.
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(result.get_varchar("access_key", access_key))) {
+      if (OB_ERR_NULL_VALUE == ret) {
+        ret = OB_SUCCESS;
+        access_key.assign_ptr(NULL, 0);
+      }
+    }
+  }
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "provider", provider, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "request_model_name", request_model_name, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "parameters", arguments, true, false, ""/*wont be used*/);

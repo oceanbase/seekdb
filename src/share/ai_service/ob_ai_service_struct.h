@@ -84,6 +84,9 @@ public:
 private:
   static const ObString DEFAULT_SCOPE;
   static bool is_valid_provider(const ObString &provider);
+  // Ollama serves a model from the local host and does not authenticate the
+  // request, so it is the only provider that may be created without an api key.
+  static bool is_ollama_provider(const ObString &provider);
   int encrypt_access_key_(common::ObIAllocator &allocator, const ObString &access_key, ObString &encrypted_access_key);
   int decrypt_access_key_(common::ObIAllocator &allocator, const ObString &encrypted_access_key, ObString &unencrypted_access_key) const;
 private:

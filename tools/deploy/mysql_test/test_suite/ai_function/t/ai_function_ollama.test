@@ -1,0 +1,64 @@
+#owner: oceanbase
+#owner group: shenzhen
+
+connection default;
+
+# The ollama provider serves a model on the local host, it needs no access
+# key and it speaks its own protocol instead of the openai one.
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_ollama_complete');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_ollama_complete_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'ai_ollama_complete', '{"type":"completion","model_name":"qwen2.5"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+  'ai_ollama_complete_ep', '{"ai_model_name":"ai_ollama_complete","scope":"all","url":"http://0.0.0.0:8000/api/generate","access_key":"","provider":"ollama"}');
+
+# The provider is stored with the case it was written in.
+select provider from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS
+ where endpoint_name = 'ai_ollama_complete_ep';
+
+# The completion reads $.response of the native ollama protocol.
+select length(ai_complete('ai_ollama_complete', 'hello')) > 0 as complete_ok;
+
+# The provider name is compared case insensitively, the stored name keeps the
+# case of the last change.
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT(
+  'ai_ollama_complete_ep', '{"provider":"Ollama"}');
+select provider from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS
+ where endpoint_name = 'ai_ollama_complete_ep';
+select length(ai_complete('ai_ollama_complete', 'hello')) > 0 as complete_ok;
+
+# The embedding reads $.embeddings of the native ollama protocol.
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_ollama_embed');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_ollama_embed_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'ai_ollama_embed', '{"type":"dense_embedding","model_name":"nomic-embed-text"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+  'ai_ollama_embed_ep', '{"ai_model_name":"ai_ollama_embed","scope":"all","url":"http://0.0.0.0:8000/api/embed","access_key":"","provider":"OLLAMA"}');
+select json_valid(ai_embed('ai_ollama_embed', 'hello')) as embed_ok;
+select json_length(ai_embed('ai_ollama_embed', 'hello')) as embed_dimension;
+
+# Only the ollama provider may leave the access key empty.
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_openai_complete');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_openai_complete_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'ai_openai_complete', '{"type":"completion","model_name":"qwen3-32b"}');
+--error 11114
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+  'ai_openai_complete_ep', '{"ai_model_name":"ai_openai_complete","scope":"all","url":"http://0.0.0.0:8000/compatible-mode/v1/chat/completions","access_key":"","provider":"openai"}');
+
+# An unknown provider is rejected.
+--error 11116
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+  'ai_unknown_provider_ep', '{"ai_model_name":"ai_openai_complete","scope":"all","url":"http://0.0.0.0:8000/api/generate","access_key":"mock-key","provider":"no_such_provider"}');
+
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_ollama_complete');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_ollama_complete_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_ollama_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_ollama_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_openai_complete');

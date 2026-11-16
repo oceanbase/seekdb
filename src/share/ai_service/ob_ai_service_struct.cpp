@@ -37,7 +37,14 @@ const char *VALID_PROVIDERS[] = {
   "SILICONFLOW",
   "COHERE",
   "HUNYUAN-OPENAI",
-  "OPENAI"
+  "OPENAI",
+  "OLLAMA"
+};
+
+// Providers that talk to a model server running on the local host. They do not
+// authenticate the request, so an empty access key is accepted for them.
+const char *NO_ACCESS_KEY_PROVIDERS[] = {
+  "OLLAMA"
 };
 
 #define EXTRACT_JSON_ELEM_STR(json_key, member) \
@@ -112,16 +119,18 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (url_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("url"), "url");
-  } else if (access_key_.empty()) {
-    ret = OB_AI_FUNC_PARAM_EMPTY;
-    LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
-    LOG_WARN("access_key is empty", K(ret), K(*this));
   } else if (provider_.empty()) {
+    // The provider is checked before the access key: whether an access key is
+    // required depends on the provider.
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("provider"), "provider");
   } else if (!is_valid_provider(provider_)) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("provider"), "provider");
+  } else if (access_key_.empty() && !is_ollama_provider(provider_)) {
+    ret = OB_AI_FUNC_PARAM_EMPTY;
+    LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
+    LOG_WARN("access_key is empty", K(ret), K(*this));
   } else if (!parameters_.empty()) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("parameters"), "parameters");
@@ -145,6 +154,18 @@ bool ObAiModelEndpointInfo::is_valid_provider(const ObString &provider)
     }
   }
   return is_valid;
+}
+
+bool ObAiModelEndpointInfo::is_ollama_provider(const ObString &provider)
+{
+  bool is_ollama = false;
+  for (int i = 0; i < ARRAYSIZEOF(NO_ACCESS_KEY_PROVIDERS); i++) {
+    if (provider.case_compare(NO_ACCESS_KEY_PROVIDERS[i]) == 0) {
+      is_ollama = true;
+      break;
+    }
+  }
+  return is_ollama;
 }
 
 int ObAiModelEndpointInfo::merge_delta_endpoint(common::ObArenaAllocator &allocator, const ObIJsonBase &delta_jbase)

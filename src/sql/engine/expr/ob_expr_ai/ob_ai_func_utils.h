@@ -124,6 +124,17 @@ public:
     DISALLOW_COPY_AND_ASSIGN(ObOllamaEmbed);
   };
   static int get_header(common::ObIAllocator &allocator, common::ObArray<ObString> &headers);
+  // Ollama does not understand the OpenAI style config keys directly. Map the
+  // generic config onto the fields Ollama uses: the sampling knobs go below
+  // "options" and the json output mode goes to "format".
+  static int map_config_to_ollama(common::ObIAllocator &allocator,
+                                  common::ObJsonObject *config,
+                                  common::ObJsonObject *body_obj);
+  // Copy the config entries that Ollama accepts as top level fields, e.g.
+  // "format". The fields owned by the request itself are never overwritten.
+  static int copy_top_level_config(common::ObIAllocator &allocator,
+                                    common::ObJsonObject *config,
+                                    common::ObJsonObject *body_obj);
   DISALLOW_COPY_AND_ASSIGN(ObOllamaUtils);
 };
 

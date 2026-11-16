@@ -254,11 +254,67 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
   return ret;
 }
 
+namespace
+{
+// The request fields that belong to the request itself. A config must never
+// be able to replace them.
+const char *const OLLAMA_RESERVED_CONFIG_KEYS[] = {
+  "model",
+  "input",
+  "prompt",
+  "messages",
+  "stream",
+  "options"
+};
+
+// Ollama keeps the sampling knobs below "options". The left side is the
+// generic config key, the right side the Ollama name of the same knob.
+struct ObOllamaOptionMapping
+{
+  const char *config_key_;
+  const char *option_key_;
+};
+
+const ObOllamaOptionMapping OLLAMA_OPTION_MAPPINGS[] = {
+  {"temperature", "temperature"},
+  {"max_tokens", "num_predict"},
+  {"num_predict", "num_predict"},
+  {"top_p", "top_p"},
+  {"top_k", "top_k"},
+  {"min_p", "min_p"},
+  {"seed", "seed"},
+  {"num_ctx", "num_ctx"},
+  {"repeat_penalty", "repeat_penalty"},
+  {"presence_penalty", "presence_penalty"},
+  {"frequency_penalty", "frequency_penalty"},
+  {"mirostat", "mirostat"},
+  {"stop", "stop"}
+};
+
+bool is_reserved_ollama_config_key(const ObString &key)
+{
+  bool is_reserved = false;
+  for (int i = 0; i < ARRAYSIZEOF(OLLAMA_RESERVED_CONFIG_KEYS); i++) {
+    if (key.case_compare(OLLAMA_RESERVED_CONFIG_KEYS[i]) == 0) {
+      is_reserved = true;
+      break;
+    }
+  }
+  return is_reserved;
+}
+} // namespace
+
 int ObOllamaUtils::get_header(common::ObIAllocator &allocator,
                               common::ObArray<ObString> &headers) 
 {
   int ret = OB_SUCCESS;
-  // ollama header is empty, do nothing
+  // Ollama serves a model on the local host and does not authenticate the
+  // request, so no api key header is sent. The payload is still json.
+  ObString content_type_str("Content-Type: application/json");
+  ObString content_type_c_str;
+  if (OB_FAIL(ob_write_string(allocator, content_type_str, content_type_c_str, true))) {
+  } else if (OB_FAIL(headers.push_back(content_type_c_str))) {
+  }
   return ret;
 }
 
@@ -280,18 +336,101 @@ int ObOllamaUtils::ObOllamaComplete::get_body(common::ObIAllocator &allocator,
   if (model.empty() || content.empty()) { 
     ret = OB_INVALID_ARGUMENT;
   } else {
-    // {"model": "llama3.1", "prompt": "What is the capital of France?"}
+    // {"model": "llama3.1", "prompt": "What is the capital of France?", "stream": false}
     ObJsonObject *body_obj = nullptr;
     ObJsonString *model_str = nullptr;
     ObJsonString *content_str = nullptr;
+    ObJsonBoolean *stream_obj = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, content, content_str))) {
     } else if (OB_FAIL(body_obj->add("prompt", content_str))) {
-    } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_boolean(allocator, false, stream_obj))) {
+    } else if (OB_FAIL(body_obj->add("stream", stream_obj))) {
+      // Ollama answers with a stream by default. seekdb reads one complete
+      // answer, so the request has to ask for a single non streamed response.
+    } else if (OB_FAIL(map_config_to_ollama(allocator, config, body_obj))) {
     } else {
       body = body_obj;
+    }
+  }
+  return ret;
+}
+
+int ObOllamaUtils::map_config_to_ollama(common::ObIAllocator &allocator,
+                                        common::ObJsonObject *config,
+                                        common::ObJsonObject *body_obj)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(body_obj)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!OB_ISNULL(config) && config->element_count() > 0) {
+    ObJsonObject *options = nullptr;
+    if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, options))) {
+    } else {
+      for (int i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(OLLAMA_OPTION_MAPPINGS); i++) {
+        ObJsonNode *value = config->get_value(OLLAMA_OPTION_MAPPINGS[i].config_key_);
+        if (OB_ISNULL(value) || value->json_type() == ObJsonNodeType::J_NULL) {
+          // the knob was not requested
+        } else if (OB_FAIL(options->add(OLLAMA_OPTION_MAPPINGS[i].option_key_, value))) {
+        }
+      }
+      if (OB_SUCC(ret) && options->element_count() > 0) {
+        if (OB_FAIL(body_obj->add("options", options))) {
+        }
+      }
+    }
+    // Ollama selects the json output mode with a top level "format" field.
+    if (OB_SUCC(ret)) {
+      ObJsonNode *format = config->get_value("format");
+      if (!OB_ISNULL(format) && format->json_type() != ObJsonNodeType::J_NULL) {
+        if (OB_FAIL(body_obj->add("format", format))) {
+        }
+      }
+    }
+    // The OpenAI style response format describes the same json output mode.
+    if (OB_SUCC(ret)) {
+      ObJsonNode *response_format = config->get_value("response_format");
+      if (!OB_ISNULL(response_format) && response_format->json_type() == ObJsonNodeType::J_OBJECT) {
+        ObJsonNode *type = static_cast<ObJsonObject *>(response_format)->get_value("type");
+        if (!OB_ISNULL(type) && type->json_type() == ObJsonNodeType::J_STRING) {
+          ObString type_str(type->get_data_length(), type->get_data());
+          if (type_str.case_compare("json") == 0 || type_str.case_compare("json_object") == 0) {
+            ObJsonString *json_str = nullptr;
+            ObString json_mode("json");
+            if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, json_mode, json_str))) {
+            } else if (OB_FAIL(body_obj->add("format", json_str))) {
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObOllamaUtils::copy_top_level_config(common::ObIAllocator &allocator,
+                                          common::ObJsonObject *config,
+                                          common::ObJsonObject *body_obj)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(body_obj)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!OB_ISNULL(config) && config->element_count() > 0) {
+    const int64_t count = config->element_count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
+      ObJsonNode *value = config->get_value(i);
+      ObString key;
+      if (OB_ISNULL(value)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(config->get_key(i, key))) {
+      } else if (is_reserved_ollama_config_key(key)) {
+        // the request owns this field, the config may not replace it
+      } else if (value->json_type() == ObJsonNodeType::J_NULL) {
+        // an explicit null carries no value
+      } else if (OB_FAIL(body_obj->add(key, value))) {
+      }
     }
   }
   return ret;
@@ -328,7 +467,11 @@ int ObOllamaUtils::ObOllamaComplete::parse_output(common::ObIAllocator &allocato
     if (OB_FAIL(j_path.parse_path())) {
     } else if (OB_FAIL(j_tree->seek(j_path, j_path.path_node_cnt(), false, false, hit))) {
     } else if (hit.size() == 0) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = OB_INVALID_DATA;
+    } else if (hit[0]->json_type() != ObJsonNodeType::J_STRING) {
+      // Ollama answers with {"response": "..."}. Any other type is not a
+      // completion text.
+      ret = OB_INVALID_DATA;
     } else {
       result = hit[0];
     }
@@ -361,12 +504,9 @@ int ObOllamaUtils::ObOllamaEmbed::get_body(common::ObIAllocator &allocator,
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::transform_array_to_json_array(allocator, contents, input_array))) {
     } else if (OB_FAIL(body_obj->add("input", input_array))) {
+    } else if (OB_FAIL(copy_top_level_config(allocator, config, body_obj))) {
     } else {
       body = body_obj;
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body))) {
-      }
     }
   }
   return ret;
@@ -387,7 +527,11 @@ int ObOllamaUtils::ObOllamaEmbed::parse_output(common::ObIAllocator &allocator,
     if (OB_FAIL(j_path.parse_path())) {
     } else if (OB_FAIL(j_tree->seek(j_path, j_path.path_node_cnt(), false, false, hit))) {
     } else if (hit.size() == 0) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = OB_INVALID_DATA;
+    } else if (hit[0]->json_type() != ObJsonNodeType::J_ARRAY) {
+      // Ollama answers with {"embeddings": [[...], ...]}. Any other type is
+      // not an embedding.
+      ret = OB_INVALID_DATA;
     } else {
       result = hit[0];
     }
@@ -1063,6 +1207,9 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
     complete_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIComplete, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     complete_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeComplete, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    // Ollama speaks its own protocol, it is not OpenAI compatible.
+    complete_provider = OB_NEWx(ObOllamaUtils::ObOllamaComplete, &allocator);
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "this provider current is");
@@ -1086,6 +1233,9 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
     embed_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIEmbed, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     embed_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeEmbed, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    // Ollama speaks its own protocol, it is not OpenAI compatible.
+    embed_provider = OB_NEWx(ObOllamaUtils::ObOllamaEmbed, &allocator);
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "this provider current is");
