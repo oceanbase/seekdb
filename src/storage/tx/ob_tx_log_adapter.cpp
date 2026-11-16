@@ -72,6 +72,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
   } else {
     static const int64_t MAX_SLEEP_US = 100;
+    const int64_t diagnostic_begin_us = cur_ts;
     int64_t retry_cnt = 0;
     int64_t sleep_us = 0;
     int64_t expire_us = INT64_MAX;
@@ -108,7 +109,13 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
         cur_ts = ObTimeUtility::current_time();
       }
     } while (OB_EAGAIN == ret && cur_ts < expire_us);
-    
+    if (retry_cnt > 0) {
+      const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC append retry summary", KP(cb), K(size),
+          K(need_nonblock), K(block_flag), K(retry_timeout_us), K(retry_cnt), K(ret),
+          K(diagnostic_begin_us), K(diagnostic_end_us), K(expire_us));
+    }
+
   }
 
   return ret;

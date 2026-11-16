@@ -3037,15 +3037,21 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
     const int64_t replay_hint_v = replay_hint ?: trans_id_.get_id();
     log_block.get_header().set_log_entry_no(exec_info_.next_log_entry_no_);
     if (OB_FAIL(log_block.seal(replay_hint_v, barrier))) {
-    } else if (OB_SUCC(ls_tx_ctx_mgr_->get_ls_log_adapter()
-                       ->submit_log(log_block.get_buf(),
-                                    log_block.get_size(),
-                                    base_scn,
-                                    log_cb,
-                                    true,
-                                    retry_timeout_us))) {
-      busy_cbs_.add_last(log_cb);
-      log_cb->set_log_size(log_block.get_size());
+    } else {
+      const int64_t diagnostic_begin_us = ObTimeUtility::current_time();
+      ret = ls_tx_ctx_mgr_->get_ls_log_adapter()->submit_log(
+          log_block.get_buf(), log_block.get_size(), base_scn, log_cb, true, retry_timeout_us);
+      const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+      if (OB_SUCC(ret)) {
+        busy_cbs_.add_last(log_cb);
+        log_cb->set_log_size(log_block.get_size());
+      }
+      const bool diagnostic_abort = is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_ABORT_LOG);
+      if (diagnostic_abort || log_block.get_size() <= 16384) {
+        TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC append call summary", K_(trans_id), KP(this),
+            KP(log_cb), K(diagnostic_abort), "size", log_block.get_size(), K(retry_timeout_us),
+            K(ret), K(diagnostic_begin_us), K(diagnostic_end_us));
+      }
     }
   }
   return ret;
