@@ -10,13 +10,16 @@ def workspace_status():
         ("GIT_REVISION", ["rev-parse", "HEAD"]),
         ("GIT_BRANCH", ["rev-parse", "--abbrev-ref", "HEAD"]),
     ):
-        result = subprocess.run(
-            ["git", "-C", workspace] + arguments,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            encoding="utf-8",
-        )
-        value = result.stdout.strip() if result.returncode == 0 else "unknown"
+        try:
+            result = subprocess.run(
+                ["git", "-C", workspace] + arguments,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                encoding="utf-8",
+            )
+            value = result.stdout.strip() if result.returncode == 0 else "unknown"
+        except OSError:
+            value = "unknown"
         sys.stdout.buffer.write(("STABLE_SEEKDB_%s %s\n" % (key, value)).encode("utf-8"))
 
 
@@ -24,6 +27,7 @@ def version_source(template, status_file, output):
     status = dict(
         line.split(" ", 1)
         for line in Path(status_file).read_text(encoding="utf-8").splitlines()
+        if line.strip()
     )
     values = {
         "BUILD_NUMBER": "1",
