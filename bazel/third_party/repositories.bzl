@@ -11,7 +11,7 @@ def _link_directory_contents(repository_ctx, directories, destination):
 def _windows_sdk(repository_ctx):
     sdk = str(repository_ctx.workspace_root) + "/deps/3rd"
     headers = {}
-    for directory in ["vcpkg/x64-windows/include", "openssl/include", "vsag/include"]:
+    for directory in ["vcpkg/x64-windows/include", "openssl/include"]:
         for child in repository_ctx.path(sdk + "/" + directory).readdir():
             headers[child.basename] = child
     locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/native"
@@ -39,14 +39,16 @@ def _windows_sdk(repository_ctx):
     if result.return_code:
         fail("Cannot prepare Windows dirent header: " + result.stderr)
     for source, destination in {
-        "vcpkg/x64-windows/bin": "bin",
         "openssl/lib/VC/x64/MD": "openssl",
         "openssl/bin": "openssl_bin",
-        "vsag/lib": "vsag",
-        "vsag/bin": "vsag_bin",
         "tools/llvm18": "devtools",
     }.items():
         repository_ctx.symlink(sdk + "/" + source, destination)
+    locked_bins = locked_sdk + "/bin"
+    if repository_ctx.path(locked_bins).exists:
+        _link_directory_contents(repository_ctx, [locked_bins, sdk + "/vcpkg/x64-windows/bin"], "bin")
+    else:
+        repository_ctx.symlink(sdk + "/vcpkg/x64-windows/bin", "bin")
     locked_libraries = locked_sdk + "/lib"
     if repository_ctx.path(locked_libraries).exists:
         _link_directory_contents(repository_ctx, [locked_libraries, sdk + "/vcpkg/x64-windows/lib"], "lib")

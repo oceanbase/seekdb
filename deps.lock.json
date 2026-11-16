@@ -65,6 +65,16 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-wasm32-emscripten-20261113T073702%2B0000-655b9e5f1178.tar.gz",
         "sha256": "62891c4f3de67bd215771b34c842a35c8034bb78a562fca37945d81d4fe8962d"
       }
+    },
+    "windows-x86_64-md": {
+      "jemalloc": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-windows-x86_64-md-20261114T020301%2B0000-845c8920ddfb.tar.gz",
+        "sha256": "c4613853aabe251fa5abf12dec68bd468cf47551735185f1270ae228bd9cef49"
+      },
+      "vsag": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-windows-x86_64-md-20261114T022500%2B0000-24707283d449.tar.gz",
+        "sha256": "49b1a01fb56bcd8d19b301cffd926ac078c92332fe4ddff5aba70ab1289fdbd8"
+      }
     }
   }
 }

@@ -80,7 +80,7 @@ _WINDOWS_SHARED = {
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
     "pthreads": ("lib/pthreadVC3.lib", "bin/pthreadVC3.dll", []),
-    "openmp": ("vsag/libomp.lib", "vsag_bin/libomp.dll", []),
+    "openmp": ("lib/libomp.lib", "bin/libomp.dll", []),
 }
 
 _WINDOWS_HEADER_LIBRARIES = {
@@ -104,7 +104,7 @@ def _windows_libraries():
     # Archives within one upstream package stay private to its library target.
     archives = {
         "absl": (native.glob(["lib/absl_*.lib"]), [":abseil_dll"]),
-        "vsag": (["vsag/" + name + ".lib" for name in [
+        "vsag": (["lib/" + name + ".lib" for name in [
             "cpuinfo", "simd", "vsag_static", "diskann", "openblas",
             "antlr4-runtime-static", "antlr4-autogen", "fmt",
         ]], [":openmp"]),
@@ -125,7 +125,7 @@ def _windows_libraries():
         )
 
 def sdk_targets(windows = False):
-    native.exports_files(HOST_FILES + native.glob(["lib/**/*.a", "lib/**/*.so", "lib/**/*.so.*", "lib64/**/*.a", "lib64/**/*.so", "lib64/**/*.so.*"], allow_empty = True))
+    native.exports_files(HOST_FILES + native.glob(["lib/**/*.a", "lib/**/*.so", "lib/**/*.so.*", "lib64/**/*.a", "lib64/**/*.so", "lib64/**/*.so.*"] + (["lib/**/*.lib"] if windows else []), allow_empty = True))
     for name, attributes in SDK_HEADERS.items():
         if windows and name in _WINDOWS_HEADER_LIBRARIES:
             attributes = attributes | {"deps": _WINDOWS_HEADER_LIBRARIES[name]}

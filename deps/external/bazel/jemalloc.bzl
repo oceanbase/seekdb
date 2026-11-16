@@ -12,27 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Expose prebuilt jemalloc, retaining the Rust build for iOS and Windows."""
+"""Expose prebuilt jemalloc, retaining the Rust build for iOS."""
 
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_rust//rust:rust_common.bzl", "BuildInfo")
-load("//bazel:platforms.bzl", "PLATFORM_ATTRS", "target_platform")
 
 def _jemalloc_build_impl(ctx):
-    windows = target_platform(ctx).os == "windows"
-    archive_name = "jemalloc.lib" if windows else "libjemalloc_pic.a"
-    built_archive = "jemalloc_s.lib" if windows else "libjemalloc_pic.a"
-    archive = ctx.actions.declare_file("jemalloc/lib/" + archive_name)
+    archive = ctx.actions.declare_file("jemalloc/lib/libjemalloc_pic.a")
     public_header = ctx.actions.declare_file("jemalloc/include/jemalloc/jemalloc.h")
     output = ctx.attr.build_script[BuildInfo].out_dir
     ctx.actions.run_shell(
         inputs = [output],
         outputs = [archive, public_header],
-        arguments = [output.path, archive.path, public_header.path, built_archive],
-        command = 'cp "$1/jemalloc-build/lib/$4" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"',
+        arguments = [output.path, archive.path, public_header.path],
+        command = 'cp "$1/jemalloc-build/lib/libjemalloc_pic.a" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"',
         mnemonic = "JemallocArtifacts",
-        use_default_shell_env = windows,
     )
     return [
         DefaultInfo(files = depset([archive, public_header])),
@@ -46,7 +41,7 @@ _jemalloc_build = rule(
     implementation = _jemalloc_build_impl,
     attrs = {
         "build_script": attr.label(default = "@external_crates//:jemalloc_build", providers = [BuildInfo]),
-    } | PLATFORM_ATTRS,
+    },
 )
 
 def jemalloc(name):
@@ -59,7 +54,6 @@ def jemalloc(name):
         name = build_target,
         target_compatible_with = select({
             "@platforms//os:ios": [],
-            "@platforms//os:windows": [],
             "//conditions:default": ["@platforms//:incompatible"],
         }),
     )
@@ -88,6 +82,7 @@ def jemalloc(name):
             "@platforms//os:linux": ["@third_party_native//:lib/libjemalloc_pic.a"],
             "@platforms//os:macos": ["@third_party_native//:lib/libjemalloc_pic.a"],
             "@platforms//os:android": ["@third_party_android//:lib/libjemalloc_pic.a"],
+            "@platforms//os:windows": ["@third_party_native//:lib/jemalloc.lib"],
             "//conditions:default": [":" + rust_archive],
         }),
         visibility = ["//src/observer:__pkg__"],
@@ -99,6 +94,7 @@ def jemalloc(name):
             "@platforms//os:linux": "@third_party_native//:jemalloc_headers",
             "@platforms//os:macos": "@third_party_native//:jemalloc_headers",
             "@platforms//os:android": "@third_party_android//:jemalloc_headers",
+            "@platforms//os:windows": "@third_party_native//:jemalloc_headers",
             "//conditions:default": ":_%s_rust_headers" % name,
         }),
         visibility = ["//src/oblib:__pkg__", "//src/observer:__pkg__"],
