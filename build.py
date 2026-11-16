@@ -21,6 +21,17 @@ class BuildError(RuntimeError):
     """The seekdb build environment could not be prepared."""
 
 
+def _check_windows_toolset() -> None:
+    # Released Windows dependencies were built with the VS 2022 14.44 toolset.
+    version = os.environ.get("VCToolsVersion", "")
+    if not re.fullmatch(r"14\.44\.\d+", version):
+        raise BuildError(
+            "Windows builds require the MSVC 14.44 toolset used by seekdb-deps; "
+            "initialize the VS 2022 x64 developer environment with -vcvars_ver=14.44 "
+            "(found %s)" % (version or "no active MSVC toolset")
+        )
+
+
 def _host_platform() -> str:
     system = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}.get(
         platform.system()
@@ -225,6 +236,8 @@ def main(arguments: List[str]) -> int:
     command, *arguments = arguments
     if command.startswith("-"):
         parser.error("put the command before its options, for example: build -o build3 seekdb")
+    if os.name == "nt" and command in ("build", "test", "run", "coverage"):
+        _check_windows_toolset()
     separator = arguments.index("--") if "--" in arguments else len(arguments)
     options, remaining = bootstrap.parse_known_args(arguments[:separator])
     cache = options.launcher_cache_dir.expanduser().resolve()
