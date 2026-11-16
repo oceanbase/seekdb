@@ -300,3 +300,6 @@ constructed_negative	parsed_negative
 select json_search('{"a":"leaf","nested":{"a":"leaf"}}','all','leaf',null,'$**.a') as recursive_locations;
 recursive_locations
 ["$.a", "$.nested.a"]
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('9223372036854775808' AS JSON)) ELSE JSON_TYPE(CAST('9223372036854775808' AS JSON)) END AS type_name;
+type_name
+UNSIGNED INTEGER
