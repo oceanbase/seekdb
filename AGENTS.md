@@ -34,6 +34,10 @@
 
 - For pull request or diff review tasks, read and follow `.agents/skills/code-review/SKILL.md`.
 
+## Pull Request Submission
+
+- For pull request preparation, description, submission, and description-update tasks, read and follow `.agents/skills/submit-pull-request/SKILL.md`.
+
 ## Testing
 
 - Add unit tests only for the internal Rust implementation of the seekdb product.
