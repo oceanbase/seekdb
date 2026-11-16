@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX TRANS
 
+#include "logservice/palf/seek1402_deferred_capture.h"
 #include "rust/config.h"
 #include "ob_tx_ctx.h"
 #include "share/ob_debug_sync.h"
@@ -3038,6 +3039,8 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
     log_block.get_header().set_log_entry_no(exec_info_.next_log_entry_no_);
     if (OB_FAIL(log_block.seal(replay_hint_v, barrier))) {
     } else {
+      const bool diagnostic_abort = is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_ABORT_LOG);
+      palf::Seek1402AbortScope diagnostic_scope(diagnostic_abort);
       const int64_t diagnostic_begin_us = ObTimeUtility::current_time();
       ret = ls_tx_ctx_mgr_->get_ls_log_adapter()->submit_log(
           log_block.get_buf(), log_block.get_size(), base_scn, log_cb, true, retry_timeout_us);
@@ -3046,8 +3049,7 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
         busy_cbs_.add_last(log_cb);
         log_cb->set_log_size(log_block.get_size());
       }
-      const bool diagnostic_abort = is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_ABORT_LOG);
-      if (diagnostic_abort || log_block.get_size() <= 16384) {
+      if (diagnostic_abort) {
         TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC append call summary", K_(trans_id), KP(this),
             KP(log_cb), K(diagnostic_abort), "size", log_block.get_size(), K(retry_timeout_us),
             K(ret), K(diagnostic_begin_us), K(diagnostic_end_us));

@@ -125,7 +125,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred capture completeness", KP(cb), K(size),
           "recorded", capture.count, "dropped", capture.dropped);
     }
-    if (retry_cnt > 0) {
+    if (retry_cnt > 0 && capture.abort_scope) {
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC append retry summary", KP(cb), K(size),
           K(need_nonblock), K(block_flag), K(retry_timeout_us), K(retry_cnt), K(ret),
           K(diagnostic_begin_us), K(diagnostic_end_us), K(expire_us));
