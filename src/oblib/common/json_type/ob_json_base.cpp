@@ -380,7 +380,6 @@ OrderResult compare_temporal(rust::Slice<const uint8_t> left, rust::Slice<const 
   if (OB_FAIL(a.reset_iter())) {
   } else if (OB_FAIL(b.reset_iter())) {
   } else if (a.json_type() == ObJsonNodeType::J_TIME && b.json_type() == ObJsonNodeType::J_TIME) {
-    // TIME payloads are signed microseconds, including fractional seconds.
     result.order = (a.get_int() > b.get_int()) - (a.get_int() < b.get_int());
   } else if (OB_FAIL(ObJsonBaseUtil::get_dt_mode_by_json_type(b.json_type(), mode_b))) {
   } else if (OB_FAIL(a.get_obtime(time_a))) {
