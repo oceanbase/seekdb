@@ -228,10 +228,6 @@ bool LogSlidingWindow::can_submit_new_log_(const int64_t valid_log_size, LSN &ls
   } else {
     bool_ret = true;
   }
-  if (!bool_ret) {
-    seek1402_capture().add(2, valid_log_size, curr_end_lsn.val_, curr_committed_end_lsn.val_,
-        buffer_reuse_lsn.val_, group_buffer_size, reuse_base_lsn.val_, lsn_upper_bound.val_, tmp_ret);
-  }
   return bool_ret;
 }
 
