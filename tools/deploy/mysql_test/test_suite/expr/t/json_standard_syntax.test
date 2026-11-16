@@ -111,6 +111,14 @@ set @json_invalid_mutation_value = null;
 select json_set('{"a":[1,2]}', '$.a[0]', 9, '$.a[1]', 8);
 select json_schema_valid(json_object('enum',json_array(time '12:00:00.000001')),json_extract(json_array(time '12:00:00.000002'),'$[0]'));
 select json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'));
+--echo # Negative SQL TIME values retain their sign and microseconds in JSON
+select json_array(time '-12:00:00.000001', time '-12:00:00.000002') as negative_time_array;
+select json_type(json_extract(json_array(time '-12:00:00.000001'), '$[0]')) as element_type;
+select cast(json_extract(json_array(time '-12:00:00.000002'), '$[0]') as time(6)) as round_trip;
+select json_schema_valid(json_object('enum', json_array(time '-12:00:00.000001')),
+  json_extract(json_array(time '-12:00:00.000002'), '$[0]')) as enum_valid;
+select json_schema_valid('{"uniqueItems":true}',
+  json_array(time '-12:00:00.000001', time '-12:00:00.000002')) as unique_items_valid;
 prepare json_table_nested_scan from 'select * from json_table(?, ''$[*]'' columns(nested path ''$.a[*]'' columns(nested path ''$.b[*]'' columns(v int path ''$'')))) jt';
 set @json_nested_document = '[{"a":[{"b":[1,2]}]},{"a":[{"b":[3]}]}]';
 execute json_table_nested_scan using @json_nested_document;

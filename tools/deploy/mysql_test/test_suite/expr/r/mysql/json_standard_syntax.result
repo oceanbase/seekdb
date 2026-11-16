@@ -276,6 +276,24 @@ json_schema_valid(json_object('enum',json_array(time '12:00:00.000001')),json_ex
 select json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'));
 json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'))
 1
+# Negative SQL TIME values retain their sign and microseconds in JSON
+select json_array(time '-12:00:00.000001', time '-12:00:00.000002') as negative_time_array;
+negative_time_array
+["-12:00:00.000001", "-12:00:00.000002"]
+select json_type(json_extract(json_array(time '-12:00:00.000001'), '$[0]')) as element_type;
+element_type
+TIME
+select cast(json_extract(json_array(time '-12:00:00.000002'), '$[0]') as time(6)) as round_trip;
+round_trip
+-12:00:00.000002
+select json_schema_valid(json_object('enum', json_array(time '-12:00:00.000001')),
+json_extract(json_array(time '-12:00:00.000002'), '$[0]')) as enum_valid;
+enum_valid
+0
+select json_schema_valid('{"uniqueItems":true}',
+json_array(time '-12:00:00.000001', time '-12:00:00.000002')) as unique_items_valid;
+unique_items_valid
+1
 prepare json_table_nested_scan from 'select * from json_table(?, ''$[*]'' columns(nested path ''$.a[*]'' columns(nested path ''$.b[*]'' columns(v int path ''$'')))) jt';
 set @json_nested_document = '[{"a":[{"b":[1,2]}]},{"a":[{"b":[3]}]}]';
 execute json_table_nested_scan using @json_nested_document;
