@@ -3,7 +3,7 @@ name: code-review
 description: Review seekdb pull requests and diffs for high-signal correctness, resource-lifetime, concurrency, current-version state-consistency, credential-exposure, workflow-security, performance, and test-evidence defects. Use when reviewing changes to seekdb C++, Rust, build, CI, or test code; report only actionable Blocker or Major findings and exclude persistence-format and upgrade-compatibility analysis.
 ---
 
-# SeekDB Code Review
+# seekdb Code Review
 
 ## Review Goal
 
@@ -16,7 +16,11 @@ Write review comments in English.
 ## Establish the Contract
 
 1. Read the pull request title, description, linked issue, changed tests, and
-   available CI results.
+   available CI results. Check the description against the current repository
+   pull request template, `.github/pull_request_template.md`: identify missing
+   or incomplete sections and ask the author to supply the information or state
+   why it does not apply. Report template gaps separately from code findings;
+   do not treat a missing section alone as a Blocker or Major.
 2. State the behavior the change promises before judging its implementation.
 3. Inspect enough surrounding code to understand the existing invariant. Do
    not review the diff in isolation.
@@ -26,6 +30,13 @@ Write review comments in English.
 5. When behavior is unclear, use a concrete input, state, and execution
    sequence to prove the defect. If proof is incomplete but the potential
    impact is serious, state exactly what evidence or focused test is missing.
+6. For a bug fix, trace the defective behavior through relevant history, such
+   as blame, commits, and linked pull requests. Verify the causal change before
+   attributing the bug to a PR; a commit that merely moved code is not enough.
+   Record the introducing PR and the evidence in the fix PR description. If it
+   cannot be identified, say so and summarize the history checked; do not guess.
+   When reviewing someone else's PR, report this information in the review or
+   ask the author to add it rather than editing the PR without authorization.
 
 ## Required Checks
 
@@ -46,8 +57,20 @@ Write review comments in English.
   changes, check equivalent syntax and expression forms, aliases, NULL and
   boundary behavior, and every relevant stage that carries the same semantic.
 - **Rust and networking:** Check transport errors, protocol handling, resource
-  cleanup, and platform-specific behavior for supported Linux and Windows
-  paths. Require focused Rust tests for changed behavior when practical.
+  cleanup, and platform-specific behavior. Require focused Rust tests for
+  changed behavior when practical.
+- **Platform-specific behavior:** For changes that may depend on the platform,
+  establish the affected component's supported targets from current repository
+  build configuration, CI, and documentation; do not assume the same support
+  matrix for every component. Trace relevant OS, architecture, compiler, libc,
+  kernel, build flags, and dependencies through conditional compilation, build
+  selection, packaging, and runtime behavior. Compare the affected paths and
+  check whether tests or CI actually exercise each relevant configuration.
+  Where practical, address platform differences in the lowest appropriate
+  platform-specific layer behind a common contract so upper layers remain
+  platform-independent. Check that the contract holds on relevant supported
+  targets; do not add an abstraction without a concrete need or demand an
+  unrelated refactor. A missing CI job alone does not prove a defect.
 - **Security:** Apply the dedicated security review below to product code,
   workflows, build scripts, tests, documentation, and repository instructions.
 - **Performance:** Report material regressions in hot paths, such as repeated
@@ -140,6 +163,15 @@ For every finding:
 4. Propose the smallest viable fix or focused test that proves correctness.
 5. Distinguish demonstrated defects from serious risks that still need
    verification.
+
+For a platform-specific finding, make the PR review comment self-contained:
+identify the affected OS and architecture and any version, toolchain, build
+option, or dependency needed to trigger it; explain the platform-specific code
+path and observable impact, and give the smallest relevant fix or focused test.
+State what was reproduced or verified and what remains inferred or untested.
+Mention unaffected platforms only when supported by evidence; do not generalize
+a failure or a passing test beyond the configuration actually checked. Apply
+the same Blocker/Major threshold and evidence standard as for other findings.
 
 Do not emit Nits, a completed-checklist report, a fixed-format summary, or a
 final approval verdict. Do not approve, request changes, or block the pull

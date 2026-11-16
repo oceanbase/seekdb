@@ -269,8 +269,7 @@ public:
   // Graceful shutdown for libseekdb embed: stop services and tenant modules without destroy().
   void embed_shutdown();
   int wait_until_refreshed(
-      common::ObMySQLProxy &mysql_proxy,
-      int64_t timeout_us) override;
+      int64_t abs_timeout_us) override;
   int get_min_dep_lsn(palf::LSN &min_dep_lsn) override;
 
 public:

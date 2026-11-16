@@ -16,6 +16,10 @@
 
 - Use `#pragma once` in new C++ header files instead of macro-based `#ifndef`/`#define` include guards.
 
+## Rust Toolchain
+
+- Write Rust code for the version pinned in `rust-toolchain.toml`. Prefer language features and standard library APIs stabilized in that version or earlier when they simplify the implementation. Compatibility with older compilers is not required. Do not rewrite existing code solely to adopt newer features.
+
 ## Rust–C++ Interoperability
 
 - Before designing, implementing, or reviewing a Rust migration or refactor, read and follow [Rust refactoring guidelines](docs/developer-guide/en/rust-refactoring.md). This includes changes to C++ callers, CXX bridges, and build integration within that task.

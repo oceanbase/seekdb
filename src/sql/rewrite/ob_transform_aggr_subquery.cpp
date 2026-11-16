@@ -1569,13 +1569,15 @@ int ObTransformAggrSubquery::modify_vector_comparison_expr_if_necessary(ObSelect
   if (OB_ISNULL(expr_factory) || OB_ISNULL(parent_expr_of_query_ref) || select_exprs.count() == 0) {
     ret = OB_ERR_UNEXPECTED;
   } else if (IS_SUBQUERY_COMPARISON_OP(parent_expr_of_query_ref->get_expr_type())) {
-    // construct a T_OP_ROW expr through vector projection term of subquery
-    ObOpRawExpr* op_row_expr;
-    ObSEArray<ObRawExpr*, 4> temp_expr;
-    if (OB_FAIL(ObTransformUtils::build_row_expr(*expr_factory, select_exprs, op_row_expr))) {
-    } else if (OB_FAIL(temp_expr.push_back(op_row_expr))) {
+    if (select_exprs.count() > 1 ||
+        T_OP_ROW == parent_expr_of_query_ref->get_param_expr(0)->get_expr_type()) {
+      ObOpRawExpr* op_row_expr;
+      ObSEArray<ObRawExpr*, 4> temp_expr;
+      if (OB_FAIL(ObTransformUtils::build_row_expr(*expr_factory, select_exprs, op_row_expr))) {
+      } else if (OB_FAIL(temp_expr.push_back(op_row_expr))) {
+      } else if (OB_FAIL(select_exprs.assign(temp_expr))) {
+      }
     }
-    select_exprs.assign(temp_expr);
     // replace parent_expr_of_query_ref with subquery comparison operator to the one of common comparison operator
     ObItemType value_cmp_type = T_INVALID;
     if (FAILEDx(ObTransformUtils::query_cmp_to_value_cmp(parent_expr_of_query_ref->get_expr_type(), value_cmp_type))) {

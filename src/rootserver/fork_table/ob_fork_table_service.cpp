@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include "lib/time/ob_time_utility.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_service.h"
@@ -347,7 +348,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
           } else if (OB_ISNULL(rootserver_local_runtime())) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(rootserver_local_runtime()->wait_until_change_stream_refreshed(
-                         get_sql_proxy(), lock_timeout_us))) {
+                         ObTimeUtility::current_time() + lock_timeout_us))) {
           } else {
             LOG_INFO("async index sync completed before fork snapshot",
                      "table_id", src_table_schema->get_table_id());

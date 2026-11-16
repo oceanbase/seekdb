@@ -221,7 +221,8 @@ public:
   // Check if the current primary key conflicts
   int check_duplicate_rowkey(const ObChunkDatumStore::StoredRow *replace_row,
                              ObIArray<ObConflictValue> &constraint_values,
-                             bool is_insert_up);
+                             bool is_insert_up,
+                             ObNewRowSource &conflict_row_source);
   // Remove conflicting rows from hash map
   int delete_old_row(const ObChunkDatumStore::StoredRow *replace_row,
                      ObNewRowSource from);
@@ -230,7 +231,8 @@ public:
                      ObNewRowSource from);
 
   int update_row(const ObChunkDatumStore::StoredRow *new_row,
-                 const ObChunkDatumStore::StoredRow *old_row);
+                 const ObChunkDatumStore::StoredRow *old_row,
+                 ObNewRowSource from);
 
   int lock_row(const ObChunkDatumStore::StoredRow *lock_row);
 

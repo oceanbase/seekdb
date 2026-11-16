@@ -183,11 +183,33 @@ int ObDMLService::check_column_type(const ExprFixedArray &dml_row,
     dml_op.get_exec_ctx().set_cur_column_name(&column_name);
     ObExpr *expr = dml_row.at(column_info.projector_index_);
     ObDatum *datum = nullptr;
+    ObExpr *value_expr = nullptr;
+    bool value_evaluated_before = false;
+    if (T_FUN_COLUMN_CONV == expr->type_ && expr->arg_cnt_ > 4) {
+      value_expr = expr->args_[4];
+      value_evaluated_before = !value_expr->is_batch_result()
+          && value_expr->get_eval_info(dml_op.get_eval_ctx()).evaluated_;
+    }
     if (OB_FAIL(expr->eval(dml_op.get_eval_ctx(), datum))) {
       ret = ObDMLService::log_user_error_inner(ret, row_num, column_name, dml_op.get_exec_ctx(),
                                                expr->datum_meta_.type_);
     } else if (OB_ISNULL(datum)) {
       // impossible
+    } else if (datum->is_null()) {
+      // A NULL assignment has no out-of-range diagnostic.
+    } else if (T_FUN_COLUMN_CONV == expr->type_
+               && ob_is_integer_type(expr->datum_meta_.type_)
+               && OB_NOT_NULL(value_expr)
+               && value_expr->get_eval_info(dml_op.get_eval_ctx()).integer_range_warning_
+               && row_num > 0) {
+      if (T_QUESTIONMARK == value_expr->type_
+          || (value_evaluated_before && T_FUN_SYS_CAST == value_expr->type_)) {
+        // A constant assignment can reuse its converted datum across DML rows.
+        // The question mark never reports while evaluating; the cast reported
+        // only when it actually ran. Publish the retained diagnostic once for
+        // this target column and row, without duplicating a fresh conversion.
+        LOG_USER_WARN(OB_DATA_OUT_OF_RANGE, column_name.length(), column_name.ptr(), row_num);
+      }
     } else if (OB_FAIL(check_geometry_type(dml_op.get_eval_ctx(),
                                            dml_row,
                                            column_info,
@@ -1724,8 +1746,24 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
       ObDASWriteBuffer::DAS_WITH_TRANS_INFO_EXTEND_SIZE : ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE;
   // 1. find das dml op
   OpType *dml_op = nullptr;
-  if (OB_UNLIKELY(!dml_rtctx.das_ref_.has_das_op(tablet_access, dml_op))) {
-    if (OB_FAIL(dml_rtctx.das_ref_.prepare_das_task(tablet_access, dml_op))) {
+  // One upsert batch can carry both statement text and vectors fetched from
+  // storage. They need different projectors, so they cannot share one task.
+  DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT;
+  if (N == DAS_OP_TABLE_INSERT) {
+    bool uses_stored_embedding = ctdef.is_embedded_vec_from_old_row_;
+    if (OB_NOT_NULL(rtdef.related_ctdefs_)) {
+      for (int64_t i = 0; !uses_stored_embedding && i < rtdef.related_ctdefs_->count(); ++i) {
+        const ObDASDMLBaseCtDef *related_ctdef = rtdef.related_ctdefs_->at(i);
+        uses_stored_embedding = OB_NOT_NULL(related_ctdef)
+            && related_ctdef->is_embedded_vec_from_old_row_;
+      }
+    }
+    if (uses_stored_embedding) {
+      vec_datum_kind = DAS_VEC_DATUM_EMBEDDED;
+    }
+  }
+  if (OB_UNLIKELY(!dml_rtctx.das_ref_.has_das_op(tablet_access, dml_op, vec_datum_kind))) {
+    if (OB_FAIL(dml_rtctx.das_ref_.prepare_das_task(tablet_access, dml_op, vec_datum_kind))) {
     } else if (OB_FAIL(dml_op->init_task_info(extend_size))) {
     } else {
       dml_op->set_das_ctdef(static_cast<const CtDefType*>(&ctdef));

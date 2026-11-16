@@ -1614,23 +1614,53 @@ int ObPluginVectorIndexUtils::get_vector_index_prefix_inner(const ObTableSchema 
     const char* index_snapshot_data_table = ObVecIndexBuilderUtil::SNAPSHOT_DATA_TABLE_NAME_SUFFIX;
     const char* hybrid_log_table = ObVecIndexBuilderUtil::HYBRID_LOG_TABLE_NAME_SUFFIX;
     const char* hybrid_embedded_table = ObVecIndexBuilderUtil::HYBRID_EMBEDDED_VEC_TABLE_NAME_SUFFIX;
-    int64_t prefix_len = 0;
+    const char* ivf_centroid_table = ObVecIndexBuilderUtil::IVF_CENTROID_TABLE_NAME_SUFFIX;
+    const char* ivf_rowkey_cid_table = ObVecIndexBuilderUtil::IVF_ROWKEY_CID_TABLE_NAME_SUFFIX;
+    const char* ivf_cid_vector_table = ObVecIndexBuilderUtil::IVF_CID_VECTOR_TABLE_NAME_SUFFIX;
+    const char* ivf_sq_meta_table = ObVecIndexBuilderUtil::IVF_SQ_META_TABLE_NAME_SUFFIX;
+    const char* ivf_pq_centroid_table = ObVecIndexBuilderUtil::IVF_PQ_CENTROID_TABLE_NAME_SUFFIX;
+    const char* ivf_pq_code_table = ObVecIndexBuilderUtil::IVF_PQ_CODE_TABLE_NAME_SUFFIX;
+    const char* ivf_pq_rowkey_cid_table = ObVecIndexBuilderUtil::IVF_PQ_ROWKEY_CID_TABLE_NAME_SUFFIX;
+    const char* suffix = nullptr;
 
     if (index_schema.is_vec_delta_buffer_type()) {
-      prefix_len = table_name_len - strlen(delta_buffer_table);
+      suffix = delta_buffer_table;
     } else if (index_schema.is_vec_index_id_type()) {
-      prefix_len = table_name_len - strlen(index_id_table);
+      suffix = index_id_table;
     } else if (index_schema.is_vec_index_snapshot_data_type()) {
-      prefix_len = table_name_len - strlen(index_snapshot_data_table);
+      suffix = index_snapshot_data_table;
     } else if (index_schema.is_hybrid_vec_index_log_type()) {
-      prefix_len = table_name_len - strlen(hybrid_log_table);
+      suffix = hybrid_log_table;
     } else if (index_schema.is_hybrid_vec_index_embedded_type()) {
-      prefix_len = table_name_len - strlen(hybrid_embedded_table);
+      suffix = hybrid_embedded_table;
+    } else if (index_schema.is_vec_ivf_centroid_index()) {
+      suffix = ivf_centroid_table;
+    } else if (index_schema.is_vec_ivfflat_rowkey_cid_index()
+               || index_schema.is_vec_ivfsq8_rowkey_cid_index()) {
+      suffix = ivf_rowkey_cid_table;
+    } else if (index_schema.is_vec_ivfflat_cid_vector_index()
+               || index_schema.is_vec_ivfsq8_cid_vector_index()) {
+      suffix = ivf_cid_vector_table;
+    } else if (index_schema.is_vec_ivfsq8_meta_index()) {
+      suffix = ivf_sq_meta_table;
+    } else if (index_schema.is_vec_ivfpq_pq_centroid_index()) {
+      suffix = ivf_pq_centroid_table;
+    } else if (index_schema.is_vec_ivfpq_code_index()) {
+      suffix = ivf_pq_code_table;
+    } else if (index_schema.is_vec_ivfpq_rowkey_cid_index()) {
+      suffix = ivf_pq_rowkey_cid_table;
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected vector index type", K(ret), K(index_schema.get_index_type()),
+               K(index_schema.get_table_name_str()));
     }
-    if (OB_SUCC(ret)) {
-      prefix.assign_ptr(index_name.ptr(), prefix_len);
+    const int64_t suffix_len = OB_NOT_NULL(suffix) ? static_cast<int64_t>(strlen(suffix)) : 0;
+    if (OB_SUCC(ret) && OB_UNLIKELY(table_name_len < suffix_len)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index name is shorter than its aux suffix", K(ret), K(index_name),
+               K(index_schema.get_index_type()), K(suffix_len));
+    } else if (OB_SUCC(ret)) {
+      prefix.assign_ptr(index_name.ptr(), table_name_len - suffix_len);
       LOG_INFO("get_index_prefix", K(prefix), K(index_name));
     }
   }

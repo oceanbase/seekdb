@@ -6275,8 +6275,6 @@ int ObDDLService::fill_column_collation(
                 sql_mode))) {
     } else if (OB_FAIL(ObDDLResolver::calc_enum_or_set_data_length(column_schema))) {
     }
-  } else if (ObGeometryTC == col_tc && !column_schema.is_nullable()) {
-    ret = OB_ER_INVALID_USE_OF_NULL;
   } else if (ObCollectionSQLTC == col_tc && !column_schema.is_nullable()) {
     ret = OB_ER_INVALID_USE_OF_NULL;
   }
@@ -7753,6 +7751,9 @@ int ObDDLService::add_new_column_to_table_schema(
   }
   // fill column collation
   if (OB_FAIL(ret)) {
+  } else if (ObGeometryTC == alter_column_schema.get_data_type_class()
+             && !alter_column_schema.is_nullable()) {
+    ret = OB_ER_INVALID_USE_OF_NULL;
   } else if (OB_FAIL(fill_column_collation(sql_mode,
                                            new_table_schema,
                                            allocator,

@@ -317,6 +317,7 @@ _OBSERVER_MAIN_OBJECT_TARGETS = [
 cc_library(
     name = "windows_service",
     srcs = ["ob_win_service.cpp", "ob_win_service.h"],
+    deps = ["//src/oblib:oblib_foundation"],
     target_compatible_with = ["@platforms//os:windows"],
 )
 

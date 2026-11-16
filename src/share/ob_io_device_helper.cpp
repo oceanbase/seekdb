@@ -614,11 +614,15 @@ int ObIODeviceLocalFileOp::fallocate(
 #elif defined(_WIN32)
     HANDLE h = (HANDLE)_get_osfhandle(static_cast<int32_t>(fd.second_id_));
     if (h == INVALID_HANDLE_VALUE) {
+      errno = EBADF;
       sys_ret = -1;
     } else {
-      LARGE_INTEGER li;
-      li.QuadPart = offset + len;
-      if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
+      // Positional reads and writes also move a synchronous handle's file pointer.
+      // Set the length directly so concurrent I/O cannot turn growth into truncation.
+      FILE_END_OF_FILE_INFO end_info = {};
+      end_info.EndOfFile.QuadPart = offset + len;
+      if (!SetFileInformationByHandle(h, FileEndOfFileInfo, &end_info, sizeof(end_info))) {
+        errno = common::ob_win32_error_to_errno(::GetLastError());
         sys_ret = -1;
       }
     }

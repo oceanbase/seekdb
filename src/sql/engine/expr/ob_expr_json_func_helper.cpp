@@ -851,7 +851,9 @@ static int convert_datum_to_json(const ObDatum &datum, const ObObjMeta &meta,
     integer = datum.get_bool();
   } else if (ObJsonExprHelper::is_convertible_to_json(type)) {
     payload = datum.get_string();
-    if (!oracle && type != ObJsonType && OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
+    const bool binary_lob = !oracle && !format_json && ob_is_text_tc(type) && cs_type == CS_TYPE_BINARY;
+    if (!oracle && type != ObJsonType && !binary_lob
+        && OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
     } else if (OB_FAIL(common::lob_helper::read_real_string_data(
         &allocator, type, cs_type, meta.has_lob_header(), payload, lob_options))) {
     } else if (oracle && type != ObJsonType && cs_type != CS_TYPE_INVALID && cs_type != CS_TYPE_BINARY
@@ -859,6 +861,10 @@ static int convert_datum_to_json(const ObDatum &datum, const ObObjMeta &meta,
     } else if (type == ObJsonType) {
       converted.bytes.emplace<ObString>(payload);
       has_binary = true;
+    } else if (binary_lob) {
+      // Opaque JSON values serialize binary data as a MySQL type-tagged Base64 string.
+      kind = 13;
+      field_type = static_cast<uint16_t>(type);
     } else if (format_json) {
       auto parsed = common::json::parse_binary(
           rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(payload.ptr()), payload.length()),

@@ -1,0 +1,12 @@
+# SEEK-269: a shared ROW constructor must not be scheduled as a scalar calculation.
+CREATE TABLE t3(c1 VARCHAR(500), c2 TINYTEXT);
+CREATE TABLE t4(c0 VARCHAR(500), c1 DATETIME, UNIQUE KEY(c1));
+INSERT INTO t3 VALUES ('p', '2025-01-01 00:00:00');
+INSERT INTO t4 VALUES ('a', '2026-01-01 00:00:00');
+
+SELECT 1 FROM t4 LEFT JOIN t3 ON t4.c1 >= t3.c2
+WHERE IF(t4.c0 IN ('a', 'b') OR
+ (t3.c1, t4.c0) NOT IN ((t3.c1, t4.c0), ('x', t4.c0)), 1, 0)
+ NOT IN (t3.c2, 0);
+
+DROP TABLE t4, t3;

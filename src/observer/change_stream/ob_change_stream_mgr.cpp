@@ -159,17 +159,14 @@ int ObChangeStreamMgr::get_min_dep_lsn(palf::LSN &min_dep_lsn) const
 }
 
 int ObChangeStreamMgr::wait_refresh_scn(
-    common::ObISQLClient &sql_client,
-    const int64_t timeout_us)
+    const int64_t abs_timeout_us)
 {
-  UNUSED(sql_client);
   int ret = common::OB_SUCCESS;
-  const int64_t abs_timeout_us = ObTimeUtility::current_time() + timeout_us;
   ObChangeStreamMgr *mgr = share::server_service<ObChangeStreamMgr>();
   bool refresh_completed = false;
 
-  if (timeout_us <= 0) {
-    ret = OB_INVALID_ARGUMENT;
+  if (ObTimeUtility::current_time() >= abs_timeout_us) {
+    ret = OB_TIMEOUT;
   } else if (OB_ISNULL(mgr) || !mgr->is_inited()) {
     ret = OB_NOT_INIT;
   }

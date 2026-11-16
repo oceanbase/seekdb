@@ -1,6 +1,21 @@
 from pathlib import Path
+import os
 import re
+import subprocess
 import sys
+import tempfile
+
+
+def generate_flex(arguments):
+    # Flex creates temporary files with predictable names. Give each Bazel action
+    # its own directory so concurrent actions on the same host cannot collide.
+    # TMP/TEMP are the MSVC CRT variables; TMPDIR is the POSIX one. FLEX_TMP_DIR
+    # is also honoured by the bundled Windows SDK build.
+    with tempfile.TemporaryDirectory(prefix="flex-") as directory:
+        environment = os.environ.copy()
+        for variable in ("TMP", "TEMP", "TMPDIR", "FLEX_TMP_DIR"):
+            environment[variable] = os.path.abspath(directory)
+        return subprocess.run(arguments, env=environment).returncode
 
 
 def patch_lexer(source, kind):
@@ -36,6 +51,8 @@ def type_names(source):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "flex":
+        sys.exit(generate_flex(sys.argv[2:]))
     kind, source, output = sys.argv[1:]
     text = Path(source).read_text(encoding="utf-8")
     text = type_names(text) if kind == "type_names" else patch_lexer(text, kind)

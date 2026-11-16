@@ -1552,12 +1552,23 @@ fn native_order_preserves_database_type_matrix_and_scalar_errors() {
     let date = BinaryDocument::new([32,0,0,0,0]).unwrap();
     let datetime = BinaryDocument::new([33,0,0,0,0,0,0,0,0]).unwrap();
     let mut no_callback = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| -> Result<_, ()> { panic!("matrix decided the order") };
-    assert_eq!(crate::compare::order(date.root().unwrap(), datetime.root().unwrap(), &mut no_callback).unwrap(), Greater);
+    assert_eq!(crate::compare::order(date.root().unwrap(), datetime.root().unwrap(), &mut no_callback).unwrap(), Less);
     assert_eq!(crate::compare::order(datetime.root().unwrap(), date.root().unwrap(), &mut no_callback).unwrap(), Greater);
     let mut callback = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| Err(37);
     assert!(matches!(crate::compare::order(timestamp.root().unwrap(), datetime.root().unwrap(), &mut callback), Err(crate::compare::OrderError::Scalar(37))));
     let oracle_number = BinaryDocument::new([18,1]).unwrap();
     assert!(matches!(crate::compare::order(oracle_number.root().unwrap(), date.root().unwrap(), &mut no_callback), Err(crate::compare::OrderError::UnsupportedTypes)));
+}
+
+#[test]
+fn native_order_compares_matching_temporal_subtypes_by_value() {
+    use std::cmp::Ordering::*;
+    let date = BinaryDocument::new([9,0,0,0,0]).unwrap();
+    let mysql_date = BinaryDocument::new([32,0,0,0,0]).unwrap();
+    let mut greater = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| -> Result<_, ()> { Ok(Greater) };
+    assert_eq!(crate::compare::order(date.root().unwrap(), mysql_date.root().unwrap(), &mut greater).unwrap(), Greater);
+    let mut less = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| -> Result<_, ()> { Ok(Less) };
+    assert_eq!(crate::compare::order(mysql_date.root().unwrap(), date.root().unwrap(), &mut less).unwrap(), Less);
 }
 
 #[test]

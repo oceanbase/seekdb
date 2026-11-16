@@ -4,7 +4,7 @@ seekdb uses Bazel, Rust, and a repository-managed compiler and dependency set. I
 
 ## Rust
 
-`./build.py init` installs rustup if needed, then prepares the toolchain, components, and targets declared in `rust-toolchain.toml`. The repository pins Rust `1.98.1`. Run `init` before the first build and after changing the toolchain file. Downloads and installation logs are shown in the terminal; `build` reports a missing toolchain and asks you to run `init`.
+`./build.py init` installs rustup if needed, then prepares the toolchain, components, and targets declared in `rust-toolchain.toml`. The repository pins Rust `1.100.0`. Run `init` before the first build and after changing the toolchain file. Downloads and installation logs are shown in the terminal; `build` reports a missing toolchain and asks you to run `init`.
 
 Native init requires only the host Rust standard library and clippy. The Android, iOS device, and iOS simulator init options install their Rust targets on demand. CI installs the Windows GNU target explicitly before its cross-platform check. Host and cross targets use the same pinned toolchain.
 

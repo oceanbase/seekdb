@@ -73,7 +73,7 @@ DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FINISH_BACKFILL_TX, ObDagPrio::DAG_PRIO_STOR
     true, 1, {"ls_id"})
 
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_VECTOR_INDEX, ObDagPrio::DAG_PRIO_VECTOR_INDEX, ObSysTaskType::VECTOR_INDEX_TASK, "VECTOR_INDEX_DAG", "VECTOR_INDEX",
-    false, 3, {"ls_id", "table_id", "tablet_id"})
+    false, 2, {"table_id", "tablet_id"})
 
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_MAX, ObDagPrio::DAG_PRIO_MAX, ObSysTaskType::MAX_SYS_TASK_TYPE, "DAG_TYPE_MAX", "INVALID", false, 0, {})
 #endif

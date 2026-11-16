@@ -33,7 +33,8 @@ OB_SERIALIZE_MEMBER(ObKeepAliveLogBody, min_start_scn_, min_start_status_);
 
 int64_t ObKeepAliveLogBody::get_max_serialize_size()
 {
-  SCN scn = SCN::max_scn();
+  // The invalid sentinel used by UNKOWN needs one more varint byte than the largest valid SCN.
+  SCN scn = SCN::invalid_scn();
   ObKeepAliveLogBody max_log_body(scn, MinStartScnStatus::MAX);
   return max_log_body.get_serialize_size();
 }
