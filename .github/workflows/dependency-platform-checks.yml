@@ -28,6 +28,23 @@ permissions:
   contents: read
 
 jobs:
+  linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    env:
+      RUSTUP_DIST_SERVER: https://static.rust-lang.org
+      RUSTUP_UPDATE_ROOT: https://static.rust-lang.org/rustup
+      RUSTUP_INIT_URL: https://sh.rustup.rs
+      SEEKDB_DEPS_GITHUB_PROXY_PREFIX: ''
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show build environment
+        run: uname -a; df -h .
+      - name: Initialize dependencies
+        run: python3 build.py init
+      - name: Build seekdb
+        run: python3 build.py build --jobs=2 seekdb
+
   apple:
     name: ${{ matrix.platform }}
     runs-on: macos-15
@@ -42,6 +59,9 @@ jobs:
           - platform: ios-arm64
             init: '--ios'
             config: '--config=ios'
+          - platform: ios-simulator-arm64
+            init: '--ios --simulator'
+            config: '--config=ios-simulator'
     env:
       RUSTUP_DIST_SERVER: https://static.rust-lang.org
       RUSTUP_UPDATE_ROOT: https://static.rust-lang.org/rustup
