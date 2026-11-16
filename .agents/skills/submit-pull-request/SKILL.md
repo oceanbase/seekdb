@@ -22,13 +22,15 @@ language.
 1. Read the linked issue, the full diff, the head SHA, and the changed
    implementation. Follow callers, callees, and serializers far enough to
    explain the mechanism; do not explain implementation from the title.
-2. Reuse verifiable original logs and upstream test cases when available.
-3. Label four evidence classes separately: prior measurement, current
+2. If the change has an associated Multica issue, include its link or
+   identifier (for example, `SEEK-xxx`) in the Task Description section.
+3. Reuse verifiable original logs and upstream test cases when available.
+4. Label four evidence classes separately: prior measurement, current
    re-verification, source-level inference, and unverified.
-4. Keep the change focused. Do not expand a description task into code
+5. Keep the change focused. Do not expand a description task into code
    changes, full test runs, or unrelated fixes, and do not silently rewrite
    tests to make them pass.
-5. If the user asks for a draft only, return the draft. If the user asked
+6. If the user asks for a draft only, return the draft. If the user asked
    to replace or update the description, do it without asking again.
 
 ## Root Cause Standard for Bug Fixes
