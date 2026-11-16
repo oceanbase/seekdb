@@ -949,9 +949,8 @@ public:
   {
     hashnode *node = NULL;
     int64_t bucket_pos = 0;
-    //if (NULL == buckets_ || NULL == allocer_)
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG_RET(HASH_WARNING, OB_NOT_INIT, "hashtable not init, backtrace=%s", lbt());
+      return end();
     } else {
       while (NULL == node && bucket_pos < bucket_num_) {
         node = buckets_[bucket_pos].node;
@@ -973,7 +972,7 @@ public:
     hashnode *node = NULL;
     int64_t bucket_pos = 0;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG_RET(HASH_WARNING, OB_NOT_INIT, "hashtable not init, backtrace=%s", lbt());
+      return end();
     } else {
       while (NULL == node && bucket_pos < bucket_num_) {
         node = buckets_[bucket_pos].node;
