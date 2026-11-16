@@ -116,6 +116,12 @@ int ObExprJsonType::calc_result_type1(ObExprResType &type,
   type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
   type.set_collation_level(CS_LEVEL_IMPLICIT);
 
+  ObLength max_length = 0;
+  for (const char *type_name : json_type_string_map) {
+    max_length = MAX(max_length, static_cast<ObLength>(strlen(type_name)));
+  }
+  type.set_length(max_length);
+
   if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(type1, 1, N_JSON_TYPE))) {
   }
   
