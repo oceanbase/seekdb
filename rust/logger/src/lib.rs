@@ -374,6 +374,7 @@ pub fn start() -> i32 {
             policy::set_option(policy::INITIALIZED, 1);
             policy::set_option(policy::STOPPED, 0);
             policy::set_option(policy::STOP_APPEND, 0);
+            seek1402_diagnostic::snapshot();
             OK
         }
         Err(_) => ERROR,
