@@ -10,13 +10,31 @@ struct Seek1402Capture {
   bool abort_scope = false;
   int64_t count = 0;
   int64_t dropped = 0;
-  Record records[64];
-  void begin() { count = 0; dropped = 0; active = abort_scope; }
+  Record records[8];
+  uint64_t sequence[8];
+  uint64_t total = 0;
+  uint64_t kind_total[4] = {};
+  int64_t first[4];
+  int64_t last[4];
+  void begin() {
+    count = 0; dropped = 0; total = 0; active = abort_scope;
+    for (int64_t k = 0; k < 4; ++k) {
+      kind_total[k] = 0; first[k] = -1; last[k] = -1;
+    }
+  }
   void add(int64_t kind, uint64_t a=0, uint64_t b=0, uint64_t c=0,
            uint64_t d=0, uint64_t e=0, uint64_t f=0, uint64_t g=0, uint64_t h=0) {
     if (active) {
-      if (count < 64) { records[count++] = {kind, {a,b,c,d,e,f,g,h}}; }
-      else { ++dropped; }
+      ++total;
+      if (kind < 1 || kind > 4) { ++dropped; return; }
+      const int64_t k = kind - 1;
+      ++kind_total[k];
+      int64_t slot;
+      if (first[k] < 0) { slot = first[k] = count++; }
+      else if (last[k] < 0) { slot = last[k] = count++; }
+      else { slot = last[k]; ++dropped; }
+      records[slot] = {kind, {a,b,c,d,e,f,g,h}};
+      sequence[slot] = total - 1;
     }
   }
 };

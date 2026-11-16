@@ -117,13 +117,15 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     for (int64_t i = 0; i < capture.count; ++i) {
       const auto &event = capture.records[i];
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred admission", KP(cb), K(size), K(i),
-          "kind", event.kind, "v0", event.value[0], "v1", event.value[1],
+          "capture_mode", "first_last_per_kind", "sequence", capture.sequence[i],
+          "kind_total", capture.kind_total[event.kind - 1], "kind", event.kind, "v0", event.value[0], "v1", event.value[1],
           "v2", event.value[2], "v3", event.value[3], "v4", event.value[4],
           "v5", event.value[5], "v6", event.value[6], "v7", event.value[7]);
     }
     if (capture.abort_scope) {
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred capture completeness", KP(cb), K(size),
           "recorded", capture.count, "dropped", capture.dropped, "scope_abort", true,
+          "capture_mode", "first_last_per_kind", "observed", capture.total,
           "retry_count", retry_cnt, K(ret), K(diagnostic_begin_us), K(diagnostic_end_us));
     }
     if (retry_cnt > 0 && capture.abort_scope) {
