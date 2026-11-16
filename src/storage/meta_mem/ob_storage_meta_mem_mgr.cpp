@@ -83,7 +83,9 @@ void ObStorageMetaMemMgr::TabletGCTask::runTimerTask()
   ObDIActionGuard ag("TabletGCTask");
   int ret = OB_SUCCESS;
   bool all_tablet_cleaned = false;
-  const int64_t deadline = ObTimeUtility::current_monotonic_raw_time() + TABLE_GC_INTERVAL_US / 10;
+  constexpr int64_t TABLET_GC_BUDGET_US = 25 * 1000;
+  const int64_t deadline =
+      ObTimeUtility::current_monotonic_raw_time() + TABLET_GC_BUDGET_US;
   do {
     if (OB_FAIL(t3m_->gc_tablets_in_queue(all_tablet_cleaned))) {
       break;
