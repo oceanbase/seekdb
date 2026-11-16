@@ -839,7 +839,6 @@ CommandCancellationScope::CommandCancellationScope(
     status_(OB_SUCCESS)
 {
   if (mask_depth() != 0) {
-    // A compensation helper cannot reactivate a masked parent cancellation.
   } else if (previous_ != nullptr) {
     session_ = previous_->session_;
     manager_ = previous_->manager_;

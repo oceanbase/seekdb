@@ -22049,8 +22049,6 @@ int ObDDLSQLTransaction::end(const bool commit)
   if (OB_SUCC(ret) && commit) {
     ret = query::CommandCancellationScope::admit_commit(*this);
   }
-  // Cancellation remains sticky on the caller; commit admission or mandatory
-  // rollback must not re-enter that cancelled capability on a pooled session.
   query::CommandCancellationMask cancellation_mask;
   if (OB_SUCCESS != (tmp_ret = common::ObMySQLTransaction::end(commit && OB_SUCC(ret)))) {
   }
