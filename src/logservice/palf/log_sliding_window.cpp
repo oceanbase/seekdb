@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PALF
+#include "logservice/palf/seek1402_deferred_capture.h"
 #include "log_sliding_window.h"
 #include "log_engine.h"
 #include "log_io_task_cb_utils.h"
@@ -190,8 +191,7 @@ bool LogSlidingWindow::can_submit_larger_log_(const int64_t log_id) const
       || log_id >= sw_end_log_id) {
     // The local sliding window is full.
     bool_ret = false;
-    PALF_LOG_RET(INFO, OB_EAGAIN, "SEEK1402_DIAGNOSTIC window snapshot", K_(self),
-        K(start_log_id), K(sw_end_log_id), K(log_id));
+    seek1402_capture().add(1, start_log_id, sw_end_log_id, log_id);
     if (palf_reach_time_interval(5 * 1000 * 1000, larger_log_warn_time_)) {
       PALF_LOG(INFO, "sw is full, cannot submit larger log", K_(self), K(start_log_id), \
           K(sw_end_log_id), K(log_id));
@@ -228,10 +228,9 @@ bool LogSlidingWindow::can_submit_new_log_(const int64_t valid_log_size, LSN &ls
   } else {
     bool_ret = true;
   }
-  if (!bool_ret && (valid_log_size <= 128 || REACH_TIME_INTERVAL(1000 * 1000))) {
-    PALF_LOG_RET(INFO, OB_EAGAIN, "SEEK1402_DIAGNOSTIC space snapshot", K_(self), K(tmp_ret),
-        K(valid_log_size), K(curr_end_lsn), K(curr_committed_end_lsn),
-        K(buffer_reuse_lsn), K(group_buffer_size), K(reuse_base_lsn), K(lsn_upper_bound));
+  if (!bool_ret) {
+    seek1402_capture().add(2, valid_log_size, curr_end_lsn.val_, curr_committed_end_lsn.val_,
+        buffer_reuse_lsn.val_, group_buffer_size, reuse_base_lsn.val_, lsn_upper_bound.val_, tmp_ret);
   }
   return bool_ret;
 }
@@ -295,11 +294,8 @@ int LogSlidingWindow::submit_log(const char *buf,
              || (diagnostic_window_checked = true,
                  !(diagnostic_window_allowed = can_submit_larger_log_(get_max_log_id() + 1)))) {
     ret = OB_EAGAIN;
-    if (valid_log_size <= 128 || REACH_TIME_INTERVAL(1000 * 1000)) {
-      PALF_LOG(INFO, "SEEK1402_DIAGNOSTIC admission rejected", K(ret), K_(self),
-          K(diagnostic_space_allowed), K(diagnostic_window_checked), K(diagnostic_window_allowed),
-          K(valid_log_size), K(lsn_upper_bound), K(start_log_id), K(log_id_upper_bound));
-    }
+    seek1402_capture().add(3, valid_log_size, lsn_upper_bound.val_, start_log_id,
+        log_id_upper_bound, diagnostic_space_allowed, diagnostic_window_checked, diagnostic_window_allowed);
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
       PALF_LOG(ERROR, "cannot submit new log now, try again", K(ret), K_(self),
           K(valid_log_size), K(buf_len), "start_id", get_start_id(), "max_log_id", get_max_log_id());

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "logservice/palf/seek1402_deferred_capture.h"
 #include "ob_tx_log_adapter.h"
 #include "src/storage/ls/ob_ls.h"
 
@@ -83,6 +84,8 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     if (expire_us == INT64_MAX) {
       block_flag = false;
     }
+    palf::Seek1402Capture &capture = palf::seek1402_capture();
+    capture.begin();
     do {
       if (is_big_log && OB_FAIL(log_handler_->append_big_log(buf, size, base_scn, block_flag,
                                                               cb, lsn, scn))) {
@@ -109,8 +112,20 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
         cur_ts = ObTimeUtility::current_time();
       }
     } while (OB_EAGAIN == ret && cur_ts < expire_us);
+    const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+    capture.active = false;
+    for (int64_t i = 0; i < capture.count; ++i) {
+      const auto &event = capture.records[i];
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred admission", KP(cb), K(size), K(i),
+          "kind", event.kind, "v0", event.value[0], "v1", event.value[1],
+          "v2", event.value[2], "v3", event.value[3], "v4", event.value[4],
+          "v5", event.value[5], "v6", event.value[6], "v7", event.value[7]);
+    }
+    if (capture.count > 0 || capture.dropped > 0) {
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred capture completeness", KP(cb), K(size),
+          "recorded", capture.count, "dropped", capture.dropped);
+    }
     if (retry_cnt > 0) {
-      const int64_t diagnostic_end_us = ObTimeUtility::current_time();
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC append retry summary", KP(cb), K(size),
           K(need_nonblock), K(block_flag), K(retry_timeout_us), K(retry_cnt), K(ret),
           K(diagnostic_begin_us), K(diagnostic_end_us), K(expire_us));
