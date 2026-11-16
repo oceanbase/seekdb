@@ -167,6 +167,9 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
     }
   } else {
     bool_ret = true;
+    seek1402_capture().recover_space(total_len, lsn.val_, ref_reuse_lsn.val_,
+        observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
+        (reuse_lsn + observed_capacity).val_);
   }
   return bool_ret;
 }
