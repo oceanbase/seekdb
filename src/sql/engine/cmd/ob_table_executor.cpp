@@ -1567,7 +1567,6 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
           const int64_t timeout_ts = std::min(worker_deadline,
               timeout_ctx.get_abs_timeout(worker_deadline));
           tmp_arg.is_parallel_ = true;
-          // The local call shares the query deadline and any earlier inherited limit.
           if (OB_UNLIKELY(timeout_ts <= ObTimeUtility::current_time())) {
             ret = OB_TIMEOUT;
           } else if (OB_FAIL(timeout_ctx.set_abs_timeout(timeout_ts))) {
