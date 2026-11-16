@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX TRANS
 
+#include <cstdio>
+#include <cstdlib>
+
 #include "logservice/palf/seek1402_deferred_capture.h"
 #include "rust/config.h"
 #include "ob_tx_ctx.h"
@@ -3049,7 +3052,18 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
         busy_cbs_.add_last(log_cb);
         log_cb->set_log_size(log_block.get_size());
       }
-      if (is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_REDO_LOG)) {
+      static const char *diagnostic_redo_arm_path = std::getenv("SEEK1402_REDO_ARM_FILE");
+      static bool diagnostic_redo_armed = false;
+      if (is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_REDO_LOG)
+          && NULL != diagnostic_redo_arm_path && !ATOMIC_LOAD(&diagnostic_redo_armed)) {
+        std::FILE *diagnostic_arm_file = std::fopen(diagnostic_redo_arm_path, "r");
+        if (NULL != diagnostic_arm_file) {
+          std::fclose(diagnostic_arm_file);
+          ATOMIC_STORE(&diagnostic_redo_armed, true);
+        }
+      }
+      if (is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_REDO_LOG)
+          && ATOMIC_LOAD(&diagnostic_redo_armed)) {
         static int64_t diagnostic_redo_calls = 0;
         static const int64_t DIAGNOSTIC_REDO_CALL_LIMIT = 8192;
         const int64_t diagnostic_redo_sequence = ATOMIC_FAA(&diagnostic_redo_calls, 1);
@@ -3057,10 +3071,10 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
           TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC redo append call summary", K_(trans_id), KP(this),
               KP(log_cb), K(diagnostic_abort), "size", log_block.get_size(), K(retry_timeout_us),
               K(ret), K(diagnostic_begin_us), K(diagnostic_end_us), K(diagnostic_redo_sequence),
-              "record_limit", DIAGNOSTIC_REDO_CALL_LIMIT);
+              "record_limit", DIAGNOSTIC_REDO_CALL_LIMIT, "capture_scope", "after_arm_file");
         } else if (diagnostic_redo_sequence == DIAGNOSTIC_REDO_CALL_LIMIT) {
           TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC redo capture overflow",
-              K(diagnostic_redo_sequence), "record_limit", DIAGNOSTIC_REDO_CALL_LIMIT);
+              K(diagnostic_redo_sequence), "record_limit", DIAGNOSTIC_REDO_CALL_LIMIT, "capture_scope", "after_arm_file");
         }
       }
       if (diagnostic_abort) {
