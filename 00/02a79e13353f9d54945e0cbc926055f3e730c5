@@ -1,0 +1,19 @@
+.github/workflows/seekdb.yml
+  s_99bd9318300c1c::t_cae8678982cf70 1-2,6-31,35-39,42-44,47-57,59-71,73-78,81-83,85-102,104-111,113-124,126-165,167-177,179-194,196-230,232-250,252-282,284-290,292-371
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0002a79e13353f9d54945e0cbc926055f3e730c5",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai <5187215+hnwyllmm@users.noreply.github.com>"
+    }
+  }
+}

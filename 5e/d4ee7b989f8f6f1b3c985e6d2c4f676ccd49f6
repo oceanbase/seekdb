@@ -1,0 +1,23 @@
+bazel/cxx.bzl
+  s_7966c2b79dc7d9::t_db5ad1ed4e6486 50-51
+  s_7966c2b79dc7d9::t_eae812524e2012 56
+src/observer/BUILD.bazel
+  s_7966c2b79dc7d9::t_fdd75249cc43ad 651
+  s_7966c2b79dc7d9::t_e0bb0fb93e602f 652-654,659-660
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5ed4ee7b989f8f6f1b3c985e6d2c4f676ccd49f6",
+  "prompts": {},
+  "sessions": {
+    "s_7966c2b79dc7d9": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "3375ffcb-47f8-4626-a108-c5811ec63525",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

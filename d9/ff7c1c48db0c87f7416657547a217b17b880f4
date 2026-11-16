@@ -1,0 +1,24 @@
+bazel/toolchains/cc/android_cc_toolchain_repo.bzl
+  s_99bd9318300c1c::t_b0a4d462ccfcf8 6
+  s_99bd9318300c1c::t_a48969066b2e9b 5
+docs/developer-guide/en/android.md
+  s_99bd9318300c1c::t_b0a4d462ccfcf8 9,32-39
+.bazelrc
+  s_99bd9318300c1c::t_b0a4d462ccfcf8 51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d9ff7c1c48db0c87f7416657547a217b17b880f4",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

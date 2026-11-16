@@ -1,0 +1,18 @@
+src/oblib/lib/profile/ob_trace_id.h
+  h_d52e93c5978515 298-401
+src/observer/ob_inner_sql_connection.cpp
+  h_d52e93c5978515 35-38,41-319,1359,1375,1377,1392
+src/pl/sys_package/ob_dbms_stats.cpp
+  h_d52e93c5978515 19,190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0980c3d65470944b16e2cb23ad13e6625ae1030e",
+  "prompts": {},
+  "humans": {
+    "h_d52e93c5978515": {
+      "author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

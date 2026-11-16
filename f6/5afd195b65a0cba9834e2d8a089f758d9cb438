@@ -1,0 +1,129 @@
+src/share/BUILD.bazel
+  s_99bd9318300c1c::t_53fa23f4d841fd 394
+src/observer/vector_index/ob_vector_index_i_task_executor.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 30-39,261-263,353-355
+src/sql/das/ob_das_dml_vec_iter.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 679-682
+src/observer/BUILD.bazel
+  s_99bd9318300c1c::t_53fa23f4d841fd 320
+src/sql/engine/dml/ob_table_insert_up_op.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 150-151,356-359,365-366,428-434,927,936-938,940-943
+package/msi/seekdb.wxs
+  s_99bd9318300c1c::t_53fa23f4d841fd 9-15
+src/observer/vector_index/ob_vector_index_util.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 2137-2140,2175-2176,2178,2473-2675,3314,3316-3319
+src/sql/engine/expr/ob_expr_ai/ob_ai_func.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 53-54
+src/sql/engine/expr/ob_expr.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 20,791,838-844
+src/sql/engine/expr/ob_expr_json_array.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 65-67
+src/sql/engine/expr/ob_expr_json_func_helper.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 854-856,864-867
+src/sql/das/ob_das_dml_ctx_define.h
+  s_99bd9318300c1c::t_53fa23f4d841fd 65,97-98
+.github/workflows/rust-checks.yml
+  s_99bd9318300c1c::t_53fa23f4d841fd 36
+.github/workflows/license-header.yml
+  s_99bd9318300c1c::t_53fa23f4d841fd 19-20
+src/sql/das/ob_das_ref.h
+  s_99bd9318300c1c::t_53fa23f4d841fd 196-197,199-200,202-203,209,214,235-238,245-246,249-250,319-320,324,334-335,339
+src/sql/engine/dml/ob_conflict_checker.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 417-418,422,446-450,556-557,561
+src/sql/engine/dml/ob_conflict_checker.h
+  s_99bd9318300c1c::t_53fa23f4d841fd 224-225,234-235
+src/sql/engine/dml/ob_table_replace_op.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 667,675-676
+rust/json/src/tests.rs
+  s_99bd9318300c1c::t_53fa23f4d841fd 1555,1563-1571
+  s_99bd9318300c1c::t_75e97143ba2a94 1572-1573
+bazel/parser.bzl
+  s_99bd9318300c1c::t_53fa23f4d841fd 62-64,66-68,70
+src/sql/engine/expr/ob_expr_url_codec.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 312
+src/sql/optimizer/ob_join_order.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 1426,1464,16213-16236
+bazel/parser_codegen.py
+  s_99bd9318300c1c::t_53fa23f4d841fd 2,4,6-18,54-55
+src/sql/tablelock/ob_lock_func_executor.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 232,235-247
+src/sql/resolver/dcl/ob_lock_user_resolver.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 97-101
+tools/deploy/mysql_test/test_suite/expr/r/mysql/url_codec_collation.result
+  s_99bd9318300c1c::t_53fa23f4d841fd 1-23
+src/oblib/lib/oblog/ob_warning_buffer.h
+  s_99bd9318300c1c::t_53fa23f4d841fd 91,105-107,150,158,165,213-218
+src/share/local_io_config.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 28,173
+src/observer/ob_win_service.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 20,119-132,135-138,141,183-192,194-195,200,263-269
+.agents/skills/code-review/SKILL.md
+  s_99bd9318300c1c::t_53fa23f4d841fd 6,19-23,33-39,60-73,167-174
+  s_99bd9318300c1c::t_6d078541390b4d 175
+src/share/ob_io_device_helper.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 617,620-625
+rust/sql-nio/src/response.rs
+  s_99bd9318300c1c::t_53fa23f4d841fd 507-508,879-886
+rust/json/src/compare.rs
+  s_99bd9318300c1c::t_53fa23f4d841fd 482,490,565-566
+src/query/api/query/vector/ob_vector_index_util.h
+  s_99bd9318300c1c::t_53fa23f4d841fd 645-653
+.github/workflows/seekdb.yml
+  s_99bd9318300c1c::t_53fa23f4d841fd 12
+src/observer/virtual_table/ob_all_virtual_memstore_usage.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 48-50,100
+src/sql/das/ob_das_task.h
+  s_99bd9318300c1c::t_53fa23f4d841fd 41-49,129,162-163,280-282
+src/sql/engine/dml/ob_dml_service.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 186-192,198-212,1749-1766
+src/sql/code_generator/ob_dml_cg_service.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 1568-1604,1621-1622,1691-1694
+src/sql/engine/expr/ob_expr_array_sortby.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 197,199-223
+src/sql/resolver/dcl/ob_grant_resolver.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 485-488
+src/sql/das/ob_das_ref.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 99-100,108,137-138,144,161,192,209,485-486,503
+src/query/api/query/engine/expr/ob_expr.h
+  s_99bd9318300c1c::t_53fa23f4d841fd 154-156
+src/pl/ob_pl_interpreter.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 151,155,168-170,172-173,177-178,205-206,224,247-253,331,338-340,343,346-349,364,366,404-407,409-435,437-445,449-451,488-495,793-801,1075-1076
+src/sql/engine/expr/ob_datum_cast.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 691-692,695,704-713,2541-2562,2572,2591,2824-2825,2828,2844
+src/sql/optimizer/ob_log_plan.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 12432-12440,12443-12444,12451-12459,12463-12464,12472-12480,12484-12485
+tools/deploy/mysql_test/test_suite/expr/r/mysql/empty_user_dcl.result
+  s_99bd9318300c1c::t_53fa23f4d841fd 1-6
+tools/deploy/mysql_test/test_suite/expr/r/mysql/named_lock_context.result
+  s_99bd9318300c1c::t_53fa23f4d841fd 1-48
+tools/deploy/mysql_test/test_suite/expr/t/empty_user_dcl.test
+  s_99bd9318300c1c::t_53fa23f4d841fd 1-6
+tools/deploy/mysql_test/test_suite/expr/t/named_lock_context.test
+  s_99bd9318300c1c::t_53fa23f4d841fd 1-30
+tools/deploy/mysql_test/r/mysql/datatype_java.result
+  s_99bd9318300c1c::t_53fa23f4d841fd 28-29,32-35
+tools/deploy/mysql_test/test_suite/expr/t/url_codec_collation.test
+  s_99bd9318300c1c::t_53fa23f4d841fd 1-24
+src/sql/ob_spi.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 1276-1295
+src/observer/vector_index/ob_plugin_vector_index_utils.cpp
+  s_99bd9318300c1c::t_53fa23f4d841fd 1617-1624,1627,1629,1631,1633,1635-1651,1654-1655,1657-1663
+src/sql/code_generator/ob_dml_cg_service.h
+  s_99bd9318300c1c::t_53fa23f4d841fd 240-242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f65afd195b65a0cba9834e2d8a089f758d9cb438",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai <5187215+hnwyllmm@users.noreply.github.com>"
+    }
+  }
+}

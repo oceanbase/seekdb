@@ -1,0 +1,26 @@
+package/libseekdb/README.md
+  s_f87238b17c0588::t_fc7fa51479f190 29
+  s_f87238b17c0588::t_827c9c13ff26d5 20-23,25,27-28,30-33
+  s_f87238b17c0588::t_076cf00a88e331 24,26
+package/libseekdb/libseekdb-build.sh
+  s_f87238b17c0588::t_63d28fea0723ce 80-91,93-121
+  s_f87238b17c0588::t_06127e9f319fe0 92
+  s_f87238b17c0588::t_4ed36e9850b7d0 319-329,336,338-339
+  s_f87238b17c0588::t_185197703d1db9 330-335,337
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3164dc0da762732e852c82cd4f590a2081994338",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}
