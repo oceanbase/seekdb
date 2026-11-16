@@ -48,7 +48,6 @@ public:
   static int backup_opt_stats(ObExecContext &ctx,
                               ObMySQLTransaction &trans,
                               const ObTableStatParam &param,
-                              int64_t saving_time,
                               bool is_backup_for_gather = false);
 
   static int restore_table_stats(ObExecContext &ctx,
@@ -112,7 +111,7 @@ private:
   static int backup_table_stats(ObExecContext &ctx,
                                 ObMySQLTransaction &trans,
                                 const ObTableStatParam &param,
-                                const int64_t saving_time,
+                                const int64_t saving_time_ns,
                                 ObIArray<int64_t> &part_ids);
 
   static int calssify_table_stat_part_ids(ObExecContext &ctx,
@@ -126,17 +125,17 @@ private:
                                             const uint64_t table_id,
                                             const bool is_specify_partition,
                                             const ObIArray<int64_t> &partition_ids,
-                                            const int64_t saving_time);
+                                            const int64_t saving_time_ns);
 
   static int backup_no_table_part_stats(ObMySQLTransaction &trans,
                                         const uint64_t table_id,
                                         const ObIArray<int64_t> &partition_ids,
-                                        const int64_t saving_time);
+                                        const int64_t saving_time_ns);
 
   static int backup_column_stats(ObExecContext &ctx,
                                  ObMySQLTransaction &trans,
                                  const ObTableStatParam &param,
-                                 const int64_t saving_time,
+                                 const int64_t saving_time_ns,
                                  const ObIArray<int64_t> &part_ids,
                                  const ObIArray<uint64_t> &column_ids);
 
@@ -154,14 +153,14 @@ private:
                                         const ObIArray<int64_t> &partition_ids,
                                         const ObIArray<uint64_t> &column_ids,
                                         hash::ObHashMap<ObOptColumnStat::Key, bool> &having_stat_part_col_map,
-                                        const int64_t saving_time);
+                                        const int64_t saving_time_ns);
 
   static int backup_no_column_stats(ObMySQLTransaction &trans,
                                     const uint64_t table_id,
                                     const ObIArray<int64_t> &partition_ids,
                                     const ObIArray<uint64_t> &column_ids,
                                     hash::ObHashMap<ObOptColumnStat::Key, bool> &having_stat_part_col_map,
-                                    const int64_t saving_time);
+                                    const int64_t saving_time_ns);
 
    static int backup_histogram_stats(ObMySQLTransaction &trans,
                                      const uint64_t table_id,
@@ -170,7 +169,7 @@ private:
                                      const ObIArray<int64_t> &partition_ids,
                                      const ObIArray<uint64_t> &column_ids,
                                      hash::ObHashMap<ObOptColumnStat::Key, bool> &having_stat_part_col_map,
-                                     const int64_t saving_time);
+                                     const int64_t saving_time_ns);
 
   static int remove_useless_column_stats(ObMySQLTransaction &trans,
                                          const uint64_t start_time,

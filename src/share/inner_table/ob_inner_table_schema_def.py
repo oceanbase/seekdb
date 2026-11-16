@@ -770,7 +770,7 @@ def_table_schema(
       ('table_id', 'int'),
       ('partition_id', 'int'),
       ('column_id', 'int'),
-      ('savtime', 'timestamp')
+      ('savtime', 'int')
   ],
   is_cluster_private = False,
   normal_columns = [
@@ -810,7 +810,7 @@ def_table_schema(
       ('partition_id', 'int'),
       ('column_id', 'int'),
       ('endpoint_num', 'int'),
-      ('savtime', 'timestamp')
+      ('savtime', 'int')
   ],
   is_cluster_private = False,
   normal_columns = [
@@ -1744,7 +1744,7 @@ def_table_schema(
   rowkey_columns = [
       ('table_id', 'int'),
       ('partition_id', 'int'),
-      ('savtime', 'timestamp')
+      ('savtime', 'int')
   ],
   is_cluster_private = False,
   normal_columns = [

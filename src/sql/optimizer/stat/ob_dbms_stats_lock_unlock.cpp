@@ -161,7 +161,7 @@ int ObDbmsStatsLockUnlock::get_stats_history_sql(ObExecContext &ctx,
 
     if (OB_SUCC(ret) && need_update_lock) {
       //before lock, we need record history stats.
-      if (OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
+      if (OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param))) {
       } else {/*do nothing*/}
     }
   }
