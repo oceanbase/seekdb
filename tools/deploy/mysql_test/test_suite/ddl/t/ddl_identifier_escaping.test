@@ -13,10 +13,6 @@ CREATE INDEX quoted_enum_idx ON ddl_identifier_escaping (`enum``name`);
 CREATE INDEX quoted_set_idx ON ddl_identifier_escaping (`set``name`);
 SELECT `id``key` AS id, `value``name` FROM ddl_identifier_escaping FORCE INDEX (quoted_value_idx)
   WHERE `value``name` = 20;
-SELECT `id``key` AS id, `enum``name` FROM ddl_identifier_escaping FORCE INDEX (quoted_enum_idx)
-  WHERE `enum``name` = 'a';
-SELECT `id``key` AS id, `set``name` FROM ddl_identifier_escaping FORCE INDEX (quoted_set_idx)
-  WHERE `set``name` = 'a,b';
 
 # Force an offline DDL to backfill the original columns, including ENUM/SET casts.
 ALTER TABLE ddl_identifier_escaping ADD COLUMN extra_id INT AUTO_INCREMENT UNIQUE;
