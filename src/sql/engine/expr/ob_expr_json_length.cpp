@@ -164,12 +164,36 @@ int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   return ret;
 }
 
+int ObExprJsonLength::eval_json_length_batch(const ObExpr &expr, ObEvalCtx &ctx,
+                                            const ObBitVector &skip, const int64_t batch_size)
+{
+  int ret = OB_SUCCESS;
+  if (batch_size > 0) {
+    ObEvalCtx::TempAllocGuard guard(ctx);
+    void *memory = guard.get_allocator().alloc(ObBitVector::memory_size(batch_size));
+    if (OB_ISNULL(memory)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      ObBitVector *pending = to_bit_vector(memory);
+      pending->bit_calculate(skip, expr.get_evaluated_flags(ctx), batch_size,
+          [](const uint64_t left, const uint64_t right) { return left | right; });
+      // Always evaluate the document; paths retain their scalar NULL/error handling.
+      if (OB_FAIL(expr.args_[0]->eval_batch(ctx, *pending, batch_size))) {
+      } else {
+        ret = expr_default_eval_batch_func(expr, ctx, *pending, batch_size);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObExprJsonLength::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                               ObExpr &rt_expr) const
 {
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_json_length;
+  rt_expr.eval_batch_func_ = eval_json_length_batch;
   return OB_SUCCESS;
 }
 

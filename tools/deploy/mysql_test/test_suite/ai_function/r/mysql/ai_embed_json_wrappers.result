@@ -1,0 +1,37 @@
+create table embed_json_rows(id int primary key, doc longtext, path varchar(32));
+insert into embed_json_rows values(1,'[10,20]','$[0]'),(2,null,'$[0]'),(3,'{"x":[1,2]}','$.x'),(4,'[]',null);
+select id,json_length(doc),json_extract(doc,'$[0]') from embed_json_rows order by id;
+id	json_length(doc)	json_extract(doc,'$[0]')
+1	2	10
+2	NULL	NULL
+3	1	{"x": [1, 2]}
+4	0	NULL
+select id,json_extract(doc,path) from embed_json_rows order by id;
+id	json_extract(doc,path)
+1	10
+2	NULL
+3	[1, 2]
+4	NULL
+select id,json_length(doc,path) from embed_json_rows where path is not null order by id;
+id	json_length(doc,path)
+1	1
+2	NULL
+3	2
+select id,json_extract(doc,null) from embed_json_rows order by id;
+id	json_extract(doc,null)
+1	NULL
+2	NULL
+3	NULL
+4	NULL
+select id,json_length(doc) from embed_json_rows where id=1;
+id	json_length(doc)
+1	2
+select id,json_extract(doc,'$[0]') from embed_json_rows order by id desc limit 2;
+id	json_extract(doc,'$[0]')
+4	NULL
+3	{"x": [1, 2]}
+select json_length('not json');
+ERROR 22032: Invalid JSON text.
+select json_extract('[1]','bad path');
+ERROR 42000: Invalid JSON path expression.
+drop table embed_json_rows;

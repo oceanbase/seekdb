@@ -28,6 +28,7 @@ def events():
 def serve():
     lock = threading.Lock()
     attempts = {}
+    default_dimension = int(os.environ.get('SEEKDB_AI_EMBED_TEST_DEFAULT_DIMENSION', '3'))
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -37,15 +38,15 @@ def serve():
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             dashscope = self.path.startswith('/dashscope/')
             texts = body['input']['texts'] if dashscope else body['input']
-            dimension = (body.get('parameters', {}).get('dimension', 3) if dashscope
-                         else body.get('dimensions', 3))
+            dimension = (body.get('parameters', {}).get('dimension', default_dimension) if dashscope
+                         else body.get('dimensions', default_dimension))
             mode = self.path.rsplit('/', 1)[-1]
             with lock:
                 attempts[self.path] = attempts.get(self.path, 0) + 1
                 attempt = attempts[self.path]
                 with EVENTS.open('a') as stream:
                     stream.write(json.dumps({'path': self.path, 'texts': texts,
-                                             'dimension': dimension}) + '\n')
+                                             'dimension': dimension, 'model': body['model']}) + '\n')
             data = [{'text_index' if dashscope else 'index': i,
                      'embedding': [float(len(text.encode('utf-8')))]
                                   + [j + 0.25 for j in range(1, dimension)]}
@@ -54,6 +55,8 @@ def serve():
                 data.reverse()
             elif mode == 'duplicate':
                 data.append(data[0])
+            elif mode == 'duplicate-index' and len(data) > 1:
+                data[1]['text_index' if dashscope else 'index'] = 0
             elif mode == 'missing':
                 data.pop()
             elif mode == 'out-of-range':
@@ -66,10 +69,14 @@ def serve():
                 data[0]['embedding'][0] = 'invalid'
             elif mode == 'null-element':
                 data[0]['embedding'][0] = None
+            elif mode == 'bool-element':
+                data[0]['embedding'][0] = True
             elif mode == 'overflow-element':
                 data[0]['embedding'][0] = 1e100
             elif mode == 'wrong-dimension':
                 data[0]['embedding'].append(0.0)
+            elif mode == 'inconsistent-dimension' and len(data) > 1:
+                data[-1]['embedding'].pop()
             elif mode == 'object-vector':
                 data[0]['embedding'] = {}
             response = {'output': {'embeddings': data}} if dashscope else {'data': data}
@@ -82,7 +89,7 @@ def serve():
                 status, response = 400, {'error': 'injected failure'}
             elif mode == 'retry' and attempt == 1:
                 status, response = 503, {'error': 'retry once'}
-            elif mode == 'fail-late' and any(text == 'row-40' for text in texts):
+            elif mode == 'fail-late' and any(text == 'x' * 40 for text in texts):
                 response = {'data': []}
             raw = b'{"data": [' if mode == 'malformed' else json.dumps(response).encode()
             self.send_response(status)
@@ -129,6 +136,17 @@ def main():
         EVENTS.write_text('')
     elif command == 'assert-empty':
         assert not events(), events()
+    elif command == 'assert-scalar':
+        rows = events()
+        assert len(rows) == int(sys.argv[2]) and all(len(r['texts']) == 1 for r in rows), rows
+    elif command == 'assert-models':
+        rows = events()
+        assert {r['model'] for r in rows} == {'regression-embed', 'regression-alt'}, rows
+        for row in rows:
+            assert all((len(t) % 2 == 0) == (row['model'] == 'regression-alt')
+                       for t in row['texts']), row
+    elif command == 'assert-requests':
+        assert len(events()) == int(sys.argv[2]), events()
     elif command == 'assert-batch':
         # Check work at the HTTP boundary, independently of SQL output checks.
         rows = events()
@@ -140,7 +158,7 @@ def main():
         if expected > 1:
             assert any(len(row['texts']) > 1 for row in rows), rows
         if len(sys.argv) > 3:
-            assert sorted(texts) == sorted('row-' + str(i) for i in
+            assert sorted(texts) == sorted('x' * i for i in
                                            map(int, sys.argv[3].split(','))), texts
 
 
