@@ -44,7 +44,6 @@ jobs:
                 ...context.repo, pull_number: Number(number)
               })).data;
             }
-            // Only public repository content may be sent to the translation service.
             if (context.payload.repository.private) {
               throw new Error('Translation of private repository content is disabled');
             }
@@ -53,7 +52,6 @@ jobs:
               core.info('No Chinese text; translation is not needed');
               return;
             }
-            // Bound the complete operation as well as each HTTP request.
             const deadline = Date.now() + 4 * 60 * 1000;
             async function translate(text) {
               const url = new URL('https://translate.google.com/translate_a/single');
@@ -83,7 +81,6 @@ jobs:
                   }
                   core.warning(`Translation HTTP ${response.status}; attempt ${attempt + 1}/3`);
                 } catch (error) {
-                  // Response/validation errors are permanent; retry transport failures only.
                   if (response) throw error;
                   core.warning(`Translation transport ${error.name}; attempt ${attempt + 1}/3`);
                 }
@@ -101,13 +98,11 @@ jobs:
                 await new Promise(resolve => setTimeout(resolve, delay));
               }
             }
-            // Chunk Unicode code points so long PR bodies do not require the old token/POST path.
             const points = Array.from(source);
             const translated = [];
             for (let offset = 0; offset < points.length; offset += 2000) {
               translated.push(await translate(points.slice(offset, offset + 2000).join('')));
             }
-            // Never rewrite the author's title/body or interpret translated text as HTML.
             await core.summary
               .addHeading(`English translation of PR #${pr.number}`)
               .addRaw('<p>The original PR title and description are unchanged.</p>')
