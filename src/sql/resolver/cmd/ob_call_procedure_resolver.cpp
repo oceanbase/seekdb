@@ -355,8 +355,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
           && nullptr == session_info_->get_pl_context()
           && !sql_ctx->multi_stmt_item_.is_part_of_multi_stmt()
           && !sql_ctx->multi_stmt_item_.is_batched_multi_stmt()) {
-        // Neither the procedure nor its arguments have been resolved/executed.
-        // Preserve this precise source; other SCHEMA_EAGAIN retries stay unknown.
         sql_ctx->call_package_load_retry_ = true;
       }
     }

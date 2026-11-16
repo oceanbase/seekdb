@@ -326,8 +326,6 @@ private:
   int last_query_retry_err_;
   // this value include local retry & packet retry
   int64_t retry_cnt_;
-  // Unknown or execution-stage retries increase only retry_cnt_, permanently
-  // excluding this request from the initial-CALL exception until reset().
   int64_t package_load_retry_cnt_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObQueryRetryInfo);
