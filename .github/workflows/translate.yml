@@ -11,12 +11,112 @@ on:
   pull_request_target:
     branches: [master, develop]
     types: [opened, edited]
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: 'Public PR number to translate without modifying it'
+        required: true
+        type: string
   pull_request_review_comment:
     types: [created, edited]
 
 jobs:
   translate:
-    if: ${{ github.event_name != 'pull_request_review_comment' || github.event.pull_request.base.ref == 'master' || github.event.pull_request.base.ref == 'develop' }}
+    if: github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # No checkout: pull_request_target must never execute PR-controlled code.
+      - name: Translate PR into the run summary, preserving its source
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            let pr = context.payload.pull_request;
+            if (context.eventName === 'workflow_dispatch') {
+              const number = context.payload.inputs.pull_request;
+              if (!/^[1-9][0-9]*$/.test(number)) {
+                throw new Error('pull_request must be a positive integer');
+              }
+              pr = (await github.rest.pulls.get({
+                ...context.repo, pull_number: Number(number)
+              })).data;
+            }
+            // Only public repository content may be sent to the translation service.
+            if (context.payload.repository.private) {
+              throw new Error('Translation of private repository content is disabled');
+            }
+            const source = `${pr.title}\n\n${pr.body || ''}`;
+            if (!/[\u3400-\u9fff]/u.test(source)) {
+              core.info('No Chinese text; translation is not needed');
+              return;
+            }
+            // Bound the complete operation as well as each HTTP request.
+            const deadline = Date.now() + 4 * 60 * 1000;
+            async function translate(text) {
+              const url = new URL('https://translate.google.com/translate_a/single');
+              url.search = new URLSearchParams({
+                client: 'gtx', sl: 'auto', tl: 'en', dt: 't', q: text
+              }).toString();
+              for (let attempt = 0; attempt < 3; attempt++) {
+                const remaining = deadline - Date.now();
+                if (remaining <= 0) throw new Error('Translation exceeded four minutes');
+                let response;
+                try {
+                  response = await fetch(url, {
+                    signal: AbortSignal.timeout(Math.min(15000, remaining)),
+                    redirect: 'error'
+                  });
+                  if (response.ok) {
+                    const data = await response.json();
+                    if (!Array.isArray(data[0]) || data[0].length === 0 ||
+                        data[0].some(part => !Array.isArray(part) || typeof part[0] !== 'string')) {
+                      throw new Error('Invalid translation response');
+                    }
+                    return data[0].map(part => part[0]).join('');
+                  }
+                  await response.body?.cancel();
+                  if (response.status !== 429 && response.status < 500) {
+                    throw new Error(`Translation HTTP ${response.status}`);
+                  }
+                  core.warning(`Translation HTTP ${response.status}; attempt ${attempt + 1}/3`);
+                } catch (error) {
+                  // Response/validation errors are permanent; retry transport failures only.
+                  if (response) throw error;
+                  core.warning(`Translation transport ${error.name}; attempt ${attempt + 1}/3`);
+                }
+                if (attempt === 2) {
+                  throw new Error(`Translation failed after three attempts (HTTP ${response?.status || 'transport'})`);
+                }
+                const retryAfter = response?.headers.get('retry-after');
+                const seconds = retryAfter && /^\d+$/.test(retryAfter)
+                  ? Number(retryAfter)
+                  : retryAfter ? Math.max(0, (Date.parse(retryAfter) - Date.now()) / 1000) : 2 ** attempt;
+                const delay = Number.isFinite(seconds) ? seconds * 1000 : 1000;
+                if (delay >= deadline - Date.now()) {
+                  throw new Error('Retry-After exceeds the remaining translation budget');
+                }
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
+            }
+            // Chunk Unicode code points so long PR bodies do not require the old token/POST path.
+            const points = Array.from(source);
+            const translated = [];
+            for (let offset = 0; offset < points.length; offset += 2000) {
+              translated.push(await translate(points.slice(offset, offset + 2000).join('')));
+            }
+            // Never rewrite the author's title/body or interpret translated text as HTML.
+            await core.summary
+              .addHeading(`English translation of PR #${pr.number}`)
+              .addRaw('<p>The original PR title and description are unchanged.</p>')
+              .addCodeBlock(translated.join('\n').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'), 'text')
+              .write();
+            core.info(`Translated ${points.length} code points in ${translated.length} requests`);
+
+  translate-other:
+    if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request_review_comment' || github.event.pull_request.base.ref == 'master' || github.event.pull_request.base.ref == 'develop') }}
     permissions:
       contents: read
       issues: write
