@@ -1,119 +1,98 @@
 <!--
-Thank you for contributing to **OceanBase SeekDB**!
+感谢向 **OceanBase SeekDB** 提交代码！
 
-**If this pull request has a significant impact, please make sure you have discussed with the OceanBase group.**
+**如果这个 pull request 影响较大，请先与 OceanBase 团队沟通确认。**
 
-Help a reviewer who has not debugged this issue answer five questions:
-what input triggers the problem, where it fails, why it fails, how this
-change removes the cause, and what evidence proves the fix. Compress simple
-changes; for bug fixes, keep the root cause concrete instead of shortening
-it into labels.
+帮助没有参与排查的审阅者回答五个问题：什么输入触发问题、在哪一步出错、
+为什么会错、这次修改如何消除原因、有哪些证据证明修复有效。简单改动可
+以压缩；缺陷修复要保留具体的根因分析，不要为了简短而只写标签。
 -->
 
-### Task Description
+### 任务描述
 
 <!--
-The problem or requirement resolved by this pull request.
-Link the issue via "close #xxx" or "ref #xxx".
-For a bug fix, describe the real business or upstream case and its trigger
-conditions: platform and build, client version or mode, key configuration,
-data type, input, and the execution stage where the failure appears.
+这个 pull request 解决的问题或需求。
+通过 "close #xxx" 或 "ref #xxx" 关联 issue。
+缺陷修复请描述真实的业务或上游用例及触发条件：平台与构建、客户端版本
+或模式、关键配置、数据类型、输入，以及失败出现的执行阶段。
 -->
 
-### Root Cause
+### 根因
 
 <!--
-Bug fixes only; omit this section for features.
-Follow one real minimal input through the call chain: the entry file,
-class/method, and branch; the concrete parameters received; the generated
-value, type metadata, length, or bytes; and the downstream contract or
-check that the actual output violates. Keep the original error code or
-exception.
-Do not stop at labels such as "encoding mismatch" or "overflow", and do
-not treat the client-side failure location as the server-side root cause.
-Mark unknown implementation details or evidence as unknown instead of
-inventing calls, parameters, or results.
+仅缺陷修复需要；功能改动可省略本节。
+沿一个真实的最小输入追调用链：入口文件、类/方法及触发分支；方法收到
+的具体参数；生成的值、类型元数据、长度或字节；以及实际输出违反的下游
+契约或检查。保留原始错误码或异常。
+不要停在“编码不兼容”、“溢出”这类标签上，也不要把客户端报错位置当作
+服务端根因。未知的关键实现或证据明确标注为未知，不要编造调用、参数或
+结果。
 -->
 
-### Solution Description
+### 解决方案
 
 <!--
-How the change removes each cause listed above: the replaced calls and
-parameters, and the corresponding intermediate and final results. When
-coupled stages must change together (for example, type inference and value
-conversion, or length planning and packet writing), explain why fixing only
-one place is not enough. List only alternatives and boundaries that were
-actually considered and are supported by evidence.
+修改如何逐项消除上述根因：替换后的调用与参数，以及对应的中间结果和最
+终结果。当耦合的阶段必须同步修改时（例如类型推导与值转换、长度规划与
+实际写包），说明为什么只改一处不够。只列出实际考虑过且有依据的替代方
+案与边界。
 -->
 
-### Verification
+### 验证
 
 <!--
-Record what was actually run, not intentions. Compare the same input before
-and after the fix: original failure, fixed result, and key semantic
-assertions (returned rows, order, warnings, byte round-trips, type tags,
-session liveness). List the scope explicitly (focused unit tests, mysqltest
-cases, Rust tests, builds, static checks, and CI) and keep them separate.
-Never describe a partial run (for example, 7 selected cases passing) as the
-whole suite passing, and do not claim CI is green without checking it live.
-Distinguish prior measurements, current re-verification, source-level
-inference, and unverified items. If a verification build SHA differs from
-the PR head, state how they correspond (same tree, same patch-id, or the
-same patch applied). Keep passwords, private keys, and internal machine
-addresses out of commands and outputs.
+记录实际运行过的内容，而不是意图。用同一输入对比修复前后：原始失败、
+修复后的结果，以及关键语义断言（返回行、顺序、警告、字节往返、类型标
+签、会话存活）。明确列出验证范围（单元测试、mysqltest、Rust 测试、构
+建、静态检查、CI）并分开陈述。
+不得把部分用例通过（例如选中 7 条通过）写成整套通过；未实时核查 CI 就
+不要声称 CI 全绿。区分既有实测、当前重新验证、源码推断和未验证项。如
+果验证构建 SHA 与 PR head 不同，说明二者如何对应（相同 tree、相同
+patch-id 或应用同一补丁）。命令和输出中不要包含密码、私钥或内部机器
+地址。
 -->
 
 <details>
-<summary>Detailed reproduction and verification records</summary>
+<summary>展开详细复现与验证记录</summary>
 
 <!--
-Optional for simple changes, expected for bug fixes. Write reproduction
-steps in execution order: prepare the baseline/build, set up the environment
-and dependencies, establish the connection path, create tables or prepare
-input, execute, observe the original failure, switch to the fixed build,
-then rerun the same steps and compare. Include original errors,
-inputs/outputs, before/after matrices, and note where long outputs are
-trimmed.
+简单改动可省略，缺陷修复建议填写。按执行顺序写复现步骤：准备基线/构
+建 → 环境与依赖 → 连接路径 → 建表或准备输入 → 执行 → 观察原始失败
+→ 更换修复构建 → 原样重跑并比较。包含原始报错、输入/输出、前后对
+照矩阵；长输出做了删节要注明。
 -->
 
 </details>
 
-### Impact Scope
+### 影响范围
 
 <!--
-Platforms and versions. For each relevant system (Windows, Linux, or
-other), state whether the issue was reproduced or the fix was measured, or
-whether the path is only inferred from shared source code. If only one
-system was tested, say the other is untested; shared source proves a shared
-code path, not a shared test result.
-List the baseline SHAs or released versions where the issue reproduced, the
-build used to verify the fix, and the versions that remain unverified.
-Record migration-compatibility issues with separate source and target
-versions and platforms.
+平台与版本。针对每个相关系统（Windows、Linux 或其他），写明问题是已
+复现、修复已实测，还是仅从共享源码推断。只测过一个系统时，注明另一个
+未测；源码共用只证明代码路径共用，不证明测试结论共用。
+列出实际复现问题的基线 SHA 或发布版本、验证修复的构建，以及尚未验证
+的版本。迁移兼容问题分别记录源端和目标端的版本与平台。
 -->
 
-### Merge Rationale
+### 合入理由
 
 <!--
-Why this should merge now: the real user impact, the evidence that the root
-cause is removed, the change scope, and the regression coverage. Include
-known regressions and verification boundaries. Do not promise zero risk or
-full coverage.
+为什么现在应该合入：真实用户影响、根因已被消除的证据、改动范围和回归
+覆盖。写明已知回归与验证边界。不要承诺零风险或全量覆盖。
 -->
 
-### Upgrade Compatibility
+### 升级兼容性
 
-<!-- Please make sure this is compatible with old version or you should give us upgrading solution. -->
+<!-- 请确认与旧版本兼容，否则请给出升级方案。 -->
 
-### Other Information
+### 其他信息
 
 <!--
-Any information helping to review this pull request: directly related and
-verified commits, baselines, or evidence links; unresolved discussions; and
-anything blocked or not yet run. Omit this section if empty.
+有助于审阅的信息：直接相关且已核实的提交、基线或证据链接；未解决的讨
+论；被阻塞或未运行的事项。没有可省略本节。
 -->
 
-### Release Note
+### 发布说明
 <!--
-A concise release note can help users to understand how your pull request makes difference.
+一段简明的发布说明，帮助用户了解这个 pull request 带来的变化。
 -->

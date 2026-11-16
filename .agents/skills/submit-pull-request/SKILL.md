@@ -13,8 +13,9 @@ concrete root cause, and decide the merge from evidence rather than
 promises.
 
 Follow the repository pull request template,
-`.github/pull_request_template.md`. Write the description in English unless
-the user explicitly requests another language.
+`.github/pull_request_template.md`. Write the description in Simplified
+Chinese, matching the template, unless the user explicitly requests another
+language.
 
 ## Establish the Facts Before Writing
 
