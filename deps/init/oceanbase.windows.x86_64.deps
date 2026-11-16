@@ -19,7 +19,7 @@ devdeps-boost-geometry-20260506.tar.gz
 devdeps-roaring-20260506.tar.gz
 devdeps-openssl-20260414.tar.gz
 jemalloc-5.3.1-bin-windows-x86_64-md-20261114T020301+0000-845c8920ddfb.tar.gz target=jemalloc prefix=jemalloc sha256=c4613853aabe251fa5abf12dec68bd468cf47551735185f1270ae228bd9cef49
-vsag-0.16.20-bin-windows-x86_64-md-20261114T022500+0000-24707283d449.tar.gz target=vsag prefix=vsag sha256=49b1a01fb56bcd8d19b301cffd926ac078c92332fe4ddff5aba70ab1289fdbd8
+vsag-0.16.20-bin-windows-x86_64-md-20261116T024308+0000-e8260eea65ea.tar.gz target=vsag prefix=vsag sha256=e713992579a7cff08f01efa862fcd14aac9633afea9d53088a53a173d7dabd87
 
 [tools]
 obdevtools-llvm-18.1.8-20260414.tar.gz
