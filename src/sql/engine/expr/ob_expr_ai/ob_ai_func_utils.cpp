@@ -825,15 +825,23 @@ int ObDashscopeUtils::ObDashscopeRerank::parse_output(common::ObIAllocator &allo
                                                       common::ObIJsonBase *&result) 
 {
   int ret = OB_SUCCESS;
-  ObJsonObject *output_obj = nullptr;
+  ObJsonNode *output_node = nullptr;
+  ObJsonNode *results_node = nullptr;
   ObJsonArray *results_array = nullptr;
   if (OB_ISNULL(http_response)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(output_obj = static_cast<ObJsonObject *>(http_response->get_value("output")))) {
+  } else if (OB_ISNULL(output_node = http_response->get_value("output"))) {
     ret = OB_INVALID_DATA;
-  } else if (OB_ISNULL(results_array = static_cast<ObJsonArray *>(output_obj->get_value("results")))) {
+  } else if (output_node->json_type() != ObJsonNodeType::J_OBJECT) {
+    ret = OB_INVALID_DATA;
+  } else if (OB_ISNULL(results_node = static_cast<ObJsonObject *>(output_node)->get_value("results"))) {
+    ret = OB_INVALID_DATA;
+  } else if (results_node->json_type() != ObJsonNodeType::J_ARRAY) {
+    // The provider must answer with a result array. Casting another type to
+    // ObJsonArray would read a wrong memory layout.
     ret = OB_INVALID_DATA;
   } else {
+    results_array = static_cast<ObJsonArray *>(results_node);
     result = results_array;
   }
   return ret;
@@ -892,12 +900,18 @@ int ObSiliconflowUtils::ObSiliconflowRerank::parse_output(common::ObIAllocator &
                                                       common::ObIJsonBase *&result) 
 {
   int ret = OB_SUCCESS;
+  ObJsonNode *results_node = nullptr;
   ObJsonArray *results_array = nullptr;
   if (OB_ISNULL(http_response)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(results_array = static_cast<ObJsonArray *>(http_response->get_value("results")))) {
+  } else if (OB_ISNULL(results_node = http_response->get_value("results"))) {
+    ret = OB_INVALID_DATA;
+  } else if (results_node->json_type() != ObJsonNodeType::J_ARRAY) {
+    // The provider must answer with {"results": [...]}. Casting another type
+    // to ObJsonArray would read a wrong memory layout.
     ret = OB_INVALID_DATA;
   } else {
+    results_array = static_cast<ObJsonArray *>(results_node);
     result = results_array;
   }
   return ret;
