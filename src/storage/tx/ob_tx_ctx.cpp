@@ -3049,6 +3049,20 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
         busy_cbs_.add_last(log_cb);
         log_cb->set_log_size(log_block.get_size());
       }
+      if (is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_REDO_LOG)) {
+        static int64_t diagnostic_redo_calls = 0;
+        static const int64_t DIAGNOSTIC_REDO_CALL_LIMIT = 8192;
+        const int64_t diagnostic_redo_sequence = ATOMIC_FAA(&diagnostic_redo_calls, 1);
+        if (diagnostic_redo_sequence < DIAGNOSTIC_REDO_CALL_LIMIT) {
+          TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC redo append call summary", K_(trans_id), KP(this),
+              KP(log_cb), K(diagnostic_abort), "size", log_block.get_size(), K(retry_timeout_us),
+              K(ret), K(diagnostic_begin_us), K(diagnostic_end_us), K(diagnostic_redo_sequence),
+              "record_limit", DIAGNOSTIC_REDO_CALL_LIMIT);
+        } else if (diagnostic_redo_sequence == DIAGNOSTIC_REDO_CALL_LIMIT) {
+          TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC redo capture overflow",
+              K(diagnostic_redo_sequence), "record_limit", DIAGNOSTIC_REDO_CALL_LIMIT);
+        }
+      }
       if (diagnostic_abort) {
         TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC append call summary", K_(trans_id), KP(this),
             KP(log_cb), K(diagnostic_abort), "size", log_block.get_size(), K(retry_timeout_us),
