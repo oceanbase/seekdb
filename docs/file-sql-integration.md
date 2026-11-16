@@ -153,17 +153,17 @@ file_table_path_arg
 映射到 `ER_SYNTAX_ERROR`，即 `1149`，与官方用例的期望不符。
 语义解析阶段的那段检查保留为兜底，消息与原来一致。
 
-## 表函数被拒绝时 observer 崩溃
+## 表函数被拒绝时的 observer 崩溃：根因未定位
 
-`read_csv` 被拒绝时，解析阶段没有表项，而 FROM 子句的循环在 `resolve_table` 失败后
-仍然使用了表项，下一句解引用了空指针，observer 以 SIGSEGV 退出：
+早期的一次运行里，关闭开关执行 `read_csv` 时 observer 退出，客户端报：
 
 ```
 ERROR 2013 (HY000): Lost connection to MySQL server during query
 ```
 
-这会让官方用例的第一条（关闭开关时的 `read_csv`，期望 `1235`）直接打挂 server。
-修法是 FROM 子句的循环在表解析失败时停止，和 update 解析器的写法一致：
+`dmesg` 里能看到 `signal: 11`，但**崩溃的根因没有定位**，也没有拿到栈或 core。
+当时怀疑的路径是 FROM 子句的循环：`resolve_table` 失败时表项为空，而循环继续往下走。
+按这个猜测做的改动是把循环改成在表解析失败时停止，和 update 解析器的写法一致：
 
 ```cpp
 const int table_ret = resolve_table(*table_node, table_item);
@@ -174,7 +174,17 @@ if (OB_FAIL(table_ret)) {
 }
 ```
 
-修复后关闭开关时的 `read_csv` 返回 `1235`，observer 存活。
+这段改动**没有修掉任何崩溃**：本仓库的 `OZ` 宏是
+`OC_I5(func, ...) = do { if (OB_SUCC(ret)) { if (OB_FAIL(func)) {...} } } while (0)`，
+即函数只在 `ret` 仍是成功时才执行。`resolve_table` 失败时 `ret` 已经不是成功，
+后面两句 `OZ(...)` 会被整体跳过，`table_item` 因此从来没有被解引用过。
+改写后的代码与改写前行为等价，属于把隐含行为写显的加固，可以保留，
+但**不能把它记成“修掉了崩溃”**。
+
+当前可确认的事实是：关闭开关时的 `read_csv` 返回 `1235`，observer 存活；
+那次 `ERROR 2013` 更可能来自 observer 被重启或重建（当时集群是新建的、
+10000 端口被占用改用了 10001，期间还出现过一次 `File not exist`），
+而不是上面这条解析路径。真正的崩溃位置需要栈或 core 才能确定。
 
 ## 尚未解决的部分
 
