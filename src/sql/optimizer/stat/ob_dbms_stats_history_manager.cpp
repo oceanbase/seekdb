@@ -193,8 +193,6 @@ int ObDbmsStatsHistoryManager::backup_opt_stats(ObExecContext &ctx,
   } else if (retention_val == 0) {
     /*do nothing*/
   } else if (OB_FAIL(ObOptStatManager::get_instance().reserve_history_saving_time(saving_time, saving_time))) {
-    // Concurrent backups may observe the same wall-clock microsecond. Keep
-    // table, column and histogram rows on one reserved version without retry.
   } else if (OB_FAIL(ObDbmsStatsUtils::get_part_ids_and_column_ids(param, part_ids, column_ids, is_backup_for_gather))) {
   } else if (OB_FAIL(backup_table_stats(ctx, trans, param, saving_time, part_ids))) {
   } else if (OB_FAIL(backup_column_stats(ctx, trans, param, saving_time, part_ids, column_ids))) {
