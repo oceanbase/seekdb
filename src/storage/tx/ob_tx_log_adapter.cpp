@@ -133,7 +133,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     if (capture.abort_scope) {
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred capture completeness", KP(cb), K(size),
           "recorded", capture.count, "dropped", capture.dropped, "scope_abort", true,
-          "capture_mode", "first_last_per_kind", "observed", capture.total, "space_recovery", capture.recovery_present,
+          "capture_mode", "first_last_per_kind", "observed", capture.total, "space_recovery", capture.recovery_present, "space_capture", "comparison_operands",
           "retry_count", retry_cnt, K(ret), K(diagnostic_begin_us), K(diagnostic_end_us));
     }
     if (retry_cnt > 0 && capture.abort_scope) {
