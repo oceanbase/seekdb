@@ -22,9 +22,31 @@ exports_files([
     "devtools/bin/bison",
     "devtools/bin/flex",
     "devtools/bin/llvm-objcopy",
+    # Hermetic C++ driver for the Cargo genrule (clang++ -> clang -> clang-17).
+    "devtools/bin/clang++",
+    "devtools/bin/clang",
+    "devtools/bin/clang-17",
     "devtools/lib64/libsanitypass.so",
     "devtools/share/bison/README",
 ])
+
+# Minimal, targeted input closure for the devtools clang++ driver used by the
+# Cargo genrule.  Only the compiler's symlink chain, the GCC 12 detection
+# anchor, the libstdc++ 12 headers, and clang 17 builtin headers are declared.
+# This deliberately does NOT expose the whole devtools tree (its bin/ alone is
+# >2 GB).  Files keep their repo-relative layout so clang's relative GCC
+# installation detection resolves include/c++/12 from the driver location.
+filegroup(
+    name = "clang12_cxx_closure",
+    srcs = glob([
+        "devtools/bin/clang",
+        "devtools/bin/clang++",
+        "devtools/bin/clang-17",
+        "devtools/include/c++/12/**",
+        "devtools/lib/clang/17/include/**",
+        "devtools/lib/gcc/x86_64-redhat-linux/12/**",
+    ], allow_empty = False),
+)
 
 # Keep each archive/shared object addressable as its own file label.  The final
 # link rule, rather than this repository, owns ordering and linker mode changes.

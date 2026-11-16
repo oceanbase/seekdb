@@ -23,23 +23,39 @@ def _platform_files(unix, windows = None):
         "//conditions:default": ["unix/" + f for f in unix],
     })
 
-def cargo_workspace(exports, srcs):
-    """Build once per platform; declare each library, headers, and archive target."""
+def cargo_workspace(exports, srcs, cxx = None, cxx_inputs = []):
+    """Build once per platform; declare each library, headers, and archive target.
+
+    cxx: optional label of a hermetic C++ driver, injected via $(location) for
+         the Linux genrule only.  cxx_inputs: labels providing that driver's
+         minimal input closure (declared as tools so Bazel stages them).
+    """
     native.config_setting(name = "windows", constraint_values = ["@platforms//os:windows"])
     native.config_setting(name = "macos", constraint_values = ["@platforms//os:macos"])
     headers = {"include/" + h: True for export in exports.values() for h in export["headers"]}
     for platform in ["unix", "windows"]:
         windows = platform == "windows"
         command = '"$(location build.py)" --target-dir "$(@D)/cargo-target" --output "$(@D)/%s"' % platform
+        # Linux-only C++ depfile evidence: -MD is appended to this genrule's
+        # own CXXFLAGS (never CFLAGS, RUSTFLAGS, or the global/toolchain env).
+        # cc reads CXXFLAGS only for cpp(true) actions, so only C++ objects
+        # emit depfiles; build.py collects them into the declared stable out.
+        depfile_outs = [platform + "/cxx-depfiles.tar"] if not windows else []
+        if not windows:
+            command += ' --depfiles-archive "$(@D)/%s/cxx-depfiles.tar"' % platform
+        cxxflags = "-D_GLIBCXX_USE_CXX11_ABI=1" + ("" if windows else " -MD")
+        cxx_export = ('export CXX="$$PWD/$(location %s)"\n' % cxx) if (not windows and cxx) else ""
+        cxx_tools = ([cxx] + cxx_inputs) if (not windows and cxx) else []
         native.genrule(
             name = "_rust_static_" + platform,
             srcs = srcs,
             outs = [platform + "/" + _archive(name, windows) for name in exports] +
-                   [platform + "/" + h for h in headers],
-            cmd = """set -eu
-export DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
-export CXXFLAGS="$${CXXFLAGS:-} -D_GLIBCXX_USE_CXX11_ABI=1"
-python3 """ + command if not windows else "",
+                   [platform + "/" + h for h in headers] + depfile_outs,
+            cmd = ('set -eu\nexport DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR\n' +
+                   cxx_export +
+                   'export CXXFLAGS="$${CXXFLAGS:-} ' + cxxflags + '"\n' +
+                   'python3 ' + command) if not windows else "",
+            tools = cxx_tools,
             cmd_bat = "set DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR\npython " + command if windows else "",
             tags = ["no-remote", "no-sandbox"],
             target_compatible_with = select({

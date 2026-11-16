@@ -32,4 +32,6 @@ cargo_workspace(
         exclude = ["target/**"],
         allow_empty = True,
     ),
+    cxx = "@seekdb_3rd_headers//:devtools/bin/clang++",
+    cxx_inputs = ["@seekdb_3rd_headers//:clang12_cxx_closure"],
 )
