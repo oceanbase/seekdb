@@ -1,0 +1,3 @@
+# macOS exported symbols list for libseekdb.dylib
+# This file is GENERATED at configure time from seekdb.h (see CMakeLists.txt).
+# Do not edit by hand. Add new API in seekdb.h and rebuild.

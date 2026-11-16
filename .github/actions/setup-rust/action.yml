@@ -1,0 +1,75 @@
+# Copyright (c) 2025 OceanBase.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Setup Rust
+description: Install the Rust toolchain required by the seekdb build
+
+inputs:
+  crates-mirror:
+    description: >-
+      Route crates.io downloads through the rsproxy.cn mirror. Set to 'true'
+      on runners that already need the rsproxy rustup mirror (RUSTUP_DIST_SERVER
+      etc.); without this, `cargo build` still fetches crates from
+      static.crates.io over the unmirrored path.
+    required: false
+    default: 'false'
+  cache:
+    description: Cache the cargo registry (and installed cargo tools) keyed on Cargo.lock.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      shell: bash
+      env:
+        SEEKDB_CARGO_RSProxy_MIRROR: ${{ inputs.crates-mirror }}
+      run: |
+        set -euo pipefail
+        # On the k8s ARC runner, `${{ github.workspace }}` inside a composite
+        # step can expand to the runner host path, which is not mounted inside
+        # the job container (see the `$(pwd)` fallback in seekdb.yml's Compile
+        # step). Resolve the checked-out repo root at runtime from the
+        # container-local workspace instead.
+        repo_root="${GITHUB_WORKSPACE:-}"
+        if [[ ! -f "$repo_root/.github/script/install-rust.sh" ]] && [[ -f "$(pwd)/.github/script/install-rust.sh" ]]; then
+          repo_root="$(pwd)"
+        fi
+        if [[ ! -f "$repo_root/.github/script/install-rust.sh" ]]; then
+          echo "install-rust.sh not found in GITHUB_WORKSPACE ($repo_root) or the step working directory" >&2
+          exit 1
+        fi
+        export SEEKDB_REPO_ROOT="$repo_root"
+        # shellcheck source=/dev/null
+        source "$repo_root/.github/script/install-rust.sh"
+        {
+          echo "CARGO_HOME=${CARGO_HOME}"
+          echo "RUSTUP_HOME=${RUSTUP_HOME}"
+        } >> "$GITHUB_ENV"
+        rustup_bin_dir="$(dirname "$(command -v rustup)")"
+        echo "$rustup_bin_dir" >> "$GITHUB_PATH"
+
+    # NOTE: needs a node20-capable runner (same constraint as the ccache action
+    # pin in buildbase); disable via `cache: 'false'` on runners that cannot.
+    - name: Cache cargo registry
+      if: inputs.cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.CARGO_HOME }}/registry/index
+          ${{ env.CARGO_HOME }}/registry/cache
+          ${{ env.CARGO_HOME }}/bin
+        key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+        restore-keys: cargo-${{ runner.os }}-

@@ -40,6 +40,112 @@ namespace oceanbase
 {
 namespace common
 {
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+// Walk the saved frame-pointer chain starting at rbp. Every address the loop
+// dereferences is validated against this thread's stack bounds first, so a
+// corrupt chain only truncates the trace. min_addr raises the lower bound
+// above the stack attribute base: the pages between the reserved base and the
+// current stack pointer are not mapped yet, and a garbage frame pointer that
+// happens to fall there would fault on the load below.
+static int light_backtrace_walk(void **buffer, int size, int64_t rbp,
+                                int64_t min_addr)
+{
+  int rv = 0;
+  if (OB_UNLIKELY(buffer == nullptr || size <= 0)) {
+    return 0;
+  }
+  if (rv < size) {
+    int (*fp)(void**, int, int64_t) = light_backtrace;
+    buffer[rv++] = (void*)fp;
+  }
+  void *stack_addr = nullptr;
+  size_t stack_size = 0;
+  if (OB_UNLIKELY(OB_SUCCESS != get_stackattr(stack_addr, stack_size))) {
+    return rv;
+  }
+  int64_t stack_low = (int64_t)stack_addr;
+  const int64_t stack_high = stack_low + (int64_t)stack_size;
+  if (min_addr > stack_low) {
+    stack_low = min_addr;
+  }
+#define addr_in_stack(addr) ((addr) >= stack_low && (addr) < stack_high)
+  while (rbp != 0 && rv < size) {
+    // Validate rbp itself before dereferencing it -- otherwise a bogus
+    // saved-FP value silently chained from the previous iteration can
+    // point at unmapped memory and the deref below would crash before
+    // the addr_in_stack check on its loaded value can run.
+    if (!addr_in_stack(rbp)) {
+      break;
+    }
+#if defined(__aarch64__)
+    if (!addr_in_stack(*(int64_t*)rbp) &&
+        !FALSE_IT(rbp += 16) &&
+        !addr_in_stack(*(int64_t*)rbp)) {
+#else
+    if (!addr_in_stack(*(int64_t*)rbp)) {
+#endif
+      break;
+    } else {
+      int64_t return_addr = rbp + 8;
+      buffer[rv++] = (void*)*(int64_t*)return_addr;
+      rbp = *(int64_t*)rbp;
+    }
+  }
+#undef addr_in_stack
+  return rv;
+}
+#endif
+
+int light_backtrace(void **buffer, int size)
+{
+#ifdef __EMSCRIPTEN__
+  return _ob_backtrace(buffer, size);
+#elif defined(_WIN32)
+  // The frame-pointer walking implementation below assumes the System V
+  // x86_64 / AArch64 ABI in which RBP / X29 is a real frame pointer and each
+  // frame is laid out as [saved_fp][return_addr][...]. On Windows x64 (MS
+  // ABI) RBP is just an ordinary non-volatile register and can hold any
+  // value the compiler wants (often a base address into a stack object), so
+  // dereferencing it as a saved-FP chain reads arbitrary memory and crashes
+  // with AccessViolation as soon as the chased value lands outside the
+  // mapped stack region. Use the unwind-table based RtlCaptureStackBackTrace
+  // (the kernel-mode-safe Win32 API) instead.
+  if (OB_UNLIKELY(buffer == nullptr || size <= 0)) {
+    return 0;
+  }
+  USHORT frames = ::CaptureStackBackTrace(/*FramesToSkip=*/1,
+                                          static_cast<ULONG>(size),
+                                          buffer,
+                                          /*BackTraceHash=*/nullptr);
+  return static_cast<int>(frames);
+#else
+  int64_t rbp = 0;
+  int64_t sp = 0;
+#if defined(__x86_64__)
+  asm("mov %%rbp, %0" : "=r"(rbp));
+  asm("mov %%rsp, %0" : "=r"(sp));
+#elif defined(__aarch64__)
+  asm("mov %0, x29" : "=r"(rbp));
+  asm("mov %0, sp" : "=r"(sp));
+#endif
+  return light_backtrace_walk(buffer, size, rbp, sp);
+#endif
+}
+
+int light_backtrace(void **buffer, int size, int64_t rbp)
+{
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
+  // The provided rbp is meaningless under the Windows x64 ABI; fall back to
+  // the same unwind-table based capture as the 2-arg overload. This keeps
+  // the signal-handler call site (which only fires on POSIX) compiling on
+  // Windows without exposing it to the broken frame-pointer walk.
+  (void)rbp;
+  return light_backtrace(buffer, size);
+#else
+  return light_backtrace_walk(buffer, size, rbp, /*min_addr=*/0);
+#endif
+}
+
 int64_t get_rel_offset(int64_t addr)
 {
   // seekdb is built as a non-PIE (ET_EXEC) executable; backtrace addresses are
@@ -48,6 +154,7 @@ int64_t get_rel_offset(int64_t addr)
 }
 
 bool g_enable_backtrace = true;
+bool g_use_light_backtrace = false;
 
 #ifdef __EMSCRIPTEN__
 int _ob_backtrace(void **buffer, int size)
@@ -90,6 +197,11 @@ char *lbt(char *buf, int32_t len)
   return parray(buf, len, offsets, size);
 }
 
+char *parray(int64_t *array, int size)
+{
+  return parray(buffer, LBT_BUFFER_LENGTH, array, size);
+}
+
 char *parray(char *buf, int64_t len, int64_t *array, int size)
 {
   //As used in lbt, and lbt used when print error log.
@@ -115,6 +227,32 @@ char *parray(char *buf, int64_t len, int64_t *array, int size)
   }
   return buf;
 }
+
+void addrs_to_offsets(void **buffer, int size)
+{
+  for (int64_t i = 0; i < size; i++) {
+    buffer[i] = (void*)get_rel_offset((int64_t)buffer[i]);
+  }
+}
+
+EXTERN_C_BEGIN
+int ob_backtrace_c(void **buffer, int size)
+{
+  return ob_backtrace(buffer, size);
+}
+char *parray_c(char *buf, int64_t len, int64_t *array, int size)
+{
+  return parray(buf, len, array, size);
+}
+int64_t get_rel_offset_c(int64_t addr)
+{
+  return get_rel_offset(addr);
+}
+char *lbt_c()
+{
+  return lbt();
+}
+EXTERN_C_END
 
 } // end namespace common
 } // end namespace oceanbase

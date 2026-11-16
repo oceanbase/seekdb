@@ -119,6 +119,10 @@ crate.annotation(
     },
     extra_aliased_targets = {"jemalloc_build": "build_script_build"},
     build_script_toolchains = ["@seekdb//bazel:windows_build_script_environment"],
+    # Windows keeps MAX_PATH limits for GNU make, and Bazel's runfiles path for
+    # this crate is longer than that; stage the vendored sources by a short path.
+    patches = ["//bazel:seekdb-jemalloc-sys-windows-long-paths.diff"],
+    patch_args = ["-p1"],
 )
 crate.annotation_select(
     crate = "seekdb-jemalloc-sys",

@@ -24,6 +24,7 @@
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_i_ls_runtime_adapter.h"
+#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx/ob_timestamp_service.h"
 #include "storage/tx/ob_trans_id_service.h"
@@ -427,13 +428,19 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
   }
+  const int64_t replay_wait_sleep_us =
+#ifdef OB_BUILD_EMBED_MODE
+      500;  // embed: poll quickly, startup is latency sensitive
+#else
+      50 * 1000;
+#endif
   while (OB_SUCC(ret) && !reached) {
     if (OB_FAIL(log_service->is_replayed_to(end_lsn, reached))) {
     } else if (!reached && ObTimeUtility::current_time() >= deadline_us) {
       ret = OB_TIMEOUT;
       LOG_WARN("wait local replay timed out", K(ret), K(end_lsn), K(deadline_us));
     } else if (!reached) {
-      ob_usleep(50 * 1000);
+      ob_usleep(replay_wait_sleep_us);
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(log_service->finish_replay(deadline_us))) {
@@ -868,9 +875,14 @@ int ObLS::online_local_log_(const LocalLogMode log_mode)
     if (OB_FAIL(start_local_log_())) {
       LOG_WARN("failed to start local append", K(ret));
     }
+    if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lsl_append_start");
+    }
   } else {
     log_handler_.set_local_append_enabled(false);
+    ::oceanbase::storage::startup_substep_timeline_mark("lsl_set_append_disabled");
     local_log_handler_set_.deactivate();
+    ::oceanbase::storage::startup_substep_timeline_mark("lsl_deactivate");
     is_local_append_mode_ = false;
     LOG_INFO("local log handlers entered replay mode", K_(ls_meta));
   }
@@ -885,23 +897,65 @@ int ObLS::online_without_lock_(const LocalLogMode log_mode)
     ret = OB_NOT_INIT;
   } else if (running_state_.is_running()) {
     LOG_INFO("ls is running state, do nothing", K(ret));
-  } else if (OB_FAIL(ls_tablet_svr_.online())) {
-  } else if (OB_FAIL(lock_table_.online())) {
-  } else if (OB_FAIL(online_tx_())) {
-  } else if (!is_append_mode && OB_FAIL(ls_tx_svr_.block_tx())) {
-  } else if (OB_FAIL(ls_ddl_log_handler_.online())) {
-  } else if (OB_FAIL(log_handler_.online(ls_meta_.get_clog_base_lsn(),
-                                         ls_meta_.get_clog_checkpoint_scn()))) {
-  } else if (OB_FAIL(ls_wrs_handler_.online())) {
-  } else if (OB_FAIL(online_compaction_())) {
-  } else if (OB_FAIL(online_local_log_(log_mode))) {
-  } else if (FALSE_IT(checkpoint_executor_.online())) {
-  } else if (FALSE_IT(tablet_gc_handler_.online())) {
-  } else if (FALSE_IT(tablet_empty_shell_handler_.online())) {
-  } else if (OB_FAIL(online_advance_epoch_())) {
-  } else if (OB_FAIL(running_state_.online())) {
   } else {
-    update_state_seq_();
+    // Sub-step marks for the LS online window (bracketed by sms_ls_finish_gc /
+    // sms_online_ls in the storage-meta replay). Each mark is emitted AFTER
+    // its sub-step, so the printed cost is that sub-step. Behavior of the
+    // original if/else-if chain is preserved: a failing step stops the rest,
+    // and the checkpoint/gc/empty-shell steps are best-effort (result
+    // ignored, exactly like the FALSE_IT forms they replaced).
+    if (OB_SUCC(ret) && OB_FAIL(ls_tablet_svr_.online())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_tablet_svr");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(lock_table_.online())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_lock_table");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(online_tx_())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_tx");
+    }
+    if (OB_SUCC(ret) && !is_append_mode && OB_FAIL(ls_tx_svr_.block_tx())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_block_tx");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ls_ddl_log_handler_.online())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_ddl_log");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(log_handler_.online(ls_meta_.get_clog_base_lsn(),
+                                                   ls_meta_.get_clog_checkpoint_scn()))) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_log_handler");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ls_wrs_handler_.online())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_wrs");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(online_compaction_())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_compaction");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(online_local_log_(log_mode))) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_local_log");
+    }
+    if (OB_SUCC(ret)) {
+      checkpoint_executor_.online();
+      tablet_gc_handler_.online();
+      tablet_empty_shell_handler_.online();
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_ckpt_gc_shell");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(online_advance_epoch_())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_advance_epoch");
+    }
+    if (OB_SUCC(ret) && OB_FAIL(running_state_.online())) {
+    } else if (OB_SUCC(ret)) {
+      ::oceanbase::storage::startup_substep_timeline_mark("lson_running");
+      update_state_seq_();
+    }
   }
 
   FLOG_INFO("ls online end", KR(ret));

@@ -1257,8 +1257,12 @@ int ob_absolute_path_utf8(const char *path, char *buffer, int64_t buffer_size)
     errno = EINVAL;
     ret = -1;
   } else {
-    char *resolved = ::realpath(path, NULL);
-    if (NULL == resolved) {
+    // Resolve into a stack buffer. realpath(path, NULL) returns libc-allocated
+    // memory, which libseekdb cannot release: the library exports its own
+    // free() backed by the bundled jemalloc, so releasing a libc pointer
+    // crashes on Linux.
+    char resolved[PATH_MAX + 1] = {'\0'};
+    if (NULL == ::realpath(path, resolved)) {
       ret = -1;
     } else {
       const size_t resolved_size = ::strlen(resolved) + 1;
@@ -1268,7 +1272,6 @@ int ob_absolute_path_utf8(const char *path, char *buffer, int64_t buffer_size)
       } else {
         ::memcpy(buffer, resolved, resolved_size);
       }
-      ::free(resolved);
     }
   }
 #endif

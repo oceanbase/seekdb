@@ -510,8 +510,7 @@ cc_library(
 )
 
 cc_library(
-    name = "_unittest_in_process_entry",
-    testonly = True,
+    name = "in_process_server",
     srcs = ["in_process/in_process_server.cpp"],
     copts = MODULE_CXX_COPTS + ["-include", "$(location :_ios_build_config)"],
     additional_compiler_inputs = [":_ios_build_config"],
@@ -546,7 +545,7 @@ final_link(
     ) + select({
         # The shared test runtime retains the Rust in-process bridge, including
         # its reference to run_server. Supply the real implementation on Linux.
-        "@platforms//os:linux": [":_unittest_in_process_entry", ":in_process_api"],
+        "@platforms//os:linux": [":in_process_server", ":in_process_api"],
         "//conditions:default": [],
     }),
     ordered_link_files = _ORDERED_LINK_FILES,
@@ -563,4 +562,124 @@ cc_import(
     tags = ["manual"],
     testonly = True,
     visibility = ["//unittest:__subpackages__"],
+)
+
+# C API behind the standalone libseekdb shared library used by the embedded
+# bindings (Python/Node/Rust/Go/Java). The FFI translation unit contributes the
+# only direct objects; the engine arrives whole-archived below so archive
+# members that the API never references are still linked into the library.
+cc_library(
+    name = "seekdb_c_api",
+    srcs = ["//src/include:seekdb.cpp"],
+    hdrs = ["//src/include:seekdb.h"],
+    tags = ["manual"],
+    deps = [
+        ":observer_internal_interface",
+        "//bazel/third_party:curl_headers",
+        "//deps/external:jemalloc_headers",
+        "//rust:in_process_headers",
+        "//rust:logger_headers",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_io_primitives",
+        "//src/oblib:oblib_rpc",
+    ],
+)
+
+# Only the public C API is exported: a version script on ELF platforms, an
+# allow list on macOS, and a module definition on Windows.
+_LIBSEEKDB_EXPORT_INPUTS = select({
+    "@platforms//os:macos": ["//src/include:seekdb_macos_exports"],
+    "@platforms//os:windows": ["//src/include:seekdb_windows_def"],
+    "//conditions:default": ["//src/include:seekdb.version"],
+})
+
+_LIBSEEKDB_LINKOPTS = select({
+    "@platforms//os:macos": [
+        "-Wl,-framework,Security",
+        "-Wl,-framework,CoreFoundation",
+        "-Wl,-framework,SystemConfiguration",
+        "-liconv",
+        "-Wl,-exported_symbols_list,$(location //src/include:seekdb_macos_exports)",
+        # Consumers (Node N-API addon, Java JNI) link against the dylib and embed
+        # its install name. The default is the relative Bazel output path, which
+        # dyld cannot resolve at runtime; route it through the consumer rpaths.
+        "-Wl,-install_name,@rpath/libseekdb.dylib",
+    ],
+    "@platforms//os:windows": [
+        "/DEF:$(location //src/include:seekdb_windows_def)",
+        "/FORCE:MULTIPLE",
+    ],
+    "//conditions:default": [
+        "-Wl,-z,notext",
+        "-Wl,-z,noexecstack",
+        "-Wl,--no-rosegment",
+        "-Wl,--build-id=sha1",
+        "-Wl,-z,relro",
+        "-Wl,-z,now",
+        "-Wl,--allow-multiple-definition",
+        "-Wl,--version-script=$(location //src/include:seekdb.version)",
+    ],
+})
+
+final_link(
+    name = "_libseekdb_link",
+    direct_object_deps = [":seekdb_c_api"] + select({
+        # ELF shared libraries keep the whole-archived Rust in-process bridge,
+        # which references run_server, so the C++ implementation must be part
+        # of the library or every consumer fails to load it.
+        "@platforms//os:linux": [":in_process_server"],
+        "@platforms//os:android": [":in_process_server"],
+        "//conditions:default": [],
+    }),
+    whole_group_deps = (
+        _OBSERVER_RETRIEVAL_COMPOSITION_OBJECT_TARGETS +
+        _CORE_LINK_DEPS +
+        select({
+            "@platforms//os:macos": [
+                "//src/sql/parser:sql_server_parser",
+            ],
+            "//conditions:default": [
+                "//src/oblib:malloc_hook_objects",
+                "//src/sql/parser:sql_server_parser",
+            ],
+        })
+    ),
+    # The Rust staticlib embeds the native static libraries of its crates, so
+    # whole-archiving the same archives adds a second copy of every object they
+    # hold. aarch64 rejects the duplicate poly1305 objects with an out-of-range
+    # adr relocation, and ld64 rejects the duplicate symbols. Keep these on the
+    # link line and pull their members on demand instead. The http-client and
+    # crypto crates list their CXX bridge in link_deps, so those bridge objects
+    # are embedded in libseekdb_rust.a as well; naming the bridge archives here
+    # is what keeps ld64 from reporting the duplicates.
+    plain_group_archives = [
+        "//bazel/third_party:curl",
+        "//bazel/third_party:libcrypto",
+        "//bazel/third_party:libssl",
+        "//rust:crypto_bridge",
+        "//rust:http_client_bridge",
+    ],
+    ordered_link_files = _ORDERED_LINK_FILES,
+    extra_inputs = _EXTRA_LINK_INPUTS + _LIBSEEKDB_EXPORT_INPUTS,
+    linkopts = _SYSTEM_LINKOPTS + _LIBSEEKDB_LINKOPTS + sanity_linkopts(),
+    out = select({
+        "@platforms//os:macos": "libseekdb.dylib",
+        "@platforms//os:windows": "seekdb.dll",
+        "//conditions:default": "libseekdb.so",
+    }),
+    # Packaged for Windows consumers (Node N-API binding and the packed-zip smoke
+    # test link against it). Ignored on other platforms.
+    import_library = "seekdb.lib",
+    shared = True,
+    runtime_dlls = True,
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "libseekdb",
+    actual = ":_libseekdb_link",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
 )

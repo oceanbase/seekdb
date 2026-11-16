@@ -1,0 +1,9 @@
+{
+    global:
+        /* Export only SeekDB public API */
+        seekdb_*;
+        
+    local:
+        /* Hide everything else, especially malloc/free */
+        *;
+};

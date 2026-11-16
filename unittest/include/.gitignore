@@ -1,0 +1,4 @@
+seekdb.db
+build
+node_modules
+*.db

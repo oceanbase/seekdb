@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_engine.h"
+#include "embed_palf_warm_manifest.h"
 #include "share/storage/local_store.h"
 #include "logservice/ob_log_allocator.h"  // ObILogAllocator
 #include "log_io_worker.h"                              // LogIOWorker
@@ -70,6 +71,9 @@ int LogEngine::init(share::LocalStore &store, const char *base_dir,
       || OB_ISNULL(plugins) || OB_ISNULL(io_adapter) || !store.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
+#ifdef OB_BUILD_EMBED_MODE
+    (void)delete_embed_palf_warm_manifest(base_dir);
+#endif
     store_ = &store;
     if (0 != log_storage_block_size && OB_FAIL(log_storage_.init(base_dir, "log",
         log_meta.get_log_snapshot_meta().base_lsn_, log_storage_block_size,
@@ -129,6 +133,15 @@ int LogEngine::load(share::LocalStore &store, const char *base_dir,
   int ret = OB_SUCCESS;
   bool meta_exists = false;
   block_id_t expected_next_block_id = LOG_INVALID_BLOCK_ID;
+#ifdef OB_BUILD_EMBED_MODE
+  EmbedPalfWarmManifest warm_manifest;
+  const EmbedPalfWarmStorageSnapshot *redo_warm_snapshot = nullptr;
+  warm_manifest.reset();
+  if (OB_SUCC(load_embed_palf_warm_manifest(base_dir, warm_manifest))) {
+    redo_warm_snapshot = &warm_manifest.redo_;
+    PALF_LOG(INFO, "loaded embed palf warm manifest", K(base_dir), K(warm_manifest.write_ts_us_));
+  }
+#endif
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(base_dir) || OB_ISNULL(alloc_mgr) || OB_ISNULL(log_io_worker)
@@ -149,20 +162,42 @@ int LogEngine::load(share::LocalStore &store, const char *base_dir,
     const LSN base_lsn = meta_exists ? log_meta_.get_log_snapshot_meta().base_lsn_
                                     : LSN(PALF_INITIAL_LSN_VAL);
     if (OB_FAIL(ret)) {
-    } else if (0 != log_storage_block_size && OB_FAIL(log_storage_.load(base_dir, "log",
-        base_lsn, log_storage_block_size, LOG_DIO_ALIGN_SIZE, LOG_DIO_ALIGNED_BUF_SIZE_REDO,
-        update_manifest, log_block_pool, plugins, log_cache, io_adapter,
-        entry_header, last_group_entry_header_lsn))) {
+    } else if (0 != log_storage_block_size
+                   && OB_FAIL(log_storage_.load(base_dir, "log",
+                       base_lsn, log_storage_block_size, LOG_DIO_ALIGN_SIZE, LOG_DIO_ALIGNED_BUF_SIZE_REDO,
+                       update_manifest, log_block_pool, plugins, log_cache, io_adapter,
+                       entry_header, last_group_entry_header_lsn
+#ifdef OB_BUILD_EMBED_MODE
+                       ,
+                       redo_warm_snapshot
+#endif
+                       ))) {
+      PALF_LOG(ERROR, "LogStorage load failed", K(ret), K(base_dir));
     } else if (OB_FAIL(integrity_verify_(meta_exists, last_group_entry_header_lsn, is_integrity))) {
     } else if (meta_exists && 0 != log_storage_block_size
-        && OB_FAIL(try_clear_up_holes_and_check_storage_integrity_(
-            last_group_entry_header_lsn, expected_next_block_id, entry_header))) {
+                   && OB_FAIL(try_clear_up_holes_and_check_storage_integrity_(
+                       last_group_entry_header_lsn, expected_next_block_id, entry_header))) {
+      PALF_LOG(ERROR, "the last block may be deleted by human, restart failed!!!", K(ret),
+          K_(is_inited));
     } else {
       palf_epoch_ = palf_epoch;
       alloc_mgr_ = alloc_mgr;
       log_io_worker_ = log_io_worker;
       log_shared_queue_th_ = log_shared_queue_th;
       is_inited_ = true;
+#ifdef OB_BUILD_EMBED_MODE
+      {
+        // The PALF metadata lives in the LocalStore KV now, so only the redo log
+        // storage tail scan can be accelerated by the warm manifest.
+        EmbedPalfWarmManifest manifest;
+        manifest.reset();
+        manifest.write_ts_us_ = common::ObTimeUtility::current_time();
+        if (OB_SUCC(log_storage_.fill_embed_warm_snapshot_from_state_for_redo(
+                manifest.redo_, entry_header, last_group_entry_header_lsn))) {
+          (void)save_embed_palf_warm_manifest(base_dir, manifest);
+        }
+      }
+#endif
       PALF_LOG(INFO, "LogEngine load success", K(log_meta_), K(log_storage_), K(palf_epoch));
     }
   }
@@ -844,6 +879,27 @@ void LogEngine::reset_min_block_info_()
   min_block_max_scn_.reset();
   min_block_info_cache_version_++;
 }
+
+#ifdef OB_BUILD_EMBED_MODE
+int LogEngine::save_embed_warm_manifest(const char *log_stream_dir)
+{
+  int ret = OB_SUCCESS;
+  EmbedPalfWarmManifest manifest;
+  manifest.reset();
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(log_stream_dir)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(log_storage_.capture_embed_warm_snapshot_for_redo(manifest.redo_))) {
+    PALF_LOG(WARN, "capture redo embed warm snapshot failed", K(ret), K(log_stream_dir));
+  } else if (OB_FAIL(save_embed_palf_warm_manifest(log_stream_dir, manifest))) {
+    PALF_LOG(WARN, "save embed palf warm manifest failed", K(ret), K(log_stream_dir));
+  } else {
+    PALF_LOG(INFO, "save embed palf warm manifest from log engine success", K(log_stream_dir));
+  }
+  return ret;
+}
+#endif
 
 } // end namespace palf
 } // end namespace oceanbase

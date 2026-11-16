@@ -10,7 +10,19 @@ def _android_cc_toolchain_repository_impl(ctx):
     if not ndk:
         ctx.file("BUILD.bazel", "# Set ANDROID_NDK_HOME to enable Android builds.\n")
         return
-    host = "darwin-x86_64" if ctx.os.name == "mac os x" else "linux-x86_64"
+    # The NDK ships one prebuilt toolchain per host OS. This repository is
+    # registered unconditionally, so a host without a prebuilt (e.g. Windows)
+    # must produce an empty repository instead of failing on fetch.
+    host = {
+        "linux": "linux-x86_64",
+        "mac os x": "darwin-x86_64",
+    }.get(ctx.os.name)
+    if host == None:
+        ctx.file(
+            "BUILD.bazel",
+            "# Android builds run only on Linux and macOS hosts; this host has no NDK prebuilt.\n",
+        )
+        return
     toolchain = ctx.path(ndk + "/toolchains/llvm/prebuilt/" + host)
     compiler = toolchain.get_child("bin").get_child(_ANDROID_TARGET + "-clang")
     if not compiler.exists:

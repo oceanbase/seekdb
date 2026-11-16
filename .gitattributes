@@ -1,6 +1,12 @@
 .gitattributes export-ignore
 .gitignore export-ignore
 
+# Bazel hashes every input of the crate_universe extension (Cargo.toml,
+# Cargo.lock, *.bazel, *.json, *.toml) byte-for-byte when validating
+# MODULE.bazel.lock, so a CRLF checkout on Windows fails --lockfile_mode=error.
+# Keep all text files LF in the working tree on every platform.
+* text=auto eol=lf
+
 # All OceanBase code is auto-formatted using clang-format.
 *.c filter=codeformat
 *.cc filter=codeformat

@@ -1,0 +1,5 @@
+target/
+build/
+*.class
+seekdb.db
+seekdb_abs.db

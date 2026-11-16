@@ -19,6 +19,7 @@
 #include "ob_vsag_adaptor.h"
 #include <inttypes.h>
 #include <map>
+#if !defined(OB_BUILD_CDC_DISABLE_VSAG) || defined(OB_BUILD_EMBED_MODE)
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
 #include "vsag/dataset.h"
@@ -26,9 +27,14 @@
 #include "vsag/index.h"
 #include "vsag/options.h"
 #include "vsag/factory.h"
+#endif
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/worker.h"
+
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
+
+#else
 
 namespace oceanbase {
 namespace common {
@@ -1416,3 +1422,4 @@ int immutable_optimize(VectorIndexPtr& index_handler)
 } // namespace obvsag
 } // namespace common
 } // namespace oceanbase
+#endif

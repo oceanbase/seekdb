@@ -17,7 +17,14 @@
 #ifndef _OB_MACRO_UTILS_H_
 #define _OB_MACRO_UTILS_H_
 
+/* Windows MSVC (cl.exe) has no weak symbols; stubs in ob_log.cpp etc. rely on OB_WEAK_SYMBOL.
+ * clang-cl + lld-link support __attribute__((weak)) on COFF — use it so strong defs in
+ * src/share/ob_errno.cpp override stubs (same as ELF). Plain _WIN32 must leave this empty. */
+#if defined(_WIN32) && !(defined(__clang__) || defined(__GNUC__))
+#define OB_WEAK_SYMBOL
+#else
 #define OB_WEAK_SYMBOL __attribute__((weak))
+#endif
 
 #define SELECT150_(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9,           \
                    _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, \

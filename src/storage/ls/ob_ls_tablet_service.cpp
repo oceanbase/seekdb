@@ -398,6 +398,12 @@ int ObLSTabletService::get_tablet_addr(const ObTabletMapKey &key, ObMetaDiskAddr
 void ObLSTabletService::report_tablet_to_rs(const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
+#ifdef __ANDROID__
+  // Embedded Android has no RS; ObTabletTableUpdater async reporting can terminate the process.
+  UNUSED(ret);
+  UNUSED(tablet_id);
+  return;
+#endif
 
   if (tablet_id.is_ls_inner_tablet()) {
     // no need to report for ls inner tablet
@@ -409,6 +415,12 @@ void ObLSTabletService::report_tablet_to_rs(
     const common::ObIArray<common::ObTabletID> &tablet_id_array)
 {
   int ret = OB_SUCCESS;
+
+#ifdef __ANDROID__
+  UNUSED(ret);
+  UNUSED(tablet_id_array);
+  return;
+#endif
 
   // ignore ret on purpose
   for (int64_t i = 0; i < tablet_id_array.count(); ++i) {
@@ -2893,6 +2905,10 @@ int ObLSTabletService::insert_tablet_rows(
       }
     }
     LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, rowkey_buffer, index_name.length(), index_name.ptr());
+  }
+  if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret && run_ctx.dml_param_.is_ignore_
+      && !rows_info.need_find_all_duplicate_key()) {
+    ret = OB_SUCCESS;
   }
   return ret;
 }
