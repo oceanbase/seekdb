@@ -2269,8 +2269,14 @@ int ObSelectResolver::resolve_from_clause(const ParseNode *node)
       }
       // TODO@wenqu: wait flags from session info
       session_info_->set_table_name_hidden(is_table_hidden);
-      OZ( resolve_table(*table_node, table_item) );
+      // A table that can not be resolved has no table item. The loop must
+      // stop here, the table item is used by the two calls below.
+      const int table_ret = resolve_table(*table_node, table_item);
       session_info_->set_table_name_hidden(old_flag);
+      if (OB_FAIL(table_ret)) {
+        ret = table_ret;
+        break;
+      }
       OZ( column_namespace_checker_.add_reference_table(table_item), table_item );
       OZ( select_stmt->add_from_item(table_item->table_id_, table_item->is_joined_table()) );
       if (OB_SUCC(ret)) {
