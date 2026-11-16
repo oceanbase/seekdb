@@ -1,0 +1,143 @@
+# JSON_TYPE must provide a nonnegative result length before CASE type deduction.
+# direct case
+SELECT CASE WHEN 1=0 THEN JSON_TYPE(CAST('{}' AS JSON)) ELSE JSON_TYPE(CAST('{}' AS JSON)) END;
+
+# json standalone
+SELECT JSON_TYPE(CAST('{}' AS JSON));
+
+# derived case
+SELECT CASE WHEN 1=0 THEN d.c ELSE d.c END FROM (SELECT JSON_TYPE(CAST('{}' AS JSON)) AS c) d;
+
+# json case OBJECT
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('{}' AS JSON)) ELSE JSON_TYPE(CAST('{}' AS JSON)) END;
+
+# json case ARRAY
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('[]' AS JSON)) ELSE JSON_TYPE(CAST('[]' AS JSON)) END;
+
+# json case NULL
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('null' AS JSON)) ELSE JSON_TYPE(CAST('null' AS JSON)) END;
+
+# json case BOOLEAN
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('true' AS JSON)) ELSE JSON_TYPE(CAST('true' AS JSON)) END;
+
+# json case INTEGER
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('1' AS JSON)) ELSE JSON_TYPE(CAST('1' AS JSON)) END;
+
+# json case DOUBLE
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('1.5' AS JSON)) ELSE JSON_TYPE(CAST('1.5' AS JSON)) END;
+
+# json case UNSIGNED INTEGER
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('9223372036854775808' AS JSON)) ELSE JSON_TYPE(CAST('9223372036854775808' AS JSON)) END;
+
+# json case STRING
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('"x"' AS JSON)) ELSE JSON_TYPE(CAST('"x"' AS JSON)) END;
+
+# sql null
+SELECT CASE WHEN 0 THEN JSON_TYPE(NULL) ELSE JSON_TYPE(NULL) END;
+
+# mixed string
+SELECT CASE WHEN 1 THEN JSON_TYPE(CAST('{}' AS JSON)) ELSE 'fallback' END;
+
+# coalesce control
+SELECT COALESCE(JSON_TYPE(CAST('{}' AS JSON)),JSON_TYPE(CAST('[]' AS JSON)));
+
+# constant control
+SELECT CASE WHEN 0 THEN 'OBJECT' ELSE 'OBJECT' END;
+
+# union
+SELECT JSON_TYPE(CAST('{}' AS JSON)) UNION ALL SELECT JSON_TYPE(CAST('[]' AS JSON));
+
+# Keep the SQLsmith fixture isolated from other CI cases.
+--disable_warnings
+DROP DATABASE IF EXISTS json_type_result_length;
+--enable_warnings
+CREATE DATABASE json_type_result_length;
+USE json_type_result_length;
+CREATE TABLE account (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  tenant_id BIGINT NOT NULL,
+  name VARCHAR(128),
+  balance DECIMAL(20,4) DEFAULT 0,
+  active TINYINT DEFAULT 1,
+  created_at TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  KEY idx_account_tenant (tenant_id, active)
+);
+
+CREATE TABLE orders (
+  order_id BIGINT NOT NULL,
+  account_id BIGINT NOT NULL,
+  status VARCHAR(32),
+  amount DECIMAL(18,2),
+  note TEXT,
+  order_date DATE,
+  updated_at DATETIME(6),
+  PRIMARY KEY (order_id),
+  KEY idx_orders_account (account_id, status)
+);
+
+CREATE TABLE inventory (
+  sku VARCHAR(64) NOT NULL,
+  warehouse_id INT NOT NULL,
+  quantity INT,
+  price DOUBLE,
+  payload JSON,
+  PRIMARY KEY (sku, warehouse_id)
+);
+
+CREATE TABLE event_log (
+  event_id BIGINT NOT NULL AUTO_INCREMENT,
+  event_type VARCHAR(64),
+  source_ip VARCHAR(64),
+  attributes JSON,
+  event_time TIMESTAMP(6),
+  PRIMARY KEY (event_id),
+  KEY idx_event_type_time (event_type, event_time)
+);
+
+CREATE TABLE numeric_types (
+  id INT NOT NULL,
+  c_tiny TINYINT,
+  c_small SMALLINT,
+  c_int INT,
+  c_big BIGINT,
+  c_decimal DECIMAL(30,10),
+  c_float FLOAT,
+  c_double DOUBLE,
+  PRIMARY KEY (id)
+);
+
+CREATE TABLE string_types (
+  id INT NOT NULL,
+  c_char CHAR(16),
+  c_varchar VARCHAR(512),
+  c_binary BINARY(16),
+  c_varbinary VARBINARY(512),
+  c_text TEXT,
+  c_blob BLOB,
+  PRIMARY KEY (id)
+);
+
+INSERT INTO account (tenant_id, name, balance, active) VALUES
+  (1, 'alpha', 100.25, 1), (1, 'beta', -2.50, 0), (2, NULL, 0, 1);
+INSERT INTO orders VALUES
+  (1, 1, 'new', 12.30, 'first', CURRENT_DATE, NOW(6)),
+  (2, 1, 'done', NULL, NULL, CURRENT_DATE, NOW(6));
+INSERT INTO inventory VALUES
+  ('sku-a', 1, 10, 3.5, '{"color":"red"}'),
+  ('sku-b', 2, 0, NULL, NULL);
+INSERT INTO numeric_types VALUES
+  (1, -1, 2, 3, 4, 5.1234567890, 6.5, 7.25),
+  (2, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO string_types VALUES
+  (1, 'fixed', 'variable', X'00112233445566778899AABBCCDDEEFF',
+   X'0102', 'text value', X'0304');
+
+# The empty input must not bypass result-type deduction.
+SELECT CASE WHEN 95 BETWEEN 60 AND 8 THEN d.c ELSE d.c END FROM (SELECT DISTINCT JSON_TYPE(CAST('{}' AS JSON)) AS c FROM event_log WHERE 34>76 LIMIT 111) d;
+
+# Original SQLsmith shape, with only the database namespace adapted.
+WITH  jennifer_0 AS (select   61 as c0,  curdate( ) as c1,  subq_0.c0 as c2,  subq_0.c0 as c3,  case when 89 = any ( select   52 as c0 from  json_type_result_length.inventory as ref_1 where subq_0.c0 >= subq_0.c0 limit 114) then subq_0.c0 else case when 95 between  60 and  8 then subq_0.c0 else subq_0.c0 end  end  as c4,  case when 11 in ( 61) then 41 else 7 end  as c5 from  (select distinct  json_type( cast('{\"key0\":36,\"key1\":\"value1\",\"key2\":98,\"key3\":\"value3\",\"key4\":\"value4\",\"key5\":\"value5\",\"key6\":\"value6\"}' as JSON) ) as c0 from  json_type_result_length.event_log as ref_0 where 34 > 76 limit 111) as subq_0 where (EXISTS ( select distinct  85 as c0,  case when 0 then 15 else 77 end  as c1,  ref_3.created_at as c2,  ref_3.created_at as c3,  group_concat( cast(cast(null as CHAR) as CHAR) ) as c4,  utc_time( ) as c5,  99 as c6,  58 as c7,  ref_3.balance as c8,  ref_3.name as c9,  ref_3.id as c10,  33 as c11,  24 as c12,  ref_3.active as c13,  utc_date( ) as c14,  subq_0.c0 as c15,  ref_3.balance as c16,  ref_3.id as c17,  ref_3.tenant_id as c18,  case when 41 not  in ( 57,  75,  19,  62) then 40 else 56 end  as c19,  ref_3.name as c20,  subq_0.c0 as c21,  utc_time( ) as c22,  subq_0.c0 as c23,  95 as c24,  subq_0.c0 as c25,  subq_0.c0 as c26,  62 as c27,  72 as c28 from  json_type_result_length.account as ref_3 where subq_0.c0 = subq_0.c0 limit 81))  and (case when 69 is not NULL then 30 else 51 end  = any ( select   ref_4.quantity as c0 from  json_type_result_length.inventory as ref_4 where ref_4.warehouse_id >= subq_0.c0 limit 88)) limit 149),   jennifer_1 AS (select   ref_5.order_id as c0,  ref_5.order_date as c1 from  json_type_result_length.orders as ref_5 where ref_5.order_id not in ( select   ref_6.c_binary as c0 from  json_type_result_length.string_types as ref_6 where 97 & 22 limit 78) limit 179),   jennifer_2 AS (select   64 as c0,  curdate( ) as c1,  subq_1.c6 as c2,  subq_1.c5 as c3,  subq_1.c0 as c4,  (select std(amount) from json_type_result_length.orders order by 1 desc )  as c5,  case when (( not EXISTS ( select   (select warehouse_id from json_type_result_length.inventory order by 1 limit 1 offset 2)  as c0,  utc_timestamp( ) as c1,  subq_1.c3 as c2,  38 as c3,  ref_11.order_id as c4,  ref_11.status as c5,  subq_1.c1 as c6,  ref_11.account_id as c7 from  json_type_result_length.orders as ref_11 where ref_11.amount <= subq_1.c0 limit 112))  or (cast(null as CHAR) in ( cast(null as CHAR),  "\6\-\V\R%",  cast(null as CHAR))))  and (cast(null as CHAR) like "cast(null as CHAR)%") then subq_1.c5 else subq_1.c2 end  as c6,  cast(coalesce((select note from json_type_result_length.orders order by 1 limit 1 offset 5) , cast(null as CHAR)) as CHAR) as c7,  subq_1.c6 as c8,  utc_date( ) as c9,  subq_1.c1 as c10,  subq_1.c1 as c11,  subq_1.c6 as c12 from  (select   ref_7.id as c0,  ref_7.c_big as c1,  ref_7.c_double as c2,  utc_time( ) as c3,  ref_7.c_big as c4,  ref_7.c_decimal as c5,  ref_7.c_double as c6 from  json_type_result_length.numeric_types as ref_7 where 87 <= any ( select distinct  46 as c0 from  json_type_result_length.string_types as ref_8 where EXISTS ( select   (select id from json_type_result_length.account order by 1 limit 1 offset 72)  as c0,  locate( cast(cast(null as CHAR) as CHAR), cast(cast(null as CHAR) as CHAR) ) as c1,  ref_7.c_tiny as c2,  ref_9.price as c3,  89 as c4,  7 as c5,  case when 7 in ( 34) then 88 else 39 end  as c6,  ref_9.sku as c7,  (select VAR_POP(id) from json_type_result_length.string_types order by 1)  as c8,  52 as c9,  ref_9.quantity as c10,  24 as c11,  ref_9.price as c12,  utc_date( ) as c13,  ref_7.c_decimal as c14 from  json_type_result_length.inventory as ref_9 where 14 in ( select   10 as c0 from  json_type_result_length.account as ref_10 where ref_9.quantity = ref_7.c_small limit 76) limit 138) limit 133) limit 169) as subq_1 where (86 < any ( select   subq_1.c3 as c0 from  json_type_result_length.event_log as ref_12 where ref_12.event_type <= subq_1.c3))  or (subq_1.c0 is not NULL) limit 138) SELECT * FROM jennifer_0 , jennifer_1 , jennifer_2;
+
+DROP DATABASE json_type_result_length;
+USE test;
