@@ -192,13 +192,17 @@ int ObUUIDNode::init()
   char buf[1024];
   int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
   if (sock == -1) {
+    const int sys_errno = errno;
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("socket failed", K(ret), K(errno));
+    LOG_ERROR("UUID node socket failed; check AF_INET datagram socket permissions", K(ret), K(sys_errno));
   } else {
     ifc.ifc_len = sizeof(buf);
     ifc.ifc_buf = buf;
     if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
+      const int sys_errno = errno;
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("UUID node SIOCGIFCONF failed; check network interface enumeration permissions",
+               K(ret), K(sys_errno));
     } else {
       ifreq *it = ifc.ifc_req;
       ifreq *end = it + (ifc.ifc_len / sizeof(ifreq));
@@ -215,17 +219,23 @@ int ObUUIDNode::init()
                 mac_addr_found = true;
                 break;
               } else {
-                LOG_WARN("ioctl failed, SIOCGIFHWADDR", K(errno), K(it->ifr_name));
+                const int sys_errno = errno;
+                LOG_WARN("UUID node SIOCGIFHWADDR failed; check MAC address query permissions",
+                         K(sys_errno), K(it->ifr_name));
               }
             }
           } else {
-            LOG_WARN("ioctl failed, SIOCGIFFLAGS", K(errno), K(it->ifr_name));
+            const int sys_errno = errno;
+            LOG_WARN("UUID node SIOCGIFFLAGS failed; check interface flags query permissions",
+                     K(sys_errno), K(it->ifr_name));
           }
         }
       }//end for
       if (OB_FAIL(ret)) {
       } else if (!mac_addr_found) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("UUID node has no usable MAC address; a queryable non-loopback interface is required; "
+                 "check preceding ioctl errors and network namespace configuration", K(ret));
       } else {
         is_inited_ = true;
       }
