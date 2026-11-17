@@ -803,7 +803,7 @@ int ObServerRuntimeController::apply_server_resource_config_(const ObServerRunti
 
   ObServerRuntime *runtime = nullptr;
   if (OB_FAIL(get_runtime(runtime))) {
-    ret = OB_ERR_UNEXPECTED;
+    // Bootstrap refresh may arrive before runtime creation completes.
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (runtime->has_stopped()) {
