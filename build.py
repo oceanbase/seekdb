@@ -22,12 +22,14 @@ class BuildError(RuntimeError):
 
 
 def _check_windows_toolset() -> None:
-    # Released Windows dependencies were built with the VS 2022 14.44 toolset.
+    # Released Windows dependencies were built with MSVC 14.44; linking needs
+    # the same or a newer compatible toolset.
     version = os.environ.get("VCToolsVersion", "")
-    if not re.fullmatch(r"14\.44\.\d+", version):
+    match = re.fullmatch(r"14\.(\d+)\.\d+", version)
+    if match is None or int(match.group(1)) < 44:
         raise BuildError(
-            "Windows builds require the MSVC 14.44 toolset used by seekdb-deps; "
-            "initialize the VS 2022 x64 developer environment with -vcvars_ver=14.44 "
+            "Windows builds require MSVC 14.44 or newer compatible 14.x tools; "
+            "initialize the x64 developer environment with a supported toolset "
             "(found %s)" % (version or "no active MSVC toolset")
         )
 
