@@ -205,138 +205,31 @@
   "moduleExtensions": {
     "//bazel/sdk_sources:repositories.bzl%sdk_sources": {
       "general": {
-        "bzlTransitiveDigest": "wjCRn4cLyvC/wUfKXaD731rHkDKSdgW0Uk8ATAYtrSo=",
+        "bzlTransitiveDigest": "6qbbcXCKyLfjRt7/fjlAk+QaxaAbiAQTZk24i6KV55g=",
         "usagesDigest": "C88oWWRSwl985DWTNoqa3RJhrmyPEurpg8bTGjwBxHo=",
         "recordedInputs": [
-          "FILE:@@//bazel/sdk_sources/dependencies.json dc42c8f57f31d55f6ba4d3be551661e93937662415599b8c3601a2561968eda6"
+          "FILE:@@//bazel/sdk_sources/dependencies.json e6cc5afa8c36fef2bb50de9d9b870a71a0f4333edc11951fa2a03dbdabb03ca7"
         ],
         "generatedRepoSpecs": {
           "sdk_abseil": {
             "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
             "attributes": {
               "build_file": "@@//bazel/sdk_sources:abseil.BUILD",
-              "package": "abseil",
-              "profile": ""
+              "package": "abseil"
             }
           },
           "sdk_roaring": {
             "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
             "attributes": {
               "build_file": "@@//bazel/sdk_sources:roaring.BUILD",
-              "package": "roaring",
-              "profile": ""
-            }
-          },
-          "sdk_vsag_ios": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:vsag.BUILD",
-              "package": "vsag",
-              "profile": "ios"
-            }
-          },
-          "sdk_vsag_wasm": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:vsag.BUILD",
-              "package": "vsag",
-              "profile": "wasm"
-            }
-          },
-          "sdk_cpuinfo": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:cpuinfo.BUILD",
-              "package": "cpuinfo",
-              "profile": ""
-            }
-          },
-          "sdk_fmt": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:fmt.BUILD",
-              "package": "fmt",
-              "profile": ""
-            }
-          },
-          "sdk_spdlog": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:spdlog.BUILD",
-              "package": "spdlog",
-              "profile": ""
-            }
-          },
-          "sdk_nlohmann_json": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:nlohmann_json.BUILD",
-              "package": "nlohmann_json",
-              "profile": ""
-            }
-          },
-          "sdk_robin_map": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:robin_map.BUILD",
-              "package": "robin_map",
-              "profile": ""
-            }
-          },
-          "sdk_thread_pool": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:thread_pool.BUILD",
-              "package": "thread_pool",
-              "profile": ""
-            }
-          },
-          "sdk_clapack": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:clapack.BUILD",
-              "package": "clapack",
-              "profile": ""
-            }
-          },
-          "sdk_openblas": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:openblas.BUILD",
-              "package": "openblas",
-              "profile": ""
-            }
-          },
-          "sdk_antlr4": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:antlr4.BUILD",
-              "package": "antlr4",
-              "profile": ""
-            }
-          },
-          "sdk_lapack": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:lapack.BUILD",
-              "package": "lapack",
-              "profile": ""
-            }
-          },
-          "sdk_openmp": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:openmp.BUILD",
-              "package": "openmp",
-              "profile": ""
+              "package": "roaring"
             }
           },
           "sdk_boost": {
             "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
             "attributes": {
               "build_file": "@@//bazel/sdk_sources:boost.BUILD",
-              "package": "boost",
-              "profile": ""
+              "package": "boost"
             }
           }
         }

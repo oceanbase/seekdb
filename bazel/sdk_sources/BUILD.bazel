@@ -1,4 +1,3 @@
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(":archives.bzl", "sdk_archives")
 
 package(default_visibility = ["//visibility:public"])
@@ -6,16 +5,7 @@ package(default_visibility = ["//visibility:public"])
 exports_files(glob(["*.BUILD"]) + [
     "dependencies.json",
     "prepare.py",
-    "openblas/blas_abi.h",
-    "openmp/kmp_config.h",
 ])
-
-cc_library(
-    name = "ios_cblas",
-    hdrs = ["vsag/ios/cblas.h"],
-    includes = ["vsag/ios"],
-    target_compatible_with = ["@platforms//os:ios"],
-)
 
 alias(
     name = "base_crypto",

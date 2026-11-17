@@ -252,17 +252,6 @@ use_repo(
     sdk_sources,
     "sdk_abseil",
     "sdk_roaring",
-    "sdk_cpuinfo",
-    "sdk_fmt",
-    "sdk_spdlog",
-    "sdk_nlohmann_json",
-    "sdk_robin_map",
-    "sdk_thread_pool",
-    "sdk_clapack",
-    "sdk_openblas",
-    "sdk_antlr4",
-    "sdk_lapack",
-    "sdk_openmp",
     "sdk_boost",
 )
 
