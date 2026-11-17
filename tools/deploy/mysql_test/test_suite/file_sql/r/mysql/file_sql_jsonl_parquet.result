@@ -53,3 +53,41 @@ id	name	c1
 1	Alice	1
 2	Bob	2
 3	Chen	3
+# Left join keeps every row of the Parquet schema
+c1	name
+0	NULL
+1	Alice
+2	Bob
+3	Chen
+4	NULL
+5	NULL
+6	NULL
+# Group by and having over a file table
+active	row_count	id_sum
+1	2	4
+0	1	2
+# The schema of a file without a header row
+column_name	column_type	null	key	default	extra
+column0	VARCHAR	NO	NULL	NULL	NULL
+column1	VARCHAR	NO	NULL	NULL	NULL
+column2	VARCHAR	NO	NULL	NULL	NULL
+column3	VARCHAR	NO	NULL	NULL	NULL
+column4	VARCHAR	YES	NULL	NULL	NULL
+column5	VARCHAR	YES	NULL	NULL	NULL
+column6	VARCHAR	NO	NULL	NULL	NULL
+column7	VARCHAR	NO	NULL	NULL	NULL
+# The glob of a pattern of files
+file
+basic.csv
+# A copy does not write a file that is there
+# A copy of a table and read it back
+copy file_sql_copy_source
+to '/home/zining/seekdb-data/seekdb1/data_for_mysqltest_file_sql/table_export.csv'
+       (format csv, header, nullstr 'NULL');
+select id, name
+from read_csv('/home/zining/seekdb-data/seekdb1/data_for_mysqltest_file_sql/table_export.csv')
+order by id;
+id	name
+4	Delta
+5	Echo
+set session enable_file_sql = OFF;

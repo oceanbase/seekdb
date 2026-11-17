@@ -3025,6 +3025,9 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
   int ret = OB_SUCCESS;
   write_header = false;
   ObString format_name;
+  bool has_delimiter = false;
+  bool has_quote = false;
+  bool has_escape = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
     const ParseNode *item = format_node->children_[i];
     if (OB_ISNULL(item)) {
@@ -3045,6 +3048,63 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
       } else if (0 == name.compare(ObString("header"))) {
         // The names of the columns are the first line of the file.
         write_header = true;
+      } else if (0 == name.compare(ObString("delimiter"))
+                 || 0 == name.compare(ObString("delim"))) {
+        // The delimiter of the fields of the file.
+        const ParseNode *value = (i + 1 < format_node->num_child_)
+                                 ? format_node->children_[++i] : NULL;
+        const ObString text = node_text(value);
+        char *delimiter = NULL;
+        if (text.length() != 1) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option delimiter of a copy needs one character");
+        } else if (OB_ISNULL(delimiter = static_cast<char *>(allocator_->alloc(2)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          MEMCPY(delimiter, text.ptr(), 1);
+          delimiter[1] = '\0';
+          into_item.field_str_.set_varchar(delimiter, 1);
+          into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
+          has_delimiter = true;
+        }
+      } else if (0 == name.compare(ObString("quote"))) {
+        // The character that encloses a value of the file.
+        const ParseNode *value = (i + 1 < format_node->num_child_)
+                                 ? format_node->children_[++i] : NULL;
+        const ObString text = node_text(value);
+        char *quote = NULL;
+        if (text.length() != 1) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option quote of a copy needs one character");
+        } else if (OB_ISNULL(quote = static_cast<char *>(allocator_->alloc(2)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          MEMCPY(quote, text.ptr(), 1);
+          quote[1] = '\0';
+          into_item.closed_cht_.meta_.set_char();
+          into_item.closed_cht_.set_char_value(quote, 1);
+          into_item.closed_cht_.set_collation_type(ObCharset::get_system_collation());
+          has_quote = true;
+        }
+      } else if (0 == name.compare(ObString("escape"))) {
+        // The character that escapes a value of the file.
+        const ParseNode *value = (i + 1 < format_node->num_child_)
+                                 ? format_node->children_[++i] : NULL;
+        const ObString text = node_text(value);
+        char *escape = NULL;
+        if (text.length() != 1) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option escape of a copy needs one character");
+        } else if (OB_ISNULL(escape = static_cast<char *>(allocator_->alloc(2)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          MEMCPY(escape, text.ptr(), 1);
+          escape[1] = '\0';
+          into_item.escaped_cht_.meta_.set_char();
+          into_item.escaped_cht_.set_char_value(escape, 1);
+          into_item.escaped_cht_.set_collation_type(ObCharset::get_system_collation());
+          has_escape = true;
+        }
       } else if (0 == name.compare(ObString("nullstr"))) {
         // The string of a null value of the file. The value is not used, the
         // null value of a file of a copy is written as the escape and the
@@ -3070,13 +3130,22 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
   if (OB_SUCC(ret)) {
     // The file of a copy is a csv file, the fields are separated by a comma
     // and a value that holds a comma is enclosed by quotes.
-    into_item.field_str_.set_varchar(",");
+    if (!has_delimiter) {
+      into_item.field_str_.set_varchar(",");
+    }
     into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
     into_item.line_str_.set_varchar("\n");
     into_item.line_str_.set_collation_type(ObCharset::get_system_collation());
-    into_item.closed_cht_.meta_.set_char();
-    into_item.closed_cht_.set_char_value("\"", 1);
+    if (!has_quote) {
+      into_item.closed_cht_.meta_.set_char();
+      into_item.closed_cht_.set_char_value("\"", 1);
+    }
     into_item.closed_cht_.set_collation_type(ObCharset::get_system_collation());
+    if (!has_escape) {
+      into_item.escaped_cht_.meta_.set_char();
+      into_item.escaped_cht_.set_char_value("\\", 1);
+    }
+    into_item.escaped_cht_.set_collation_type(ObCharset::get_system_collation());
     into_item.is_optional_ = true;
     into_item.write_header_ = write_header;
   }
@@ -3112,6 +3181,9 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node,
       } else if (write_header) {
         // The names of the columns are the first line of the file.
         ObStringBuffer buf(allocator_);
+        // The names of the columns are separated by the delimiter of the
+        // fields of the file.
+        const ObString delimiter = into_item.field_str_.get_string();
         for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_select_item_size(); ++i) {
           const SelectItem &select_item = select_stmt->get_select_item(i);
           {
@@ -3119,7 +3191,7 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node,
                                           ? select_item.expr_name_
                                           : select_item.alias_name_;
             if (i > 0 && OB_SUCC(ret)) {
-              ret = buf.append(",");
+              ret = buf.append(delimiter);
             }
             if (OB_SUCC(ret)) {
               ret = buf.append(name);
