@@ -28,6 +28,18 @@ namespace oceanbase
 namespace sql
 {
 
+namespace
+{
+bool has_collection_select_item(const ObSelectStmt &stmt)
+{
+  bool has_collection = false;
+  for (int64_t i = 0; !has_collection && i < stmt.get_select_item_size(); ++i) {
+    const ObRawExpr *expr = stmt.get_select_item(i).expr_;
+    has_collection = OB_NOT_NULL(expr) && ObCollectionSQLType == expr->get_data_type();
+  }
+  return has_collection;
+}
+}
 
 int ObTransformSimplifySet::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                ObDMLStmt *&stmt,
@@ -231,6 +243,10 @@ int ObTransformSimplifySet::add_limit_order_distinct_for_union(const common::ObI
                                           need_push_orderby, can_push))) {
         } else if (!can_push) {
           /*do nothing*/
+        } else if (need_push_distinct && !child_stmt->is_set_stmt() &&
+                   has_collection_select_item(*child_stmt)) {
+          // SELECT DISTINCT cannot compare collections. Do not push its LIMIT
+          // without duplicate elimination either; keep both at the set engine.
         } else if (need_push_distinct && OB_FAIL(add_distinct(child_stmt, select_stmt))) {
         } else if (need_push_orderby && OB_FAIL(add_order_by(child_stmt, select_stmt))) {
         } else if (OB_FAIL(add_limit(child_stmt, select_stmt))) {
@@ -464,10 +480,18 @@ int ObTransformSimplifySet::pruning_set_query(common::ObIArray<ObParentDMLStmt> 
     }
     // do the remove.
     if (OB_SUCC(ret) && remove_list.count() > 0) {
-      ObSEArray<int64_t, 1> constraints_idxs;
-      if (OB_FAIL(remove_set_query_in_stmt(select_stmt, remove_list,
-                                           constraints_idxs, trans_happened))) {
-      } else if (trans_happened && OB_FAIL(add_constraints_by_idx(constraints_idxs, helper))) {
+      const bool replaces_set = select_stmt->get_set_op() != ObSelectStmt::UNION ||
+          remove_list.count() >= select_stmt->get_set_query().count() - 1;
+      if (replaces_set && select_stmt->is_set_distinct() &&
+          has_collection_select_item(*select_stmt)) {
+        // Replacing the last set branch adds an ordinary SELECT DISTINCT,
+        // which rejects collections. Preserve the set operator and its keys.
+      } else {
+        ObSEArray<int64_t, 1> constraints_idxs;
+        if (OB_FAIL(remove_set_query_in_stmt(select_stmt, remove_list,
+                                             constraints_idxs, trans_happened))) {
+        } else if (trans_happened && OB_FAIL(add_constraints_by_idx(constraints_idxs, helper))) {
+        }
       }
     }
   }

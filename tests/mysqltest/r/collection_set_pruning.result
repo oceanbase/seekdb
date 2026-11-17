@@ -1,0 +1,89 @@
+union_empty_left
+rows_found	payload_sum
+3	3
+union_empty_right
+rows_found	payload_sum
+3	3
+union_empty_both
+rows_found	payload_sum
+0	NULL
+intersect_empty_left
+rows_found	payload_sum
+0	NULL
+intersect_empty_right
+rows_found	payload_sum
+0	NULL
+intersect_empty_both
+rows_found	payload_sum
+0	NULL
+except_empty_left
+rows_found	payload_sum
+0	NULL
+except_empty_right
+rows_found	payload_sum
+3	3
+except_empty_both
+rows_found	payload_sum
+0	NULL
+union_three_branches_keeps_set
+rows_found	payload_sum
+3	3
+union_nonempty_deduplicates
+rows_found	payload_sum
+3	3
+intersect_nonempty_deduplicates
+rows_found	payload_sum
+3	3
+except_same_rows_empty
+rows_found	payload_sum
+0	NULL
+union_all_empty_left_preserves_duplicates
+rows_found	payload_sum
+5	5
+union_all_full_preserves_duplicates
+rows_found	payload_sum
+10	10
+n_union_empty_left
+rows_found	payload_sum
+3	3
+n_union_empty_right
+rows_found	payload_sum
+3	3
+n_except_empty_right
+rows_found	payload_sum
+3	3
+m_union_empty_left
+rows_found	payload_sum
+3	3
+m_union_empty_right
+rows_found	payload_sum
+3	3
+m_except_empty_right
+rows_found	payload_sum
+3	3
+mf_union_empty_left
+rows_found	payload_sum
+3	1
+mf_union_empty_right
+rows_found	payload_sum
+3	1
+mf_except_empty_right
+rows_found	payload_sum
+3	1
+union_limit_keeps_distinct
+rows_found	payload_sum
+2	2
+union_order_limit_deduplicates_before_limit
+rows_found	payload_sum
+2	1
+union_all_order_limit_keeps_null_duplicates
+rows_found	payload_sum
+2	NULL
+scalar_set_distinct_on_collection_table
+rows_found	payload_sum
+5	15
+smallint_empty_branch_control
+rows_found	payload_sum
+3	3
+plain_collection_distinct_stays_unsupported
+ERROR 22000: Invalid data type for the operation

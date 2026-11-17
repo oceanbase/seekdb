@@ -1,0 +1,101 @@
+# Collection set operations must keep their own duplicate elimination.
+# Use table columns with duplicates: constant expressions can fold away DISTINCT.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS collection_set_pruning;
+--enable_warnings
+CREATE TABLE collection_set_pruning(id INT PRIMARY KEY,c SMALLINT,a ARRAY(INT),n ARRAY(ARRAY(ARRAY(ARRAY(SMALLINT)))),m MAP(INT,ARRAY(TINYINT)),mf MAP(VARCHAR(8),DOUBLE));
+INSERT INTO collection_set_pruning VALUES(1,1,[1,2],[[[[1,2]]]],map(1,[1,2]),map('a',1.5)),(2,2,[1,2],[[[[1,2]]]],map(1,[1,2]),map('a',1.5)),(3,3,[3],[[[[3]]]],map(2,[3]),map('b',2.5)),(4,4,NULL,NULL,NULL,NULL),(5,5,NULL,NULL,NULL,NULL);
+
+--echo union_empty_left
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 0 UNION SELECT a FROM collection_set_pruning WHERE c>0) AS q;
+
+--echo union_empty_right
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE c>0 UNION SELECT a FROM collection_set_pruning WHERE 0) AS q;
+
+--echo union_empty_both
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 0 UNION SELECT a FROM collection_set_pruning WHERE 0) AS q;
+
+--echo intersect_empty_left
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 0 INTERSECT SELECT a FROM collection_set_pruning WHERE c>0) AS q;
+
+--echo intersect_empty_right
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE c>0 INTERSECT SELECT a FROM collection_set_pruning WHERE 0) AS q;
+
+--echo intersect_empty_both
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 0 INTERSECT SELECT a FROM collection_set_pruning WHERE 0) AS q;
+
+--echo except_empty_left
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 0 EXCEPT SELECT a FROM collection_set_pruning WHERE c>0) AS q;
+
+--echo except_empty_right
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE c>0 EXCEPT SELECT a FROM collection_set_pruning WHERE 0) AS q;
+
+--echo except_empty_both
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 0 EXCEPT SELECT a FROM collection_set_pruning WHERE 0) AS q;
+
+--echo union_three_branches_keeps_set
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 0 UNION SELECT a FROM collection_set_pruning WHERE id<=2 UNION SELECT a FROM collection_set_pruning WHERE id>=3) AS q;
+
+--echo union_nonempty_deduplicates
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 1=1 UNION SELECT a FROM collection_set_pruning WHERE 1=1) AS q;
+
+--echo intersect_nonempty_deduplicates
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 1=1 INTERSECT SELECT a FROM collection_set_pruning WHERE 1=1) AS q;
+
+--echo except_same_rows_empty
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 1=1 EXCEPT SELECT a FROM collection_set_pruning WHERE 1=1) AS q;
+
+--echo union_all_empty_left_preserves_duplicates
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 0 UNION ALL SELECT a FROM collection_set_pruning WHERE 1=1) AS q;
+
+--echo union_all_full_preserves_duplicates
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 1=1 UNION ALL SELECT a FROM collection_set_pruning WHERE 1=1) AS q;
+
+--echo n_union_empty_left
+SELECT COUNT(*) AS rows_found,SUM(cardinality(element_at(element_at(element_at(n,1),1),1))) AS payload_sum FROM (SELECT n FROM collection_set_pruning WHERE 0 UNION SELECT n FROM collection_set_pruning WHERE c>0) AS q;
+
+--echo n_union_empty_right
+SELECT COUNT(*) AS rows_found,SUM(cardinality(element_at(element_at(element_at(n,1),1),1))) AS payload_sum FROM (SELECT n FROM collection_set_pruning WHERE c>0 UNION SELECT n FROM collection_set_pruning WHERE 0) AS q;
+
+--echo n_except_empty_right
+SELECT COUNT(*) AS rows_found,SUM(cardinality(element_at(element_at(element_at(n,1),1),1))) AS payload_sum FROM (SELECT n FROM collection_set_pruning WHERE 1=1 EXCEPT SELECT n FROM collection_set_pruning WHERE 0) AS q;
+
+--echo m_union_empty_left
+SELECT COUNT(*) AS rows_found,SUM(cardinality(element_at(map_values(m),1))) AS payload_sum FROM (SELECT m FROM collection_set_pruning WHERE 0 UNION SELECT m FROM collection_set_pruning WHERE c>0) AS q;
+
+--echo m_union_empty_right
+SELECT COUNT(*) AS rows_found,SUM(cardinality(element_at(map_values(m),1))) AS payload_sum FROM (SELECT m FROM collection_set_pruning WHERE c>0 UNION SELECT m FROM collection_set_pruning WHERE 0) AS q;
+
+--echo m_except_empty_right
+SELECT COUNT(*) AS rows_found,SUM(cardinality(element_at(map_values(m),1))) AS payload_sum FROM (SELECT m FROM collection_set_pruning WHERE 1=1 EXCEPT SELECT m FROM collection_set_pruning WHERE 0) AS q;
+
+--echo mf_union_empty_left
+SELECT COUNT(*) AS rows_found,SUM(array_contains(map_values(mf),1.5)) AS payload_sum FROM (SELECT mf FROM collection_set_pruning WHERE 0 UNION SELECT mf FROM collection_set_pruning WHERE c>0) AS q;
+
+--echo mf_union_empty_right
+SELECT COUNT(*) AS rows_found,SUM(array_contains(map_values(mf),1.5)) AS payload_sum FROM (SELECT mf FROM collection_set_pruning WHERE c>0 UNION SELECT mf FROM collection_set_pruning WHERE 0) AS q;
+
+--echo mf_except_empty_right
+SELECT COUNT(*) AS rows_found,SUM(array_contains(map_values(mf),1.5)) AS payload_sum FROM (SELECT mf FROM collection_set_pruning WHERE 1=1 EXCEPT SELECT mf FROM collection_set_pruning WHERE 0) AS q;
+
+--echo union_limit_keeps_distinct
+SELECT COUNT(*) AS rows_found,SUM(1) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 1=1 UNION SELECT a FROM collection_set_pruning WHERE 1=1 LIMIT 2) AS q;
+
+--echo union_order_limit_deduplicates_before_limit
+SELECT COUNT(*) AS rows_found,SUM(len) AS payload_sum FROM (SELECT a,cardinality(a) AS len FROM collection_set_pruning WHERE 1=1 UNION SELECT a,cardinality(a) AS len FROM collection_set_pruning WHERE 1=1 ORDER BY len LIMIT 2) AS q;
+
+--echo union_all_order_limit_keeps_null_duplicates
+SELECT COUNT(*) AS rows_found,SUM(len) AS payload_sum FROM (SELECT a,cardinality(a) AS len FROM collection_set_pruning WHERE 1=1 UNION ALL SELECT a,cardinality(a) AS len FROM collection_set_pruning WHERE 1=1 ORDER BY len LIMIT 2) AS q;
+
+--echo scalar_set_distinct_on_collection_table
+SELECT COUNT(*) AS rows_found,SUM(c) AS payload_sum FROM (SELECT c FROM collection_set_pruning WHERE 0 UNION SELECT c FROM collection_set_pruning WHERE c>0) AS q;
+
+--echo smallint_empty_branch_control
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE c>2147483647 UNION SELECT a FROM collection_set_pruning WHERE c>0) AS q;
+
+--echo plain_collection_distinct_stays_unsupported
+--error 5083
+SELECT DISTINCT a FROM collection_set_pruning;
+
+DROP TABLE collection_set_pruning;
