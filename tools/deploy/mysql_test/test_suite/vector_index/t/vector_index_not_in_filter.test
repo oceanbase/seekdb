@@ -1,0 +1,61 @@
+--echo # HNSW adaptive scan: NOT (IN) should expose the same B-tree range as NOT IN
+
+alter system set vector_memory_limit = 0;
+sleep 1;
+
+--disable_warnings
+drop table if exists t_not_in_range;
+--enable_warnings
+
+create table t_not_in_range (
+  id int,
+  age int not null,
+  embedding vector(3),
+  primary key (id),
+  key idx_age (age)
+) organization heap;
+
+insert into t_not_in_range values
+  (1, 1, '[0.1,0.2,0.3]'),
+  (2, 2, '[0.2,0.3,0.4]'),
+  (3, 3, '[0.3,0.4,0.5]'),
+  (4, 4, '[0.4,0.5,0.6]'),
+  (5, 5, '[0.5,0.6,0.7]'),
+  (6, 6, '[0.6,0.7,0.8]'),
+  (7, 7, '[0.7,0.8,0.9]'),
+  (8, 8, '[0.8,0.9,1.0]'),
+  (9, 9, '[0.9,1.0,0.1]'),
+  (10, 10, '[1.0,0.1,0.2]');
+
+create vector index idx_hnsw on t_not_in_range(embedding)
+  with (distance=l2, type=hnsw, lib=vsag, m=16,
+        ef_construction=128, ef_search=64, sync_mode=immediate);
+
+analyze table t_not_in_range;
+set ob_hnsw_ef_search = 16;
+
+--replace_column 5 #
+--replace_regex /_[0-9]+/_0/g
+explain select /*+ index(t_not_in_range idx_age) */ id
+from t_not_in_range
+where not (age in (2,3,4,5,6,7,8,9,10))
+order by l2_distance(embedding, [0.1,0.2,0.3]) approximate
+limit 1;
+
+--replace_column 5 #
+--replace_regex /_[0-9]+/_0/g
+explain select /*+ index(t_not_in_range idx_age) */ id
+from t_not_in_range
+where age not in (2,3,4,5,6,7,8,9,10)
+order by l2_distance(embedding, [0.1,0.2,0.3]) approximate
+limit 1;
+
+select group_concat(id order by id)
+from t_not_in_range
+where not (age in (2,3,4,5,6,7,8,9,10));
+
+select group_concat(id order by id)
+from t_not_in_range
+where age not in (2,3,4,5,6,7,8,9,10);
+
+drop table t_not_in_range;
