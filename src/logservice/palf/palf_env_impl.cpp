@@ -276,7 +276,7 @@ void PalfEnvImpl::wait()
   block_gc_timer_task_.wait();
   log_loop_thread_.wait();
   if (!seek1402_io_lifecycle().export_after_join()) {
-    PALF_LOG(WARN, "SEEK1402_IO_LIFECYCLE export incomplete");
+    PALF_LOG_RET(WARN, OB_ERR_UNEXPECTED, "SEEK1402_IO_LIFECYCLE export incomplete");
   }
   PALF_LOG(INFO, "PalfEnvImpl wait success", KPC(this));
 }
