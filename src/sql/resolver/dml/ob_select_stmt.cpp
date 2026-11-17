@@ -65,6 +65,7 @@ int ObSelectIntoItem::deep_copy(ObIAllocator &allocator,
   user_vars_.assign(other.user_vars_);
   if (OB_FAIL(ob_write_string(allocator, other.external_properties_, external_properties_))) {
   } else if (OB_FAIL(ob_write_string(allocator, other.header_line_, header_line_))) {
+  } else if (OB_FAIL(ob_write_string(allocator, other.null_string_, null_string_))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < other.pl_vars_.count(); ++i) {
     ObRawExpr* pl_var;

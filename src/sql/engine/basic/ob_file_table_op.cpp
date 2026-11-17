@@ -115,6 +115,10 @@ int ObFileTableOp::open_file()
                        "cannot expand the pattern %s: %s",
                        pattern.c_str(),
                        file_sql::path_code_message(code));
+      } else if (spec.is_schema_) {
+        // The table shows the schema of the glob, the rows of the glob are not
+        // the rows of the table.
+        row_index_ = 0;
       } else {
         for (const std::string &file : files) {
           file_sql::FileTableRow row;

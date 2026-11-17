@@ -116,6 +116,14 @@ public:
   {
     return header_line_;
   }
+  inline void set_null_string(const common::ObString &null_string)
+  {
+    null_string_.assign_ptr(null_string.ptr(), null_string.length());
+  }
+  inline common::ObString get_null_string() const
+  {
+    return null_string_;
+  }
   inline ObItemType get_into_type() const
   {
     return into_type_;
@@ -199,6 +207,9 @@ private:
   // The names of the columns of the file, they are the first line of the file
   // when the header of the file is written.
   common::ObString header_line_;
+  // The value of a null of the file, it is written into the file instead of
+  // the escape of the null.
+  common::ObString null_string_;
 };
 }
 }

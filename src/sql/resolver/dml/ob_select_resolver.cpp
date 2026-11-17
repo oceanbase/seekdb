@@ -3054,6 +3054,8 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
         if (node_text(value).empty()) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option nullstr of a copy needs a value");
+        } else if (OB_FAIL(ob_write_string(*allocator_, node_text(value), into_item.null_string_))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
         }
       } else {
         ret = OB_NOT_SUPPORTED;

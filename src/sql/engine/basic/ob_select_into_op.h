@@ -72,6 +72,7 @@ public:
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
       header_line_(),
+      null_string_(),
       external_properties_(alloc)
   {
   }
@@ -94,6 +95,9 @@ public:
   // The names of the columns of the file, they are the first line of the
   // file when the header of the file is written.
   common::ObString header_line_;
+  // The value of a null of the file, it is written into the file instead of
+  // the escape of the null.
+  common::ObString null_string_;
   ObExternalFileFormat::StringData external_properties_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
