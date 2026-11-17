@@ -66,13 +66,21 @@ struct Seek1402IONotify {
   }
 
   void append_entered(uint64_t slot, int64_t epoch) {
+    emit(1, slot, static_cast<uint64_t>(epoch));
+  }
+  void space_compared(uint64_t point, uint64_t call_id) {
+    emit(2, point, call_id);
+  }
+  void emit(uint64_t schema, uint64_t slot, uint64_t tag) {
     if (!requested) return;
     const int saved_errno = errno;
     const uint64_t attempt = attempts.fetch_add(1, std::memory_order_relaxed);
     bool delivered = false;
-    if (attempt < 8192 && slot < 8192 && epoch >= 0 && fd >= 0) {
+    const bool valid_tag = (schema == 1 && tag <= INT64_MAX) ||
+        (schema == 2 && tag > 0 && tag <= 8192);
+    if (attempt < 8192 && slot < 8192 && valid_tag && fd >= 0) {
 #if defined(__linux__)
-      const uint64_t frame[3] = {1, slot, static_cast<uint64_t>(epoch)};
+      const uint64_t frame[3] = {schema, slot, tag};
       delivered = ::send(fd, frame, sizeof(frame), MSG_DONTWAIT | MSG_NOSIGNAL) == sizeof(frame);
 #endif
     }

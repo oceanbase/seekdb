@@ -199,6 +199,8 @@ struct Seek1402IOLifecycle {
   std::atomic<uint64_t> space_call_gate{0};
   std::atomic<bool> space_orphan{false};
   bool space_enabled = false;
+  uint64_t space_headroom_threshold = 0;
+  bool space_config_error = false;
   std::atomic<bool> multiple_envs{false};
   const char *path;
   char run_id[129] = {};
@@ -216,13 +218,27 @@ struct Seek1402IOLifecycle {
       identity_ready = count > 0 && identity[count] == '\0';
       const char *space_option = std::getenv("SEEK1402_SPACE_CAPTURE");
       space_enabled = identity_ready && space_option != nullptr && std::strcmp(space_option, "1") == 0;
+      const char *threshold = std::getenv("SEEK1402_SPACE_HEADROOM_BYTES");
+      if (threshold != nullptr && *threshold != '\0') {
+        const size_t length = std::strlen(threshold);
+        bool valid = space_enabled && length <= 7;
+        for (size_t i = 0; valid && i < length; ++i) valid = threshold[i] >= '0' && threshold[i] <= '9';
+        if (valid) {
+          space_headroom_threshold = std::strtoull(threshold, nullptr, 10);
+          valid = space_headroom_threshold > 0 && space_headroom_threshold <= 4194304;
+        }
+        space_config_error = !valid;
+      }
     }
   }
   bool enabled() const { return path != nullptr && *path != '\0' && identity_ready; }
   void bind_env(const void *environment) {
     if (path == nullptr || *path == '\0') return;
     if (init_calls.fetch_add(1) != 0) multiple_envs.store(true, std::memory_order_release);
-    else if (enabled()) notify.initialize();
+    else if (enabled()) {
+      notify.initialize();
+      if (space_config_error) notify.lost.fetch_add(1, std::memory_order_relaxed);
+    }
     uintptr_t expected = 0;
     const uintptr_t address = reinterpret_cast<uintptr_t>(environment);
     if (!bound_env.compare_exchange_strong(expected, address) && expected != address) {
@@ -268,6 +284,11 @@ struct Seek1402IOLifecycle {
         for (int i = 0; i < 8; ++i) point.value[i] = values[i];
         point.abort_scope = abort_scope;
         point.ready.store(true, std::memory_order_release);
+        // Only a historical comparison hint; later reuse/allocation may change the available range.
+        if (!space_config_error && space_headroom_threshold > 0 && !abort_scope &&
+            point.call_id > 0 && (upper < lsn || upper - lsn < space_headroom_threshold)) {
+          notify.space_compared(state, point.call_id);
+        }
         return;
       }
     }
@@ -281,7 +302,7 @@ struct Seek1402IOLifecycle {
     call.allocator_reject_present = true;
   }
   void notify_append_entered(Seek1402IOSlot *slot) {
-    if (!notify.requested || slot == nullptr) return;
+    if (!notify.requested || slot == nullptr || space_headroom_threshold > 0 || space_config_error) return;
     const uintptr_t address = reinterpret_cast<uintptr_t>(slot);
     const uintptr_t begin = reinterpret_cast<uintptr_t>(slots);
     if (address < begin || address >= begin + sizeof(slots) ||
@@ -428,6 +449,8 @@ inline Seek1402IOLifecycle *seek1402_create_mapped_capture(const char *raw_path)
   SEEK1402_CAPTURE_OFFSET(space_calls);
   SEEK1402_CAPTURE_OFFSET(space_orphan);
   SEEK1402_CAPTURE_OFFSET(space_enabled);
+  SEEK1402_CAPTURE_OFFSET(space_headroom_threshold);
+  SEEK1402_CAPTURE_OFFSET(space_config_error);
   SEEK1402_CAPTURE_OFFSET(space_points);
   append("\"notify_requested\":%zu,\"notify_attempts\":%zu,\"notify_sent\":%zu,\"notify_lost\":%zu,",
          offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, requested),
