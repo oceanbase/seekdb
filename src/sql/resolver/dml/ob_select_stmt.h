@@ -130,6 +130,7 @@ struct ObSelectIntoItem
         buffer_size_(DEFAULT_BUFFER_SIZE),
         write_header_(false),
         header_line_(),
+        null_string_(),
         external_properties_()
   {
     field_str_.set_varchar(DEFAULT_FIELD_TERM_STR);
@@ -158,6 +159,7 @@ struct ObSelectIntoItem
     buffer_size_ = other.buffer_size_;
     write_header_ = other.write_header_;
     header_line_ = other.header_line_;
+    null_string_ = other.null_string_;
     external_properties_ = other.external_properties_;
     return user_vars_.assign(other.user_vars_);
   }
@@ -194,6 +196,9 @@ struct ObSelectIntoItem
   // The names of the columns of the file, separated by the delimiter of the
   // fields of the file.
   common::ObString header_line_;
+  // The value of a null of the file, the value is written into the file
+  // instead of the escape of the null.
+  common::ObString null_string_;
   common::ObString external_properties_;
 
   static const char* const DEFAULT_FIELD_TERM_STR;
