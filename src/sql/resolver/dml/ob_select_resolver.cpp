@@ -3026,26 +3026,21 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
   write_header = false;
   ObString format_name;
   for (int64_t i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
-    const ParseNode *option = format_node->children_[i];
-    ObString name;
-    ObString value;
-    if (OB_ISNULL(option)) {
+    const ParseNode *item = format_node->children_[i];
+    if (OB_ISNULL(item)) {
       ret = OB_ERR_PARSE_SQL;
       LOG_USER_ERROR(OB_ERR_PARSE_SQL, "unknown option of a copy");
-    } else if (T_LINK_NODE == option->type_ && 2 == option->num_child_) {
-      // The name of the option and the value of the option.
-      name = node_text(option->children_[0]);
-      value = node_text(option->children_[1]);
     } else {
-      name = node_text(option);
-    }
-    if (OB_SUCC(ret)) {
+      const ObString name = node_text(item);
       if (0 == name.compare(ObString("format"))) {
-        if (value.empty()) {
+        // The name of the format is the word that follows the name of the
+        // option.
+        const ParseNode *value = (i + 1 < format_node->num_child_)
+                                 ? format_node->children_[++i] : NULL;
+        format_name = node_text(value);
+        if (format_name.empty()) {
           ret = OB_ERR_PARSE_SQL;
           LOG_USER_ERROR(OB_ERR_PARSE_SQL, "the option format of a copy needs a value");
-        } else {
-          format_name = value;
         }
       } else if (0 == name.compare(ObString("header"))) {
         // The names of the columns are the first line of the file.
@@ -3054,7 +3049,9 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
         // The string of a null value of the file. The value is not used, the
         // null value of a file of a copy is written as the escape and the
         // letter N.
-        if (value.empty()) {
+        const ParseNode *value = (i + 1 < format_node->num_child_)
+                                 ? format_node->children_[++i] : NULL;
+        if (node_text(value).empty()) {
           ret = OB_ERR_PARSE_SQL;
           LOG_USER_ERROR(OB_ERR_PARSE_SQL, "the option nullstr of a copy needs a value");
         }

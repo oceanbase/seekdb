@@ -385,7 +385,7 @@ END_P SET_VAR DELIMITER
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
 %type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
-%type <node> copy_stmt copy_opts copy_option copy_option_kw copy_option_val
+%type <node> copy_stmt copy_opts copy_option_item copy_option_kw
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
 %type <node> case_arg when_clause_list when_clause case_default
@@ -12339,24 +12339,21 @@ COPY '(' select_no_parens ')' TO STRING_VALUE '(' copy_opts ')'
 ;
 
 copy_opts:
-copy_option
+copy_option_item
 {
   $$ = $1;
 }
-| copy_opts opt_comma copy_option
+| copy_opts opt_comma copy_option_item
 {
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
 }
 ;
 
-copy_option:
+copy_option_item:
 copy_option_kw
-| copy_option_kw copy_option_val
-{
-  // The name of the option and the value of the option.
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $2);
-}
+| NAME_OB
+| STRING_VALUE
 ;
 
 copy_option_kw:
@@ -12375,11 +12372,6 @@ unreserved_keyword
   name_node->str_len_ = len;
   $$ = name_node;
 }
-;
-
-copy_option_val:
-NAME_OB
-| STRING_VALUE
 ;
 
 explainable_stmt:
