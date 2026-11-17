@@ -291,7 +291,6 @@ public:
       const ObTabletMapKey &key,
       ObTabletResidentInfo &info);
   int get_tablet_ddl_kv_mgr(const ObTabletMapKey &key, ObDDLKvMgrHandle &ddl_kv_mgr_handle);
-  ObFullTabletCreator &get_mstx_tablet_creator() { return full_tablet_creator_; }
   common::ObIAllocator &get_meta_cache_io_allocator() { return meta_cache_io_allocator_; }
   OB_INLINE int64_t get_total_tablet_cnt() const { return tablet_map_.count(); }
 
