@@ -1,0 +1,72 @@
+# Standalone behavioral tests use product sources directly; no query engine or mock implementation.
+cmake_minimum_required(VERSION 3.16)
+project(file_sql_member_b_tests LANGUAGES CXX)
+enable_testing()
+get_filename_component(SEEKDB_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
+set(FILE_SQL_SRC "${SEEKDB_ROOT}/src/sql/engine/basic/file_sql")
+add_library(file_sql_types "${FILE_SQL_SRC}/file_sql_types.cpp")
+target_include_directories(file_sql_types PUBLIC "${SEEKDB_ROOT}/src")
+target_compile_features(file_sql_types PUBLIC cxx_std_17)
+target_compile_options(file_sql_types PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+add_executable(test_file_sql_types test_file_sql_types.cpp)
+target_link_libraries(test_file_sql_types PRIVATE file_sql_types)
+add_test(NAME file_sql_types COMMAND test_file_sql_types)
+add_library(file_sql_path "${FILE_SQL_SRC}/file_sql_path.cpp")
+target_include_directories(file_sql_path PUBLIC "${SEEKDB_ROOT}/src")
+target_compile_features(file_sql_path PUBLIC cxx_std_17)
+target_compile_options(file_sql_path PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+add_executable(test_file_sql_path test_file_sql_path.cpp)
+target_link_libraries(test_file_sql_path PRIVATE file_sql_path)
+add_test(NAME file_sql_path COMMAND test_file_sql_path)
+if(EXISTS "${FILE_SQL_SRC}/file_sql_csv.cpp")
+  add_library(file_sql_csv "${FILE_SQL_SRC}/file_sql_csv.cpp")
+  target_include_directories(file_sql_csv PUBLIC "${FILE_SQL_SRC}")
+  target_link_libraries(file_sql_csv PUBLIC file_sql_types)
+  target_compile_options(file_sql_csv PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+  add_executable(test_file_sql_csv test_file_sql_csv.cpp)
+  target_link_libraries(test_file_sql_csv PRIVATE file_sql_csv)
+  add_test(NAME file_sql_csv COMMAND test_file_sql_csv
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/basic.csv")
+endif()
+if(EXISTS "${FILE_SQL_SRC}/file_sql_parquet.cpp")
+  add_library(file_sql_parquet_lib "${FILE_SQL_SRC}/file_sql_parquet.cpp")
+  target_include_directories(file_sql_parquet_lib PUBLIC "${FILE_SQL_SRC}")
+  target_link_libraries(file_sql_parquet_lib PUBLIC file_sql_types)
+  target_compile_options(file_sql_parquet_lib PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+  add_executable(test_file_sql_parquet test_file_sql_parquet.cpp)
+  target_link_libraries(test_file_sql_parquet PRIVATE file_sql_parquet_lib)
+  add_test(NAME file_sql_parquet COMMAND test_file_sql_parquet
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/parquet")
+endif()
+if(EXISTS "${FILE_SQL_SRC}/file_sql_jsonl.cpp")
+  add_library(file_sql_jsonl "${FILE_SQL_SRC}/file_sql_jsonl.cpp")
+  target_include_directories(file_sql_jsonl PUBLIC "${FILE_SQL_SRC}")
+  target_link_libraries(file_sql_jsonl PUBLIC file_sql_types)
+  target_compile_options(file_sql_jsonl PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+  add_executable(test_file_sql_jsonl_parquet test_file_sql_jsonl_parquet.cpp)
+  target_link_libraries(test_file_sql_jsonl_parquet PRIVATE file_sql_jsonl file_sql_parquet_lib)
+  add_test(NAME file_sql_jsonl_parquet COMMAND test_file_sql_jsonl_parquet
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/basic.jsonl"
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/simple.parquet.b64")
+endif()
+if(EXISTS "${FILE_SQL_SRC}/file_sql_adapters.cpp")
+  # The adapters map the options of the framework onto the options of the
+  # format modules, so the test needs the reader of the framework as well.
+  add_library(file_sql_reader "${FILE_SQL_SRC}/file_sql_reader.cpp")
+  target_include_directories(file_sql_reader PUBLIC "${FILE_SQL_SRC}")
+  target_link_libraries(file_sql_reader PUBLIC file_sql_types)
+  target_compile_options(file_sql_reader PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+  add_library(file_sql_adapters "${FILE_SQL_SRC}/file_sql_adapters.cpp")
+  target_include_directories(file_sql_adapters PUBLIC "${FILE_SQL_SRC}")
+  target_link_libraries(file_sql_adapters PUBLIC file_sql_types)
+  target_compile_options(file_sql_adapters PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+  add_executable(test_file_sql_adapters test_file_sql_adapters.cpp)
+  # The reader of the framework registers the scanners of the format modules,
+  # so the reader has to be linked before the adapters. The reader reads the
+  # CSV module, so the CSV module has to be linked as well.
+  target_link_libraries(test_file_sql_adapters PRIVATE
+    file_sql_reader file_sql_adapters file_sql_csv file_sql_jsonl file_sql_parquet_lib)
+  add_test(NAME file_sql_adapters COMMAND test_file_sql_adapters
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/basic.jsonl"
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/simple.parquet.b64")
+endif()

@@ -1,0 +1,98 @@
+# owner: database-competition
+# owner group: SQL
+# description: JSONL and Parquet reading for the file as database lab.
+# tags: sql,executor,file_sql
+
+--source mysql_test/test_suite/file_sql/include/copy_file_sql_data.inc
+
+--disable_query_log
+let $FILE_SQL_DATA_DIR = $OBSERVER_DIR/data_for_mysqltest_file_sql;
+
+--echo # enable_file_sql defaults to OFF
+select @@session.enable_file_sql AS default_enabled;
+--disable_result_log
+--error 1235
+eval select count(*) from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited');
+--enable_result_log
+
+set session enable_file_sql = ON;
+
+--echo # JSONL union schema and missing fields
+eval select id, name, score, active, day, note
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      order by id;
+
+--echo # JSONL accepts the read_ndjson alias
+eval select count(*) as row_count
+       from read_ndjson('$FILE_SQL_DATA_DIR/basic.jsonl') f;
+
+--echo # JSONL aggregates over the inferred schema
+eval select count(*) as row_count, sum(id) as id_sum,
+            round(avg(score), 2) as score_avg, sum(active) as active_count
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f;
+
+--echo # JSONL filter and limit
+eval select id, name
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where id > 1
+      order by id
+      limit 1;
+
+--echo # JSONL filter keeps every row that satisfies the condition
+eval select id, name
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where id > 1
+      order by id;
+eval select id, name
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where name = 'Bob';
+eval select id, name
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where name <> 'Bob'
+      order by id;
+eval select count(*) as row_count
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      where id is not null;
+
+--echo # CSV filter keeps every row that satisfies the condition
+eval select id, name
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+      where id > 1
+      order by id;
+eval select id, name
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+      where name = 'Bob';
+
+--echo # Parquet scan and aggregate push through projected columns
+eval select count(*) AS row_count, min(c1) AS min_c1,
+            max(c1) AS max_c1, sum(c1) AS sum_c1
+       from read_parquet('$FILE_SQL_DATA_DIR/simple.parquet') p;
+
+--echo # Parquet schema is taken from the footer
+eval describe select * from read_parquet('$FILE_SQL_DATA_DIR/simple.parquet') p;
+
+--echo # Cross format join between the CSV and the JSONL schema
+eval select c.name as csv_name, j.name as jsonl_name
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') c
+       join read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') j
+         on c.id = j.id
+      order by c.id;
+
+--echo # Cross format left join keeps every CSV row
+eval select c.id, c.name, j.note
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') c
+       left join read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') j
+         on c.id = j.id
+      order by c.id;
+
+--echo # Inner join between the CSV and the Parquet schema
+eval select c.id, c.name, p.c1
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') c
+       join read_parquet('$FILE_SQL_DATA_DIR/simple.parquet') p
+         on c.id = p.c1
+      order by c.id;
+
+set session enable_file_sql = OFF;
+--enable_query_log
+
+--source mysql_test/test_suite/file_sql/include/remove_file_sql_data.inc

@@ -210,6 +210,7 @@ protected:
 public:
   int resolve_all_function_table_columns(const TableItem &table_item, ObIArray<ColumnItem> *column_items);
   int resolve_all_json_table_columns(const TableItem &table_item, ObIArray<ColumnItem> *column_items);
+  int resolve_all_file_table_columns(const TableItem &table_item, ObIArray<ColumnItem> *column_items);
   int resolve_all_generated_table_columns(const TableItem &table_item, common::ObIArray<ColumnItem> *column_items);
 protected:
   virtual int set_select_item(SelectItem &select_item, bool is_auto_gen);

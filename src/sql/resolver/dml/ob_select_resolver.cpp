@@ -1654,6 +1654,9 @@ int ObSelectResolver::expand_target_list(
   } else if (table_item.is_json_table()) {
     if (OB_FAIL(resolve_all_json_table_columns(table_item, &column_items))) {
     }
+  } else if (table_item.is_file_table()) {
+    if (OB_FAIL(resolve_all_file_table_columns(table_item, &column_items))) {
+    }
   } else if (table_item.is_values_table()) {
     if (OB_ISNULL(get_stmt()) || OB_UNLIKELY(get_stmt()->get_column_size() == 0)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1843,6 +1846,18 @@ int ObSelectResolver::resolve_all_json_table_columns(
   if (OB_ISNULL(column_items)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(resolve_json_table_column_all_items(table_item, *column_items))) {
+  }
+  return ret;
+}
+
+int ObSelectResolver::resolve_all_file_table_columns(
+  const TableItem &table_item, ObIArray<ColumnItem> *column_items)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(column_items)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ret = resolve_file_table_column_all_items(table_item, *column_items);
   }
   return ret;
 }
@@ -2254,8 +2269,14 @@ int ObSelectResolver::resolve_from_clause(const ParseNode *node)
       }
       // TODO@wenqu: wait flags from session info
       session_info_->set_table_name_hidden(is_table_hidden);
-      OZ( resolve_table(*table_node, table_item) );
+      // A table that can not be resolved has no table item. The loop must
+      // stop here, the table item is used by the two calls below.
+      const int table_ret = resolve_table(*table_node, table_item);
       session_info_->set_table_name_hidden(old_flag);
+      if (OB_FAIL(table_ret)) {
+        ret = table_ret;
+        break;
+      }
       OZ( column_namespace_checker_.add_reference_table(table_item), table_item );
       OZ( select_stmt->add_from_item(table_item->table_id_, table_item->is_joined_table()) );
       if (OB_SUCC(ret)) {

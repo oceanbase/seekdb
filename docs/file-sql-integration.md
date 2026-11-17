@@ -1,0 +1,228 @@
+# Lab 2 集成说明：框架与格式模块的接合
+
+本文记录 `lab2/integration` 分支上把成员 A 的框架与成员 C 的格式模块合到一起时
+所做的改动，以及这些改动的原因。
+
+## 合并的背景
+
+两个分支各自实现了 Lab 2 的一部分：
+
+- `lab2/file-discovery`（成员 A）：表函数入口、`enable_file_sql` 开关、路径校验、
+  读取器接口 `FileTableScanner`、计划与执行算子。
+- `lab2/jsonl-parquet`（成员 B 的 CSV 与类型推断 + 成员 C 的 JSONL 与 Parquet）：
+  CSV 读取、确定性类型推断、JSONL 读取、Parquet 读取。
+
+两者都基于 `2026-competition`（`5bce9e06d`），所以直接合并时两个分支各自新增的
+同名文件会冲突。集成分支把框架与格式模块放在同一个目录 `src/sql/engine/basic/file_sql/`
+之下，模块之间只通过 `file_sql_types.h` 的共享类型与 `file_sql_reader.h` 的接口相连。
+
+## 合并时解决的冲突
+
+| 文件 | 冲突 | 处理 |
+| --- | --- | --- |
+| `file_sql_types.h` | 两个分支都新增，两边各自把 `ScalarRow` 别名放在自己新增的位置 | 别名属于共享的类型模块，保留在 `file_sql_types.h` |
+| `file_sql_csv.h` | 同上，A 把别名放在 CSV 模块里 | 删除 CSV 模块里的副本，统一用类型模块的别名 |
+| `sql_source_inventory.bzl` | 两边各自把新增的源文件加进清单 | 取并集，并补上新加的 `file_sql_adapters.cpp` |
+| `unittest/sql/engine/basic/CMakeLists.txt` | 两边各自新增测试目标 | 取并集，保留双方的全部测试 |
+
+别名只有一份之后，`file_sql_csv.h`、`file_sql_jsonl.h` 与 `file_sql_parquet.h`
+都能直接使用 `ScalarRow`，适配层不需要做任何类型转换。
+
+## 适配层：框架接口与格式模块的接合
+
+### 接口不兼容的地方
+
+A 的框架要求每个格式模块实现 `FileTableScanner`：
+
+```cpp
+virtual FileStatus prepare(FILE *input, const FileScanOptions &options) = 0;
+virtual FileStatus next_batch(size_t limit, std::vector<FileTableRow> &rows) = 0;
+virtual void rescan() = 0;
+virtual const std::vector<ColumnSchema> &columns() const = 0;
+```
+
+C 的两个模块有各自不同的形状：
+
+- `JsonlTableScan::prepare(FILE *, const JsonlOptions &, int64_t sample_size)`，
+  选项是模块自己的 `JsonlOptions`；
+- `ParquetReader::init(FILE *, const ParquetOptions &)`，选项是 `ParquetOptions`，
+  而且方法名不是 `prepare`。
+
+两者的 `next_batch` 与 `columns` 的形状和框架一致，`rescan` 也一致，只有
+`prepare` 的选项类型与名字不同。
+
+### 改动一：框架的选项带上模块需要的字段
+
+`file_sql_reader.h` 的 `FileScanOptions` 增加了两块：
+
+- `FileScanLimits limits`：资源上限。框架统一持有这些上限，模块只读取适用于自己的那几项。
+  取值与 C 的模块原本自己使用的默认值相同，因此行为不变。
+- `std::vector<std::string> projection`：列裁剪。空表示读全部列，目前只有 Parquet 使用。
+
+适配层把这两块映射到模块自己的选项结构上，模块的代码一行未改。
+
+### 改动二：适配层新增 `file_sql_adapters.{h,cpp}`
+
+新增的文件实现两个适配类：
+
+- `JsonlFileScanner`：把 `FileScanOptions` 映射到 `JsonlOptions`，转调
+  `JsonlTableScan`。
+- `ParquetFileScanner`：把 `FileScanOptions` 映射到 `ParquetOptions`，转调
+  `ParquetReader`。
+
+两个适配类在文件加载时通过 `register_file_scanner` 注册自己，注册是幂等的。
+调用方（解析器与执行算子）不需要改动。
+
+### 改动三：文件结束的表示方式不一致（重要）
+
+这是一个会在运行时挂住的问题，不是编译期能发现的。
+
+三个模块报告"文件读完"的方式不同：
+
+| 模块 | 文件读完时 `next_batch` 的返回 |
+| --- | --- |
+| CSV | 返回 `FileCode::END` |
+| JSONL | 返回 OK，行数为 0 |
+| Parquet | 返回 OK，行数为 0 |
+
+框架的执行算子只把 `END` 当作扫描结束：
+
+```cpp
+const file_sql::FileStatus status = scanner_->next_batch(FILE_TABLE_BATCH_SIZE, rows_);
+if (file_sql::FileCode::END == status.code) {
+  ret = OB_ITER_END;
+} else if (!status.ok()) { ... }
+```
+
+而 `inner_get_next_row` 在批次用完后会继续取下一批。如果 JSONL 或 Parquet 在
+文件末尾返回 OK 加空批次，算子就会永远取空批次，查询挂死。
+
+适配层把这个差异统一掉：模块返回 OK 但行数为 0 时，适配层返回 `FileCode::END`。
+CSV 的适配器不需要改，因为它本来就是这样。
+
+### 改动四：`rescan` 的返回值
+
+框架的接口把 `rescan` 声明成 `void`，而三个模块的 `rescan` 都返回 `FileStatus`。
+A 的 CSV 适配器直接丢弃了返回值：
+
+```cpp
+void rescan() override { scan_.rescan(); }
+```
+
+`rescan` 会失败（例如文件已被替换导致 seek 失败），丢弃返回值会让失败变成静默的
+错误结果。集成时把接口改成返回 `FileStatus`，三个适配器都把状态透传给调用方。
+
+## 验证
+
+`unittest/sql/engine/basic/test_file_sql_adapters.cpp` 是新增的测试，它通过框架的
+接口驱动 JSONL 与 Parquet 两个模块，覆盖：
+
+- `create_file_scanner` 能拿到 JSONL 与 Parquet 的扫描器；
+- 字段并集与官方样例一致（6 列、3 条记录）；
+- Parquet 的形状与官方样例一致（1 列 `c1`、7 行、`min=0`、`max=6`、`sum=21`）；
+- `rescan` 之后能重新读到全部数据；
+- 框架的资源上限能传到模块（超限时返回 `RESOURCE_LIMIT`）；
+- 不存在的 projection 被拒绝，而不是产出全 NULL 的行；
+- 文件末尾报告 `END`，而不是返回空批次。
+
+用例的有效性做过验证：把适配层里"空批次转 `END`"的转换去掉后，测试报 8 条 FAIL，
+确认这条用例覆盖的正是会挂死的那条路径。
+
+## 第二个位置参数在解析期被拒绝
+
+表函数的第一个参数是路径，其余参数必须是具名选项。第二个位置参数由语法分析器拒绝，
+语句报解析错误 `1064`，与 `file_sql_basic.test` 的期望一致：
+
+```sql
+select * from read_csv('/path/basic.csv', 'xml');        -- ERROR 1064 (syntax error)
+select * from read_csv('/path/basic.csv', sample_size = 10);  -- ERROR 1235
+```
+
+改法是把参数列表拆成路径参数与选项参数两个产生式，非首元素只能是
+`column_name COMP_EQ simple_expr`：
+
+```
+file_table_arg_list:
+file_table_path_arg
+| file_table_arg_list ',' file_table_option_arg
+;
+```
+
+语法分析器给出的错误码是 `OB_ERR_PARSE_SQL`，映射到 `ER_PARSE_ERROR`，即 `1064`；
+改之前语法分析器不拒绝第二个位置参数，由语义解析阶段报 `OB_ERR_PARSER_SYNTAX`，
+映射到 `ER_SYNTAX_ERROR`，即 `1149`，与官方用例的期望不符。
+语义解析阶段的那段检查保留为兜底，消息与原来一致。
+
+## 表函数被拒绝时的 observer 崩溃：根因未定位
+
+早期的一次运行里，关闭开关执行 `read_csv` 时 observer 退出，客户端报：
+
+```
+ERROR 2013 (HY000): Lost connection to MySQL server during query
+```
+
+`dmesg` 里能看到 `signal: 11`，但**崩溃的根因没有定位**，也没有拿到栈或 core。
+当时怀疑的路径是 FROM 子句的循环：`resolve_table` 失败时表项为空，而循环继续往下走。
+按这个猜测做的改动是把循环改成在表解析失败时停止，和 update 解析器的写法一致：
+
+```cpp
+const int table_ret = resolve_table(*table_node, table_item);
+session_info_->set_table_name_hidden(old_flag);
+if (OB_FAIL(table_ret)) {
+  ret = table_ret;
+  break;
+}
+```
+
+这段改动**没有修掉任何崩溃**：本仓库的 `OZ` 宏是
+`OC_I5(func, ...) = do { if (OB_SUCC(ret)) { if (OB_FAIL(func)) {...} } } while (0)`，
+即函数只在 `ret` 仍是成功时才执行。`resolve_table` 失败时 `ret` 已经不是成功，
+后面两句 `OZ(...)` 会被整体跳过，`table_item` 因此从来没有被解引用过。
+改写后的代码与改写前行为等价，属于把隐含行为写显的加固，可以保留，
+但**不能把它记成“修掉了崩溃”**。
+
+当前可确认的事实是：关闭开关时的 `read_csv` 返回 `1235`，observer 存活；
+那次 `ERROR 2013` 更可能来自 observer 被重启或重建（当时集群是新建的、
+10000 端口被占用改用了 10001，期间还出现过一次 `File not exist`），
+而不是上面这条解析路径。真正的崩溃位置需要栈或 core 才能确定。
+
+## 文件表上的 WHERE 条件恒为假
+
+`read_csv` 与 `read_json` 的算子一行一行地产出行。框架在按行驱动算子时
+不会清除"这个表达式已经求过值"的标记，产出行的算子要自己清除，
+`ObValuesTableAccessOp::inner_get_next_row()` 就是这么做的。
+
+文件表的算子没有清除，于是 WHERE 条件只在文件的第一行上求过一次值，
+后面每一行都用这个结果。第一行满足条件时所有行都通过，第一行不满足时
+所有行都被过滤掉。查询不报错，返回的结果是错的。
+
+修法是算子在产出每一行之前调用 `clear_evaluated_flag()`。
+用例 `file_sql_jsonl_parquet` 里那条过滤 JSONL 的用例原本记录的就是这个
+错误输出（期望值是空集），现在改成真实输出，并补了过滤 CSV、过滤 JSONL
+以及保留所有满足条件的行三组用例。
+
+## 计划里的路径没有零字节结尾
+
+文件表定义里的字符串在语句的内存里，计划活得比语句久，所以它们被复制到计划的
+内存里。复制时没有带零字节结尾（`ob_write_string()` 只有被要求时才写 C 字符串）。
+
+算子把计划里的路径交给 `fopen()`，`fopen()` 会一直读到零字节。没有零字节时
+文件名会读到后面的内存里，打开失败，查询报 `File not exist`。能不能打开取决于
+堆里的内容，所以同一个查询有时成功有时失败，计划缓存让这个差别更容易出现
+（`read_json(..., format = 'newline_delimited') where name <> 'Bob'` 在复现时
+每次都失败，`where name != 'Bob'` 每次都成功）。
+
+路径、格式与 null 字符串现在都按 C 字符串写入计划。
+
+## 尚未解决的部分
+
+- `DESCRIBE` 与 `COPY` 还没有实现，属于 ① 与 ⑥ 的评分项；`glob` 已由
+  `lab2/jsonl-parquet` 实现。`DESCRIBE` 在本版本的语法里是 `EXPLAIN` 的别名，
+  `describe select * from read_csv(...)` 返回的是执行计划，不是官方用例期望的
+  `column_name`、`column_type`、`null`、`key`、`default`、`extra` 六列。
+- 资源上限目前是框架里的常量，还没有做成会话变量。
+- 框架的路径校验只在解析阶段做一次，执行阶段重新打开文件之前没有再校验一次，
+  两次之间文件被换成指向别处的软链接不会被发现。
+- 表函数的语句不可比较，计划缓存不会复用文件表语句的计划，每次执行都会重新推断 Schema。
+- 一个查询会把文件读三遍：解析阶段推断一次，算子执行时为了发现文件变化再推断一次，
+  读数据时再读一遍。

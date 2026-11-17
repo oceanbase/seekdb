@@ -309,6 +309,21 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
       PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
       break;
     }
+    case TableItem::FILE_TABLE: {
+      const ObFileTableDef *file_def = table_item->file_table_def_;
+      if (OB_ISNULL(file_def)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        DATA_PRINTF("%.*s('%.*s')",
+                    LEN_AND_PTR(file_def->func_name_),
+                    LEN_AND_PTR(file_def->path_));
+        if (! table_item->alias_name_.empty()) {
+          DATA_PRINTF(" ");
+          PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
+        }
+      }
+      break;
+    }
     case TableItem::JSON_TABLE: {
       switch (table_item->json_table_def_->table_type_) {
         case MulModeTableType::OB_ORA_JSON_TABLE_TYPE : {

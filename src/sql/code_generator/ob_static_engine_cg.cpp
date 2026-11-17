@@ -30,6 +30,7 @@
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
 #include "sql/optimizer/ob_log_json_table.h"
+#include "sql/optimizer/ob_log_file_table.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
 #include "sql/optimizer/ob_log_subplan_scan.h"
@@ -96,6 +97,7 @@
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/engine/basic/ob_function_table_op.h"
 #include "sql/engine/basic/ob_json_table_op.h"
+#include "sql/engine/basic/ob_file_table_op.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/basic/ob_stat_collector_op.h"
 #include "sql/engine/opt_statistics/ob_optimizer_stats_gathering_op.h"
@@ -5532,6 +5534,77 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   return ret;
 }
 
+int ObStaticEngineCG::generate_spec(ObLogFileTable &op, ObFileTableSpec &spec,
+                                    const bool in_root_job)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(in_root_job);
+  const ObFileTableDef *file_def = op.get_file_def();
+  if (OB_ISNULL(file_def) || OB_ISNULL(op.get_stmt())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(spec.column_exprs_.prepare_allocate(file_def->columns_.count()))) {
+  } else {
+    // The columns of the file are the columns of the table item. The column
+    // id of a column of a file table is the index of the column in the file,
+    // so the expression of a column is put at the place of the column in the
+    // file. A column that the plan does not use keeps an empty place, the
+    // operator reads the value of the file and writes it only into the
+    // expressions that the plan uses.
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_stmt()->get_column_size(); ++i) {
+      const ColumnItem *col_item = op.get_stmt()->get_column_item(i);
+      ObExpr *rt_expr = NULL;
+      if (OB_ISNULL(col_item) || OB_ISNULL(col_item->expr_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (col_item->table_id_ != op.get_table_id()
+                 || !col_item->expr_->is_explicited_reference()) {
+        continue;
+      } else if (col_item->column_id_ >= spec.column_exprs_.count()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("the column of a file table has an unexpected id",
+                 K(col_item->column_id_), K(spec.column_exprs_.count()));
+      } else if (OB_FAIL(mark_expr_self_produced(col_item->expr_))) {
+      } else if (OB_FAIL(generate_rt_expr(*col_item->expr_, rt_expr))) {
+      } else if (OB_ISNULL(rt_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        spec.column_exprs_.at(col_item->column_id_) = rt_expr;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      // The strings of the definition of the table live in the memory of the
+      // statement. The plan of a file table outlives the statement, it is
+      // kept in the plan cache and it is run after the statement is gone,
+      // so the strings are copied into the memory of the plan. The path is
+      // written as a C string, the operator hands it to fopen() which reads
+      // it until the zero byte. Without the zero byte the file name of the
+      // plan runs into the memory behind it and the open fails with the
+      // error File not exist, depending on the content of the heap.
+      if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
+                                   file_def->path_,
+                                   spec.path_,
+                                   true))) {
+      } else if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
+                                         file_def->format_,
+                                         spec.format_,
+                                         true))) {
+      } else if (OB_FAIL(ob_write_string(phy_plan_->get_allocator(),
+                                         file_def->null_string_,
+                                         spec.null_string_,
+                                         true))) {
+      } else {
+        spec.header_ = file_def->header_;
+        spec.sample_size_ = file_def->sample_size_;
+        spec.delimiter_ = file_def->delimiter_;
+        spec.quote_ = file_def->quote_;
+        spec.escape_ = file_def->escape_;
+        spec.skip_blank_lines_ = file_def->skip_blank_lines_;
+        spec.file_format_ = file_def->file_format_;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObStaticEngineCG::generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec,
     const bool in_root_job)
 {
@@ -6121,6 +6194,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_JSON_TABLE: {
       type = PHY_JSON_TABLE;
+      break;
+    }
+    case log_op_def::LOG_FILE_TABLE: {
+      type = PHY_FILE_TABLE;
       break;
     }
     case log_op_def::LOG_MONITORING_DUMP: {
