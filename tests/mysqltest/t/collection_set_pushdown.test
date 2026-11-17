@@ -32,6 +32,20 @@ SELECT COUNT(*) AS rows_found,SUM(c) AS payload_sum FROM (SELECT /*+ parallel(2)
 --echo partitioned_union_all_preserves_duplicates
 SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0) AS q;
 
+# A forced-partition GI on the first MVI scan must not suppress its sibling GI.
+# Check raw branch identities as well as aggregates: all ten rows must be read.
+--echo partitioned_union_all_raw_scalar_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,c FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,c FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_union_all_raw_array_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_union_all_raw_map_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,m FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,m FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
 SET ob_enable_aggregation_pushdown=false;
 --echo session_disabled_default_control
 --sorted_result

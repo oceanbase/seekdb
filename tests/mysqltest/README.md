@@ -18,6 +18,10 @@ The forced-hint case also runs with session pushdown disabled to verify that
 the capability guard still wins when the hint overrides that setting. Scalar
 keys remain eligible, UNION ALL preserves duplicates, and the session is
 restored to enabled before the ordinary collection DISTINCT negative check.
+Raw scalar, ARRAY and MAP UNION ALL queries label both branches and require
+five rows from each, including duplicate collections and NULLs. These also
+check that allocating a forced-partition iterator for one multi-value index
+scan does not suppress the iterator needed by its sibling scan.
 
 Use the normal client authentication mechanism for the endpoint; keep passwords
 out of command arguments. The test is separate from the legacy suite under
