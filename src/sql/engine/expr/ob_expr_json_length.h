@@ -42,6 +42,8 @@ public:
                   MultimodeAlloctor *allocator, ObDatum &res,
                   ObJsonPathCache* path_cache);
   static int eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_json_length_batch(const ObExpr &expr, ObEvalCtx &ctx,
+                                    const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }

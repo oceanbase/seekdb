@@ -1,0 +1,12 @@
+select json_length(ai_embed('embed_contract', 'single-row')) as embed_dimension;
+embed_dimension
+768
+select json_length(ai_embed('embed_contract', 'dimension-row', 768)) as requested_dimension;
+requested_dimension
+768
+select id, json_length(ai_embed('embed_contract', content)) as dimension
+from embed_contract_rows order by id;
+id	dimension
+1	768
+2	NULL
+3	768

@@ -1,0 +1,55 @@
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_rerank_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ai_rerank', '{"type":"rerank","model_name":"BAAI/bge-reranker-v2-m3"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+'ai_rerank_ep', '{"ai_model_name":"ai_rerank","scope":"all","url":"http://0.0.0.0:8000/v1/rerank","access_key":"mock-key","provider":"siliconflow"}');
+select json_length(ai_rerank('ai_rerank','apple',
+'["apple","banana","fruit","vegetable"]', null)) as rerank_count;
+rerank_count
+4
+select json_unquote(json_extract(ai_rerank('ai_rerank','apple',
+'["apple","banana","fruit","vegetable"]', null), '$[0].document')) as first_document;
+first_document
+apple
+select json_unquote(json_extract(ai_rerank('ai_rerank','apple',
+'["apple","banana","fruit","vegetable"]', null), '$[0].index')) as first_index;
+first_index
+0
+select json_unquote(json_extract(ai_rerank('ai_rerank','apple',
+'["apple","banana","fruit","vegetable"]', null), '$[1].document')) as second_document;
+second_document
+banana
+select json_unquote(json_extract(ai_rerank('ai_rerank','apple',
+'["apple","banana","fruit","vegetable"]', null), '$[3].document')) as last_document;
+last_document
+vegetable
+select json_unquote(json_extract(r,'$[0].id')) as first_id,
+json_unquote(json_extract(r,'$[0].text')) as first_text,
+json_length(r) as rerank_count
+from (select ai_rerank('ai_rerank','apple',
+'[{"id":"a","text":"apple"},{"id":"b","text":"banana"}]',
+'text') as r) x;
+first_id	first_text	rerank_count
+a	apple	2
+select json_unquote(json_extract(r,'$[1].id')) as second_id,
+json_unquote(json_extract(r,'$[1].text')) as second_text
+from (select ai_rerank('ai_rerank','apple',
+'[{"id":"a","text":"apple"},{"id":"b","text":"banana"}]',
+'text') as r) x;
+second_id	second_text
+b	banana
+select ai_rerank('ai_rerank','apple','[]', null);
+ERROR HY000: Incorrect arguments to ai_rerank, document_array is empty
+select ai_rerank('ai_rerank','apple','[1,2]', null);
+ERROR HY000: Incorrect arguments to ai_rerank, document_array element is not string
+select ai_rerank('ai_rerank','apple','["apple"]', 'text');
+ERROR HY000: Incorrect arguments to ai_rerank, document_array element is not object
+select ai_rerank('ai_rerank','apple','[{"id":"a"}]', 'text');
+ERROR HY000: Incorrect arguments to ai_rerank, document_array element has no doc key
+select ai_rerank('ai_rerank','apple','[{"id":"a","text":"apple"}]', '');
+ERROR HY000: Incorrect arguments to ai_rerank, doc key is empty
+select ai_rerank('ai_no_such_model','apple','["apple"]', null);
+ERROR HY000: Incorrect arguments to ai_function, ai model not found, please check if the model exists
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_rerank_ep');
