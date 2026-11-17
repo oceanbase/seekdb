@@ -4800,7 +4800,7 @@ int ObResolverUtils::check_foreign_key_set_null_satisfy(
       const ObString &fk_col_name = arg.child_columns_.at(i);
       const ObColumnSchemaV2 *fk_col_schema = child_table_schema.get_column_schema(fk_col_name);
       if (OB_ISNULL(fk_col_schema)) {
-        ret = OB_ERR_UNEXPECTED;
+        ret = OB_ERR_COLUMN_NOT_FOUND;
       } else if (fk_col_schema->is_generated_column()) {
         ret = OB_ERR_UNSUPPORTED_FK_SET_NULL_ON_GENERATED_COLUMN;
       } else if (!fk_col_schema->is_nullable()) {
