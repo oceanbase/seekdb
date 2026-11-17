@@ -12349,6 +12349,37 @@ COPY '(' select_no_parens ')' TO STRING_VALUE '(' copy_opts ')'
     YYERROR;
   }
 }
+| COPY tbl_name TO STRING_VALUE '(' copy_opts ')'
+{
+  // A copy of a table is a copy of the rows of the table. The statement of
+  // the copy is a select of the rows of the table with the clause that writes
+  // the rows into the file.
+  ParseNode *star_node = NULL;
+  ParseNode *project_string = NULL;
+  ParseNode *project_list = NULL;
+  ParseNode *from_list = NULL;
+  ParseNode *select_node = NULL;
+  ParseNode *format_list = NULL;
+  ParseNode *into_node = NULL;
+  // The select list of the copy is the star, the rows of the table are the
+  // rows of the copy.
+  malloc_terminal_node(star_node, result->malloc_pool_, T_STAR);
+  malloc_non_terminal_node(project_string, result->malloc_pool_, T_PROJECT_STRING, 1, star_node);
+  dup_string_to_node(project_string, result->malloc_pool_, "*");
+  merge_nodes(project_list, result, T_PROJECT_LIST, project_string);
+  // The from clause of the copy is the table of the copy. The name of the
+  // table is a node of the grammar that holds the relation of the table, the
+  // from clause takes the relation.
+  merge_nodes(from_list, result, T_FROM_LIST, $2->children_[0]);
+  malloc_select_node(select_node, result->malloc_pool_);
+  select_node->children_[PARSE_SELECT_SELECT] = project_list;
+  select_node->children_[PARSE_SELECT_FROM] = from_list;
+  merge_nodes(format_list, result, T_EXTERNAL_FILE_FORMAT, $6);
+  malloc_non_terminal_node(into_node, result->malloc_pool_, T_INTO_OUTFILE, 3, $4, format_list, NULL);
+  select_node->children_[PARSE_SELECT_INTO_EXTRA] = into_node;
+  setup_token_pos_info(select_node, @1.first_column - 1, 6);
+  $$ = select_node;
+}
 ;
 
 copy_opts:

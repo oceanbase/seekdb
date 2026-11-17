@@ -3820,7 +3820,8 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
         } else {
           null_string = value.get_string();
         }
-      } else if (0 == option_name.case_compare("delimiter")) {
+      } else if (0 == option_name.case_compare("delimiter")
+                 || 0 == option_name.case_compare("delim")) {
         const ObString text = value.get_string();
         if (text.length() != 1) {
           ret = OB_ERR_PARSER_SYNTAX;
