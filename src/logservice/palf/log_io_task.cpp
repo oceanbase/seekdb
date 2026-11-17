@@ -192,9 +192,16 @@ int LogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHand
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogIOFlusLoghTask not inited", K(ret));
-  } else if (OB_FAIL(guard.get_palf_handle_impl()->inner_append_log(
-                 flush_log_cb_ctx_.lsn_, write_buf_, flush_log_cb_ctx_.scn_))) {
-  } else if (OB_FAIL(guard.get_palf_handle_impl()->advance_reuse_lsn(flush_log_end_lsn))) {
+  } else if (OB_FAIL(seek1402_observe_io_phase(
+      diagnostic_slot_ == nullptr ? nullptr : &diagnostic_slot_->append, [&] {
+        return guard.get_palf_handle_impl()->inner_append_log(
+            flush_log_cb_ctx_.lsn_, write_buf_, flush_log_cb_ctx_.scn_);
+      }))) {
+  } else if (OB_FAIL(seek1402_observe_io_phase(
+      diagnostic_slot_ == nullptr ? nullptr : &diagnostic_slot_->reuse, [&] {
+        if (diagnostic_slot_ != nullptr) diagnostic_slot_->reuse_end_lsn = flush_log_end_lsn.val_;
+        return guard.get_palf_handle_impl()->advance_reuse_lsn(flush_log_end_lsn);
+      }))) {
   } else if (OB_FAIL(push_task_into_cb_thread_pool_(cb_thread_pool, this))) {
   } else {
   }
@@ -417,6 +424,28 @@ int BatchLogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPal
   IPalfHandleImplGuard guard;
   LSN flushed_log_end_lsn;
   const int64_t first_handle_ts = ObTimeUtility::fast_current_time();
+  bool diagnostic_observed = false;
+  const int64_t diagnostic_count = io_task_array_.count();
+  if (seek1402_io_lifecycle().enabled()) {
+    for (int64_t i = 0; i < diagnostic_count; ++i) {
+      if (io_task_array_[i] != nullptr && io_task_array_[i]->get_diagnostic_slot() != nullptr) {
+        diagnostic_observed = true;
+        break;
+      }
+    }
+  }
+  const uint64_t diagnostic_batch = diagnostic_observed ?
+      seek1402_io_lifecycle().batch_sequence.fetch_add(1) + 1 : 0;
+  if (diagnostic_observed) {
+    for (int64_t i = 0; i < diagnostic_count; ++i) {
+      Seek1402IOSlot *slot = io_task_array_[i] == nullptr ? nullptr : io_task_array_[i]->get_diagnostic_slot();
+      if (slot != nullptr) {
+        slot->batch_group = diagnostic_batch;
+        slot->batch_member = i;
+        slot->batch_size = diagnostic_count;
+      }
+    }
+  }
   if (OB_FAIL(palf_env_impl->get_palf_handle_impl(guard))) {
   } else if (OB_FAIL(guard.get_palf_handle_impl()->get_palf_epoch(palf_epoch))) {
   } else {
@@ -442,9 +471,30 @@ int BatchLogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPal
       }
     }
     if (OB_SUCC(ret) && true == has_valid_data) {
-      if (OB_FAIL(guard.get_palf_handle_impl()->inner_append_log(lsn_array_, log_write_buf_array_,
-                                                                 scn_array_))) {
-      } else if (OB_FAIL(guard.get_palf_handle_impl()->advance_reuse_lsn(flushed_log_end_lsn))) {
+      auto observe_batch = [&](bool append, auto call) {
+        Seek1402IOPhase phase;
+        const int result = seek1402_observe_io_phase(diagnostic_observed ? &phase : nullptr, call);
+        if (diagnostic_observed) {
+          for (int64_t i = 0; i < count; ++i) {
+            Seek1402IOSlot *slot = io_task_array_[i] == nullptr ? nullptr : io_task_array_[i]->get_diagnostic_slot();
+            if (slot != nullptr) {
+              if (append) {
+                slot->append = phase;
+              } else {
+                slot->reuse = phase;
+                slot->reuse_end_lsn = flushed_log_end_lsn.val_;
+              }
+            }
+          }
+        }
+        return result;
+      };
+      if (OB_FAIL(observe_batch(true, [&] {
+        return guard.get_palf_handle_impl()->inner_append_log(lsn_array_, log_write_buf_array_, scn_array_);
+      }))) {
+      } else if (OB_FAIL(observe_batch(false, [&] {
+        return guard.get_palf_handle_impl()->advance_reuse_lsn(flushed_log_end_lsn);
+      }))) {
       } else if (OB_FAIL(push_flush_cb_to_thread_pool_(cb_thread_pool, palf_env_impl))) {
       } else {
       }

@@ -16,16 +16,49 @@
 
 #pragma once
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
 namespace oceanbase { namespace palf {
+struct Seek1402IOPhase {
+  bool entered = false;
+  bool returned = false;
+  int result = 0;
+  int64_t begin_us = 0;
+  int64_t end_us = 0;
+};
+template <typename Call>
+int seek1402_observe_io_phase(Seek1402IOPhase *phase, Call call) {
+  if (phase == nullptr) return call();
+  phase->entered = true;
+  phase->begin_us = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+  const int result = call();
+  phase->end_us = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+  phase->result = result;
+  phase->returned = true;
+  return result;
+}
+inline bool seek1402_write_io_phase(FILE *file, const Seek1402IOPhase &phase) {
+  if (!phase.entered) return std::fprintf(file, "null") >= 0;
+  if (!phase.returned) return std::fprintf(file, "{\"returned\":false,\"result\":null}") >= 0;
+  return std::fprintf(file, "{\"returned\":true,\"result\":%d,\"begin_us\":%lld,\"end_us\":%lld}",
+      phase.result, static_cast<long long>(phase.begin_us), static_cast<long long>(phase.end_us)) >= 0;
+}
 // Diagnostic storage outlives tasks. No slot is recycled within a process.
 struct Seek1402IOSlot {
   int64_t epoch = 0;
   uint64_t lsn = 0;
   int64_t length = 0;
+  uint64_t batch_group = 0;
+  int64_t batch_member = -1;
+  int64_t batch_size = 0;
+  uint64_t reuse_end_lsn = 0;
+  Seek1402IOPhase append;
+  Seek1402IOPhase reuse;
   int producer_ret = 0;
   int callback_ret = 0;
   bool callback_skipped = false;
@@ -71,9 +104,11 @@ struct Seek1402IOLifecycle {
   std::atomic<bool> exported{false};
   std::atomic<uintptr_t> bound_env{0};
   std::atomic<uint64_t> init_calls{0};
+  std::atomic<uint64_t> batch_sequence{0};
   std::atomic<bool> multiple_envs{false};
   const char *path;
   Seek1402IOLifecycle() : path(std::getenv("SEEK1402_IO_LIFECYCLE_FILE")) {}
+  bool enabled() const { return path != nullptr && *path != '\0'; }
   void bind_env(const void *environment) {
     if (path == nullptr || *path == '\0') return;
     if (init_calls.fetch_add(1) != 0) multiple_envs.store(true, std::memory_order_release);
@@ -110,7 +145,7 @@ struct Seek1402IOLifecycle {
     FILE *file = std::fopen(path, "wx");
     if (file == nullptr) return false;
     bool ok = std::fprintf(file,
-      "{\"scope\":\"flush_task_lifecycle_only\",\"slots\":%llu,\"unfinished\":%llu,\"overflow\":%s,\"multiple_envs\":%s,\"progress_phases_present\":false}\n",
+      "{\"scope\":\"flush_task_append_reuse_and_lifecycle\",\"clock\":\"realtime_us\",\"slots\":%llu,\"unfinished\":%llu,\"overflow\":%s,\"multiple_envs\":%s,\"progress_phases_present\":false,\"io_phases_present\":true}\n",
       static_cast<unsigned long long>(count), static_cast<unsigned long long>(unfinished),
       state & overflow ? "true" : "false", multiple_envs.load() ? "true" : "false") >= 0;
     for (uint64_t i = 0; i < count && ok; ++i) {
@@ -127,7 +162,7 @@ struct Seek1402IOLifecycle {
       if (producer) std::snprintf(producer_result, sizeof(producer_result), "%d", slot.producer_ret);
       if (callback) std::snprintf(callback_result, sizeof(callback_result), "%d", slot.callback_ret);
       ok = std::fprintf(file,
-        "{\"slot\":%llu,\"epoch\":%lld,\"lsn\":%llu,\"length\":%lld,\"producer_done\":%s,\"producer_ret\":%s,\"consumer_seen\":%s,\"callback_done\":%s,\"callback_ret\":%s,\"callback_skipped\":%s,\"freed\":%s,\"dropped_before_push\":%s}\n",
+        "{\"slot\":%llu,\"epoch\":%lld,\"lsn\":%llu,\"length\":%lld,\"producer_done\":%s,\"producer_ret\":%s,\"consumer_seen\":%s,\"callback_done\":%s,\"callback_ret\":%s,\"callback_skipped\":%s,\"freed\":%s,\"dropped_before_push\":%s,\"batch_group\":%llu,\"batch_member\":%lld,\"batch_size\":%lld,\"reuse_end_lsn\":%llu,\"append\":",
         static_cast<unsigned long long>(i), static_cast<long long>(slot.epoch),
         static_cast<unsigned long long>(slot.lsn), static_cast<long long>(slot.length),
         producer ? "true" : "false", producer_result,
@@ -135,7 +170,13 @@ struct Seek1402IOLifecycle {
         callback ? "true" : "false", callback_result,
         callback && slot.callback_skipped ? "true" : "false",
         slot.freed.load(std::memory_order_acquire) ? "true" : "false",
-        slot.dropped_before_push.load(std::memory_order_acquire) ? "true" : "false") >= 0;
+        slot.dropped_before_push.load(std::memory_order_acquire) ? "true" : "false",
+        static_cast<unsigned long long>(slot.batch_group), static_cast<long long>(slot.batch_member),
+        static_cast<long long>(slot.batch_size), static_cast<unsigned long long>(slot.reuse_end_lsn)) >= 0;
+      ok = ok && seek1402_write_io_phase(file, slot.append);
+      ok = ok && std::fprintf(file, ",\"reuse\":") >= 0;
+      ok = ok && seek1402_write_io_phase(file, slot.reuse);
+      ok = ok && std::fprintf(file, "}\n") >= 0;
     }
     ok = !std::ferror(file) && ok;
     ok = std::fclose(file) == 0 && ok;
