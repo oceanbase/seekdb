@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_IO_TASK_
 #define OCEANBASE_LOGSERVICE_LOG_IO_TASK_
 
+#include "logservice/palf/seek1402_io_lifecycle.h"
 #include "lib/thread/ob_link_task.h"
 #include "lib/utility/ob_print_utils.h"          // TO_STRING_KV
 #include "share/log/palf/lsn.h"                                 // LSN
@@ -69,6 +70,7 @@ public:
   void free_this(IPalfEnvImpl *palf_env_impl);
   int64_t get_io_size();
   int64_t get_palf_epoch() const { return palf_epoch_; }
+  Seek1402IOSlot *get_diagnostic_slot() const { return diagnostic_slot_; }
 	VIRTUAL_TO_STRING_KV("BaseClass", "LogIOTask",
 			"palf_epoch", palf_epoch_,
 			"create_task_ts", init_task_ts_,
@@ -83,6 +85,7 @@ protected:
 	int push_task_into_cb_thread_pool_(LogIOTaskCbThreadPool *cb_thread_pool, LogIOTask *io_task);
 
 protected:
+  Seek1402IOSlot *diagnostic_slot_;
   int64_t palf_epoch_;
 	int64_t init_task_ts_;
 	int64_t push_cb_into_cb_pool_ts_;

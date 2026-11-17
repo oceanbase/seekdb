@@ -47,6 +47,14 @@ int push_task_into_cb_thread_pool(LogIOTaskCbThreadPool *cb_thread_pool, LogIOTa
   return ret;
 }
 
+static int push_task_with_lifecycle(LogIOTaskCbThreadPool *pool, LogIOTask *task)
+{
+  Seek1402IOSlot *slot = task->get_diagnostic_slot();
+  const int ret = push_task_into_cb_thread_pool(pool, task);
+  if (slot != nullptr) slot->produced(ret);
+  return ret;
+}
+
 LogIOTask::LogIOTask(const int64_t palf_epoch)
 {
 	reset();
@@ -61,6 +69,7 @@ LogIOTask::~LogIOTask()
 
 void LogIOTask::reset()
 {
+  diagnostic_slot_ = nullptr;
 	palf_epoch_ = -1;
 	init_task_ts_ = OB_INVALID_TIMESTAMP;
   push_cb_into_cb_pool_ts_ = OB_INVALID_TIMESTAMP;
@@ -70,6 +79,7 @@ void LogIOTask::reset()
 int LogIOTask::do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl)
 { 
 	int ret = OB_SUCCESS;
+  Seek1402IOSlot *diagnostic_slot = diagnostic_slot_;
 	int64_t do_task_ts = ObTimeUtility::current_time();
   const int64_t delay_ts = do_task_ts - init_task_ts_;
 	constexpr int64_t MAX_DELAY_TIME = 100 * 1000;
@@ -85,7 +95,8 @@ int LogIOTask::do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf
 	  PALF_LOG(WARN, "palf_epoch has been changed, drop task", KPC(this), K(palf_epoch));
 	} else if (OB_FAIL(do_task_(cb_thread_pool, guard))) {
 	} else {}
-	return ret;
+	if (diagnostic_slot != nullptr) diagnostic_slot->produced(ret);
+  return ret;
 }
 
 // NB: after after_consume, the caller(LogIOCb) needs free LogIOTask.
@@ -122,6 +133,7 @@ int64_t LogIOTask::get_init_task_ts()
 
 void LogIOTask::free_this(IPalfEnvImpl *palf_env_impl)
 {
+  if (diagnostic_slot_ != nullptr) diagnostic_slot_->released();
   return free_this_(palf_env_impl);
 }
 int64_t LogIOTask::get_io_size()
@@ -157,6 +169,8 @@ int LogIOFlushLogTask::init(const FlushLogCbCtx &flush_log_cb_ctx,
   } else {
     flush_log_cb_ctx_ = flush_log_cb_ctx;
     write_buf_ = write_buf;
+    diagnostic_slot_ = seek1402_io_lifecycle().reserve(palf_epoch_,
+        flush_log_cb_ctx.lsn_.val_, write_buf.get_total_size());
     is_inited_ = true;
   }
   return ret;
@@ -383,7 +397,7 @@ int BatchLogIOFlushLogTask::push_flush_cb_to_thread_pool_(LogIOTaskCbThreadPool 
         PALF_LOG(WARN, "io_task is nullptr, may be its' epoch has changed", K(ret), KP(io_task),
             KPC(this));
       } else if (FALSE_IT(io_task->push_cb_into_cb_pool_ts_ = current_time)) {
-      } else if (OB_FAIL(push_task_into_cb_thread_pool(cb_thread_pool, io_task))) {
+      } else if (OB_FAIL(push_task_with_lifecycle(cb_thread_pool, io_task))) {
       } else {
         // task will be released in after_consume, this task no need be rleased in 'clear_memory_'
         // again.

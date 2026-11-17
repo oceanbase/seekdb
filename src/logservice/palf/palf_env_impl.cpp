@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PALF
+#include "logservice/palf/seek1402_io_lifecycle.h"
 #include "palf_env_impl.h"
 #include <cinttypes>
 #include "lib/utility/ob_platform_io.h"
@@ -185,6 +186,7 @@ int PalfEnvImpl::init(
     common::ObIODevice *log_local_device,
     ObIOManager *io_manager)
 {
+  seek1402_io_lifecycle().bind_env(this);
   int ret = OB_SUCCESS;
   int pret = 0;
   const int64_t io_cb_num = PALF_SLIDING_WINDOW_SIZE * 128;
@@ -273,6 +275,9 @@ void PalfEnvImpl::wait()
   cb_thread_pool_.wait();
   block_gc_timer_task_.wait();
   log_loop_thread_.wait();
+  if (!seek1402_io_lifecycle().export_after_join()) {
+    PALF_LOG(WARN, "SEEK1402_IO_LIFECYCLE export incomplete");
+  }
   PALF_LOG(INFO, "PalfEnvImpl wait success", KPC(this));
 }
 

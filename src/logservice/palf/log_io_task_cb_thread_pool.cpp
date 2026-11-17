@@ -125,15 +125,19 @@ void LogIOTaskCbThreadPool::handle(common::LinkTask *task)
 {
   int ret = OB_SUCCESS;
   LogIOTask *log_io_task = static_cast<LogIOTask*>(task);
+  Seek1402IOSlot *diagnostic_slot = log_io_task == nullptr ? nullptr : log_io_task->get_diagnostic_slot();
+  bool diagnostic_consumed = false;
+  if (diagnostic_slot != nullptr) diagnostic_slot->consumer_seen.store(true, std::memory_order_release);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogIOTaskCbThreadPool not inited!!!", K(ret));
   } else if (OB_ISNULL(log_io_task)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(log_io_task));
-  } else if (OB_FAIL(log_io_task->after_consume(palf_env_impl_))) {
+  } else if (OB_FAIL((diagnostic_consumed = true, log_io_task->after_consume(palf_env_impl_)))) {
   } else {
   }
+  if (diagnostic_slot != nullptr) diagnostic_slot->consumed(ret, !diagnostic_consumed);
   if (OB_NOT_NULL(log_io_task)) {
     log_io_task->free_this(palf_env_impl_);
   }
