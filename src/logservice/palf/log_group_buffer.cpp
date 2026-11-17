@@ -15,6 +15,7 @@
  */
 
 #include "log_group_buffer.h"
+#include "logservice/palf/seek1402_deferred_capture.h"
 #include "share/rc/ob_server_runtime.h"
 #include "log_writer_utils.h"
 
@@ -146,19 +147,35 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
   LSN start_lsn, reuse_lsn;
   get_buffer_start_lsn_(start_lsn);
   get_reuse_lsn_(reuse_lsn);
+  const LSN observed_reuse_lsn = reuse_lsn;
   reuse_lsn = MIN(reuse_lsn, ref_reuse_lsn);
+  int64_t observed_capacity = 0;
   if (IS_NOT_INIT) {
   } else if (!lsn.is_valid() || total_len <= 0 || !ref_reuse_lsn.is_valid()) {
     PALF_LOG_RET(WARN, OB_INVALID_ARGUMENT, "invalid arguments", K(bool_ret), K(lsn), K(total_len), K(ref_reuse_lsn));
   } else if (lsn < start_lsn) {
     PALF_LOG_RET(WARN, OB_INVALID_ARGUMENT, "lsn is less than start_lsn", K(bool_ret), K(lsn), K_(start_lsn));
-  } else if (end_lsn > reuse_lsn + get_available_buffer_size()) {
+  } else if (end_lsn > reuse_lsn + (observed_capacity = get_available_buffer_size())) {
+    seek1402_capture().first_space_comparison(total_len, lsn.val_, ref_reuse_lsn.val_,
+        observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
+        (reuse_lsn + observed_capacity).val_, false);
+    if (seek1402_capture().admission_scope) {
+      seek1402_capture().add(2, total_len, lsn.val_, ref_reuse_lsn.val_,
+          observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
+          (reuse_lsn + observed_capacity).val_, OB_SUCCESS);
+    }
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
       PALF_LOG_RET(WARN, OB_EAGAIN, "end_lsn is larger than max reuse pos", K(bool_ret), K(lsn), K(end_lsn),
           K(reuse_lsn), K_(available_buffer_size));
     }
   } else {
     bool_ret = true;
+    seek1402_capture().first_space_comparison(total_len, lsn.val_, ref_reuse_lsn.val_,
+        observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
+        (reuse_lsn + observed_capacity).val_, true);
+    seek1402_capture().recover_space(total_len, lsn.val_, ref_reuse_lsn.val_,
+        observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
+        (reuse_lsn + observed_capacity).val_);
   }
   return bool_ret;
 }

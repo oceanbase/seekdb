@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "logservice/palf/seek1402_deferred_capture.h"
 #include "ob_tx_log_adapter.h"
 #include "src/storage/ls/ob_ls.h"
 
@@ -71,6 +72,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
   } else {
     static const int64_t MAX_SLEEP_US = 100;
+    const int64_t diagnostic_begin_us = cur_ts;
     int64_t retry_cnt = 0;
     int64_t sleep_us = 0;
     int64_t expire_us = INT64_MAX;
@@ -81,6 +83,8 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     if (expire_us == INT64_MAX) {
       block_flag = false;
     }
+    palf::Seek1402Capture &capture = palf::seek1402_capture();
+    capture.begin();
     do {
       if (is_big_log && OB_FAIL(log_handler_->append_big_log(buf, size, base_scn, block_flag,
                                                               cb, lsn, scn))) {
@@ -115,6 +119,45 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
       TRANS_LOG(WARN, "append log to palf retry timeout", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
           K(block_flag), K(expire_us), K(is_big_log), K(retry_cnt));
     }
+    const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+    capture.active = false;
+    for (int64_t i = 0; i < capture.count; ++i) {
+      const auto &event = capture.records[i];
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred admission", KP(cb), K(size), K(i),
+          "capture_mode", "first_last_per_kind", "sequence", capture.sequence[i],
+          "kind_total", capture.kind_total[event.kind - 1], "kind", event.kind, "v0", event.value[0], "v1", event.value[1],
+          "v2", event.value[2], "v3", event.value[3], "v4", event.value[4],
+          "v5", event.value[5], "v6", event.value[6], "v7", event.value[7]);
+    }
+    if (capture.first_space_present) {
+      const auto &event = capture.first_space;
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC first space comparison", KP(cb), K(size),
+          "v0", event.value[0], "v1", event.value[1], "v2", event.value[2],
+          "v3", event.value[3], "v4", event.value[4], "v5", event.value[5],
+          "v6", event.value[6], "passed", event.value[7],
+          K(diagnostic_begin_us), K(diagnostic_end_us));
+    }
+    if (capture.recovery_present) {
+      const auto &event = capture.recovery;
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC space comparison recovery", KP(cb), K(size),
+          "after_observed", capture.recovery_after_observed,
+          "v0", event.value[0], "v1", event.value[1], "v2", event.value[2],
+          "v3", event.value[3], "v4", event.value[4], "v5", event.value[5],
+          "v6", event.value[6], K(diagnostic_begin_us), K(diagnostic_end_us));
+    }
+    if (capture.abort_scope) {
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC deferred capture completeness", KP(cb), K(size),
+          "recorded", capture.count, "dropped", capture.dropped, "scope_abort", true,
+          "first_space_comparison", capture.first_space_present,
+          "capture_mode", "first_last_per_kind", "observed", capture.total, "space_recovery", capture.recovery_present, "space_capture", "comparison_operands",
+          "retry_count", retry_cnt, K(ret), K(diagnostic_begin_us), K(diagnostic_end_us));
+    }
+    if (retry_cnt > 0 && capture.abort_scope) {
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC append retry summary", KP(cb), K(size),
+          K(need_nonblock), K(block_flag), K(retry_timeout_us), K(retry_cnt), K(ret),
+          K(diagnostic_begin_us), K(diagnostic_end_us), K(expire_us));
+    }
+
   }
 
   return ret;

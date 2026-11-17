@@ -434,6 +434,7 @@ pub unsafe fn commit(buffer: *mut Buffer, body_len: usize, backtrace: *const c_c
         bytes[len] = b'\n';
         len += 1;
     }
+    crate::seek1402_diagnostic::copy(&bytes[..len]);
     let result = if trace_mode {
         let spill = with_context(|ctx| ctx.borrow().trace_buffer.len() + len > MAX_SIZE);
         let result = if spill { flush_trace(route) } else { 0 };

@@ -24,6 +24,7 @@ mod facade;
 mod files;
 mod policy;
 mod record;
+mod seek1402_diagnostic;
 pub use policy::*;
 
 use files::{Limits, Output};
@@ -373,6 +374,7 @@ pub fn start() -> i32 {
             policy::set_option(policy::INITIALIZED, 1);
             policy::set_option(policy::STOPPED, 0);
             policy::set_option(policy::STOP_APPEND, 0);
+            seek1402_diagnostic::snapshot();
             OK
         }
         Err(_) => ERROR,
@@ -405,10 +407,12 @@ unsafe fn owned_text(ptr: *const c_char) -> Option<String> {
 }
 
 pub fn flush() -> i32 {
+    seek1402_diagnostic::snapshot();
     with_backend(Backend::flush)
 }
 
 pub fn shutdown() -> i32 {
+    seek1402_diagnostic::snapshot();
     // Hold the gate until draining/joining finishes: init cannot race shutdown.
     let mut backend = BACKEND.write().unwrap();
     policy::set_option(policy::STOP_APPEND, 1);

@@ -16,6 +16,10 @@
 
 #define USING_LOG_PREFIX TRANS
 
+#include <cstdio>
+#include <cstdlib>
+
+#include "logservice/palf/seek1402_deferred_capture.h"
 #include "rust/config.h"
 #include "ob_tx_ctx.h"
 #include "share/ob_debug_sync.h"
@@ -1459,8 +1463,10 @@ int ObTxCtx::compensate_abort_log_()
       ret = OB_SUCCESS;
     }
     TRANS_LOG(WARN, "submit abort log failed", KR(submit_ret), KR(ret), K(*this));
+    TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC abort append failure", K(submit_ret), K(tmp_ret), K(ret), K_(trans_id), KP(this));
   } else {
   }
+  TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC abort retry outcome", K(ret), K_(trans_id), KP(this), "durable_state", static_cast<int>(get_durable_state_()), "end_scn", ctx_tx_data_.get_end_log_ts());
   TRANS_LOG(INFO, "compensate abort log", K(ret), KPC(this));
   return ret;
 }
@@ -1565,6 +1571,7 @@ ERRSIM_POINT_DEF(EN_TX_ON_SUCCESS_DELAY)
 
 int ObTxCtx::on_success(ObTxLogCb *log_cb)
 {
+
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   const int64_t cur_ts = ObTimeUtility::current_time();
@@ -1601,6 +1608,10 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
 
     // allow fill redo concurrently with log callback
     CtxLockGuard guard(lock_, is_committing_() ? CtxLockGuard::MODE::ALL : CtxLockGuard::MODE::CTX);
+    if (NULL != log_cb && ObTxLogType::TX_ABORT_LOG == log_cb->get_last_log_type()) {
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC abort durable callback entered", K_(trans_id), KP(this), "lsn", log_cb->get_lsn(), "scn", log_cb->get_log_ts());
+    }
+
 
     log_sync_used_time = cur_ts - log_cb->get_submit_ts();
     ctx_lock_wait_time = guard.get_lock_acquire_used_time();
@@ -3030,15 +3041,47 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
     const int64_t replay_hint_v = replay_hint ?: trans_id_.get_id();
     log_block.get_header().set_log_entry_no(exec_info_.next_log_entry_no_);
     if (OB_FAIL(log_block.seal(replay_hint_v, barrier))) {
-    } else if (OB_SUCC(ls_tx_ctx_mgr_->get_ls_log_adapter()
-                       ->submit_log(log_block.get_buf(),
-                                    log_block.get_size(),
-                                    base_scn,
-                                    log_cb,
-                                    true,
-                                    retry_timeout_us))) {
-      busy_cbs_.add_last(log_cb);
-      log_cb->set_log_size(log_block.get_size());
+    } else {
+      const bool diagnostic_abort = is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_ABORT_LOG);
+      palf::Seek1402AbortScope diagnostic_scope(diagnostic_abort);
+      const int64_t diagnostic_begin_us = ObTimeUtility::current_time();
+      ret = ls_tx_ctx_mgr_->get_ls_log_adapter()->submit_log(
+          log_block.get_buf(), log_block.get_size(), base_scn, log_cb, true, retry_timeout_us);
+      const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+      if (OB_SUCC(ret)) {
+        busy_cbs_.add_last(log_cb);
+        log_cb->set_log_size(log_block.get_size());
+      }
+      static const char *diagnostic_redo_arm_path = std::getenv("SEEK1402_REDO_ARM_FILE");
+      static bool diagnostic_redo_armed = false;
+      if (is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_REDO_LOG)
+          && NULL != diagnostic_redo_arm_path && !ATOMIC_LOAD(&diagnostic_redo_armed)) {
+        std::FILE *diagnostic_arm_file = std::fopen(diagnostic_redo_arm_path, "r");
+        if (NULL != diagnostic_arm_file) {
+          std::fclose(diagnostic_arm_file);
+          ATOMIC_STORE(&diagnostic_redo_armed, true);
+        }
+      }
+      if (is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_REDO_LOG)
+          && ATOMIC_LOAD(&diagnostic_redo_armed)) {
+        static int64_t diagnostic_redo_calls = 0;
+        static const int64_t DIAGNOSTIC_REDO_CALL_LIMIT = 8192;
+        const int64_t diagnostic_redo_sequence = ATOMIC_FAA(&diagnostic_redo_calls, 1);
+        if (diagnostic_redo_sequence < DIAGNOSTIC_REDO_CALL_LIMIT) {
+          TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC redo append call summary", K_(trans_id), KP(this),
+              KP(log_cb), K(diagnostic_abort), "size", log_block.get_size(), K(retry_timeout_us),
+              K(ret), K(diagnostic_begin_us), K(diagnostic_end_us), K(diagnostic_redo_sequence),
+              "record_limit", DIAGNOSTIC_REDO_CALL_LIMIT, "capture_scope", "after_arm_file");
+        } else if (diagnostic_redo_sequence == DIAGNOSTIC_REDO_CALL_LIMIT) {
+          TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC redo capture overflow",
+              K(diagnostic_redo_sequence), "record_limit", DIAGNOSTIC_REDO_CALL_LIMIT, "capture_scope", "after_arm_file");
+        }
+      }
+      if (diagnostic_abort) {
+        TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC append call summary", K_(trans_id), KP(this),
+            KP(log_cb), K(diagnostic_abort), "size", log_block.get_size(), K(retry_timeout_us),
+            K(ret), K(diagnostic_begin_us), K(diagnostic_end_us));
+      }
     }
   }
   return ret;
@@ -4132,6 +4175,7 @@ int ObTxCtx::replay_abort(const ObTxAbortLog &abort_log,
   if (OB_SUCC(ret)) {
     runtime_state_.set_state_log_submitted();
   }
+  TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC replay abort outcome", K(ret), K(offset), K(timestamp), K_(trans_id), KP(this), "durable_state", static_cast<int>(get_durable_state_()), "end_scn", ctx_tx_data_.get_end_log_ts());
   const int64_t used_time = timeguard.get_diff();
   REC_TRANS_TRACE_EXT2(tlog_, replay_abort, OB_ID(ret), ret, OB_ID(used),
                        used_time, OB_ID(offset), offset.val_,
@@ -5804,6 +5848,7 @@ int ObTxCtx::on_local_abort_tx_()
     set_exiting_();
   }
 
+  TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC local abort final outcome", K(ret), K_(trans_id), KP(this), "durable_state", static_cast<int>(get_durable_state_()), "end_scn", ctx_tx_data_.get_end_log_ts());
   return ret;
 }
 
