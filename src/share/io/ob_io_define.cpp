@@ -665,12 +665,12 @@ int ObIOResult::wait(int64_t wait_ms)
   ObThreadCondGuard guard(cond_);
   if (OB_FAIL(guard.get_ret())) {
   } else {
-    int64_t begin_ms = ObTimeUtility::current_time();
+    const int64_t deadline_us = ObTimeUtility::current_time() + wait_ms * 1000;
     while (OB_SUCC(ret) && !is_finished_ && wait_ms > 0) {
       if (OB_FAIL(cond_.wait(wait_ms))) {
       } else if (!is_finished_) {
-        int64_t duration_ms = ObTimeUtility::current_time() - begin_ms;
-        wait_ms -= duration_ms;
+        const int64_t remaining_us = deadline_us - ObTimeUtility::current_time();
+        wait_ms = remaining_us > 0 ? (remaining_us + 999) / 1000 : 0;
       }
     }
     if (OB_UNLIKELY(wait_ms <= 0)) { // rarely happen
