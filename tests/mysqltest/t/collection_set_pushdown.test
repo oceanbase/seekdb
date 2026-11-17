@@ -1,0 +1,53 @@
+# Real partitioned column keys exercise physical partial DISTINCT.
+# The SET$1 hint must target the set parent, not either SELECT branch.
+--disable_query_log
+SET ob_enable_aggregation_pushdown=true;
+--disable_warnings
+DROP TABLE IF EXISTS collection_set_pushdown;
+--enable_warnings
+CREATE TABLE collection_set_pushdown(id INT,p INT,c SMALLINT,j JSON,a ARRAY(INT),n ARRAY(ARRAY(ARRAY(ARRAY(SMALLINT)))),m MAP(INT,ARRAY(TINYINT)),PRIMARY KEY(id,p),INDEX mv((CAST(j->'$[*]' AS UNSIGNED ARRAY)))) PARTITION BY HASH(p) PARTITIONS 4;
+INSERT INTO collection_set_pushdown VALUES(1,1,1,'[1,2]',[1,2],[[[[1,2]]]],map(1,[1,2])),(2,2,2,'[1,2]',[1,2],[[[[1,2]]]],map(1,[1,2])),(3,3,3,'[1,2]',[3],[[[[3]]]],map(2,[3])),(4,4,4,'[1,2]',NULL,NULL,NULL),(5,5,5,'[1,2]',NULL,NULL,NULL);
+
+--echo partitioned_forced_collection_pushdown
+--sorted_result
+SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_default_collection_pushdown
+--sorted_result
+SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_scoped_disabled_control
+--sorted_result
+SELECT /*+ parallel(2) NO_DISTINCT_PUSHDOWN(@"SET$1") */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_nested_array_forced_pushdown
+SELECT COUNT(*) AS rows_found,SUM(cardinality(element_at(element_at(element_at(n,1),1),1))) AS payload_sum FROM (SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ n FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ n FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0) AS q;
+
+--echo partitioned_map_forced_pushdown
+SELECT COUNT(*) AS rows_found,SUM(cardinality(element_at(map_values(m),1))) AS payload_sum FROM (SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ m FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ m FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0) AS q;
+
+--echo partitioned_scalar_forced_pushdown
+SELECT COUNT(*) AS rows_found,SUM(c) AS payload_sum FROM (SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ c FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ c FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0) AS q;
+
+--echo partitioned_union_all_preserves_duplicates
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0) AS q;
+
+SET ob_enable_aggregation_pushdown=false;
+--echo session_disabled_default_control
+--sorted_result
+SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo forced_collection_hint_overrides_session
+--sorted_result
+SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ a FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo forced_scalar_hint_overrides_session
+SELECT COUNT(*) AS rows_found,SUM(c) AS payload_sum FROM (SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ c FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION SELECT /*+ parallel(2) */ c FROM collection_set_pushdown WHERE 1 MEMBER OF(j->'$[*]') AND c>=0) AS q;
+
+SET ob_enable_aggregation_pushdown=true;
+--echo session_pushdown_restored
+SELECT @@ob_enable_aggregation_pushdown AS pushdown_enabled;
+--echo plain_collection_distinct_stays_unsupported
+--error 5083
+SELECT DISTINCT a FROM collection_set_pushdown;
+DROP TABLE collection_set_pushdown;

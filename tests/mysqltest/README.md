@@ -10,6 +10,15 @@ mysqltest --host=127.0.0.1 --port=2881 --user=root --database=test \
   --result-file="$PWD/tests/mysqltest/r/collection_set_pruning.result"
 ```
 
+Run `collection_set_pushdown.test` with its matching `.result` file using the
+same command to cover physical partial DISTINCT on a partitioned table with
+a multi-value index. It uses real duplicate ARRAY/MAP values and NULLs,
+`parallel(2)`, and `DISTINCT_PUSHDOWN(@"SET$1")` targeting the SET parent.
+The forced-hint case also runs with session pushdown disabled to verify that
+the capability guard still wins when the hint overrides that setting. Scalar
+keys remain eligible, UNION ALL preserves duplicates, and the session is
+restored to enabled before the ordinary collection DISTINCT negative check.
+
 Use the normal client authentication mechanism for the endpoint; keep passwords
 out of command arguments. The test is separate from the legacy suite under
 `tools/` so new test-only files remain outside that directory.
@@ -25,3 +34,8 @@ The final SELECT DISTINCT over an ARRAY column must still return 5083.
 SQL bounds on SMALLINT are included as an additional control. The primary
 empty-branch cases use literal false predicates so they do not depend on type
 range inference or other pruning rules.
+
+These fixes retain the final set operator's duplicate elimination. They do
+not add ordinary collection DISTINCT support or replace the pre-existing
+planner strategy for UNION with more than two surviving branches; that
+strategy can still use UNION ALL plus ordinary DISTINCT.

@@ -1,0 +1,45 @@
+partitioned_forced_collection_pushdown
+a
+NULL
+[1,2]
+[3]
+partitioned_default_collection_pushdown
+a
+NULL
+[1,2]
+[3]
+partitioned_scoped_disabled_control
+a
+NULL
+[1,2]
+[3]
+partitioned_nested_array_forced_pushdown
+rows_found	payload_sum
+3	3
+partitioned_map_forced_pushdown
+rows_found	payload_sum
+3	3
+partitioned_scalar_forced_pushdown
+rows_found	payload_sum
+5	15
+partitioned_union_all_preserves_duplicates
+rows_found	payload_sum
+10	10
+session_disabled_default_control
+a
+NULL
+[1,2]
+[3]
+forced_collection_hint_overrides_session
+a
+NULL
+[1,2]
+[3]
+forced_scalar_hint_overrides_session
+rows_found	payload_sum
+5	15
+session_pushdown_restored
+pushdown_enabled
+1
+plain_collection_distinct_stays_unsupported
+ERROR 22000: Invalid data type for the operation

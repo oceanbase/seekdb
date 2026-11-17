@@ -4283,9 +4283,22 @@ int ObSelectLogPlan::check_need_pushdown_set_distinct(ObLogicalOperator *&child,
   int ret = OB_SUCCESS;
   bool is_const = true;
   bool is_unique = true;
+  bool has_collection = false;
   is_valid = false;
-  if (OB_ISNULL(child) || OB_ISNULL(optimizer_context_.get_query_ctx())) {
+  for (int64_t i = 0; OB_SUCC(ret) && !has_collection && i < set_keys.count(); ++i) {
+    if (OB_ISNULL(set_keys.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      has_collection = ObCollectionSQLType == set_keys.at(i)->get_data_type();
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(child) || OB_ISNULL(optimizer_context_.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (has_collection) {
+    // Partial deduplication uses ordinary DISTINCT, which rejects collections.
+    // Keep duplicate elimination in the final set operator, even with a hint.
+    OPT_TRACE("skip collection set distinct pushdown");
   } else if (!child->is_distributed() && is_set_op_parallel) {
     // do nothing
   } else if (LOG_SET == child->get_type()
