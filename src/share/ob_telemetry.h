@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 
+#include "lib/net/ob_addr.h"
+
 namespace oceanbase
 {
 namespace share
@@ -46,7 +48,11 @@ int generate_telemetry_uuid(const char *machine_id,
                             char *uuid,
                             const int64_t uuid_len);
 
-int report_telemetry(const char *reporter, const char *event_name);
+// Reports the deployment telemetry of this server. The self address is
+// injected by the caller: Share must not reach for the global context locator.
+int report_telemetry(const char *reporter,
+                     const char *event_name,
+                     const common::ObAddr &self_addr);
 
 } // namespace share
 } // namespace oceanbase
