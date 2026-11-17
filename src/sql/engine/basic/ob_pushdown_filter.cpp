@@ -1250,8 +1250,6 @@ int ObPushdownFilterExecutor::find_evaluated_datums(
     if (OB_FAIL(eval_exprs.push_back(expr))) {
     }
   }
-  // ROW is a structural node outside calc_exprs, but its children can hold
-  // evaluated datums that must be cleared before filtering the next batch.
   if (OB_SUCC(ret) && (is_calc_expr || T_OP_ROW == expr->type_)) {
     for (uint32_t i = 0; i < expr->arg_cnt_ && OB_SUCC(ret); ++i) {
       if (OB_FAIL(find_evaluated_datums(expr->args_[i], calc_exprs, eval_exprs))) {
