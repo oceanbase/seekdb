@@ -74,7 +74,7 @@ die()  { printf '[seekdb-pkg-build][ERROR] %s\n' "$*" >&2; exit 1; }
 PKG_WORK="$(mktemp -d "${TMPDIR:-/tmp}/seekdb-pkg.XXXXXX")"
 trap 'rm -rf "$PKG_WORK"' EXIT
 MACOS_ARCH="$(uname -m)"
-MACOS_VERSION_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
+MACOS_MINIMUM_OS=15.0
 
 # ---------------------------------------------------------------------------
 # Validate build artifacts
@@ -100,7 +100,7 @@ if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
     -o "$MENUBAR_BIN" \
     -framework AppKit \
     -framework Security \
-    -target "${MACOS_ARCH}-apple-macosx13.0" \
+    -target "${MACOS_ARCH}-apple-macosx${MACOS_MINIMUM_OS}" \
     -O \
     "$MENUBAR_SRC/SeekDBMenuBar.swift"
   codesign --force --sign - "$MENUBAR_BIN"
@@ -110,7 +110,7 @@ if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
   swiftc \
     -o "$HELPER_BIN" \
     -framework Foundation \
-    -target "${MACOS_ARCH}-apple-macosx13.0" \
+    -target "${MACOS_ARCH}-apple-macosx${MACOS_MINIMUM_OS}" \
     -O \
     "$MENUBAR_SRC/SeekDBHelper.swift"
   codesign --force --sign - "$HELPER_BIN"
@@ -120,7 +120,7 @@ fi
 # ---------------------------------------------------------------------------
 # Step 2: Assemble staging directory (the on-disk layout after install)
 # ---------------------------------------------------------------------------
-PKG_NAME="${PROJECT_NAME}-${VERSION}-${RELEASE}-macos${MACOS_VERSION_MAJOR}-${MACOS_ARCH}"
+PKG_NAME="${PROJECT_NAME}-${VERSION}-${RELEASE}-macos${MACOS_MINIMUM_OS%%.*}-${MACOS_ARCH}"
 STAGING="$PKG_WORK/_pkg_staging"
 APP_BUNDLE_NAME="seekdb Monitor.app"
 APP_EXECUTABLE="seekdb-menubar"
@@ -167,7 +167,7 @@ if [[ "$DO_MENUBAR" == true && -x "$MENUBAR_BIN" ]]; then
   swiftc \
     -o "$SVG2PNG_BIN" \
     -framework AppKit \
-    -target "${MACOS_ARCH}-apple-macosx13.0" \
+    -target "${MACOS_ARCH}-apple-macosx${MACOS_MINIMUM_OS}" \
     "$MACPKG_DIR/svg2png.swift"
   rm -rf "$APP_ICONSET" "$APP_ICON_ICNS"
   mkdir -p "$APP_ICONSET"

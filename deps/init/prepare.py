@@ -53,9 +53,10 @@ def host_profile():
         if arch == "aarch64" or arm.stdout.strip() == "1":
             arch = "arm64"
         major = int(subprocess.check_output(["sw_vers", "-productVersion"], universal_newlines=True).split(".")[0])
+        if major < 15:
+            raise ValueError("macOS 15 or newer is required for native dependencies")
         # The dependency ABI follows the release baseline, not the build host.
-        release = 13 if major >= 13 else None
-        tag = "macos%s.%s" % (release, arch)
+        tag = "macos15.%s" % arch
     elif system == "Linux":
         release = {}
         for line in Path("/etc/os-release").read_text().splitlines():

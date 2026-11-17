@@ -289,7 +289,7 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
     return [executable] + sorted(libraries.iterdir())
 
 
-def macos_binaries(prefix, arch, minimum_os="13.0", executable=None):
+def macos_binaries(prefix, arch, minimum_os="15.0", executable=None):
     versions = []
     for binary in [executable or prefix / "bin/seekdb"] + sorted((prefix / "lib/seekdb").iterdir()):
         if architecture(binary, "macos") != arch:
@@ -557,8 +557,8 @@ def load(source, destination, version=None):
         raise ValueError("Android binary packages require minimum_api=26")
     if metadata["os"] == "macos" and (not isinstance(metadata.get("minimum_os"), str) or
                                         not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", metadata["minimum_os"]) or
-                                        version_tuple(metadata["minimum_os"]) > version_tuple("13.0")):
-        raise ValueError("macOS binary packages require a numeric deployment target no newer than 13.0")
+                                        version_tuple(metadata["minimum_os"]) > version_tuple("15.0")):
+        raise ValueError("macOS binary packages require a numeric deployment target no newer than 15.0")
     files = manifest.get("files")
     if not isinstance(files, dict):
         raise ValueError("binary package requires a file manifest")

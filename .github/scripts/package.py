@@ -55,7 +55,7 @@ def matrix():
                                 conda_spec=CONFIG["linux_sysroots"][arch][baseline]["spec"],
                                 micromamba=CONFIG["micromamba"]))
     targets += [
-        dict(id="macos13-arm64", platform="macos-arm64", os="macos", arch="arm64", runner="macos-15", glibc="", profile=""),
+        dict(id="macos15-arm64", platform="macos-arm64", os="macos", arch="arm64", runner="macos-15", glibc="", profile=""),
         dict(id="windows-x86_64-md", platform="windows-x86_64", os="windows", arch="x86_64", runner="windows-2022", glibc="", profile=""),
         dict(id="android-arm64-api26", platform="android-arm64", os="android", arch="aarch64", runner="ubuntu-24.04", glibc="", profile=""),
     ]
@@ -116,7 +116,7 @@ def environment():
     elif target == "ios":
         profiles = ["oceanbase.ios-host.arm64.deps"]
     elif target == "macos":
-        profiles = ["oceanbase.macos13.arm64.deps"]
+        profiles = ["oceanbase.macos15.arm64.deps"]
     elif target == "windows":
         profiles = ["oceanbase.windows.x86_64.deps"]
     else:
@@ -253,6 +253,13 @@ def export():
     if os.environ["PACKAGE_OS"] == "linux":
         arguments += ["--glibc-version", os.environ["PACKAGE_GLIBC"]]
     run(arguments)
+    if os.environ["PACKAGE_OS"] == "macos":
+        archives = list((ROOT / "dist").glob("seekdb-binary-*.tar.gz"))
+        if len(archives) != 1:
+            raise ValueError("expected exactly one macOS binary distribution")
+        with tempfile.TemporaryDirectory(prefix="seekdb-package-check-") as temporary:
+            bundle, _ = binary.load(archives[0], Path(temporary) / "binary", os.environ["PACKAGE_VERSION"])
+            run([bundle / "bin/seekdb", "--version"])
     if os.environ["PACKAGE_OS"] == "linux":
         helper = ROOT / "deps/3rd/home/admin/oceanbase/bin/obshell"
         staged = CACHE / "obshell"
