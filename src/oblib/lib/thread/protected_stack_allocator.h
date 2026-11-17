@@ -22,8 +22,9 @@
 #ifdef _WIN32
 #include <BaseTsd.h>
 typedef SSIZE_T ssize_t;
+#else
+#include <sys/types.h>
 #endif
-#include "lib/lock/ob_latch.h"
 
 namespace oceanbase {
 namespace lib {
@@ -41,8 +42,6 @@ struct ObStackHeader
   uint64_t pth_;
   char *base_;
   bool has_guarded_page_;
-  ObStackHeader *prev_;
-  ObStackHeader *next_;
 };
 
 class ProtectedStackAllocator
@@ -60,53 +59,7 @@ private:
                 const bool guard_page);
 };
 
-class StackMgr
-{
-public:
-  class Guard
-  {
-  public:
-    Guard(StackMgr& mgr) : mgr_(mgr), cur_(nullptr)
-    {
-      mgr_.rwlock_.rdlock(common::ObLatchIds::DEFAULT_SPIN_RWLOCK);
-      cur_ = mgr_.dummy_.next_;
-    }
-    ~Guard() { mgr_.rwlock_.unlock(); }
-    ObStackHeader* operator*() { return (cur_ == &(mgr_.dummy_)) ? nullptr : cur_; }
-    ObStackHeader* next()
-    {
-      cur_ = cur_->next_;
-      return (cur_ == &(mgr_.dummy_)) ? nullptr : cur_;
-    }
-  private:
-    StackMgr& mgr_;
-    ObStackHeader* cur_;
-  };
-  StackMgr()
-  {
-    dummy_.prev_ = dummy_.next_ = &dummy_;
-  }
-  void insert(ObStackHeader *);
-  void erase(ObStackHeader *);
-private:
-  ObStackHeader *begin() { return dummy_.next_; }
-  ObStackHeader *end() { return &dummy_; }
-private:
-  common::ObLatch rwlock_;
-  ObStackHeader dummy_;
-};
-
-class ObStackHeaderGuard
-{
-public:
-  ObStackHeaderGuard();
-  ~ObStackHeaderGuard();
-private:
-  ObStackHeader header_;
-};
-
 extern ProtectedStackAllocator g_stack_allocer;
-extern StackMgr g_stack_mgr;
 
 }  // lib
 }  // oceanbase
