@@ -269,6 +269,7 @@ int LogSlidingWindow::submit_log(const char *buf,
                                  SCN &result_scn)
 {
   int ret = OB_SUCCESS;
+  Seek1402SpaceCallScope diagnostic_space_call(ret, seek1402_capture().abort_scope);
   int64_t log_id = OB_INVALID_LOG_ID;
   SCN scn;
   // whether need generate new log task

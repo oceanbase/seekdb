@@ -152,7 +152,18 @@ int seek1402_observe_callback_epoch(int64_t &epoch, Call call) {
   return result;
 }
 
+inline uint64_t &seek1402_space_current_call() {
+  static thread_local uint64_t id = 0;
+  return id;
+}
+struct Seek1402SpaceCall {
+  uint64_t first_point = UINT64_MAX;
+  int64_t result = 0;
+  bool abort_scope = false;
+  std::atomic<bool> ready{false};
+};
 struct Seek1402SpacePoint {
+  uint64_t call_id = 0;
   uint64_t group_buffer = 0;
   uint64_t value[8] = {};
   bool abort_scope = false;
@@ -173,6 +184,9 @@ struct Seek1402IOLifecycle {
   Seek1402IONotify notify;
   Seek1402SpacePoint space_points[limit];
   std::atomic<uint64_t> space_gate{0};
+  Seek1402SpaceCall space_calls[limit];
+  std::atomic<uint64_t> space_call_gate{0};
+  std::atomic<bool> space_orphan{false};
   bool space_enabled = false;
   std::atomic<bool> multiple_envs{false};
   const char *path;
@@ -231,6 +245,13 @@ struct Seek1402IOLifecycle {
         if (space_gate.compare_exchange_weak(state, state | overflow)) return;
       } else if (space_gate.compare_exchange_weak(state, state + 1)) {
         auto &point = space_points[state];
+        point.call_id = seek1402_space_current_call();
+        if (point.call_id == 0 || point.call_id > limit) {
+          space_orphan.store(true, std::memory_order_relaxed);
+        } else {
+          auto &call = space_calls[point.call_id - 1];
+          if (call.first_point == UINT64_MAX) call.first_point = state;
+        }
         point.group_buffer = buffer;
         const uint64_t values[8] = {size, lsn, committed, reuse, capacity, base, upper, passed ? 1UL : 0UL};
         for (int i = 0; i < 8; ++i) point.value[i] = values[i];
@@ -384,6 +405,9 @@ inline Seek1402IOLifecycle *seek1402_create_mapped_capture(const char *raw_path)
   SEEK1402_CAPTURE_OFFSET(init_calls);
   SEEK1402_CAPTURE_OFFSET(multiple_envs);
   SEEK1402_CAPTURE_OFFSET(space_gate);
+  SEEK1402_CAPTURE_OFFSET(space_call_gate);
+  SEEK1402_CAPTURE_OFFSET(space_calls);
+  SEEK1402_CAPTURE_OFFSET(space_orphan);
   SEEK1402_CAPTURE_OFFSET(space_enabled);
   SEEK1402_CAPTURE_OFFSET(space_points);
   append("\"notify_requested\":%zu,\"notify_attempts\":%zu,\"notify_sent\":%zu,\"notify_lost\":%zu,",
@@ -392,9 +416,13 @@ inline Seek1402IOLifecycle *seek1402_create_mapped_capture(const char *raw_path)
          offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, sent),
          offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, lost));
 #undef SEEK1402_CAPTURE_OFFSET
-  append("\"slots\":%zu},\"space_point_bytes\":%zu,\"space_offsets\":{"
-         "\"group_buffer\":%zu,\"value\":%zu,\"abort_scope\":%zu,\"ready\":%zu},\"slot_offsets\":{",
-         offsetof(Seek1402IOLifecycle, slots), sizeof(Seek1402SpacePoint),
+  append("\"slots\":%zu},\"space_call_bytes\":%zu,\"space_call_offsets\":{"
+         "\"first_point\":%zu,\"result\":%zu,\"abort_scope\":%zu,\"ready\":%zu},\"space_point_bytes\":%zu,\"space_offsets\":{"
+         "\"call_id\":%zu,\"group_buffer\":%zu,\"value\":%zu,\"abort_scope\":%zu,\"ready\":%zu},\"slot_offsets\":{",
+         offsetof(Seek1402IOLifecycle, slots), sizeof(Seek1402SpaceCall),
+         offsetof(Seek1402SpaceCall, first_point), offsetof(Seek1402SpaceCall, result),
+         offsetof(Seek1402SpaceCall, abort_scope), offsetof(Seek1402SpaceCall, ready), sizeof(Seek1402SpacePoint),
+         offsetof(Seek1402SpacePoint, call_id),
          offsetof(Seek1402SpacePoint, group_buffer), offsetof(Seek1402SpacePoint, value),
          offsetof(Seek1402SpacePoint, abort_scope), offsetof(Seek1402SpacePoint, ready));
 #define SEEK1402_SLOT_OFFSET(field) append("\"" #field "\":%zu,", offsetof(Seek1402IOSlot, field))
@@ -434,4 +462,38 @@ inline Seek1402IOLifecycle &seek1402_io_lifecycle() {
   }();
   return *capture;
 }
+class Seek1402SpaceCallScope {
+public:
+  Seek1402SpaceCallScope(int &result, bool abort_scope)
+      : previous_(seek1402_space_current_call()), result_(result), record_(nullptr) {
+    auto &capture = seek1402_io_lifecycle();
+    seek1402_space_current_call() = 0;
+    if (!capture.space_enabled || !capture.enabled()) return;
+    uint64_t state = capture.space_call_gate.load(std::memory_order_acquire);
+    for (;;) {
+      if (state & (capture.closed | capture.overflow)) return;
+      if ((state & capture.count_mask) == capture.limit) {
+        if (capture.space_call_gate.compare_exchange_weak(state, state | capture.overflow)) return;
+      } else if (capture.space_call_gate.compare_exchange_weak(state, state + 1)) {
+        record_ = &capture.space_calls[state];
+        record_->abort_scope = abort_scope;
+        seek1402_space_current_call() = state + 1;
+        return;
+      }
+    }
+  }
+  ~Seek1402SpaceCallScope() {
+    if (record_ != nullptr) {
+      record_->result = result_;
+      record_->ready.store(true, std::memory_order_release);
+    }
+    seek1402_space_current_call() = previous_;
+  }
+  Seek1402SpaceCallScope(const Seek1402SpaceCallScope &) = delete;
+  Seek1402SpaceCallScope &operator=(const Seek1402SpaceCallScope &) = delete;
+private:
+  uint64_t previous_;
+  int &result_;
+  Seek1402SpaceCall *record_;
+};
 } }

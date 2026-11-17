@@ -161,6 +161,9 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
         observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
         (reuse_lsn + observed_capacity).val_, false);
     if (seek1402_capture().admission_scope) {
+      if (seek1402_capture().space_call_id == 0) {
+        seek1402_capture().space_call_id = seek1402_space_current_call();
+      }
       seek1402_io_lifecycle().record_space_comparison(reinterpret_cast<uintptr_t>(this),
           total_len, lsn.val_, ref_reuse_lsn.val_, observed_reuse_lsn.val_, observed_capacity,
           reuse_lsn.val_, (reuse_lsn + observed_capacity).val_, false, seek1402_capture().abort_scope);
@@ -180,6 +183,9 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
         observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
         (reuse_lsn + observed_capacity).val_, true);
     if (seek1402_capture().admission_scope) {
+      if (seek1402_capture().space_call_id == 0) {
+        seek1402_capture().space_call_id = seek1402_space_current_call();
+      }
       seek1402_io_lifecycle().record_space_comparison(reinterpret_cast<uintptr_t>(this),
           total_len, lsn.val_, ref_reuse_lsn.val_, observed_reuse_lsn.val_, observed_capacity,
           reuse_lsn.val_, (reuse_lsn + observed_capacity).val_, true, seek1402_capture().abort_scope);

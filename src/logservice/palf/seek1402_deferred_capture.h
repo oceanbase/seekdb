@@ -14,6 +14,7 @@ struct Seek1402Capture {
   Record records[8];
   Record first_space;
   bool first_space_present = false;
+  uint64_t space_call_id = 0;
   Record recovery;
   bool recovery_present = false;
   uint64_t recovery_after_observed = 0;
@@ -24,7 +25,7 @@ struct Seek1402Capture {
   int64_t last[4];
   void begin() {
     count = 0; dropped = 0; total = 0; active = abort_scope;
-    first_space_present = false;
+    first_space_present = false; space_call_id = 0;
     recovery_present = false; recovery_after_observed = 0;
     for (int64_t k = 0; k < 4; ++k) {
       kind_total[k] = 0; first[k] = -1; last[k] = -1;
