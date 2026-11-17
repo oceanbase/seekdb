@@ -1163,6 +1163,12 @@ int ObTransformAggrSubquery::get_trans_param(ObDMLStmt &stmt,
       bool is_valid = true;
       if (ObOptimizerUtil::find_item(invalid_list, params.at(j).ja_query_ref_)) {
         is_valid = false;
+      } else if (!params.at(j).ja_query_ref_->is_scalar() &&
+                 !is_filter && !expr->has_flag(CNT_ALIAS) &&
+                 (!stmt.is_select_stmt() ||
+                  (static_cast<ObSelectStmt &>(stmt).has_group_by() && !post_group_by))) {
+        // A split view only pushes scalar query references from post-join expressions.
+        is_valid = false;
       } else if (is_exists_op(expr->get_expr_type())) {
         if (OB_FAIL(choose_pullup_method_for_exists(params.at(j).ja_query_ref_,
                                                     params.at(j).pullup_flag_,
@@ -2392,6 +2398,10 @@ int ObTransformAggrSubquery::check_can_trans_any_all_as_scalar_subquery(ObDMLStm
     ret = OB_ERR_UNEXPECTED;
   } else if (parent_expr->get_expr_type() != T_OP_SQ_EQ || !parent_expr->has_flag(IS_WITH_ANY)) {
     // only pure equal correlated condition can be converted to aggr-first join form
+  } else if (OB_ISNULL(parent_expr->get_param_expr(0))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (parent_expr->get_param_expr(0)->has_flag(CNT_WINDOW_FUNC)) {
+    // IN-to-EXISTS would introduce a window-dependent parameter after parameter validation.
   } else if (OB_FAIL(ObTransformUtils::check_expr_used_as_condition(&stmt, 
                                                                     root_expr, 
                                                                     parent_expr, 
