@@ -61,3 +61,22 @@ while unrepresentable differences report 1690 instead of wrapping. Stored
 columns, a scalar subquery, a two-row batch, NULL/empty arrays, existing NULL
 element rejection and small-integer/floating controls are included. The input
 arrays and the result type are not narrowed to hide overflow.
+
+Run `collection_set_merge_capability.test` with its matching result file to
+verify that collection set keys retain hash-set execution when a merge-set
+candidate would require unsupported collection ordering. Real duplicate ARRAY,
+nested ARRAY and MAP values plus NULLs check UNION/INTERSECT/EXCEPT semantics.
+`NO_USE_HASH_SET(@"SET$1")` targets the set parent: the unsupported merge hint
+must fall back to a valid hash plan, while scalar keys can still use merge.
+The grouped case combines aggregate/scalar/collection outputs, HAVING and
+branch ORDER BY/LIMIT, and another case keeps the empty LIMIT window. UNION
+ALL preserves both branches and repeated NULLs. Explicit collection ORDER BY
+must still report 5083. The positive tests do not force hash execution.
+
+For an additional plan check, EXPLAIN the first MAP INTERSECT and the scalar
+INTERSECT with the same scoped hint. The former must select HASH INTERSECT
+without MERGE INTERSECT or a collection sort; the scalar control must retain
+MERGE INTERSECT. EXPLAIN the grouped INTERSECT as well: scalar group/order
+sorts remain valid, but the set parent must use HASH INTERSECT. These plan
+checks accompany the native mysqltest runner so cost/timing numbers are not
+part of the semantic golden output.

@@ -1,0 +1,80 @@
+# Collection equality/hash is supported, but collection ordering is not.
+# A forced merge hint cannot make an unsupported merge candidate executable.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS collection_set_merge_capability;
+--enable_warnings
+CREATE TABLE collection_set_merge_capability(id INT PRIMARY KEY,g INT,a ARRAY(INT),n ARRAY(ARRAY(SMALLINT)),m MAP(FLOAT,FLOAT));
+INSERT INTO collection_set_merge_capability VALUES(1,1,[1,2],[[1,2],[3]],map(1.5,10.5)),(2,1,[1,2],[[1,2],[3]],map(1.5,10.5)),(3,2,[3],[[4]],map(2.5,20.5)),(4,3,NULL,NULL,NULL),(5,3,NULL,NULL,NULL),(6,4,[5],[[6]],map(3.5,30.5));
+
+--echo map_forced_merge_intersect
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ m FROM collection_set_merge_capability WHERE id<=5 INTERSECT SELECT m FROM collection_set_merge_capability WHERE id>=3;
+
+--echo array_forced_merge_union
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ a FROM collection_set_merge_capability WHERE id<=5 UNION SELECT a FROM collection_set_merge_capability WHERE id>=3;
+
+--echo array_forced_merge_intersect
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ a FROM collection_set_merge_capability WHERE id<=5 INTERSECT SELECT a FROM collection_set_merge_capability WHERE id>=3;
+
+--echo array_forced_merge_except
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ a FROM collection_set_merge_capability WHERE id<=5 EXCEPT SELECT a FROM collection_set_merge_capability WHERE id>=3;
+
+--echo nested_forced_merge_union
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ n FROM collection_set_merge_capability WHERE id<=5 UNION SELECT n FROM collection_set_merge_capability WHERE id>=3;
+
+--echo nested_forced_merge_intersect
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ n FROM collection_set_merge_capability WHERE id<=5 INTERSECT SELECT n FROM collection_set_merge_capability WHERE id>=3;
+
+--echo nested_forced_merge_except
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ n FROM collection_set_merge_capability WHERE id<=5 EXCEPT SELECT n FROM collection_set_merge_capability WHERE id>=3;
+
+--echo map_forced_merge_union
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ m FROM collection_set_merge_capability WHERE id<=5 UNION SELECT m FROM collection_set_merge_capability WHERE id>=3;
+
+--echo map_forced_merge_except
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ m FROM collection_set_merge_capability WHERE id<=5 EXCEPT SELECT m FROM collection_set_merge_capability WHERE id>=3;
+
+--echo mixed_keys_forced_merge_intersect
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ g,a,n,m FROM collection_set_merge_capability WHERE id<=5 INTERSECT SELECT g,a,n,m FROM collection_set_merge_capability WHERE id>=3;
+
+--echo collection_default_intersect
+--sorted_result
+SELECT a FROM collection_set_merge_capability WHERE id<=5 INTERSECT SELECT a FROM collection_set_merge_capability WHERE id>=3;
+
+--echo grouped_having_limit_intersect
+--sorted_result
+(SELECT /*+ NO_USE_HASH_SET(@"SET$1") OPT_PARAM('enable_rich_vector_format','TRUE') */ count(id) AS cnt,sum(id) AS total,min(g) AS group_id,a,n,m FROM collection_set_merge_capability WHERE id<=5 GROUP BY g HAVING min(id)>=1 ORDER BY g LIMIT 1,2) INTERSECT (SELECT /*+ OPT_PARAM('enable_rich_vector_format','TRUE') */ count(id),sum(id),min(g),a,n,m FROM collection_set_merge_capability WHERE id>=3 GROUP BY g HAVING min(id)>=1 ORDER BY g LIMIT 1,2);
+
+--echo grouped_having_limit_empty_intersect
+(SELECT /*+ NO_USE_HASH_SET(@"SET$1") OPT_PARAM('enable_rich_vector_format','TRUE') */ count(id) AS cnt,a FROM collection_set_merge_capability WHERE id<=5 GROUP BY g HAVING min(id)>=1 LIMIT 8,10) INTERSECT (SELECT /*+ OPT_PARAM('enable_rich_vector_format','TRUE') */ count(id),a FROM collection_set_merge_capability WHERE id>=3 GROUP BY g HAVING min(id)>=1 LIMIT 8,10);
+
+--echo union_all_preserves_both_branches_and_null_duplicates
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ 1 AS side,a FROM collection_set_merge_capability WHERE id<=5 UNION ALL SELECT 2,a FROM collection_set_merge_capability WHERE id>=3;
+
+--echo scalar_forced_merge_union
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ g FROM collection_set_merge_capability WHERE id<=5 UNION SELECT g FROM collection_set_merge_capability WHERE id>=3;
+
+--echo scalar_forced_merge_intersect
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ g FROM collection_set_merge_capability WHERE id<=5 INTERSECT SELECT g FROM collection_set_merge_capability WHERE id>=3;
+
+--echo scalar_forced_merge_except
+--sorted_result
+SELECT /*+ NO_USE_HASH_SET(@"SET$1") */ g FROM collection_set_merge_capability WHERE id<=5 EXCEPT SELECT g FROM collection_set_merge_capability WHERE id>=3;
+
+--echo explicit_collection_ordering_stays_unsupported
+--error 5083
+SELECT a FROM collection_set_merge_capability ORDER BY a;
+DROP TABLE collection_set_merge_capability;

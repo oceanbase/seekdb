@@ -3552,6 +3552,24 @@ int ObSelectLogPlan::generate_merge_set_plans(const EqualSets &equal_sets,
                                               ObIArray<CandidatePlan> &merge_set_plans)
 {
   int ret = OB_SUCCESS;
+  bool has_collection_key = false;
+  const ObIArray<ObRawExpr*> *key_lists[] = {&left_set_keys, &right_set_keys};
+  for (int64_t side = 0; side < 2; ++side) {
+    const ObIArray<ObRawExpr*> &keys = *key_lists[side];
+    for (int64_t i = 0; i < keys.count(); ++i) {
+      if (OB_ISNULL(keys.at(i))) {
+        return OB_ERR_UNEXPECTED;
+      }
+      has_collection_key |= ObCollectionSQLType == keys.at(i)->get_data_type();
+    }
+  }
+  if (has_collection_key) {
+    // Merge sets require ordering, which collection keys do not support.
+    // Leave no merge candidate so the caller can fall back to hash sets,
+    // including when a hint requested a merge algorithm.
+    OPT_TRACE("skip merge set plans for collection keys");
+    return OB_SUCCESS;
+  }
   ObArenaAllocator allocator;
   ObSEArray<MergeKeyInfo*, 8> merge_key_list;
   ObSEArray<ObSEArray<MergeKeyInfo*, 8>, 8> left_merge_keys;
