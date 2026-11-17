@@ -36,15 +36,8 @@ id	name
 row_count	min_c1	max_c1	sum_c1
 7	0	6	21
 # Parquet schema is taken from the footer
-Query Plan
-==========================================
-|ID|OPERATOR  |NAME|EST.ROWS|EST.TIME(us)|
-------------------------------------------
-|0 |FILE TABLE|    |199     |1           |
-==========================================
-Outputs & filters:
--------------------------------------
-  0 - output([.c1]), filter(nil)
+column_name	column_type	null	key	default	extra
+c1	BIGINT	NO	NULL	NULL	NULL
 # Cross format join between the CSV and the JSONL schema
 csv_name	jsonl_name
 Alice	Alice

@@ -43,7 +43,8 @@ public:
       quote_('"'),
       escape_('"'),
       skip_blank_lines_(false),
-      file_format_(0) {}
+      file_format_(0),
+      is_schema_(false) {}
 
   // The columns of the file, the operator writes the values into them.
   common::ObFixedArray<ObExpr *, common::ObIAllocator> column_exprs_;
@@ -59,6 +60,9 @@ public:
   char escape_;
   bool skip_blank_lines_;
   int8_t file_format_;
+  // The operator produces the schema of the file, a row for every column of
+  // the file, and not the rows of the file.
+  bool is_schema_;
 };
 
 class ObFileTableOp : public ObOperator
@@ -82,6 +86,7 @@ private:
   int close_file();
   int check_schema();
   int fetch_batch();
+  int build_schema_rows();
   int write_row(const file_sql::FileTableRow &row);
 private:
   file_sql::FileTableScanner *scanner_;

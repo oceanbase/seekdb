@@ -40,8 +40,7 @@
 #include "../../../src/sql/parser/sql_parser_mysql_mode_lex.h"
 #include "../../../src/sql/parser/sql_parser_base.h"
 
-#define GEN_EXPLAN_STMT(no_use, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
-  (void)(no_use); \
+#define GEN_EXPLAN_STMT(desc_node, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
   ParseNode *type_node = NULL; \
   ParseNode *display_node = NULL; \
   if (0 != explain_type) { \
@@ -50,8 +49,8 @@
   if (0 != display_type) { \
     malloc_terminal_node(display_node, result->malloc_pool_, display_type); \
   } \
-  malloc_non_terminal_node(explain_stmt, result->malloc_pool_, T_EXPLAIN, 5, \
-                           type_node, display_node, into_table, set_statement_id, stmt);
+  malloc_non_terminal_node(explain_stmt, result->malloc_pool_, T_EXPLAIN, 6, \
+                           type_node, display_node, into_table, set_statement_id, stmt, desc_node);
 %}
 
 %destructor {destroy_tree($$);}<node>
@@ -12313,8 +12312,22 @@ explain_or_desc relation_factor opt_desc_column_option
 
 explain_or_desc:
 EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+| DESCRIBE
+{
+  // A describe shows the columns of a statement, an explain shows the plan of
+  // a statement. The node marks the statement of the describe.
+  ParseNode *desc_marker = NULL;
+  malloc_terminal_node(desc_marker, result->malloc_pool_, T_INT);
+  desc_marker->value_ = 1;
+  $$ = desc_marker;
+}
+| DESC
+{
+  ParseNode *desc_marker = NULL;
+  malloc_terminal_node(desc_marker, result->malloc_pool_, T_INT);
+  desc_marker->value_ = 1;
+  $$ = desc_marker;
+}
 ;
 
 /* A copy writes the rows of a statement into a file. The statement of the

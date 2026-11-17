@@ -5600,6 +5600,7 @@ int ObStaticEngineCG::generate_spec(ObLogFileTable &op, ObFileTableSpec &spec,
         spec.escape_ = file_def->escape_;
         spec.skip_blank_lines_ = file_def->skip_blank_lines_;
         spec.file_format_ = file_def->file_format_;
+        spec.is_schema_ = file_def->is_schema_;
       }
     }
   }

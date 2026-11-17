@@ -41,6 +41,7 @@ OB_DEF_SERIALIZE(ObFileTableSpec)
   OB_UNIS_ENCODE(escape_);
   OB_UNIS_ENCODE(skip_blank_lines_);
   OB_UNIS_ENCODE(file_format_);
+  OB_UNIS_ENCODE(is_schema_);
   return ret;
 }
 
@@ -59,6 +60,7 @@ OB_DEF_SERIALIZE_SIZE(ObFileTableSpec)
   OB_UNIS_ADD_LEN(escape_);
   OB_UNIS_ADD_LEN(skip_blank_lines_);
   OB_UNIS_ADD_LEN(file_format_);
+  OB_UNIS_ADD_LEN(is_schema_);
   return len;
 }
 
@@ -77,6 +79,7 @@ OB_DEF_DESERIALIZE(ObFileTableSpec)
   OB_UNIS_DECODE(escape_);
   OB_UNIS_DECODE(skip_blank_lines_);
   OB_UNIS_DECODE(file_format_);
+  OB_UNIS_DECODE(is_schema_);
   return ret;
 }
 
@@ -185,6 +188,12 @@ int ObFileTableOp::check_schema()
     // The glob function does not read a file, it has no schema to check.
     return ret;
   }
+  if (spec.is_schema_) {
+    // The columns of the table are the columns of the schema of the file, the
+    // number of the columns of the file is not the number of the columns of
+    // the table.
+    return ret;
+  }
   const std::vector<file_sql::ColumnSchema> &columns = scanner_->columns();
   if (columns.size() != spec.column_exprs_.count()) {
     // The file changed after the schema was inferred, the plan does not match
@@ -204,6 +213,7 @@ int ObFileTableOp::inner_open()
   rows_.clear();
   if (OB_FAIL(open_file())) {
   } else if (OB_FAIL(check_schema())) {
+  } else if (MY_SPEC.is_schema_ && OB_FAIL(build_schema_rows())) {
   } else {
     // The rows of the first batch are read when the first row is requested.
   }
@@ -247,6 +257,12 @@ int ObFileTableOp::fetch_batch()
     ret = OB_ITER_END;
     return ret;
   }
+  if (MY_SPEC.is_schema_) {
+    // The rows of the schema of the file are built when the file is opened,
+    // the file has no rows to read.
+    ret = OB_ITER_END;
+    return ret;
+  }
   rows_.clear();
   row_index_ = 0;
   // The text of the columns of the previous batch is not needed any more.
@@ -260,6 +276,49 @@ int ObFileTableOp::fetch_batch()
                    "cannot read the file %s: %s",
                    MY_SPEC.path_.ptr(),
                    status.message.c_str());
+  }
+  return ret;
+}
+
+int ObFileTableOp::build_schema_rows()
+{
+  int ret = OB_SUCCESS;
+  // The schema of a file has a row for every column of the file, the row has
+  // the name of the column, the type of the column, the null of the column,
+  // the key of the column, the default of the column and the extra of the
+  // column.
+  std::vector<file_sql::ColumnSchema> columns;
+  if (OB_ISNULL(scanner_)) {
+    // The glob function does not read a file, it has one column, the column
+    // file.
+    file_sql::ColumnSchema column;
+    column.name = "file";
+    column.type = file_sql::ScalarType::VARCHAR;
+    column.nullable = false;
+    columns.push_back(column);
+  } else {
+    columns = scanner_->columns();
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < static_cast<int64_t>(columns.size()); ++i) {
+    const file_sql::ColumnSchema &column = columns[i];
+    file_sql::FileTableRow row;
+    file_sql::ScalarValue value;
+    value.type = file_sql::ScalarType::VARCHAR;
+    value.is_null = false;
+    value.text = column.name;
+    row.push_back(value);
+    value.text = file_sql::scalar_type_name(column.type);
+    row.push_back(value);
+    value.text = column.nullable ? "YES" : "NO";
+    row.push_back(value);
+    // The key, the default and the extra of a column of a file are not known.
+    value.type = file_sql::ScalarType::NULL_VALUE;
+    value.is_null = true;
+    value.text.clear();
+    row.push_back(value);
+    row.push_back(value);
+    row.push_back(value);
+    rows_.push_back(row);
   }
   return ret;
 }
