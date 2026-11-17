@@ -55,8 +55,8 @@ class ObTableStmt;
 class ObDDLExecutorUtil final
 {
 public:
+  static int check_ddl_status();
   static int wait_local_schema_visible(
-      const ObTimeoutCtx &ctx,
       ObSQLSessionInfo *session,
       const int64_t schema_version);
   ObDDLExecutorUtil() {}
