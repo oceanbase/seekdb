@@ -480,8 +480,7 @@ int BatchLogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPal
     if (OB_SUCC(ret) && true == has_valid_data) {
       auto observe_batch = [&](bool append, auto call) {
         Seek1402IOPhase phase;
-        const int result = seek1402_observe_io_phase(diagnostic_observed ? &phase : nullptr, call);
-        if (diagnostic_observed) {
+        auto publish_phase = [&] {
           for (int64_t i = 0; i < count; ++i) {
             Seek1402IOSlot *slot = io_task_array_[i] == nullptr ? nullptr : io_task_array_[i]->get_diagnostic_slot();
             if (slot != nullptr) {
@@ -493,7 +492,12 @@ int BatchLogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPal
               }
             }
           }
-        }
+        };
+        const int result = seek1402_observe_io_phase(diagnostic_observed ? &phase : nullptr, [&] {
+          if (diagnostic_observed) publish_phase();
+          return call();
+        });
+        if (diagnostic_observed) publish_phase();
         return result;
       };
       if (OB_FAIL(observe_batch(true, [&] {
