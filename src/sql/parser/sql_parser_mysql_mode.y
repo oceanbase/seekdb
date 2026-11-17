@@ -385,7 +385,7 @@ END_P SET_VAR DELIMITER
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
 %type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
-%type <node> copy_stmt copy_option_list copy_option_item
+%type <node> copy_stmt copy_option_list copy_option_item copy_option_kw copy_option_val
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
 %type <node> case_arg when_clause_list when_clause case_default
@@ -12343,14 +12343,36 @@ copy_option_item
 {
   $$ = $1;
 }
-| copy_option_list opt_comma copy_option_item
+| copy_option_list ',' copy_option_item
 {
-  (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
 }
 ;
 
 copy_option_item:
+copy_option_kw
+| copy_option_val
+;
+
+copy_option_kw:
+unreserved_keyword
+{
+  // The name of an option is a keyword of the parser, it is turned into the
+  // identifier of the option.
+  ParseNode *name_node = NULL;
+  malloc_terminal_node(name_node, result->malloc_pool_, T_IDENT);
+  const int32_t len = strlen($1->keyword_name);
+  name_node->str_value_ = parse_strndup($1->keyword_name, len, result->malloc_pool_);
+  if (OB_ISNULL(name_node->str_value_)) {
+    yyerror(NULL, result, "No more space for the name of an option\n");
+    YYABORT_NO_MEMORY;
+  }
+  name_node->str_len_ = len;
+  $$ = name_node;
+}
+;
+
+copy_option_val:
 NAME_OB
 | STRING_VALUE
 ;

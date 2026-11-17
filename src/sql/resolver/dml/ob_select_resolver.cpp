@@ -32,6 +32,17 @@
 #include "sql/executor/ob_memory_tracker.h"
 namespace oceanbase
 {
+// The text of a node of the parser, it is in the field str_value_.
+static ObString node_text(const ParseNode *node)
+{
+  if (OB_ISNULL(node)) {
+    return ObString();
+  } else if (node->str_len_ > 0) {
+    return ObString(node->str_len_, node->str_value_);
+  } else {
+    return ObString();
+  }
+}
 using namespace common;
 using namespace share;
 using namespace share::schema;
@@ -3021,7 +3032,7 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
       ret = OB_ERR_PARSE_SQL;
       LOG_USER_ERROR(OB_ERR_PARSE_SQL, "unknown option of a copy");
     } else {
-      const ObString name(item->str_len_, item->str_value_);
+      const ObString name = node_text(item);
       if (0 == name.compare(ObString("format"))) {
         // The name of the format is the item that follows the name of the
         // option.
@@ -3031,7 +3042,7 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
           ret = OB_ERR_PARSE_SQL;
           LOG_USER_ERROR(OB_ERR_PARSE_SQL, "the option format of a copy needs a value");
         } else {
-          format_name = ObString(value->str_len_, value->str_value_);
+          format_name = node_text(value);
         }
       } else if (0 == name.compare(ObString("header"))) {
         // The names of the columns are the first line of the file.
@@ -3092,7 +3103,7 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node,
     // of an into outfile are the nodes of the grammar, they hold no text.
     bool is_copy = format_node->num_child_ > 0
                    && NULL != format_node->children_[0]
-                   && format_node->children_[0]->str_len_ > 0;
+                   && !node_text(format_node->children_[0]).empty();
     if (OB_SUCC(ret) && is_copy) {
       // The options of a copy are the names and the values of the options,
       // they are grouped here.
