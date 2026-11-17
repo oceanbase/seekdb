@@ -210,13 +210,15 @@ def bazel_arguments():
 def build_jobs():
     jobs = os.environ["BUILD_JOBS"]
     if jobs == "0":
-        jobs = "1" if os.environ["PACKAGE_OS"] in ("macos", "ios") else "2"
+        jobs = "1" if os.environ["PACKAGE_OS"] == "ios" else "2"
     return jobs
 
 
 def build():
+    jobs = build_jobs()
+    print("Building %s with --jobs=%s" % (os.environ["PACKAGE_OS"], jobs), flush=True)
     arguments = [sys.executable, "build.py", "build", *bazel_arguments(),
-                 "--jobs=" + build_jobs(), "--config=O2", "--config=line_tables_only", "--config=package",
+                 "--jobs=" + jobs, "--config=O2", "--config=line_tables_only", "--config=package",
                  "--lockfile_mode=error"]
     if os.environ["PACKAGE_OS"] == "ios":
         configuration = "ios-simulator" if os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator" else "ios"
@@ -225,7 +227,13 @@ def build():
         return
     if os.environ["PACKAGE_OS"] == "android":
         arguments.append("--config=android")
-    run(arguments + ["//src/observer:seekdb", "//src/share/inner_table/sys_package:syspack_release"])
+    if os.environ["PACKAGE_OS"] == "macos":
+        subprocess.run(["sysctl", "hw.ncpu", "hw.memsize", "vm.swapusage"], check=False)
+    try:
+        run(arguments + ["//src/observer:seekdb", "//src/share/inner_table/sys_package:syspack_release"])
+    finally:
+        if os.environ["PACKAGE_OS"] == "macos":
+            subprocess.run(["sysctl", "vm.swapusage"], check=False)
 
 
 def timezone():
