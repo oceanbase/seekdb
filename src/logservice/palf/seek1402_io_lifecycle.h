@@ -15,6 +15,7 @@
  */
 
 #pragma once
+#include "seek1402_io_notify.h"
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -162,6 +163,7 @@ struct Seek1402IOLifecycle {
   std::atomic<uintptr_t> bound_env{0};
   std::atomic<uint64_t> init_calls{0};
   std::atomic<uint64_t> batch_sequence{0};
+  Seek1402IONotify notify;
   std::atomic<bool> multiple_envs{false};
   const char *path;
   char run_id[129] = {};
@@ -183,6 +185,7 @@ struct Seek1402IOLifecycle {
   void bind_env(const void *environment) {
     if (path == nullptr || *path == '\0') return;
     if (init_calls.fetch_add(1) != 0) multiple_envs.store(true, std::memory_order_release);
+    else if (enabled()) notify.initialize();
     uintptr_t expected = 0;
     const uintptr_t address = reinterpret_cast<uintptr_t>(environment);
     if (!bound_env.compare_exchange_strong(expected, address) && expected != address) {
@@ -205,6 +208,18 @@ struct Seek1402IOLifecycle {
       }
     }
   }
+  void notify_append_entered(Seek1402IOSlot *slot) {
+    if (!notify.requested || slot == nullptr) return;
+    const uintptr_t address = reinterpret_cast<uintptr_t>(slot);
+    const uintptr_t begin = reinterpret_cast<uintptr_t>(slots);
+    if (address < begin || address >= begin + sizeof(slots) ||
+        (address - begin) % sizeof(Seek1402IOSlot) != 0 ||
+        !slot->append.entered || slot->append.returned) {
+      notify.lost.fetch_add(1, std::memory_order_relaxed);
+      return;
+    }
+    notify.append_entered((address - begin) / sizeof(Seek1402IOSlot), slot->epoch);
+  }
   // Only call after the PALF producer/consumer threads have joined.
   bool export_after_join() {
     if (path == nullptr || *path == '\0') return true;
@@ -221,10 +236,12 @@ struct Seek1402IOLifecycle {
     const int writer_pid = getpid();
 #endif
     bool ok = std::fprintf(file,
-      "{\"schema\":1,\"writer_pid\":%d,\"run_id\":\"%s\",\"identity_valid\":%s,\"scope\":\"flush_task_append_reuse_and_lifecycle\",\"clock\":\"realtime_us\",\"slots\":%llu,\"unfinished\":%llu,\"overflow\":%s,\"multiple_envs\":%s,\"progress_phases_present\":false,\"io_phases_present\":true}\n",
+      "{\"schema\":1,\"writer_pid\":%d,\"run_id\":\"%s\",\"identity_valid\":%s,\"scope\":\"flush_task_append_reuse_and_lifecycle\",\"clock\":\"realtime_us\",\"slots\":%llu,\"unfinished\":%llu,\"overflow\":%s,\"multiple_envs\":%s,\"progress_phases_present\":false,\"io_phases_present\":true,\"notify_requested\":%s,\"notify_attempts\":%llu,\"notify_sent\":%llu,\"notify_lost\":%llu}\n",
       writer_pid, identity_ready ? run_id : "", identity_ready ? "true" : "false",
       static_cast<unsigned long long>(count), static_cast<unsigned long long>(unfinished),
-      state & overflow ? "true" : "false", multiple_envs.load() ? "true" : "false") >= 0;
+      state & overflow ? "true" : "false", multiple_envs.load() ? "true" : "false",
+      notify.requested ? "true" : "false", static_cast<unsigned long long>(notify.attempts.load()),
+      static_cast<unsigned long long>(notify.sent.load()), static_cast<unsigned long long>(notify.lost.load())) >= 0;
     for (uint64_t i = 0; i < count && ok; ++i) {
       const auto &slot = slots[i];
       if (!slot.terminal()) {
@@ -284,7 +301,7 @@ struct Seek1402IOLifecycle {
     }
     ok = !std::ferror(file) && ok;
     ok = std::fclose(file) == 0 && ok;
-    return ok && identity_ready && unfinished == 0 && !(state & overflow) && !multiple_envs.load();
+    return ok && identity_ready && unfinished == 0 && !(state & overflow) && !multiple_envs.load() && notify.lost.load() == 0;
   }
 };
 static_assert(sizeof(Seek1402IOLifecycle) <= 4 * 1024 * 1024,
@@ -332,6 +349,11 @@ inline Seek1402IOLifecycle *seek1402_create_mapped_capture(const char *raw_path)
   SEEK1402_CAPTURE_OFFSET(gate);
   SEEK1402_CAPTURE_OFFSET(init_calls);
   SEEK1402_CAPTURE_OFFSET(multiple_envs);
+  append("\"notify_requested\":%zu,\"notify_attempts\":%zu,\"notify_sent\":%zu,\"notify_lost\":%zu,",
+         offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, requested),
+         offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, attempts),
+         offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, sent),
+         offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, lost));
 #undef SEEK1402_CAPTURE_OFFSET
   append("\"slots\":%zu},\"slot_offsets\":{", offsetof(Seek1402IOLifecycle, slots));
 #define SEEK1402_SLOT_OFFSET(field) append("\"" #field "\":%zu,", offsetof(Seek1402IOSlot, field))

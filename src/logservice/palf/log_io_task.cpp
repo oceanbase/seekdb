@@ -198,6 +198,7 @@ int LogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHand
     PALF_LOG(ERROR, "LogIOFlusLoghTask not inited", K(ret));
   } else if (OB_FAIL(seek1402_observe_io_phase(
       diagnostic_slot_ == nullptr ? nullptr : &diagnostic_slot_->append, [&] {
+        seek1402_io_lifecycle().notify_append_entered(diagnostic_slot_);
         return guard.get_palf_handle_impl()->inner_append_log(
             flush_log_cb_ctx_.lsn_, write_buf_, flush_log_cb_ctx_.scn_);
       }))) {
@@ -494,7 +495,16 @@ int BatchLogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPal
           }
         };
         const int result = seek1402_observe_io_phase(diagnostic_observed ? &phase : nullptr, [&] {
-          if (diagnostic_observed) publish_phase();
+          if (diagnostic_observed) {
+            publish_phase();
+            if (append) {
+              for (int64_t i = 0; i < count; ++i) {
+                if (io_task_array_[i] != nullptr) {
+                  seek1402_io_lifecycle().notify_append_entered(io_task_array_[i]->get_diagnostic_slot());
+                }
+              }
+            }
+          }
           return call();
         });
         if (diagnostic_observed) publish_phase();
