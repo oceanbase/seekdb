@@ -60,11 +60,11 @@ int ObSimpleThreadPoolBase<T>::init(
     stop_ = false;
     name_ = name;
     
-    if (max_thread_cnt_ < 0) {
-      max_thread_cnt_ = thread_num;
+    if (max_thread_count() < 0) {
+      ATOMIC_STORE(&max_thread_cnt_, thread_num);
     }
-    if (min_thread_cnt_ < 0) {
-      min_thread_cnt_ = 0;
+    if (min_thread_count() < 0) {
+      ATOMIC_STORE(&min_thread_cnt_, 0);
     }
     if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
     }
@@ -81,28 +81,10 @@ int ObSimpleThreadPoolBase<T>::init(
 template <class T>
 void ObSimpleThreadPoolBase<T>::destroy()
 {
-  is_inited_ = false;
-  stop_ = true;
-  // Stop all workers
-  {
-    lib::ObMutexGuard g(workers_lock_);
-    DLIST_FOREACH_NORET(wnode, workers_) {
-      wnode->get_data()->stop();
-    }
-  }
-  // Wait and delete all workers
-  {
-    lib::ObMutexGuard g(workers_lock_);
-    DLIST_FOREACH_REMOVESAFE_NORET(wnode, workers_) {
-      Worker *w = wnode->get_data();
-      workers_.remove(wnode);
-      w->wait();
-      w->destroy();
-      OB_DELETE(Worker, "QThWker", w);
-    }
-  }
-  IGNORE_RETURN ObSimpleThreadPoolDynamicMgr::get_instance().unbind(this);
+  stop();
+  wait();
   queue_.destroy();
+  is_inited_ = false;
 }
 
 template <class T>
@@ -121,7 +103,7 @@ int ObSimpleThreadPoolBase<T>::push(TaskType *task)
       ret = OB_EAGAIN;
     }
     if (this->idle_count() == 0) {
-      this->try_expand_one(max_thread_cnt_);
+      this->try_expand_one(max_thread_count());
     }
   }
   return ret;
@@ -130,38 +112,29 @@ int ObSimpleThreadPoolBase<T>::push(TaskType *task)
 template <class T>
 bool ObSimpleThreadPoolBase<T>::do_add_worker()
 {
+  lib::ObMutexGuard g(workers_lock_);
   if (stop_) {
     return false;
   }
-  Worker *w = nullptr;
-  {
-    lib::ObMutexGuard g(workers_lock_);
-
-    w = OB_NEW(Worker, "QThWker", this, static_cast<int64_t>(cur_worker_idx_++));
-    if (OB_ISNULL(w)) {
-      return false;
-    }
-    if (run_wrapper_ != nullptr) {
-      w->set_run_wrapper(run_wrapper_);
-    }
-    if (OB_SUCCESS != w->init()) {
-      OB_DELETE(Worker, "QThWker", w);
-      return false;
-    }
+  Worker *w = OB_NEW(Worker, "QThWker", this, static_cast<int64_t>(cur_worker_idx_++));
+  if (OB_ISNULL(w)) {
+    return false;
   }
-  // Start outside the lock: the new worker may call try_expand_one →
-  // do_add_worker, which would deadlock if we held workers_lock_
+  if (run_wrapper_ != nullptr) {
+    w->set_run_wrapper(run_wrapper_);
+  }
+  if (OB_SUCCESS != w->init()) {
+    OB_DELETE(Worker, "QThWker", w);
+    return false;
+  }
+  // Thread::start publishes creation before entering worker code, so a child
+  // waiting for this lock cannot prevent start from returning.
   if (OB_SUCCESS != w->start()) {
     OB_DELETE(Worker, "QThWker", w);
     return false;
   }
-  // Add to list only after successful start, so reap_workers() never
-  // sees a worker whose start() is still in flight.
-  {
-    lib::ObMutexGuard g(workers_lock_);
-    bool ok = workers_.add_last(&w->worker_node_);
-    abort_unless(ok);
-  }
+  bool ok = workers_.add_last(&w->worker_node_);
+  abort_unless(ok);
   return true;
 }
 
@@ -176,9 +149,10 @@ int ObSimpleThreadPoolBase<T>::set_adaptive_thread(
     COMMON_LOG(WARN, "set_adaptive_thread failed",
                KP(this), K(min_thread_num), K(max_thread_num));
   } else {
-    min_thread_cnt_ = min_thread_num;
-    max_thread_cnt_ = max_thread_num;
     if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
+    } else {
+      ATOMIC_STORE(&min_thread_cnt_, min_thread_num);
+      ATOMIC_STORE(&max_thread_cnt_, max_thread_num);
     }
     COMMON_LOG(INFO, "set adaptive thread success",
                KP(this), K(min_thread_num), K(max_thread_num));
@@ -192,50 +166,71 @@ int ObSimpleThreadPoolBase<T>::set_thread_count(int64_t n_threads)
   int ret = OB_SUCCESS;
   if (n_threads <= 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
   } else {
-    max_thread_cnt_ = n_threads;
-    if (min_thread_cnt_ > max_thread_cnt_) {
-      min_thread_cnt_ = max_thread_cnt_;
-    }
-    if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
-    }
+    commit_bound_thread_count(n_threads);
   }
   return ret;
 }
 
 template <class T>
+void ObSimpleThreadPoolBase<T>::commit_bound_thread_count(int64_t n_threads)
+{
+  if (min_thread_count() > n_threads) { ATOMIC_STORE(&min_thread_cnt_, n_threads); }
+  ATOMIC_STORE(&max_thread_cnt_, n_threads);
+}
+
+template <class T>
 void ObSimpleThreadPoolBase<T>::stop()
 {
-  stop_ = true;
-  notify_stop();
-  lib::ObMutexGuard g(workers_lock_);
-  DLIST_FOREACH_NORET(wnode, workers_) {
-    wnode->get_data()->stop();
+  {
+    lib::ObMutexGuard g(workers_lock_);
+    stop_ = true;
+    DLIST_FOREACH_NORET(wnode, workers_) {
+      wnode->get_data()->stop();
+    }
   }
+  notify_stop();
 }
 
 template <class T>
 void ObSimpleThreadPoolBase<T>::wait()
 {
-  lib::ObMutexGuard g(workers_lock_);
-  DLIST_FOREACH_NORET(wnode, workers_) {
-    wnode->get_data()->wait();
+  // Unbind waits for an active manager reap, before taking list ownership.
+  IGNORE_RETURN ObSimpleThreadPoolDynamicMgr::get_instance().unbind(this);
+  WorkerList retired;
+  {
+    lib::ObMutexGuard g(workers_lock_);
+    workers_.move(retired);
   }
+  destroy_workers(retired);
 }
 
 template <class T>
 void ObSimpleThreadPoolBase<T>::reap_workers()
 {
-  // Called only from Mgr background thread
-  lib::ObMutexGuard g(workers_lock_);
-  DLIST_FOREACH_REMOVESAFE_NORET(wnode, workers_) {
-    Worker *w = wnode->get_data();
-    if (w->has_set_stop()) {
-      workers_.remove(wnode);
-      w->wait();
-      w->destroy();
-      OB_DELETE(Worker, "QThWker", w);
+  WorkerList retired;
+  {
+    lib::ObMutexGuard g(workers_lock_);
+    DLIST_FOREACH_REMOVESAFE_NORET(wnode, workers_) {
+      Worker *w = wnode->get_data();
+      if (ATOMIC_LOAD(&w->has_set_stop())) {
+        workers_.remove(wnode);
+        abort_unless(retired.add_last(wnode));
+      }
     }
+  }
+  destroy_workers(retired);
+}
+
+template <class T>
+void ObSimpleThreadPoolBase<T>::destroy_workers(WorkerList &workers)
+{
+  while (WorkerNode *node = workers.remove_first()) {
+    Worker *w = node->get_data();
+    w->wait();
+    w->destroy();
+    OB_DELETE(Worker, "QThWker", w);
   }
 }
 
@@ -248,7 +243,7 @@ void ObSimpleThreadPoolBase<T>::Worker::run1()
   pool_->cur_worker_idx_ = idx_;
   pool_->run1();
   // Worker is exiting — mark stopped for Mgr to reap
-  this->has_set_stop() = true;
+  ATOMIC_STORE(&this->has_set_stop(), true);
 }
 
 template <class T>
@@ -266,7 +261,7 @@ void ObSimpleThreadPoolBase<T>::run1()
       if (OB_NOT_NULL(task)) {
         idle_since = 0;
         if (expand) {
-          this->try_expand_one(max_thread_cnt_);
+          this->try_expand_one(max_thread_count());
         }
         handle(static_cast<TaskType *>(task));
       }
@@ -275,7 +270,7 @@ void ObSimpleThreadPoolBase<T>::run1()
       if (idle_since == 0) {
         idle_since = now;
       } else if (now - idle_since >= SHRINK_TIMEOUT_US) {
-        if (this->try_shrink_one(min_thread_cnt_)) {
+        if (this->try_shrink_one(min_thread_count())) {
           return;  // Worker::run1 will set has_set_stop
         }
         idle_since = 0;
