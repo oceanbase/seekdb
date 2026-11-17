@@ -108,6 +108,14 @@ public:
   {
     external_properties_.assign_ptr(external_properties.ptr(), external_properties.length());
   }
+  inline void set_header_line(const common::ObString &header_line)
+  {
+    header_line_.assign_ptr(header_line.ptr(), header_line.length());
+  }
+  inline common::ObString get_header_line() const
+  {
+    return header_line_;
+  }
   inline ObItemType get_into_type() const
   {
     return into_type_;
@@ -188,6 +196,9 @@ private:
   common::ObCollationType cs_type_;
   bool is_overwrite_;
   common::ObString external_properties_;
+  // The names of the columns of the file, they are the first line of the file
+  // when the header of the file is written.
+  common::ObString header_line_;
 };
 }
 }

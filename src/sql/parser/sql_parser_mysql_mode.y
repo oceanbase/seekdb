@@ -385,6 +385,7 @@ END_P SET_VAR DELIMITER
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
 %type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
+%type <node> copy_stmt copy_option_list copy_option_item
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
 %type <node> case_arg when_clause_list when_clause case_default
@@ -583,6 +584,7 @@ stmt:
   | drop_table_stmt         { $$ = $1; check_question_mark($$, result); }
   | drop_view_stmt          { $$ = $1; check_question_mark($$, result); }
   | explain_stmt            { $$ = $1; question_mark_issue($$, result); }
+  | copy_stmt               { $$ = $1; question_mark_issue($$, result); }
   | create_outline_stmt     { $$ = $1; question_mark_issue($$, result); }
   | alter_outline_stmt      { $$ = $1; question_mark_issue($$, result); }
   | drop_outline_stmt       { $$ = $1; check_question_mark($$, result); }
@@ -12313,6 +12315,44 @@ explain_or_desc:
 EXPLAIN {$$ = NULL;}
 | DESCRIBE {$$ = NULL;}
 | DESC  {$$ = NULL;}
+;
+
+/* A copy writes the rows of a statement into a file. The statement of the
+   copy is the statement of the rows with the clause that writes the rows into
+   the file. The options of the copy are the names and the values of the
+   options, they are grouped by the resolver. */
+copy_stmt:
+COPY '(' select_no_parens ')' TO STRING_VALUE '(' copy_option_list ')'
+{
+  ParseNode *format_list = NULL;
+  merge_nodes(format_list, result, T_EXTERNAL_FILE_FORMAT, $8);
+  ParseNode *into_node = NULL;
+  malloc_non_terminal_node(into_node, result->malloc_pool_, T_INTO_OUTFILE, 3, $6, format_list, NULL);
+  if (NULL == $3->children_[PARSE_SELECT_INTO_EXTRA]) {
+    $3->children_[PARSE_SELECT_INTO_EXTRA] = into_node;
+    $$ = $3;
+  } else {
+    yyerror(&@1, result, "a copy does not take a statement that writes a file");
+    YYERROR;
+  }
+}
+;
+
+copy_option_list:
+copy_option_item
+{
+  $$ = $1;
+}
+| copy_option_list opt_comma copy_option_item
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+copy_option_item:
+NAME_OB
+| STRING_VALUE
 ;
 
 explainable_stmt:
