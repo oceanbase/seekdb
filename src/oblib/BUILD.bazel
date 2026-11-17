@@ -717,7 +717,6 @@ cc_library(
     name = "_jemalloc_headers",
     deps = select({
         "//bazel:sanity_enabled": ["//deps/external:jemalloc_headers"],
-        "@platforms//os:ios": ["//deps/external:jemalloc_headers"],
         "//conditions:default": [],
     }),
 )

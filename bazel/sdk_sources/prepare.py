@@ -10,12 +10,6 @@ patches = manifest["patches"]
 selected = []
 if package == "boost":
     selected += patches["boost_ios_numeric"]["files"]
-if package == "vsag" and profile == "wasm":
-    selected += [patches[name] for name in (
-        "vsag_dataset_paths", "vsag_stream_sizes", "vsag_allocator_sizes")]
-    selected += patches["vsag_source_patches"]["files"]
-if package in ("clapack", "openblas") or (package == "vsag" and profile == "wasm"):
-    selected += [p for p in patches["vsag_blas_patches"]["files"] if p["dependency"] == package]
 for patch in selected:
     path = Path(patch["path"])
     data = path.read_bytes()
@@ -40,19 +34,6 @@ if package == "abseil":
 if package == "roaring":
     for path in Path("cpp").glob("*.hh"):
         Path("include/roaring", path.name).symlink_to("../../" + str(path))
-if package == "vsag":
-    Path("version.h").write_text(Path("src/version.h.in").read_text().replace(
-        "@VSAG_VERSION@", manifest["sources"][package]["version"] + "-" + profile))
-    Path("antlr4-autogen").symlink_to("extern/antlr4/fc", target_is_directory=True)
-if package == "antlr4":
-    Path("antlr4-runtime").symlink_to("runtime/Cpp/runtime/src", target_is_directory=True)
-    # DiskANN's exceptions.h collides with ANTLR's Exceptions.h on macOS.
-    for path in Path("runtime/Cpp/runtime/src").rglob("*"):
-        if path.suffix in (".h", ".cpp"):
-            path.write_text(path.read_text().replace('#include "Exceptions.h"', '#include "antlr4-runtime/Exceptions.h"'))
-if package == "openblas":
-    source = Path("lapack-netlib/CBLAS/include/cblas_mangling_with_flags.h.in")
-    Path("lapack-netlib/CBLAS/include/cblas_mangling.h").write_bytes(source.read_bytes())
 Path("source.json").write_text(json.dumps({
     "package": package,
     "profile": profile,

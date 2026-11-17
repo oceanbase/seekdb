@@ -28,6 +28,7 @@ SDK_HEADERS = {
         }),
     },
     "roaring_headers": _headers("roaring"),
+    "jemalloc_headers": _headers("jemalloc"),
     "vsag_headers": _headers("vsag"),
     "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
 }
@@ -53,6 +54,8 @@ SDK_IMPORTS = {
 SDK_FILEGROUPS = {
     "ios_base_metadata": {"srcs": ["verified/*.json"]},
     "ios_base_licenses": {"srcs": ["licenses/**/*"]},
+    "ios_locked_metadata": {"srcs": ["locked_manifest.json"]},
+    "ios_locked_licenses": {"srcs": ["locked_licenses/**/*"]},
     "sanity_pass": {"srcs": ["devtools/lib64/libsanitypass.so"]},
 }
 
@@ -77,7 +80,7 @@ _WINDOWS_SHARED = {
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
     "pthreads": ("lib/pthreadVC3.lib", "bin/pthreadVC3.dll", []),
-    "openmp": ("vsag/libomp.lib", "vsag_bin/libomp.dll", []),
+    "openmp": ("lib/libomp.lib", "bin/libomp.dll", []),
 }
 
 _WINDOWS_HEADER_LIBRARIES = {
@@ -101,7 +104,7 @@ def _windows_libraries():
     # Archives within one upstream package stay private to its library target.
     archives = {
         "absl": (native.glob(["lib/absl_*.lib"]), [":abseil_dll"]),
-        "vsag": (["vsag/" + name + ".lib" for name in [
+        "vsag": (["lib/" + name + ".lib" for name in [
             "cpuinfo", "simd", "vsag_static", "diskann", "openblas",
             "antlr4-runtime-static", "antlr4-autogen", "fmt",
         ]], [":openmp"]),
@@ -122,7 +125,7 @@ def _windows_libraries():
         )
 
 def sdk_targets(windows = False):
-    native.exports_files(HOST_FILES + native.glob(["lib/**/*.a", "lib/**/*.so", "lib/**/*.so.*", "lib64/**/*.a", "lib64/**/*.so", "lib64/**/*.so.*"], allow_empty = True))
+    native.exports_files(HOST_FILES + native.glob(["lib/**/*.a", "lib/**/*.so", "lib/**/*.so.*", "lib64/**/*.a", "lib64/**/*.so", "lib64/**/*.so.*"] + (["lib/**/*.lib"] if windows else []), allow_empty = True))
     for name, attributes in SDK_HEADERS.items():
         if windows and name in _WINDOWS_HEADER_LIBRARIES:
             attributes = attributes | {"deps": _WINDOWS_HEADER_LIBRARIES[name]}
@@ -135,13 +138,22 @@ def sdk_targets(windows = False):
         cc_import(name = name, **(attributes | ({"hdrs": native.glob(attributes["hdrs"], allow_empty = True)} if "hdrs" in attributes else {})))
     for name, attributes in SDK_FILEGROUPS.items():
         native.filegroup(name = name, **(attributes | {"srcs": native.glob(attributes["srcs"], allow_empty = True)}))
+    vsag_imports = []
+    for library in native.glob(["lib/" + name for name in [
+        "libvsag_static.a", "libdiskann.a", "libsimd.a", "libcpuinfo.a",
+        "libopenblas.a", "libio.a", "libomp_static.a",
+        "libantlr4-runtime.a", "libantlr4-autogen.a", "libfmt.a",
+    ]], allow_empty = True):
+        target = "_vsag_sdk_" + library.rsplit("/", 1)[-1]
+        cc_import(name = target, static_library = library, visibility = ["//visibility:private"])
+        vsag_imports.append(":" + target)
+    cc_library(name = "vsag_sdk", deps = [":vsag_headers"] + vsag_imports)
     if windows:
         _windows_libraries()
 
 _SOURCE_HEADERS = {
     "absl_headers": ("abseil", "abseil"),
     "roaring_headers": ("roaring", "roaring"),
-    "vsag_headers": ("vsag_ios", "vsag_wasm"),
 }
 
 def sdk_aliases():

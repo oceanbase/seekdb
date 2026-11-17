@@ -16,9 +16,9 @@ cc_library(
 cc_test(
     name = "test_memtable_mutator",
     linkstatic = True,
-    # liboceanbase supplies the C++ runtime. Use rules_cc's $ORIGIN rpath,
-    # rather than its $EXEC_ORIGIN path for tests with static C++ runtimes.
+    # Keep rules_cc's $ORIGIN rpath while linking the C++ runtime used by gtest.
     features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    linkopts = ["-lstdc++"],
     deps = [
         ":memtable_mutator_cases",
         "//src/observer:liboceanbase",
