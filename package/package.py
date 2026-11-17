@@ -310,6 +310,8 @@ def main():
             fallbacks = [options.dependencies.resolve() / path for path in (
                 "usr/local/oceanbase/devtools/lib64", "usr/local/oceanbase/deps/devel/lib",
                 "usr/local/oceanbase/deps/devel/lib/vsag_lib")]
+            fallbacks.insert(0, options.dependencies.resolve().parent / "prebuilt" /
+                             ("android" if options.layout == "android" else "native") / "lib")
             metadata = binary.prepare(binary_package, original.resolve(), options.layout, directories,
                                       options.extra_library, options.glibc_version, fallbacks)
             if options.format == "binary":

@@ -122,6 +122,7 @@ def environment():
     else:
         profiles = ["oceanbase.el9.x86_64.deps", "oceanbase.android.arm64.deps"]
     sdk = hashlib.sha256((ROOT / "deps/init/prepare.py").read_bytes())
+    sdk.update((ROOT / "deps.lock.json").read_bytes())
     for name in profiles:
         sdk.update((ROOT / "deps/init" / name).read_bytes())
     if target == "ios":
@@ -171,11 +172,14 @@ def initialize():
         import prepare
         simulator = os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator"
         prepare.prepare_rust("aarch64-apple-ios-sim" if simulator else "aarch64-apple-ios")
-        prepare.install(ROOT / "deps/init/oceanbase.ios-host.arm64.deps", ROOT / "deps/3rd")
+        prepare.install(ROOT / "deps/init/oceanbase.ios-host.arm64.deps", ROOT / "deps/3rd", None)
         # Build the base dependencies here; Bazel builds source_sdk with the
         # engine below, using the CI downloader configuration and parallelism.
         run([sys.executable, "deps/init/ios/build.py", "--reuse", "--jobs", build_jobs(),
              "--deployment-target", CONFIG["ios_minimum_os"], *(["--simulator"] if simulator else [])])
+        prepare.install_locked(ROOT / "deps.lock.json",
+                               ROOT / "deps/prebuilt" / ("ios_simulator" if simulator else "ios"),
+                               None, "iOSSimulator" if simulator else "iOSDevice", "arm64")
         return
     arguments = [sys.executable, "build.py", "init"]
     if os.environ["PACKAGE_OS"] == "linux":

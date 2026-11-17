@@ -25,8 +25,9 @@ build. Other targets produce portable archives.
 Windows uses `/MD` and the pinned seekdb-deps jemalloc 5.3.1 and VSAG 0.16.20
 archives. Dependency initialization verifies their SHA-256 checksums, and Bazel
 links the prebuilt allocator without running configure or make. The binary ZIP
-includes OpenMP and the MSVC runtime DLLs, along with the dependency licenses, lock file, and SDK build manifest. The workflow extracts the ZIP and runs `seekdb.exe --version`
-before uploading it.
+includes OpenMP and the MSVC runtime DLLs, along with the dependency licenses,
+`deps.lock.json`, and the SDK build manifest from `deps/prebuilt/native`.
+The workflow extracts the ZIP and runs `seekdb.exe --version` before uploading it.
 
 Select `ios` to build device and simulator frameworks in parallel, or select
 `ios-arm64` / `ios-simulator-arm64` individually. `all` includes both iOS variants.
@@ -210,10 +211,10 @@ integrity checks instead of the developer proxy configuration.
 ## Dependency cache
 
 The workflow restores and saves one dependency cache containing `deps/3rd`,
-`deps/android`, and `deps/ios`. These directories hold the extracted SDKs and their
-downloaded archives in `pkg/`. The cache key includes the target, dependency
-manifests, and initializer. `init` rechecks the manifest identity when an older
-same-target snapshot is restored, reusing its downloaded archives as needed.
+`deps/prebuilt`, `deps/android`, and `deps/ios`. These directories hold the
+prepared SDKs and the legacy SDK archives in `pkg/`. The cache key includes the
+target, `deps.lock.json`, dependency profiles, and initializer. `init` rechecks
+the dependency identity when an older same-target snapshot is restored.
 iOS keys additionally include the base-library recipe, deployment target, Xcode
 version, and selected SDK version. iOS restores require an exact cache key;
 device and simulator dependencies use separate targets. Only dependencies under
@@ -221,8 +222,8 @@ device and simulator dependencies use separate targets. Only dependencies under
 not uploaded as a separate cache.
 The initialized SDK is saved before compilation. Cache restore/save steps have
 a five-minute limit and do not block builds on failure. An incomplete restore
-is removed before initializing dependencies again. Windows adds MSYS utilities
-to the compilation step's PATH only, keeping the cache tools independent.
+is removed before initializing dependencies again. Windows consumes the locked
+prebuilt jemalloc archive, so its packaging workflow does not need MSYS make.
 
 Conda, Rust/Cargo, the Android NDK, Bazel downloads, Homebrew, timezone data,
 and compilation outputs are not persisted between workflow runs. Additional

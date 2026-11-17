@@ -91,6 +91,7 @@ jobs:
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
       PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
       BUILD_JOBS: ${{ inputs.jobs }}
+      SEEKDB_DEPS_GITHUB_PROXY_PREFIX: ''
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -156,18 +157,19 @@ jobs:
         with:
           path: |
             deps/3rd
+            deps/prebuilt
             deps/android
             ${{ matrix.os == 'ios' && 'deps/ios' || '' }}
-          key: package-sdk-v1-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
+          key: package-sdk-v2-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
           # iOS base libraries must match the selected Xcode/SDK exactly.
-          restore-keys: ${{ matrix.os != 'ios' && format('package-sdk-v1-{0}-', matrix.id) || '' }}
+          restore-keys: ${{ matrix.os != 'ios' && format('package-sdk-v2-{0}-', matrix.id) || '' }}
       - name: Clear incomplete SDK restore
         if: steps.sdk.outputs.cache-matched-key == ''
         run: |
           python - <<'PY'
           import shutil
           from pathlib import Path
-          for path in (Path('deps/3rd'), Path('deps/android'), Path('deps/ios')):
+          for path in (Path('deps/3rd'), Path('deps/prebuilt'), Path('deps/android'), Path('deps/ios')):
               if path.exists():
                   shutil.rmtree(path)
           PY
@@ -181,6 +183,7 @@ jobs:
         with:
           path: |
             deps/3rd
+            deps/prebuilt
             deps/android
             ${{ matrix.os == 'ios' && 'deps/ios' || '' }}
           key: ${{ steps.sdk.outputs.cache-primary-key }}
@@ -224,10 +227,9 @@ jobs:
           path: |
             build/bin/src/observer/seekdb/
             build/bin/src/share/inner_table/sys_package/bazel_generated/syspack_release/
-            deps/3rd/jemalloc/manifest.json
-            deps/3rd/jemalloc/share/licenses/
-            deps/3rd/vsag/manifest.json
-            deps/3rd/vsag/share/licenses/
+            deps/prebuilt/native/manifest.json
+            deps/prebuilt/native/share/licenses/
+            deps.lock.json
           if-no-files-found: error
           compression-level: 0
       - name: Stop Bazel
