@@ -143,7 +143,7 @@ int TelemetryTask::report()
 {
   const char *env_reporter = std::getenv("REPORTER");
   const char *reporter = env_reporter ? env_reporter : (GCTX.is_embedded_mode() ? "embed" : "server");
-  return share::report_telemetry(reporter, "bootstraped");
+  return share::report_telemetry(reporter, "bootstraped", GCTX.self_addr());
 }
 
 //////////////////////////////////////
