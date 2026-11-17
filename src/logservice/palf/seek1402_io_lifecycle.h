@@ -159,6 +159,17 @@ inline uint64_t &seek1402_space_current_call() {
 struct Seek1402SpaceCall {
   uint64_t first_point = UINT64_MAX;
   int64_t result = 0;
+  uint64_t allocator_upper = 0;
+  int64_t allocator_id_upper = 0;
+  int64_t allocator_result = 0;
+  uint64_t allocated_lsn = 0;
+  int64_t allocated_log_id = 0;
+  int64_t rejected_log_id = 0;
+  uint64_t rejected_max_lsn = 0;
+  bool allocator_entered = false;
+  bool allocator_returned = false;
+  bool allocator_output_present = false;
+  bool allocator_reject_present = false;
   bool abort_scope = false;
   std::atomic<bool> ready{false};
 };
@@ -260,6 +271,14 @@ struct Seek1402IOLifecycle {
         return;
       }
     }
+  }
+  void record_allocator_rejection(int64_t new_log_id, uint64_t new_max_lsn) {
+    const uint64_t id = seek1402_space_current_call();
+    if (!space_enabled || id == 0 || id > limit) return;
+    auto &call = space_calls[id - 1];
+    call.rejected_log_id = new_log_id;
+    call.rejected_max_lsn = new_max_lsn;
+    call.allocator_reject_present = true;
   }
   void notify_append_entered(Seek1402IOSlot *slot) {
     if (!notify.requested || slot == nullptr) return;
@@ -417,11 +436,20 @@ inline Seek1402IOLifecycle *seek1402_create_mapped_capture(const char *raw_path)
          offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, lost));
 #undef SEEK1402_CAPTURE_OFFSET
   append("\"slots\":%zu},\"space_call_bytes\":%zu,\"space_call_offsets\":{"
-         "\"first_point\":%zu,\"result\":%zu,\"abort_scope\":%zu,\"ready\":%zu},\"space_point_bytes\":%zu,\"space_offsets\":{"
+         "\"first_point\":%zu,\"result\":%zu,\"allocator_upper\":%zu,\"allocator_id_upper\":%zu,"
+         "\"allocator_result\":%zu,\"allocated_lsn\":%zu,\"allocated_log_id\":%zu,"
+         "\"rejected_log_id\":%zu,\"rejected_max_lsn\":%zu,\"allocator_entered\":%zu,"
+         "\"allocator_returned\":%zu,\"allocator_output_present\":%zu,\"allocator_reject_present\":%zu,"
+         "\"abort_scope\":%zu,\"ready\":%zu},\"space_point_bytes\":%zu,\"space_offsets\":{"
          "\"call_id\":%zu,\"group_buffer\":%zu,\"value\":%zu,\"abort_scope\":%zu,\"ready\":%zu},\"slot_offsets\":{",
          offsetof(Seek1402IOLifecycle, slots), sizeof(Seek1402SpaceCall),
          offsetof(Seek1402SpaceCall, first_point), offsetof(Seek1402SpaceCall, result),
-         offsetof(Seek1402SpaceCall, abort_scope), offsetof(Seek1402SpaceCall, ready), sizeof(Seek1402SpacePoint),
+         offsetof(Seek1402SpaceCall, allocator_upper), offsetof(Seek1402SpaceCall, allocator_id_upper),
+         offsetof(Seek1402SpaceCall, allocator_result), offsetof(Seek1402SpaceCall, allocated_lsn),
+         offsetof(Seek1402SpaceCall, allocated_log_id), offsetof(Seek1402SpaceCall, rejected_log_id),
+         offsetof(Seek1402SpaceCall, rejected_max_lsn), offsetof(Seek1402SpaceCall, allocator_entered),
+         offsetof(Seek1402SpaceCall, allocator_returned), offsetof(Seek1402SpaceCall, allocator_output_present),
+         offsetof(Seek1402SpaceCall, allocator_reject_present), offsetof(Seek1402SpaceCall, abort_scope), offsetof(Seek1402SpaceCall, ready), sizeof(Seek1402SpacePoint),
          offsetof(Seek1402SpacePoint, call_id),
          offsetof(Seek1402SpacePoint, group_buffer), offsetof(Seek1402SpacePoint, value),
          offsetof(Seek1402SpacePoint, abort_scope), offsetof(Seek1402SpacePoint, ready));
@@ -481,6 +509,26 @@ public:
         return;
       }
     }
+  }
+  template <typename Call>
+  int observe_allocator(uint64_t upper, int64_t id_upper, const uint64_t &allocated_lsn,
+                        const int64_t &allocated_log_id, Call call) {
+    if (record_ != nullptr) {
+      record_->allocator_upper = upper;
+      record_->allocator_id_upper = id_upper;
+      record_->allocator_entered = true;
+    }
+    const int result = call();
+    if (record_ != nullptr) {
+      record_->allocator_result = result;
+      record_->allocator_returned = true;
+      if (result == 0) {
+        record_->allocated_lsn = allocated_lsn;
+        record_->allocated_log_id = allocated_log_id;
+        record_->allocator_output_present = true;
+      }
+    }
+    return result;
   }
   ~Seek1402SpaceCallScope() {
     if (record_ != nullptr) {

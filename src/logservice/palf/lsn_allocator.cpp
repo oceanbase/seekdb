@@ -15,6 +15,7 @@
  */
 
 #include "logservice/palf/seek1402_deferred_capture.h"
+#include "logservice/palf/seek1402_io_lifecycle.h"
 #include "lsn_allocator.h"
 #include "log_group_entry_header.h"
 
@@ -492,6 +493,7 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
         new_max_lsn.val_ = next.lsn_val_;
         if (new_log_id > log_id_upper_bound || new_max_lsn > lsn_upper_bound) {
           ret = OB_EAGAIN;
+          seek1402_io_lifecycle().record_allocator_rejection(new_log_id, new_max_lsn.val_);
           seek1402_capture().add(4, size, new_log_id, log_id_upper_bound,
               new_max_lsn.val_, lsn_upper_bound.val_);
           if (REACH_TIME_INTERVAL(100 * 1000)) {

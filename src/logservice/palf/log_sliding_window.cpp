@@ -302,8 +302,11 @@ int LogSlidingWindow::submit_log(const char *buf,
           K(valid_log_size), K(buf_len), "start_id", get_start_id(), "max_log_id", get_max_log_id());
     }
     // sw_ cannot submit larger log
-  } else if (OB_FAIL(lsn_allocator_.alloc_lsn_scn(ref_scn, valid_log_size, log_id_upper_bound, lsn_upper_bound,
-            tmp_lsn, log_id, scn, is_new_log, need_gen_padding_entry, padding_size))) {
+  } else if (OB_FAIL(diagnostic_space_call.observe_allocator(lsn_upper_bound.val_, log_id_upper_bound,
+      tmp_lsn.val_, log_id, [&] {
+        return lsn_allocator_.alloc_lsn_scn(ref_scn, valid_log_size, log_id_upper_bound, lsn_upper_bound,
+            tmp_lsn, log_id, scn, is_new_log, need_gen_padding_entry, padding_size);
+      }))) {
   } else if (OB_FAIL(wait_sw_slot_ready_(log_id))) {
   } else {
     bool is_need_handle_next = false;
