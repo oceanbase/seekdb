@@ -536,8 +536,19 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // Approximate vector index queries are recognized by the resolver through their
+      // ordering expression, so structural rewrites must stay disabled to keep that
+      // expression matchable against the vector index. Expression simplification only
+      // rewrites filter predicates in place (constant identity operands such as
+      // "x OR FALSE" / "x AND TRUE", duplicated AND/OR operands, ...) and never touches
+      // the ANN ordering expression; without it, equivalent filters kept every redundant
+      // operand and were evaluated for every pre-filter candidate.
+      uint64_t vec_index_approx_enable_list = 0;
+      ObTransformRule::add_trans_type(vec_index_approx_enable_list, SIMPLIFY_EXPR);
+      disable_list = ObTransformRule::ALL_TRANSFORM_RULES & (~vec_index_approx_enable_list);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
