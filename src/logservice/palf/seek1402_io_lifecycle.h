@@ -21,6 +21,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <type_traits>
+#include <cstddef>
+#include <new>
+#if defined(__linux__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <sys/mman.h>
+#endif
 #ifdef _WIN32
 #include <process.h>
 #else
@@ -285,8 +291,84 @@ static_assert(sizeof(Seek1402IOLifecycle) <= 4 * 1024 * 1024,
               "diagnostic lifecycle storage exceeds 4MiB");
 static_assert(std::is_trivially_destructible<Seek1402IOLifecycle>::value,
               "diagnostic storage must not register a teardown destructor");
-inline Seek1402IOLifecycle &seek1402_io_lifecycle() {
-  static Seek1402IOLifecycle capture;
+// Raw mapping is decoded only after the controller observes writer exit.
+inline Seek1402IOLifecycle *seek1402_create_mapped_capture(const char *raw_path) {
+#if defined(__linux__) || defined(__APPLE__)
+  static_assert(std::atomic<uint64_t>::is_always_lock_free && std::atomic<bool>::is_always_lock_free,
+                "mapped diagnostic counters require lock-free atomics");
+  static_assert(std::is_standard_layout<Seek1402IOLifecycle>::value &&
+                std::is_standard_layout<Seek1402IOSlot>::value,
+                "raw descriptor requires standard layout");
+  constexpr size_t header_bytes = 4096;
+  constexpr size_t file_bytes = header_bytes + sizeof(Seek1402IOLifecycle);
+  static_assert(file_bytes <= 4 * 1024 * 1024, "mapped capture exceeds fixed budget");
+  const int fd = ::open(raw_path, O_RDWR | O_CREAT | O_EXCL, 0600);
+  if (fd < 0) return nullptr;
+  if (::ftruncate(fd, file_bytes) != 0) { ::close(fd); return nullptr; }
+  void *mapping = ::mmap(nullptr, file_bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  ::close(fd);
+  if (mapping == MAP_FAILED) return nullptr;
+  auto *capture = new(static_cast<char *>(mapping) + header_bytes) Seek1402IOLifecycle();
+  char *header = static_cast<char *>(mapping);
+  size_t used = 0;
+  bool ok = true;
+  auto append = [&](const char *format, auto... values) {
+    if (!ok) return;
+    const int count = std::snprintf(header + used, header_bytes - used, format, values...);
+    if (count < 0 || static_cast<size_t>(count) >= header_bytes - used) ok = false;
+    else used += static_cast<size_t>(count);
+  };
+  const uint16_t endian = 1;
+  append("{\"schema\":1,\"format\":\"seek1402-native-layout\",\"initialization_complete\":true,"
+         "\"writer_pid\":%lld,\"run_id\":\"%s\",\"little_endian\":%s,\"pointer_bytes\":%zu,"
+         "\"file_bytes\":%zu,\"capture_offset\":%zu,\"slot_bytes\":%zu,\"slots_limit\":8192,"
+         "\"atomic_u64_bytes\":%zu,\"atomic_bool_bytes\":%zu,\"threads_joined\":false,"
+         "\"progress_phases_present\":false,\"capture_offsets\":{",
+         static_cast<long long>(::getpid()), capture->identity_ready ? capture->run_id : "",
+         *reinterpret_cast<const unsigned char *>(&endian) == 1 ? "true" : "false", sizeof(void *),
+         file_bytes, header_bytes, sizeof(Seek1402IOSlot), sizeof(std::atomic<uint64_t>),
+         sizeof(std::atomic<bool>));
+#define SEEK1402_CAPTURE_OFFSET(field) append("\"" #field "\":%zu,", offsetof(Seek1402IOLifecycle, field))
+  SEEK1402_CAPTURE_OFFSET(gate);
+  SEEK1402_CAPTURE_OFFSET(init_calls);
+  SEEK1402_CAPTURE_OFFSET(multiple_envs);
+#undef SEEK1402_CAPTURE_OFFSET
+  append("\"slots\":%zu},\"slot_offsets\":{", offsetof(Seek1402IOLifecycle, slots));
+#define SEEK1402_SLOT_OFFSET(field) append("\"" #field "\":%zu,", offsetof(Seek1402IOSlot, field))
+  SEEK1402_SLOT_OFFSET(epoch); SEEK1402_SLOT_OFFSET(lsn); SEEK1402_SLOT_OFFSET(length);
+  SEEK1402_SLOT_OFFSET(batch_group); SEEK1402_SLOT_OFFSET(batch_member); SEEK1402_SLOT_OFFSET(batch_size);
+  SEEK1402_SLOT_OFFSET(reuse_end_lsn); SEEK1402_SLOT_OFFSET(append); SEEK1402_SLOT_OFFSET(reuse);
+  SEEK1402_SLOT_OFFSET(push); SEEK1402_SLOT_OFFSET(callback_handler); SEEK1402_SLOT_OFFSET(after_flush);
+  SEEK1402_SLOT_OFFSET(max_flushed); SEEK1402_SLOT_OFFSET(committed);
+  SEEK1402_SLOT_OFFSET(callback_epoch_present); SEEK1402_SLOT_OFFSET(callback_epoch);
+  SEEK1402_SLOT_OFFSET(active_observed); SEEK1402_SLOT_OFFSET(active);
+  SEEK1402_SLOT_OFFSET(max_store); SEEK1402_SLOT_OFFSET(max_store_to);
+  SEEK1402_SLOT_OFFSET(committed_cas_count); SEEK1402_SLOT_OFFSET(committed_cas_from); SEEK1402_SLOT_OFFSET(committed_cas_to);
+  SEEK1402_SLOT_OFFSET(submission_failure_present); SEEK1402_SLOT_OFFSET(submission_failure_ret);
+  SEEK1402_SLOT_OFFSET(producer_ret); SEEK1402_SLOT_OFFSET(callback_ret); SEEK1402_SLOT_OFFSET(callback_skipped);
+  SEEK1402_SLOT_OFFSET(producer_done); SEEK1402_SLOT_OFFSET(consumer_seen); SEEK1402_SLOT_OFFSET(callback_done);
+  SEEK1402_SLOT_OFFSET(freed);
+#undef SEEK1402_SLOT_OFFSET
+  append("\"dropped_before_push\":%zu},\"phase_offsets\":{", offsetof(Seek1402IOSlot, dropped_before_push));
+  append("\"entered\":%zu,\"returned\":%zu,\"result\":%zu,\"begin_us\":%zu,\"end_us\":%zu},\"phase_bytes\":%zu}\n",
+         offsetof(Seek1402IOPhase, entered), offsetof(Seek1402IOPhase, returned), offsetof(Seek1402IOPhase, result),
+         offsetof(Seek1402IOPhase, begin_us), offsetof(Seek1402IOPhase, end_us), sizeof(Seek1402IOPhase));
+  if (!ok) { ::munmap(mapping, file_bytes); return nullptr; }
+  // Process lifetime mapping; _Exit does not need a destructor or a synchronous flush.
   return capture;
+#else
+  (void)raw_path;
+  return nullptr; // Unsupported platforms must fail raw-file admission, not claim capture.
+#endif
+}
+inline Seek1402IOLifecycle &seek1402_io_lifecycle() {
+  static Seek1402IOLifecycle *capture = [] {
+    const char *raw_path = std::getenv("SEEK1402_IO_RAW_FILE");
+    if (raw_path != nullptr && *raw_path != '\0') {
+      if (auto *mapped = seek1402_create_mapped_capture(raw_path)) return mapped;
+    }
+    return new Seek1402IOLifecycle();
+  }();
+  return *capture;
 }
 } }
