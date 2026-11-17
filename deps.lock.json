@@ -62,8 +62,8 @@
     },
     "wasm32-emscripten": {
       "vsag": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-wasm32-emscripten-20261116T070344%2B0000-97588f036a3a.tar.gz",
-        "sha256": "9d7996cc0564c0646da9e1f4c31bd093dd045084d5f556e6d49c901cf76d8e2b"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-wasm32-emscripten-20261117T020514%2B0000-696998510ad2.tar.gz",
+        "sha256": "bed161ba48217216dea31d3750abc992302457f2e3b69e0b5fd076d3a81ec3a2"
       }
     },
     "windows-x86_64-md": {
