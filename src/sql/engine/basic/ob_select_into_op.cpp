@@ -262,6 +262,13 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
       ret = OB_ERR_UNEXPECTED;
     }
   }
+  if (OB_SUCC(ret) && T_INTO_OUTFILE == into_type && OB_NOT_NULL(data_writer)) {
+    // The names of the columns are the first line of the file, they are
+    // written before the rows of the file.
+    ObCsvFileWriter *csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer);
+    if (OB_FAIL(write_header_line(*csv_data_writer))) {
+    } else { /* do nothing */ }
+  }
 
   if (0 == top_limit_cnt_) {
     brs_.size_ = 0;

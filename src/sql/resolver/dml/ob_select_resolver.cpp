@@ -3028,8 +3028,8 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
   for (int64_t i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
     const ParseNode *item = format_node->children_[i];
     if (OB_ISNULL(item)) {
-      ret = OB_ERR_PARSE_SQL;
-      LOG_USER_ERROR(OB_ERR_PARSE_SQL, "unknown option of a copy");
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "unknown option of a copy");
     } else {
       const ObString name = node_text(item);
       if (0 == name.compare(ObString("format"))) {
@@ -3039,8 +3039,8 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
                                  ? format_node->children_[++i] : NULL;
         format_name = node_text(value);
         if (format_name.empty()) {
-          ret = OB_ERR_PARSE_SQL;
-          LOG_USER_ERROR(OB_ERR_PARSE_SQL, "the option format of a copy needs a value");
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option format of a copy needs a value");
         }
       } else if (0 == name.compare(ObString("header"))) {
         // The names of the columns are the first line of the file.
@@ -3052,12 +3052,12 @@ int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
         const ParseNode *value = (i + 1 < format_node->num_child_)
                                  ? format_node->children_[++i] : NULL;
         if (node_text(value).empty()) {
-          ret = OB_ERR_PARSE_SQL;
-          LOG_USER_ERROR(OB_ERR_PARSE_SQL, "the option nullstr of a copy needs a value");
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option nullstr of a copy needs a value");
         }
       } else {
-        ret = OB_ERR_PARSE_SQL;
-        LOG_USER_ERROR(OB_ERR_PARSE_SQL, "unknown option of a copy");
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "unknown option of a copy");
       }
     }
   }
@@ -3128,45 +3128,55 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node,
         if (OB_SUCC(ret) && OB_FAIL(buf.get_result_string(header_line))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_SUCC(ret)) {
-          into_item.header_line_ = header_line;
+          // The buffer of the names of the columns gives its memory back when
+          // it is left, the names are copied into the memory of the
+          // statement.
+          if (OB_FAIL(ob_write_string(*allocator_, header_line, into_item.header_line_))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          }
         }
       }
     }
-    for (int i = 0; OB_SUCC(ret) && !is_copy && i < format_node->num_child_; ++i) {
-      if (OB_ISNULL(option_node = format_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
-                 || T_CHARSET == option_node->type_) {
-        if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+    // The options of a copy are the options of a copy, they are not the
+    // options of the format of an into outfile. The file of a copy is a csv
+    // file, it is set by the options of the copy.
+    if (OB_SUCC(ret) && !is_copy) {
+      for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+        if (OB_ISNULL(option_node = format_node->children_[i])) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
+                   || T_CHARSET == option_node->type_) {
+          if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+          }
+          has_format_type |= (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_);
+          has_cs_type |= (T_CHARSET == option_node->type_);
         }
-        has_format_type |= (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_);
-        has_cs_type |= (T_CHARSET == option_node->type_);
       }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (!has_format_type) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
-    } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
-    } else {
-      ObCollationType file_cs_type = has_cs_type
-                                     ? ObCharset::get_default_collation(external_format.csv_format_.cs_type_)
-                                     : ObCharset::get_system_collation();
-      if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
+      if (OB_FAIL(ret)) {
+      } else if (!has_format_type) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
+      } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
+      } else {
+        ObCollationType file_cs_type = has_cs_type
+                                       ? ObCharset::get_default_collation(external_format.csv_format_.cs_type_)
+                                       : ObCharset::get_system_collation();
+        if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
+        }
       }
-    }
-    for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
-      if (OB_ISNULL(option_node = format_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
-                 || T_CHARSET == option_node->type_) {
-      } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+      for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+        if (OB_ISNULL(option_node = format_node->children_[i])) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
+                   || T_CHARSET == option_node->type_) {
+        } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+        }
       }
-    }
-    if (OB_SUCC(ret)
-        && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
+      if (OB_SUCC(ret)
+          && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
+      }
     }
   }
   // file: single, max_file_size, buffer_size
