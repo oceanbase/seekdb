@@ -69,7 +69,6 @@ int ObCSVGeneralParser::init(const ObDataInFileStruct &format,
 
   if (OB_FAIL(format_.init_format(format, file_column_nums, file_cs_type))) {
   } else {
-    // Preserve explicit trailing empty fields for ordinary LOAD DATA.
     format_.ignore_last_empty_col_ = false;
     ret = init_opt_variables();
   }
