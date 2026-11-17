@@ -114,11 +114,19 @@ int ObExprArrayDifference::calc_difference(ObIArrayType *src_arr, ObIArrayType *
     } else if (i == 0 && OB_FALSE_IT(last_elem = this_elem)) {
     } else if (ob_is_int_uint_tc(obj_type)) {
       ObArrayFixedSize<int64_t> *array_obj = static_cast<ObArrayFixedSize<int64_t> *>(res_arr);
-      if (OB_FAIL(ObArrayExprUtils::raw_check_minus<int64_t>(
-                      this_elem.get_int() - last_elem.get_int(), 
-                      this_elem.get_int(), 
-                      last_elem.get_int()))) {
-      } else if (OB_FAIL(array_obj->push_back(this_elem.get_int() - last_elem.get_int()))) {
+      // The result is signed BIGINT even for unsigned input arrays. Preserve
+      // the full input values until after subtraction and range checking.
+      const __int128 current = ob_is_uint_tc(obj_type)
+          ? static_cast<__int128>(this_elem.get_uint64())
+          : static_cast<__int128>(this_elem.get_int());
+      const __int128 previous = ob_is_uint_tc(obj_type)
+          ? static_cast<__int128>(last_elem.get_uint64())
+          : static_cast<__int128>(last_elem.get_int());
+      const __int128 difference = current - previous;
+      if (difference < INT64_MIN || difference > INT64_MAX) {
+        ret = OB_OPERATE_OVERFLOW;
+        LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "Array", "BIGINT");
+      } else if (OB_FAIL(array_obj->push_back(static_cast<int64_t>(difference)))) {
       }
     } else if (ob_is_float_tc(obj_type)) {
       ObArrayFixedSize<float> *array_obj = static_cast<ObArrayFixedSize<float> *>(res_arr);

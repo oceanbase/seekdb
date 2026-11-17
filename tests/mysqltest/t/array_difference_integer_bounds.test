@@ -1,0 +1,69 @@
+# ARRAY_DIFFERENCE returns signed BIGINT even when its inputs are unsigned.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS array_difference_unsigned_bounds;
+DROP TABLE IF EXISTS array_difference_signed_bounds;
+--enable_warnings
+CREATE TABLE array_difference_unsigned_bounds(id INT PRIMARY KEY,a ARRAY(BIGINT UNSIGNED));
+INSERT INTO array_difference_unsigned_bounds VALUES(1,[CAST('18446744073709551614' AS UNSIGNED),CAST('1' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(2,[CAST('18446744073709551615' AS UNSIGNED),CAST('1' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(3,[CAST('0' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(4,[CAST('18446744073709551615' AS UNSIGNED),CAST('18446744073709551614' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(5,[CAST('18446744073709551614' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(6,[CAST('18446744073709551615' AS UNSIGNED),CAST('9223372036854775807' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(7,[CAST('9223372036854775808' AS UNSIGNED),CAST('0' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(8,[CAST('9223372036854775807' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(9,[CAST('0' AS UNSIGNED),CAST('9223372036854775807' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(10,[CAST('9223372036854775807' AS UNSIGNED),CAST('0' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(11,[CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(12,[CAST('18446744073709551615' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(13,NULL);
+INSERT INTO array_difference_unsigned_bounds VALUES(14,array_filter((x)->false,[CAST('1' AS UNSIGNED)]));
+INSERT INTO array_difference_unsigned_bounds VALUES(15,[CAST('0' AS UNSIGNED),CAST('1' AS UNSIGNED),CAST('2' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(16,[CAST('1' AS UNSIGNED),NULL]);
+--echo unsigned_out_of_range_1
+--error 1690
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=1;
+--echo unsigned_out_of_range_2
+--error 1690
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=2;
+--echo unsigned_out_of_range_3
+--error 1690
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=3;
+--echo unsigned_out_of_range_8
+--error 1690
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=8;
+--echo unsigned_representable_differences
+SELECT id,array_difference(a) AS d FROM array_difference_unsigned_bounds WHERE id IN (4,5,6,7,9,10,11,12,13,14,15) ORDER BY id;
+--echo unsigned_batch_two_rows
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,array_difference(a) AS d FROM array_difference_unsigned_bounds WHERE id IN (4,5,6,7,9,10,11,12,13,14,15) ORDER BY id;
+--echo unsigned_scalar_subquery
+SELECT array_difference((SELECT a FROM array_difference_unsigned_bounds WHERE id=6)) AS d;
+CREATE TABLE array_difference_signed_bounds(id INT PRIMARY KEY,a ARRAY(BIGINT));
+INSERT INTO array_difference_signed_bounds VALUES(1,[CAST('9223372036854775807' AS SIGNED),CAST('-1' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(2,[CAST('-9223372036854775808' AS SIGNED),CAST('-1' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(3,[CAST('-1' AS SIGNED),CAST('9223372036854775807' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(4,[CAST('-9223372036854775808' AS SIGNED),CAST('9223372036854775807' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(5,[CAST('9223372036854775807' AS SIGNED),CAST('-9223372036854775808' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(6,[CAST('-9223372036854775808' AS SIGNED),CAST('-9223372036854775808' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(7,[CAST('1' AS SIGNED),CAST('2' AS SIGNED),CAST('3' AS SIGNED)]);
+--echo signed_representable_boundaries
+SELECT id,array_difference(a) AS d FROM array_difference_signed_bounds WHERE id IN (1,2,6,7) ORDER BY id;
+--echo signed_out_of_range_3
+--error 1690
+SELECT array_difference(a) FROM array_difference_signed_bounds WHERE id=3;
+--echo signed_out_of_range_4
+--error 1690
+SELECT array_difference(a) FROM array_difference_signed_bounds WHERE id=4;
+--echo signed_out_of_range_5
+--error 1690
+SELECT array_difference(a) FROM array_difference_signed_bounds WHERE id=5;
+--echo existing_null_element_rejection
+--disable_result_log
+--error 1235
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=16;
+--enable_result_log
+--echo small_integer_and_float_controls
+SELECT array_difference([1,2,3])=[0,1,1] AS small_ok,array_difference([1.5,2.5])=[0.0,1.0] AS float_ok;
+DROP TABLE array_difference_signed_bounds;
+DROP TABLE array_difference_unsigned_bounds;

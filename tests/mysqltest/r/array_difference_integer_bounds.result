@@ -1,0 +1,53 @@
+unsigned_out_of_range_1
+ERROR 22003: Array value is out of range in 'BIGINT'
+unsigned_out_of_range_2
+ERROR 22003: Array value is out of range in 'BIGINT'
+unsigned_out_of_range_3
+ERROR 22003: Array value is out of range in 'BIGINT'
+unsigned_out_of_range_8
+ERROR 22003: Array value is out of range in 'BIGINT'
+unsigned_representable_differences
+id	d
+4	[0,-1]
+5	[0,1]
+6	[0,-9223372036854775808]
+7	[0,-9223372036854775808]
+9	[0,9223372036854775807]
+10	[0,-9223372036854775807]
+11	[0]
+12	[0,0]
+13	NULL
+14	[]
+15	[0,1,1]
+unsigned_batch_two_rows
+id	d
+4	[0,-1]
+5	[0,1]
+6	[0,-9223372036854775808]
+7	[0,-9223372036854775808]
+9	[0,9223372036854775807]
+10	[0,-9223372036854775807]
+11	[0]
+12	[0,0]
+13	NULL
+14	[]
+15	[0,1,1]
+unsigned_scalar_subquery
+d
+[0,-9223372036854775808]
+signed_representable_boundaries
+id	d
+1	[0,-9223372036854775808]
+2	[0,9223372036854775807]
+6	[0,0]
+7	[0,1,1]
+signed_out_of_range_3
+ERROR 22003: Array value is out of range in 'BIGINT'
+signed_out_of_range_4
+ERROR 22003: Array value is out of range in 'BIGINT'
+signed_out_of_range_5
+ERROR 22003: Array value is out of range in 'BIGINT'
+existing_null_element_rejection
+small_integer_and_float_controls
+small_ok	float_ok
+1	1

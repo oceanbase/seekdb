@@ -52,3 +52,12 @@ must return the existing DOUBLE result without a spurious 1690. Exact
 cancellation checks retain low bits, including `[INT64_MIN, INT64_MAX]` and
 `[INT64_MAX, 1, -INT64_MAX]`. ARRAY SUM must still reject true signed and
 unsigned 64-bit overflow; the case does not broaden the result type of SUM.
+
+Run `array_difference_integer_bounds.test` with its matching result file to
+check the signed BIGINT result range for signed and unsigned input arrays.
+Unsigned values above INT64_MAX must retain their magnitude until subtraction:
+representable high-value differences and the exact INT64_MIN boundary succeed,
+while unrepresentable differences report 1690 instead of wrapping. Stored
+columns, a scalar subquery, a two-row batch, NULL/empty arrays, existing NULL
+element rejection and small-integer/floating controls are included. The input
+arrays and the result type are not narrowed to hide overflow.
