@@ -22,7 +22,6 @@ def ios_framework():
             "//src/oblib:oblib_base",
             "//src/oblib:oblib_io_primitives",
             "//src/oblib:oblib_rpc",
-            "//deps/external:jemalloc_headers",
             "//rust:in_process_headers",
             "//rust:logger_headers",
         ],
@@ -36,7 +35,6 @@ def ios_framework():
         sdk_deps = ["//bazel/sdk_sources:source_sdk", "//bazel/third_party:base_libraries"],
         ordered_link_files = [
             "//rust:archive",
-            "//deps/external:jemalloc_archive",
         ],
         extra_inputs = ["ios/exports.txt"],
         linkopts = [

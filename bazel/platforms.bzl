@@ -63,7 +63,6 @@ def platform_local_defines():
         "@platforms//os:ios": [
             "_DARWIN_C_SOURCE",
             "_XOPEN_SOURCE=700",
-            "OB_HAVE_BUNDLED_JEMALLOC=1",
             "BOOST_NO_CXX98_FUNCTION_BASE",
         ],
         "//conditions:default": [],

@@ -12,69 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Expose prebuilt jemalloc, retaining the Rust build for iOS."""
+"""Expose the prebuilt jemalloc archive and headers on supported platforms."""
 
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("@rules_rust//rust:rust_common.bzl", "BuildInfo")
 
-def _jemalloc_build_impl(ctx):
-    archive = ctx.actions.declare_file("jemalloc/lib/libjemalloc_pic.a")
-    public_header = ctx.actions.declare_file("jemalloc/include/jemalloc/jemalloc.h")
-    output = ctx.attr.build_script[BuildInfo].out_dir
-    ctx.actions.run_shell(
-        inputs = [output],
-        outputs = [archive, public_header],
-        arguments = [output.path, archive.path, public_header.path],
-        command = 'cp "$1/jemalloc-build/lib/libjemalloc_pic.a" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"',
-        mnemonic = "JemallocArtifacts",
-    )
-    return [
-        DefaultInfo(files = depset([archive, public_header])),
-        OutputGroupInfo(
-            jemalloc_archive = depset([archive]),
-            jemalloc_header = depset([public_header]),
-        ),
-    ]
-
-_jemalloc_build = rule(
-    implementation = _jemalloc_build_impl,
-    attrs = {
-        "build_script": attr.label(default = "@external_crates//:jemalloc_build", providers = [BuildInfo]),
-    },
-)
+_SUPPORTED_PLATFORMS = select({
+    "@platforms//os:linux": [],
+    "@platforms//os:macos": [],
+    "@platforms//os:android": [],
+    "@platforms//os:windows": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
 
 def jemalloc(name):
-    """Expose the platform's jemalloc archive and public header to C++."""
-    build_target = "_%s_build" % name
-    rust_archive = "_%s_rust_archive" % name
-    rust_header = "_%s_rust_header" % name
-
-    _jemalloc_build(
-        name = build_target,
-        target_compatible_with = select({
-            "@platforms//os:ios": [],
-            "//conditions:default": ["@platforms//:incompatible"],
-        }),
-    )
-
-    native.filegroup(
-        name = rust_archive,
-        srcs = [":" + build_target],
-        output_group = "jemalloc_archive",
-    )
-
-    native.filegroup(
-        name = rust_header,
-        srcs = [":" + build_target],
-        output_group = "jemalloc_header",
-    )
-
-    cc_library(
-        name = "_%s_rust_headers" % name,
-        hdrs = [":" + rust_header],
-        strip_include_prefix = "jemalloc/include",
-    )
+    """Expose the platform's prebuilt jemalloc to C++ targets."""
 
     native.filegroup(
         name = "%s_archive" % name,
@@ -83,25 +35,28 @@ def jemalloc(name):
             "@platforms//os:macos": ["@third_party_native//:lib/libjemalloc_pic.a"],
             "@platforms//os:android": ["@third_party_android//:lib/libjemalloc_pic.a"],
             "@platforms//os:windows": ["@third_party_native//:lib/jemalloc.lib"],
-            "//conditions:default": [":" + rust_archive],
+            "//conditions:default": [],
         }),
+        target_compatible_with = _SUPPORTED_PLATFORMS,
         visibility = ["//src/observer:__pkg__"],
     )
 
-    native.alias(
+    cc_library(
         name = "%s_headers" % name,
-        actual = select({
-            "@platforms//os:linux": "@third_party_native//:jemalloc_headers",
-            "@platforms//os:macos": "@third_party_native//:jemalloc_headers",
-            "@platforms//os:android": "@third_party_android//:jemalloc_headers",
-            "@platforms//os:windows": "@third_party_native//:jemalloc_headers",
-            "//conditions:default": ":_%s_rust_headers" % name,
+        deps = select({
+            "@platforms//os:linux": ["@third_party_native//:jemalloc_headers"],
+            "@platforms//os:macos": ["@third_party_native//:jemalloc_headers"],
+            "@platforms//os:android": ["@third_party_android//:jemalloc_headers"],
+            "@platforms//os:windows": ["@third_party_native//:jemalloc_headers"],
+            "//conditions:default": [],
         }),
+        target_compatible_with = _SUPPORTED_PLATFORMS,
         visibility = ["//src/oblib:__pkg__", "//src/observer:__pkg__"],
     )
 
     cc_import(
         name = "%s_library" % name,
         static_library = ":%s_archive" % name,
+        target_compatible_with = _SUPPORTED_PLATFORMS,
         visibility = ["//src/oblib:__pkg__", "//unittest/oblib:__pkg__"],
     )
