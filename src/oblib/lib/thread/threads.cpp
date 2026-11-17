@@ -290,7 +290,7 @@ void Threads::wait()
 void Threads::stop()
 {
   common::SpinRLockGuard g(lock_);
-  stop_ = true;
+  ATOMIC_STORE(&stop_, true);
   if (OB_NOT_NULL(threads_)) {
     for (int i = 0; i < n_threads_; i++) {
       if (threads_[i] != nullptr) {
