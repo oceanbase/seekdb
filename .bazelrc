@@ -44,7 +44,7 @@ build:O1 --@rules_rust//rust/settings:lto=off
 build:O2 --compilation_mode=opt
 # Apple's fastbuild/dbg DEBUG macro conflicts with seekdb's DEBUG log level.
 build:macos --copt=-UDEBUG
-build:macos --macos_minimum_os=13.0
+build:macos --macos_minimum_os=15.0
 build:android --platforms=//bazel/platforms:android_arm64
 build:ios --platforms=@apple_support//platforms:ios_arm64
 build:ios --ios_minimum_os=18.0

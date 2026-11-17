@@ -34,7 +34,7 @@ crate.render_config(
 )
 crate.annotation(
     crate = "*",
-    repositories = ["rust_crates", "external_crates"],
+    repositories = ["rust_crates"],
     build_script_env = {"DEBUG": "true", "PROFILE": "release"},
 )
 crate.annotation(
@@ -110,87 +110,7 @@ crate.from_cargo(
     isolated = False,
     supported_platform_triples = _RUST_PLATFORMS,
 )
-crate.annotation(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    build_script_env = {
-        "MAKEFLAGS": "",
-        "NUM_JOBS": "4",
-    },
-    extra_aliased_targets = {"jemalloc_build": "build_script_build"},
-    build_script_toolchains = ["@seekdb//bazel:windows_build_script_environment"],
-)
-crate.annotation_select(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    triples = [target for target in _RUST_PLATFORMS if target not in [
-        "aarch64-apple-ios",
-        "aarch64-apple-ios-sim",
-        "aarch64-linux-android",
-        "x86_64-pc-windows-msvc",
-        "aarch64-pc-windows-msvc",
-    ]],
-    build_script_env = {
-        "CFLAGS": "-O2 -fPIC",
-        "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=",
-        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_",
-    },
-)
-crate.annotation_select(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    triples = ["aarch64-apple-ios", "aarch64-apple-ios-sim"],
-    build_script_env = {
-        "CFLAGS": "-O2 -fPIC",
-        "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=",
-        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=aarch64-apple-ios\n--with-lg-page=14\n--disable-zone-allocator",
-    },
-)
-crate.annotation_select(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    triples = ["aarch64-linux-android"],
-    build_script_env = {
-        "CFLAGS": "-O2 -fPIC",
-        "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=",
-        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=aarch64-linux-android\n--with-lg-page=14\n--disable-initial-exec-tls",
-    },
-)
-crate.annotation_select(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    triples = ["x86_64-pc-windows-msvc"],
-    build_script_env = {
-        "PATH": "$(CARGO_BUILD_SCRIPT_PATH)",
-        "CFLAGS": "/O2 /MD /D_WIN32_WINNT=0x0A00",
-        "JEMALLOC_SYS_MAKE": "make",
-        "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=\nMSYS2_ARG_CONV_EXCL=*",
-        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=x86_64-w64-mingw32",
-    },
-)
-crate.annotation_select(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    triples = ["aarch64-pc-windows-msvc"],
-    build_script_env = {
-        "PATH": "$(CARGO_BUILD_SCRIPT_PATH)",
-        "CFLAGS": "/O2 /MD /D_WIN32_WINNT=0x0A00",
-        "JEMALLOC_SYS_MAKE": "make",
-        "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=\nMSYS2_ARG_CONV_EXCL=*",
-        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=aarch64-w64-mingw32",
-    },
-)
-crate.from_cargo(
-    name = "external_crates",
-    manifests = ["//deps/external:Cargo.toml"],
-    cargo_lockfile = "//deps/external:Cargo.lock",
-    cargo_config = "//bazel:rust_cargo_config.toml",
-    host_tools = "@rust_native//:BUILD.bazel",
-    skip_cargo_lockfile_overwrite = True,
-    isolated = False,
-    supported_platform_triples = _RUST_PLATFORMS,
-)
-use_repo(crate, "rust_crates", "cxxbridge_deps", "external_crates")
+use_repo(crate, "rust_crates", "cxxbridge_deps")
 
 host_tools_repository = use_repo_rule("//bazel:parser.bzl", "host_tools_repository")
 host_tools_repository(name = "host_tools")
@@ -252,19 +172,6 @@ use_repo(
     sdk_sources,
     "sdk_abseil",
     "sdk_roaring",
-    "sdk_vsag_ios",
-    "sdk_vsag_wasm",
-    "sdk_cpuinfo",
-    "sdk_fmt",
-    "sdk_spdlog",
-    "sdk_nlohmann_json",
-    "sdk_robin_map",
-    "sdk_thread_pool",
-    "sdk_clapack",
-    "sdk_openblas",
-    "sdk_antlr4",
-    "sdk_lapack",
-    "sdk_openmp",
     "sdk_boost",
 )
 

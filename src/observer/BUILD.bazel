@@ -521,7 +521,6 @@ cc_library(
         "//src/oblib:oblib_base",
         "//src/oblib:oblib_io_primitives",
         "//src/oblib:oblib_rpc",
-        "//deps/external:jemalloc_headers",
         "//rust:in_process_headers",
         "//rust:logger_headers",
     ],

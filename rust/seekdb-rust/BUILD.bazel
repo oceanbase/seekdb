@@ -27,14 +27,14 @@ rust_static_library(
         "//rust/spatial-covering:spatial_covering",
         "//rust/uuid-generator:uuid_generator",
         "//rust/json",
+        "//rust/math",
+        "//rust/vector-kernels:vector_kernels",
+        "//rust/path-utils:path_utils",
     ] + select({
         "@platforms//os:emscripten": [],
         "//conditions:default": [
             "//rust/standby-rpc:standby_rpc",
             "//rust/http-client:http_client",
-            "//rust/math",
-            "//rust/vector-kernels:vector_kernels",
-            "//rust/path-utils:path_utils",
         ],
     }),
     proc_macro_deps = all_crate_deps(proc_macro = True),

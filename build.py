@@ -21,6 +21,19 @@ class BuildError(RuntimeError):
     """The seekdb build environment could not be prepared."""
 
 
+def _check_windows_toolset() -> None:
+    # Released Windows dependencies were built with MSVC 14.44; linking needs
+    # the same or a newer compatible toolset.
+    version = os.environ.get("VCToolsVersion", "")
+    match = re.fullmatch(r"14\.(\d+)\.\d+", version)
+    if match is None or int(match.group(1)) < 44:
+        raise BuildError(
+            "Windows builds require MSVC 14.44 or newer compatible 14.x tools; "
+            "initialize the x64 developer environment with a supported toolset "
+            "(found %s)" % (version or "no active MSVC toolset")
+        )
+
+
 def _host_platform() -> str:
     system = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}.get(
         platform.system()
@@ -195,8 +208,9 @@ def _normalize_cxxbridge_lockfile_paths(root: Path, output_base: Path) -> None:
 
 def main(arguments: List[str]) -> int:
     root = Path(__file__).resolve().parent
-    os.environ.setdefault("RUSTUP_DIST_SERVER", "https://rsproxy.cn")
-    os.environ.setdefault("RUSTUP_UPDATE_ROOT", "https://rsproxy.cn/rustup")
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        os.environ.setdefault("RUSTUP_DIST_SERVER", "https://rsproxy.cn")
+        os.environ.setdefault("RUSTUP_UPDATE_ROOT", "https://rsproxy.cn/rustup")
     cargo_bin = str((Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin").expanduser().resolve())
     path = os.environ.get("PATH", os.defpath)
     if cargo_bin not in path.split(os.pathsep):
@@ -225,6 +239,8 @@ def main(arguments: List[str]) -> int:
     command, *arguments = arguments
     if command.startswith("-"):
         parser.error("put the command before its options, for example: build -o build3 seekdb")
+    if os.name == "nt" and command in ("build", "test", "run", "coverage"):
+        _check_windows_toolset()
     separator = arguments.index("--") if "--" in arguments else len(arguments)
     options, remaining = bootstrap.parse_known_args(arguments[:separator])
     cache = options.launcher_cache_dir.expanduser().resolve()

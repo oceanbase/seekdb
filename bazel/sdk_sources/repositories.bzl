@@ -39,13 +39,11 @@ _source = repository_rule(
 def _sdk_sources_impl(ctx):
     manifest = json.decode(ctx.read(Label("//bazel/sdk_sources:dependencies.json")))
     for name in manifest["sources"]:
-        profiles = ["ios", "wasm"] if name == "vsag" else [""]
-        for profile in profiles:
+        if name != "vsag":
             _source(
-                name = "sdk_" + name + ("_" + profile if profile else ""),
+                name = "sdk_" + name,
                 build_file = Label("//bazel/sdk_sources:%s.BUILD" % name),
                 package = name,
-                profile = profile,
             )
 
 sdk_sources = module_extension(implementation = _sdk_sources_impl)
