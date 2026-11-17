@@ -155,6 +155,7 @@ typedef struct ObFileTableDef
       escape_('"'),
       skip_blank_lines_(false),
       file_format_(0),
+      is_schema_(false),
       columns_() {}
 
   int deep_copy(const ObFileTableDef &src, ObIRawExprCopier &expr_copier, ObIAllocator *allocator);
@@ -173,6 +174,9 @@ typedef struct ObFileTableDef
   bool skip_blank_lines_;
   // The format of the file, it is the value of file_sql::FileFormat.
   int8_t file_format_;
+  // The table shows the schema of the file, the columns of the table are the
+  // columns of the schema and not the columns of the file.
+  bool is_schema_;
   common::ObSEArray<ObFileTableColumnDef, 4, common::ModulePageAllocator, true> columns_;
 } ObFileTableDef;
 

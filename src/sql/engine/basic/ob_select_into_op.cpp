@@ -38,7 +38,7 @@ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+    header_line_, external_properties_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -200,6 +200,13 @@ int ObSelectIntoOp::inner_get_next_row()
       && T_INTO_VARIABLES != into_type
       && OB_FAIL(create_the_only_data_writer(data_writer))) {
   }
+  if (OB_SUCC(ret) && T_INTO_OUTFILE == into_type) {
+    ObCsvFileWriter *csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer);
+    if (OB_ISNULL(csv_data_writer)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(write_header_line(*csv_data_writer))) {
+    } else { /* do nothing */ }
+  }
   while (OB_SUCC(ret) && row_count < top_limit_cnt_) {
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_row())) {
@@ -254,6 +261,13 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
     } else if (OB_ISNULL(data_writer)) {
       ret = OB_ERR_UNEXPECTED;
     }
+  }
+  if (OB_SUCC(ret) && T_INTO_OUTFILE == into_type && OB_NOT_NULL(data_writer)) {
+    // The names of the columns are the first line of the file, they are
+    // written before the rows of the file.
+    ObCsvFileWriter *csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer);
+    if (OB_FAIL(write_header_line(*csv_data_writer))) {
+    } else { /* do nothing */ }
   }
 
   if (0 == top_limit_cnt_) {
@@ -939,6 +953,27 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
   }
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
+  }
+  return ret;
+}
+
+int ObSelectIntoOp::write_header_line(ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  const common::ObString &header = MY_SPEC.header_line_;
+  if (!header_written_ && header.length() > 0) {
+    ObObj header_obj;
+    header_obj.set_varchar(header);
+    if (OB_SUCC(ret)) {
+      // The names of the columns are the first line of the file.
+      ret = write_obj_to_file(header_obj, data_writer, false);
+    }
+    if (OB_SUCC(ret)) {
+      ret = write_obj_to_file(line_str_, data_writer);
+    }
+    if (OB_SUCC(ret)) {
+      header_written_ = true;
+    }
   }
   return ret;
 }

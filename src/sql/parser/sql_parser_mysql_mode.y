@@ -40,8 +40,7 @@
 #include "../../../src/sql/parser/sql_parser_mysql_mode_lex.h"
 #include "../../../src/sql/parser/sql_parser_base.h"
 
-#define GEN_EXPLAN_STMT(no_use, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
-  (void)(no_use); \
+#define GEN_EXPLAN_STMT(desc_node, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
   ParseNode *type_node = NULL; \
   ParseNode *display_node = NULL; \
   if (0 != explain_type) { \
@@ -50,8 +49,8 @@
   if (0 != display_type) { \
     malloc_terminal_node(display_node, result->malloc_pool_, display_type); \
   } \
-  malloc_non_terminal_node(explain_stmt, result->malloc_pool_, T_EXPLAIN, 5, \
-                           type_node, display_node, into_table, set_statement_id, stmt);
+  malloc_non_terminal_node(explain_stmt, result->malloc_pool_, T_EXPLAIN, 6, \
+                           type_node, display_node, into_table, set_statement_id, stmt, desc_node);
 %}
 
 %destructor {destroy_tree($$);}<node>
@@ -385,6 +384,7 @@ END_P SET_VAR DELIMITER
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
 %type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
+%type <node> copy_stmt copy_opts copy_option_item copy_option_kw
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
 %type <node> case_arg when_clause_list when_clause case_default
@@ -583,6 +583,7 @@ stmt:
   | drop_table_stmt         { $$ = $1; check_question_mark($$, result); }
   | drop_view_stmt          { $$ = $1; check_question_mark($$, result); }
   | explain_stmt            { $$ = $1; question_mark_issue($$, result); }
+  | copy_stmt               { $$ = $1; question_mark_issue($$, result); }
   | create_outline_stmt     { $$ = $1; question_mark_issue($$, result); }
   | alter_outline_stmt      { $$ = $1; question_mark_issue($$, result); }
   | drop_outline_stmt       { $$ = $1; check_question_mark($$, result); }
@@ -12311,8 +12312,79 @@ explain_or_desc relation_factor opt_desc_column_option
 
 explain_or_desc:
 EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+| DESCRIBE
+{
+  // A describe shows the columns of a statement, an explain shows the plan of
+  // a statement. The node marks the statement of the describe.
+  ParseNode *desc_marker = NULL;
+  malloc_terminal_node(desc_marker, result->malloc_pool_, T_INT);
+  desc_marker->value_ = 1;
+  $$ = desc_marker;
+}
+| DESC
+{
+  ParseNode *desc_marker = NULL;
+  malloc_terminal_node(desc_marker, result->malloc_pool_, T_INT);
+  desc_marker->value_ = 1;
+  $$ = desc_marker;
+}
+;
+
+/* A copy writes the rows of a statement into a file. The statement of the
+   copy is the statement of the rows with the clause that writes the rows into
+   the file. The options of the copy are the names and the values of the
+   options, they are grouped by the resolver. */
+copy_stmt:
+COPY '(' select_no_parens ')' TO STRING_VALUE '(' copy_opts ')'
+{
+  ParseNode *format_list = NULL;
+  merge_nodes(format_list, result, T_EXTERNAL_FILE_FORMAT, $8);
+  ParseNode *into_node = NULL;
+  malloc_non_terminal_node(into_node, result->malloc_pool_, T_INTO_OUTFILE, 3, $6, format_list, NULL);
+  if (NULL == $3->children_[PARSE_SELECT_INTO_EXTRA]) {
+    $3->children_[PARSE_SELECT_INTO_EXTRA] = into_node;
+    $$ = $3;
+  } else {
+    yyerror(&@1, result, "a copy does not take a statement that writes a file");
+    YYERROR;
+  }
+}
+;
+
+copy_opts:
+copy_option_item
+{
+  $$ = $1;
+}
+| copy_opts opt_comma copy_option_item
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+copy_option_item:
+copy_option_kw
+| NAME_OB
+| STRING_VALUE
+;
+
+copy_option_kw:
+unreserved_keyword
+{
+  // The name of an option is a keyword of the parser, it is turned into the
+  // identifier of the option.
+  ParseNode *name_node = NULL;
+  malloc_terminal_node(name_node, result->malloc_pool_, T_IDENT);
+  const int32_t len = strlen($1->keyword_name);
+  name_node->str_value_ = parse_strndup($1->keyword_name, len, result->malloc_pool_);
+  if (OB_ISNULL(name_node->str_value_)) {
+    yyerror(NULL, result, "No more space for the name of an option\n");
+    YYABORT_NO_MEMORY;
+  }
+  name_node->str_len_ = len;
+  $$ = name_node;
+}
 ;
 
 explainable_stmt:

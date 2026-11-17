@@ -170,7 +170,14 @@ protected:
   int resolve_into_variable_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_file_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_without_format(const ParseNode *node, ObSelectIntoItem &into_item);
-  int resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item);
+  int resolve_into_outfile_with_format(const ParseNode *node,
+                                         ObSelectIntoItem &into_item,
+                                         const ObSelectStmt *select_stmt);
+  // The options of a copy are the names and the values of the options, the
+  // resolver groups them.
+  int resolve_copy_options(const ParseNode *format_node,
+                          ObSelectIntoItem &into_item,
+                          bool &write_header);
   // resolve_star related functions
   int resolve_star_for_table_groups();
   int find_joined_table_group_for_table(const uint64_t table_id, int64_t &jt_idx);

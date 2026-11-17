@@ -4059,25 +4059,59 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
     }
   }
 
-  for (int64_t i = 0; OB_SUCC(ret) && i < columns.size(); ++i) {
-    const file_sql::ColumnSchema &column = columns[i];
+  // The columns of a describe are the columns of the schema of a file,
+  // the operator of the file table produces a row for every column of the
+  // file.
+  static const char *const DESCRIBE_COLUMN_NAMES[] = {
+    "column_name", "column_type", "null", "key", "default", "extra"};
+  const int64_t describe_column_count = static_cast<int64_t>(sizeof(DESCRIBE_COLUMN_NAMES)
+                                                           / sizeof(DESCRIBE_COLUMN_NAMES[0]));
+  const int64_t column_count = params_.is_describe_ ? describe_column_count
+                                                    : static_cast<int64_t>(columns.size());
+  for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
     ObDataType data_type;
     ColumnItem *col_item = NULL;
     ObFileTableColumnDef col_def;
-    if (OB_FAIL(file_sql::build_column_data_type(column.type, data_type))) {
-    } else if (OB_FAIL(generate_file_table_output_column_item(item,
-                                                              data_type,
-                                                              ObString(column.name.length(), column.name.c_str()),
-                                                              i,
-                                                              col_item))) {
+    if (params_.is_describe_) {
+      const char *column_name = DESCRIBE_COLUMN_NAMES[i];
+      const int32_t name_len = static_cast<int32_t>(strlen(column_name));
+      const char *type_name = file_sql::scalar_type_name(file_sql::ScalarType::VARCHAR);
+      if (OB_FAIL(file_sql::build_column_data_type(file_sql::ScalarType::VARCHAR, data_type))) {
+      } else if (OB_FAIL(generate_file_table_output_column_item(item,
+                                                                data_type,
+                                                                ObString(name_len, column_name),
+                                                                i,
+                                                                col_item))) {
+      } else {
+        col_def.name_.assign_ptr(column_name, name_len);
+        col_def.type_name_.assign_ptr(type_name, static_cast<int32_t>(strlen(type_name)));
+        col_def.nullable_ = false;
+        if (OB_FAIL(file_def->columns_.push_back(col_def))) {
+        }
+      }
     } else {
-      col_def.name_.assign_ptr(column.name.c_str(), column.name.length());
-      col_def.type_name_.assign_ptr(file_sql::scalar_type_name(column.type),
-                                    static_cast<int32_t>(strlen(file_sql::scalar_type_name(column.type))));
-      col_def.nullable_ = column.nullable;
-      if (OB_FAIL(file_def->columns_.push_back(col_def))) {
+      const file_sql::ColumnSchema &column = columns[i];
+      if (OB_FAIL(file_sql::build_column_data_type(column.type, data_type))) {
+      } else if (OB_FAIL(generate_file_table_output_column_item(item,
+                                                                data_type,
+                                                                ObString(column.name.length(), column.name.c_str()),
+                                                                i,
+                                                                col_item))) {
+      } else {
+        col_def.name_.assign_ptr(column.name.c_str(), column.name.length());
+        col_def.type_name_.assign_ptr(file_sql::scalar_type_name(column.type),
+                                      static_cast<int32_t>(strlen(file_sql::scalar_type_name(column.type))));
+        col_def.nullable_ = column.nullable;
+        if (OB_FAIL(file_def->columns_.push_back(col_def))) {
+        }
       }
     }
+  }
+
+  if (OB_SUCC(ret) && params_.is_describe_) {
+    // The table shows the schema of the file, the columns of the table are
+    // the columns of the schema.
+    file_def->is_schema_ = true;
   }
 
   if (OB_SUCC(ret)) {

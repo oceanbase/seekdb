@@ -32,6 +32,8 @@ namespace sql
     {}
     virtual ~ObExplainResolver() {}
     virtual int resolve(const ParseNode &parse_tree);
+    // The describe of a statement shows the columns of a file table.
+    int resolve_describe(const ParseNode &parse_tree);
     ObExplainStmt *get_explain_stmt();
     int resolve_columns(ObRawExpr *&expr, common::ObArray<ObQualifiedName> &columns)
     {

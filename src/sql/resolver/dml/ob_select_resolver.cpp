@@ -32,6 +32,17 @@
 #include "sql/executor/ob_memory_tracker.h"
 namespace oceanbase
 {
+// The text of a node of the parser, it is in the field str_value_.
+static ObString node_text(const ParseNode *node)
+{
+  if (OB_ISNULL(node)) {
+    return ObString();
+  } else if (node->str_len_ > 0) {
+    return ObString(node->str_len_, node->str_value_);
+  } else {
+    return ObString();
+  }
+}
 using namespace common;
 using namespace share;
 using namespace share::schema;
@@ -3007,7 +3018,72 @@ int ObSelectResolver::resolve_into_file_node(const ParseNode *list_node, ObSelec
   return ret;
 }
 
-int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item)
+int ObSelectResolver::resolve_copy_options(const ParseNode *format_node,
+                                           ObSelectIntoItem &into_item,
+                                           bool &write_header)
+{
+  int ret = OB_SUCCESS;
+  write_header = false;
+  ObString format_name;
+  for (int64_t i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+    const ParseNode *item = format_node->children_[i];
+    if (OB_ISNULL(item)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "unknown option of a copy");
+    } else {
+      const ObString name = node_text(item);
+      if (0 == name.compare(ObString("format"))) {
+        // The name of the format is the word that follows the name of the
+        // option.
+        const ParseNode *value = (i + 1 < format_node->num_child_)
+                                 ? format_node->children_[++i] : NULL;
+        format_name = node_text(value);
+        if (format_name.empty()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option format of a copy needs a value");
+        }
+      } else if (0 == name.compare(ObString("header"))) {
+        // The names of the columns are the first line of the file.
+        write_header = true;
+      } else if (0 == name.compare(ObString("nullstr"))) {
+        // The string of a null value of the file. The value is not used, the
+        // null value of a file of a copy is written as the escape and the
+        // letter N.
+        const ParseNode *value = (i + 1 < format_node->num_child_)
+                                 ? format_node->children_[++i] : NULL;
+        if (node_text(value).empty()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the option nullstr of a copy needs a value");
+        }
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "unknown option of a copy");
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !format_name.empty() && 0 != format_name.compare(ObString("csv"))) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "the format of a copy has to be csv");
+  }
+  if (OB_SUCC(ret)) {
+    // The file of a copy is a csv file, the fields are separated by a comma
+    // and a value that holds a comma is enclosed by quotes.
+    into_item.field_str_.set_varchar(",");
+    into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
+    into_item.line_str_.set_varchar("\n");
+    into_item.line_str_.set_collation_type(ObCharset::get_system_collation());
+    into_item.closed_cht_.meta_.set_char();
+    into_item.closed_cht_.set_char_value("\"", 1);
+    into_item.closed_cht_.set_collation_type(ObCharset::get_system_collation());
+    into_item.is_optional_ = true;
+    into_item.write_header_ = write_header;
+  }
+  return ret;
+}
+
+int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node,
+                                                  ObSelectIntoItem &into_item,
+                                                  const ObSelectStmt *select_stmt)
 {
   int ret = OB_SUCCESS;
   bool has_format_type = false;
@@ -3020,41 +3096,87 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
   } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
   }
   if (OB_SUCC(ret) && NULL != (format_node = node->children_[1])) { // format
-    for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
-      if (OB_ISNULL(option_node = format_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
-                 || T_CHARSET == option_node->type_) {
-        if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+    // The options of a copy are the words of the options, they are the
+    // nodes of the lexer and they hold their text. The options of the format
+    // of an into outfile are the nodes of the grammar, they hold no text.
+    bool is_copy = format_node->num_child_ > 0
+                   && NULL != format_node->children_[0]
+                   && !node_text(format_node->children_[0]).empty();
+    if (OB_SUCC(ret) && is_copy) {
+      // The options of a copy are the names and the values of the options,
+      // they are grouped here.
+      bool write_header = false;
+      if (OB_FAIL(resolve_copy_options(format_node, into_item, write_header))) {
+      } else if (write_header) {
+        // The names of the columns are the first line of the file.
+        ObStringBuffer buf(allocator_);
+        for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_select_item_size(); ++i) {
+          const SelectItem &select_item = select_stmt->get_select_item(i);
+          {
+            const common::ObString &name = select_item.alias_name_.empty()
+                                          ? select_item.expr_name_
+                                          : select_item.alias_name_;
+            if (i > 0 && OB_SUCC(ret)) {
+              ret = buf.append(",");
+            }
+            if (OB_SUCC(ret)) {
+              ret = buf.append(name);
+            }
+          }
         }
-        has_format_type |= (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_);
-        has_cs_type |= (T_CHARSET == option_node->type_);
+        common::ObString header_line;
+        if (OB_SUCC(ret) && OB_FAIL(buf.get_result_string(header_line))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_SUCC(ret)) {
+          // The buffer of the names of the columns gives its memory back when
+          // it is left, the names are copied into the memory of the
+          // statement.
+          if (OB_FAIL(ob_write_string(*allocator_, header_line, into_item.header_line_))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          }
+        }
       }
     }
-    if (OB_FAIL(ret)) {
-    } else if (!has_format_type) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
-    } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
-    } else {
-      ObCollationType file_cs_type = has_cs_type
-                                     ? ObCharset::get_default_collation(external_format.csv_format_.cs_type_)
-                                     : ObCharset::get_system_collation();
-      if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
+    // The options of a copy are the options of a copy, they are not the
+    // options of the format of an into outfile. The file of a copy is a csv
+    // file, it is set by the options of the copy.
+    if (OB_SUCC(ret) && !is_copy) {
+      for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+        if (OB_ISNULL(option_node = format_node->children_[i])) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
+                   || T_CHARSET == option_node->type_) {
+          if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+          }
+          has_format_type |= (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_);
+          has_cs_type |= (T_CHARSET == option_node->type_);
+        }
       }
-    }
-    for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
-      if (OB_ISNULL(option_node = format_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
-                 || T_CHARSET == option_node->type_) {
-      } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+      if (OB_FAIL(ret)) {
+      } else if (!has_format_type) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
+      } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
+      } else {
+        ObCollationType file_cs_type = has_cs_type
+                                       ? ObCharset::get_default_collation(external_format.csv_format_.cs_type_)
+                                       : ObCharset::get_system_collation();
+        if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
+        }
       }
-    }
-    if (OB_SUCC(ret)
-        && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
+      for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+        if (OB_ISNULL(option_node = format_node->children_[i])) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
+                   || T_CHARSET == option_node->type_) {
+        } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+        }
+      }
+      if (OB_SUCC(ret)
+          && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
+      }
     }
   }
   // file: single, max_file_size, buffer_size
@@ -3130,7 +3252,7 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
           ret = OB_INAPPROPRIATE_INTO;
         } else if (node->num_child_ == 3 && NULL != node->children_[1]
             && T_EXTERNAL_FILE_FORMAT == node->children_[1]->type_) { // Handle with `FORMAT`
-          if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item))) {
+          if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item, select_stmt))) {
           }
         } else { // Be compatible with grammar before
           if (OB_FAIL(resolve_into_outfile_without_format(node, *into_item))) {

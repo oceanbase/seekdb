@@ -379,7 +379,8 @@ struct ObResolverParams
        package_guard_(NULL),
        star_expansion_infos_(),
        is_resolve_fake_cte_table_(false),
-       is_in_view_(false)
+       is_in_view_(false),
+       is_describe_(false)
   {}
   bool is_force_trace_log() { return force_trace_log_; }
 
@@ -455,6 +456,9 @@ public:
   common::ObArray<ObStarExpansionInfo> star_expansion_infos_;
   bool is_resolve_fake_cte_table_;
   bool is_in_view_;
+  // The statement is the describe of a statement, the columns of a file table
+  // are the columns of the schema of the file.
+  bool is_describe_;
 };
 } // end namespace sql
 } // end namespace oceanbase

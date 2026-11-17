@@ -26,15 +26,69 @@ const static int64_t EXPLAIN_DISPLAY_OPTION = 1;
 const static int64_t EXPLAIN_INTO_TABLE = 2;
 const static int64_t EXPLAIN_STMT_ID = 3;
 const static int64_t EXPLAIN_CHILD_STMT = 4;
+int ObExplainResolver::resolve_describe(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ParseNode *child_node = parse_tree.children_[EXPLAIN_CHILD_STMT];
+  if (OB_ISNULL(child_node) || T_SELECT != child_node->type_) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                   "the describe of a statement is only supported for a select");
+  } else {
+    // The columns of a file table are the columns of the schema of the file
+    // when the statement is a describe.
+    const bool old_is_describe = params_.is_describe_;
+    params_.is_describe_ = true;
+    ObStmt *child_stmt = NULL;
+    ObResolver resolver(params_);
+    ret = resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, *child_node, child_stmt);
+    params_.is_describe_ = old_is_describe;
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(child_stmt)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        bool has_file_table = false;
+        ObDMLStmt *dml_stmt = static_cast<ObDMLStmt *>(child_stmt);
+        for (int64_t i = 0; !has_file_table && i < dml_stmt->get_table_size(); ++i) {
+          const TableItem *table_item = dml_stmt->get_table_item(i);
+          if (NULL != table_item && table_item->is_file_table()) {
+            has_file_table = true;
+          }
+        }
+        if (!has_file_table) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                         "the describe of a statement is only supported for a file table");
+        } else {
+          // The statement of a describe is the select of the describe, the
+          // result of the statement is the schema of the file table.
+          set_basic_stmt(child_stmt);
+          // The result of a describe is a table of columns, it is not the plan
+          // of a statement.
+          params_.session_info_->set_stmt_type(stmt::T_SELECT);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObExplainResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObExplainStmt *explain_stmt = NULL;
-  if (!(T_EXPLAIN == parse_tree.type_  && 5 == parse_tree.num_child_)) {
+  // A describe shows the columns of a statement, it has a node that marks it
+  // as a describe, an explain has no such node.
+  const bool has_desc_node = (6 == parse_tree.num_child_);
+  const ParseNode *desc_node = has_desc_node ? parse_tree.children_[5] : NULL;
+  const bool is_describe = (NULL != desc_node && 0 != desc_node->value_);
+  if (!(T_EXPLAIN == parse_tree.type_ && (5 == parse_tree.num_child_ || has_desc_node))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid EXPLAIN syntax",
              "type", parse_tree.type_,
              "# of child", parse_tree.num_child_);
+  } else if (is_describe) {
+    ret = resolve_describe(parse_tree);
   } else if (NULL == (explain_stmt = create_stmt<ObExplainStmt>())) {
     ret = OB_SQL_RESOLVER_NO_MEMORY;
     LOG_WARN("failed to create explain stmt");
