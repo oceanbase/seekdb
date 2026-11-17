@@ -4091,14 +4091,23 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree, TableIte
       }
     } else {
       const file_sql::ColumnSchema &column = columns[i];
-      if (OB_FAIL(file_sql::build_column_data_type(column.type, data_type))) {
+      // The names of the columns of the file are in the memory of the
+      // inference of the schema, that memory is gone when the statement is
+      // resolved. The names are copied into the memory of the statement, the
+      // names of the columns of the table live as long as the statement.
+      ObString column_name;
+      if (OB_FAIL(ob_write_string(*allocator_,
+                                  ObString(column.name.length(), column.name.c_str()),
+                                  column_name))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(file_sql::build_column_data_type(column.type, data_type))) {
       } else if (OB_FAIL(generate_file_table_output_column_item(item,
                                                                 data_type,
-                                                                ObString(column.name.length(), column.name.c_str()),
+                                                                column_name,
                                                                 i,
                                                                 col_item))) {
       } else {
-        col_def.name_.assign_ptr(column.name.c_str(), column.name.length());
+        col_def.name_.assign_ptr(column_name.ptr(), column_name.length());
         col_def.type_name_.assign_ptr(file_sql::scalar_type_name(column.type),
                                       static_cast<int32_t>(strlen(file_sql::scalar_type_name(column.type))));
         col_def.nullable_ = column.nullable;
