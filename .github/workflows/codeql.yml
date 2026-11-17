@@ -4,11 +4,6 @@ on:
   schedule:
     - cron: "0 0 * * 1" # every Monday
 
-env:
-  RUSTUP_DIST_SERVER: https://static.rust-lang.org
-  RUSTUP_UPDATE_ROOT: https://static.rust-lang.org/rustup
-  RUSTUP_INIT_URL: https://sh.rustup.rs
-
 jobs:
   codeql:
     runs-on: ubuntu-22.04

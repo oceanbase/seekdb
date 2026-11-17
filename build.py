@@ -208,8 +208,9 @@ def _normalize_cxxbridge_lockfile_paths(root: Path, output_base: Path) -> None:
 
 def main(arguments: List[str]) -> int:
     root = Path(__file__).resolve().parent
-    os.environ.setdefault("RUSTUP_DIST_SERVER", "https://rsproxy.cn")
-    os.environ.setdefault("RUSTUP_UPDATE_ROOT", "https://rsproxy.cn/rustup")
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        os.environ.setdefault("RUSTUP_DIST_SERVER", "https://rsproxy.cn")
+        os.environ.setdefault("RUSTUP_UPDATE_ROOT", "https://rsproxy.cn/rustup")
     cargo_bin = str((Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin").expanduser().resolve())
     path = os.environ.get("PATH", os.defpath)
     if cargo_bin not in path.split(os.pathsep):

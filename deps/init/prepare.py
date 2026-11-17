@@ -373,11 +373,13 @@ def prepare_rust(target=None):
             if os.name == "nt":
                 arch = {"amd64": "x86_64", "x86_64": "x86_64", "arm64": "aarch64", "aarch64": "aarch64"}[platform.machine().lower()]
                 installer = Path(directory) / "rustup-init.exe"
-                url = os.environ["RUSTUP_UPDATE_ROOT"].rstrip("/") + "/dist/" + arch + "-pc-windows-msvc/rustup-init.exe"
+                root = os.environ.get("RUSTUP_UPDATE_ROOT", "https://static.rust-lang.org/rustup")
+                url = root.rstrip("/") + "/dist/" + arch + "-pc-windows-msvc/rustup-init.exe"
                 command = [str(installer)]
             else:
                 installer = Path(directory) / "rustup-init.sh"
-                url = "https://rsproxy.cn/rustup-init.sh"
+                url = ("https://sh.rustup.rs" if os.environ.get("GITHUB_ACTIONS") == "true"
+                       else "https://rsproxy.cn/rustup-init.sh")
                 command = ["sh", str(installer)]
             print("Installing rustup", flush=True)
             download(os.environ.get("RUSTUP_INIT_URL", url), installer)
