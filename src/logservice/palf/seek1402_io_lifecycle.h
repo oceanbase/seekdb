@@ -21,6 +21,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <type_traits>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace oceanbase { namespace palf {
 struct Seek1402IOPhase {
@@ -153,8 +158,22 @@ struct Seek1402IOLifecycle {
   std::atomic<uint64_t> batch_sequence{0};
   std::atomic<bool> multiple_envs{false};
   const char *path;
-  Seek1402IOLifecycle() : path(std::getenv("SEEK1402_IO_LIFECYCLE_FILE")) {}
-  bool enabled() const { return path != nullptr && *path != '\0'; }
+  char run_id[129] = {};
+  bool identity_ready = false;
+  Seek1402IOLifecycle() : path(std::getenv("SEEK1402_IO_LIFECYCLE_FILE")) {
+    const char *identity = std::getenv("SEEK1402_IO_CAPTURE_RUN_ID");
+    if (identity != nullptr) {
+      size_t count = 0;
+      for (; count < sizeof(run_id) - 1 && identity[count] != '\0'; ++count) {
+        const char c = identity[count];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.')) return;
+        run_id[count] = c;
+      }
+      identity_ready = count > 0 && identity[count] == '\0';
+    }
+  }
+  bool enabled() const { return path != nullptr && *path != '\0' && identity_ready; }
   void bind_env(const void *environment) {
     if (path == nullptr || *path == '\0') return;
     if (init_calls.fetch_add(1) != 0) multiple_envs.store(true, std::memory_order_release);
@@ -165,7 +184,7 @@ struct Seek1402IOLifecycle {
     }
   }
   Seek1402IOSlot *reserve(int64_t epoch, uint64_t lsn, int64_t length) {
-    if (path == nullptr || *path == '\0') return nullptr;
+    if (!enabled()) return nullptr;
     uint64_t state = gate.load(std::memory_order_acquire);
     for (;;) {
       if (state & (closed | overflow)) return nullptr;
@@ -190,8 +209,14 @@ struct Seek1402IOLifecycle {
     for (uint64_t i = 0; i < count; ++i) if (!slots[i].terminal()) ++unfinished;
     FILE *file = std::fopen(path, "wx");
     if (file == nullptr) return false;
+#ifdef _WIN32
+    const int writer_pid = _getpid();
+#else
+    const int writer_pid = getpid();
+#endif
     bool ok = std::fprintf(file,
-      "{\"scope\":\"flush_task_append_reuse_and_lifecycle\",\"clock\":\"realtime_us\",\"slots\":%llu,\"unfinished\":%llu,\"overflow\":%s,\"multiple_envs\":%s,\"progress_phases_present\":false,\"io_phases_present\":true}\n",
+      "{\"schema\":1,\"writer_pid\":%d,\"run_id\":\"%s\",\"identity_valid\":%s,\"scope\":\"flush_task_append_reuse_and_lifecycle\",\"clock\":\"realtime_us\",\"slots\":%llu,\"unfinished\":%llu,\"overflow\":%s,\"multiple_envs\":%s,\"progress_phases_present\":false,\"io_phases_present\":true}\n",
+      writer_pid, identity_ready ? run_id : "", identity_ready ? "true" : "false",
       static_cast<unsigned long long>(count), static_cast<unsigned long long>(unfinished),
       state & overflow ? "true" : "false", multiple_envs.load() ? "true" : "false") >= 0;
     for (uint64_t i = 0; i < count && ok; ++i) {
@@ -253,7 +278,7 @@ struct Seek1402IOLifecycle {
     }
     ok = !std::ferror(file) && ok;
     ok = std::fclose(file) == 0 && ok;
-    return ok && unfinished == 0 && !(state & overflow) && !multiple_envs.load();
+    return ok && identity_ready && unfinished == 0 && !(state & overflow) && !multiple_envs.load();
   }
 };
 static_assert(sizeof(Seek1402IOLifecycle) <= 4 * 1024 * 1024,
