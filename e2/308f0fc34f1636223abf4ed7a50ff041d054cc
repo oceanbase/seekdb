@@ -1,0 +1,30 @@
+.github/scripts/package.py
+  s_99bd9318300c1c::t_9d1f50c4d182b9 19,21,73-78,83-86,88-89,91-92,289-293,301-303
+  s_99bd9318300c1c::t_0ab8a1d1eedd1b 20,79-82,87
+package/package.py
+  s_99bd9318300c1c::t_9d1f50c4d182b9 23-33,147-148,168,184-185,217-218,232-236,324-330,333,350-354,358,361
+package/deb/seekdb-build.sh
+  s_99bd9318300c1c::t_c16ba7faa0fa7c 4,13-14,16,19,21,23-26
+.github/workflows/package.yml
+  s_99bd9318300c1c::t_9d1f50c4d182b9 256,267-268,279
+package/rpm/seekdb-build.sh
+  s_99bd9318300c1c::t_c16ba7faa0fa7c 4,13-14,16,19,21,23-26,30
+package/README.md
+  s_99bd9318300c1c::t_f1676716e900ae 20-23,33-48,62-64,71-74,88-107,111,116-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e2308f0fc34f1636223abf4ed7a50ff041d054cc",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai <5187215+hnwyllmm@users.noreply.github.com>"
+    }
+  }
+}
