@@ -57,6 +57,20 @@ namespace observer
 namespace
 {
 
+int response_status_to_error(const int status)
+{
+  switch (static_cast<oceanbase::nio::ResponseStatus>(status)) {
+    case oceanbase::nio::ResponseStatus::Ok:
+      return OB_SUCCESS;
+    case oceanbase::nio::ResponseStatus::ConnectionClosed:
+      return OB_CONNECT_ERROR;
+    case oceanbase::nio::ResponseStatus::AllocationFailed:
+      return OB_ALLOCATE_MEMORY_FAILED;
+    default:
+      return OB_ERR_UNEXPECTED;
+  }
+}
+
 static_assert(sizeof(oceanbase::nio::NioByteView) == 16, "oceanbase::nio::NioByteView ABI mismatch");
 static_assert(sizeof(oceanbase::nio::NioMysqlKvView) == 32, "oceanbase::nio::NioMysqlKvView ABI mismatch");
 static_assert(std::is_standard_layout<oceanbase::nio::NioMysqlKvView>::value,
@@ -517,7 +531,7 @@ int ObMPPacketSender::response_resultset_metadata(
           include_result_header ? 1 : 0, view_data, views.count(),
           eof_field_count, warnings, status_flags, &packet_count, &framed_len);
       if (0 != append_ret) {
-        ret = OB_ERR_UNEXPECTED;
+        ret = response_status_to_error(append_ret);
       } else {
       }
     }
@@ -1031,7 +1045,9 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
     if (OB_FAIL(encode_ret)) {
       ret = encode_ret;
     } else if (0 != append_ret) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = response_status_to_error(append_ret);
+      LOG_INFO("Rust MySQL response append failed", K(ret), K(append_ret),
+               K(pkt.get_mysql_packet_type()));
     }
   }
   return ret;
@@ -1048,9 +1064,12 @@ int ObMPPacketSender::flush_buffer(const bool is_last) {
   } else if (OB_ISNULL(req_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("req_ is null", KP_(req), K(ret));
-  } else if (0 != oceanbase::nio::response_flush(connection_handle, request_generation_,
-                                     is_last ? 1 : 0)) {
-    ret = OB_IO_ERROR;
+  } else {
+    const int flush_ret = oceanbase::nio::response_flush(
+        connection_handle, request_generation_, is_last ? 1 : 0);
+    if (0 != flush_ret) {
+      ret = response_status_to_error(flush_ret);
+    }
   }
   if (is_last) {
     const int finish_ret = finish_sql_request();

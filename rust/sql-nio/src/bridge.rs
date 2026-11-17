@@ -81,6 +81,14 @@ pub mod ffi {
     }
 
     #[repr(i32)]
+    enum ResponseStatus {
+        Error = -1,
+        Ok = 0,
+        ConnectionClosed = -2,
+        AllocationFailed = -3,
+    }
+
+    #[repr(i32)]
     enum AuthStatus {
         NoChange = 0,
         Ok = 1,
