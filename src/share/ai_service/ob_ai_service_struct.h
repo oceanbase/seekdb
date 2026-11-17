@@ -55,6 +55,9 @@ public:
   int merge_delta_endpoint(common::ObArenaAllocator &allocator, const ObIJsonBase &delta_endpoint);
   int deep_copy(common::ObIAllocator &allocator, const ObAiModelEndpointInfo &other);
   int check_valid() const;
+  // replaces the NULL pointer of an empty string with a valid empty string, so
+  // that an empty value is never confused with SQL NULL
+  void normalize_empty_strings();
 
   const ObString &get_name() const { return name_; }
   const ObString &get_scope() const { return scope_; }
@@ -84,6 +87,7 @@ public:
 private:
   static const ObString DEFAULT_SCOPE;
   static bool is_valid_provider(const ObString &provider);
+  static bool is_provider_need_access_key(const ObString &provider);
   int encrypt_access_key_(common::ObIAllocator &allocator, const ObString &access_key, ObString &encrypted_access_key);
   int decrypt_access_key_(common::ObIAllocator &allocator, const ObString &encrypted_access_key, ObString &unencrypted_access_key) const;
 private:

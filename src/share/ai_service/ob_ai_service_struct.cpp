@@ -37,7 +37,8 @@ const char *VALID_PROVIDERS[] = {
   "SILICONFLOW",
   "COHERE",
   "HUNYUAN-OPENAI",
-  "OPENAI"
+  "OPENAI",
+  "OLLAMA"
 };
 
 #define EXTRACT_JSON_ELEM_STR(json_key, member) \
@@ -90,8 +91,26 @@ int ObAiModelEndpointInfo::deep_copy(
   } else if (OB_FAIL(ob_write_string(allocator, other.parameters_, parameters_))) {
   } else if (OB_FAIL(ob_write_string(allocator, other.request_transform_fn_, request_transform_fn_))) {
   } else if (OB_FAIL(ob_write_string(allocator, other.response_transform_fn_, response_transform_fn_))) {
+  } else {
+    normalize_empty_strings();
   }
   return ret;
+}
+
+void ObAiModelEndpointInfo::normalize_empty_strings()
+{
+  // an empty string is copied with a NULL pointer by the deep copy helpers,
+  // but the dml splicer writes a NULL pointer as SQL NULL, and reading a NULL
+  // column back fails with OB_ERR_NULL_VALUE, so the empty string must keep a
+  // valid pointer here
+  ObString *strings[] = {&name_, &scope_, &ai_model_name_, &url_, &access_key_,
+                         &provider_, &request_model_name_, &parameters_,
+                         &request_transform_fn_, &response_transform_fn_};
+  for (int i = 0; i < ARRAYSIZEOF(strings); i++) {
+    if (NULL == strings[i]->ptr()) {
+      strings[i]->assign_ptr("", 0);
+    }
+  }
 }
 
 int ObAiModelEndpointInfo::check_valid() const
@@ -112,7 +131,7 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (url_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("url"), "url");
-  } else if (access_key_.empty()) {
+  } else if (access_key_.empty() && is_provider_need_access_key(provider_)) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
     LOG_WARN("access_key is empty", K(ret), K(*this));
@@ -147,6 +166,13 @@ bool ObAiModelEndpointInfo::is_valid_provider(const ObString &provider)
   return is_valid;
 }
 
+bool ObAiModelEndpointInfo::is_provider_need_access_key(const ObString &provider)
+{
+  // the ollama provider serves the model in the local process, so the access
+  // key is optional for it
+  return provider.case_compare("OLLAMA") != 0;
+}
+
 int ObAiModelEndpointInfo::merge_delta_endpoint(common::ObArenaAllocator &allocator, const ObIJsonBase &delta_jbase)
 {
   int ret = OB_SUCCESS;
@@ -173,7 +199,10 @@ int ObAiModelEndpointInfo::merge_delta_endpoint(common::ObArenaAllocator &alloca
   if (OB_SUCC(ret)) {
     if (has_api_key && !access_key_.empty() && OB_FAIL(encrypt_access_key_(allocator, access_key_, access_key_))) {
       LOG_WARN("failed to encrypt access key", K(ret));
-    } else if (OB_FAIL(check_valid())) {
+    } else {
+      normalize_empty_strings();
+      if (OB_FAIL(check_valid())) {
+      }
     }
   }
 
