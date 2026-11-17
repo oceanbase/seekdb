@@ -213,6 +213,11 @@ int LogEngine::submit_flush_log_task(const FlushLogCbCtx &flush_log_cb_ctx,
   } else {
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(flush_log_task)) {
+    Seek1402IOSlot *slot = flush_log_task->get_diagnostic_slot();
+    if (slot != nullptr) {
+      slot->submission_failure_present = true;
+      slot->submission_failure_ret = ret;
+    }
     alloc_mgr_->free_log_io_flush_log_task(flush_log_task);
     flush_log_task = NULL;
   }

@@ -136,7 +136,6 @@ int64_t LogIOTask::get_init_task_ts()
 
 void LogIOTask::free_this(IPalfEnvImpl *palf_env_impl)
 {
-  if (diagnostic_slot_ != nullptr) diagnostic_slot_->released();
   return free_this_(palf_env_impl);
 }
 int64_t LogIOTask::get_io_size()

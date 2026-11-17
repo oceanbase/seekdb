@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <type_traits>
 
 namespace oceanbase { namespace palf {
 struct Seek1402IOPhase {
@@ -77,6 +78,8 @@ struct Seek1402IOSlot {
   uint64_t committed_cas_count = 0;
   uint64_t committed_cas_from = 0;
   uint64_t committed_cas_to = 0;
+  bool submission_failure_present = false;
+  int submission_failure_ret = 0;
   int producer_ret = 0;
   int callback_ret = 0;
   bool callback_skipped = false;
@@ -109,6 +112,7 @@ struct Seek1402IOSlot {
     const bool consumed = consumer_seen.load(std::memory_order_acquire);
     const bool dropped = dropped_before_push.load(std::memory_order_acquire);
     return freed.load(std::memory_order_acquire) &&
+      !(submission_failure_present && consumed) &&
       ((produced && ((producer_ret == 0 && consumed) ||
                      (producer_ret != 0 && !consumed))) || (dropped && !consumed)) &&
       (!consumed || callback_done.load(std::memory_order_acquire));
@@ -199,15 +203,17 @@ struct Seek1402IOLifecycle {
       }
       const bool producer = slot.producer_done.load(std::memory_order_acquire);
       const bool callback = slot.callback_done.load(std::memory_order_acquire);
+      char submission_result[24] = "null";
+      if (slot.submission_failure_present) std::snprintf(submission_result, sizeof(submission_result), "%d", slot.submission_failure_ret);
       char producer_result[24] = "null";
       char callback_result[24] = "null";
       if (producer) std::snprintf(producer_result, sizeof(producer_result), "%d", slot.producer_ret);
       if (callback) std::snprintf(callback_result, sizeof(callback_result), "%d", slot.callback_ret);
       ok = std::fprintf(file,
-        "{\"slot\":%llu,\"epoch\":%lld,\"lsn\":%llu,\"length\":%lld,\"producer_done\":%s,\"producer_ret\":%s,\"consumer_seen\":%s,\"callback_done\":%s,\"callback_ret\":%s,\"callback_skipped\":%s,\"freed\":%s,\"dropped_before_push\":%s,\"batch_group\":%llu,\"batch_member\":%lld,\"batch_size\":%lld,\"reuse_end_lsn\":%llu,\"append\":",
+        "{\"slot\":%llu,\"epoch\":%lld,\"lsn\":%llu,\"length\":%lld,\"submission_failure_ret\":%s,\"producer_done\":%s,\"producer_ret\":%s,\"consumer_seen\":%s,\"callback_done\":%s,\"callback_ret\":%s,\"callback_skipped\":%s,\"freed\":%s,\"dropped_before_push\":%s,\"batch_group\":%llu,\"batch_member\":%lld,\"batch_size\":%lld,\"reuse_end_lsn\":%llu,\"append\":",
         static_cast<unsigned long long>(i), static_cast<long long>(slot.epoch),
         static_cast<unsigned long long>(slot.lsn), static_cast<long long>(slot.length),
-        producer ? "true" : "false", producer_result,
+        submission_result, producer ? "true" : "false", producer_result,
         slot.consumer_seen.load(std::memory_order_acquire) ? "true" : "false",
         callback ? "true" : "false", callback_result,
         callback && slot.callback_skipped ? "true" : "false",
@@ -252,6 +258,8 @@ struct Seek1402IOLifecycle {
 };
 static_assert(sizeof(Seek1402IOLifecycle) <= 4 * 1024 * 1024,
               "diagnostic lifecycle storage exceeds 4MiB");
+static_assert(std::is_trivially_destructible<Seek1402IOLifecycle>::value,
+              "diagnostic storage must not register a teardown destructor");
 inline Seek1402IOLifecycle &seek1402_io_lifecycle() {
   static Seek1402IOLifecycle capture;
   return capture;

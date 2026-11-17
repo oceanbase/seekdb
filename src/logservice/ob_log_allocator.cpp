@@ -120,8 +120,10 @@ LogIOFlushLogTask *ObLogAllocator::alloc_log_io_flush_log_task(
 void ObLogAllocator::free_log_io_flush_log_task(LogIOFlushLogTask *ptr)
 {
   if (OB_LIKELY(NULL != ptr)) {
+    Seek1402IOSlot *slot = ptr->get_diagnostic_slot();
     ptr->~LogIOFlushLogTask();
     log_io_flush_log_task_alloc_.free(ptr);
+    if (slot != nullptr) slot->released();
     ATOMIC_DEC(&flying_log_task_);
   }
 }
