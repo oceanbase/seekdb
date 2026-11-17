@@ -29,15 +29,17 @@ struct Seek1402IOPhase {
   int64_t begin_us = 0;
   int64_t end_us = 0;
 };
+inline int64_t seek1402_io_now_us() {
+  return std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+}
 template <typename Call>
 int seek1402_observe_io_phase(Seek1402IOPhase *phase, Call call) {
   if (phase == nullptr) return call();
   phase->entered = true;
-  phase->begin_us = std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::system_clock::now().time_since_epoch()).count();
+  phase->begin_us = seek1402_io_now_us();
   const int result = call();
-  phase->end_us = std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::system_clock::now().time_since_epoch()).count();
+  phase->end_us = seek1402_io_now_us();
   phase->result = result;
   phase->returned = true;
   return result;
@@ -59,6 +61,22 @@ struct Seek1402IOSlot {
   uint64_t reuse_end_lsn = 0;
   Seek1402IOPhase append;
   Seek1402IOPhase reuse;
+  Seek1402IOPhase push;
+  Seek1402IOPhase callback_handler;
+  Seek1402IOPhase after_flush;
+  Seek1402IOPhase max_flushed;
+  Seek1402IOPhase committed;
+  bool callback_epoch_present = false;
+  int64_t callback_epoch = 0;
+  bool active_observed = false;
+  bool active = false;
+  bool observe_max_store = false;
+  bool observe_committed_cas = false;
+  bool max_store = false;
+  uint64_t max_store_to = 0;
+  uint64_t committed_cas_count = 0;
+  uint64_t committed_cas_from = 0;
+  uint64_t committed_cas_to = 0;
   int producer_ret = 0;
   int callback_ret = 0;
   bool callback_skipped = false;
@@ -74,6 +92,9 @@ struct Seek1402IOSlot {
   void consumed(int ret, bool skipped) {
     callback_ret = ret;
     callback_skipped = skipped;
+    callback_handler.result = ret;
+    callback_handler.end_us = seek1402_io_now_us();
+    callback_handler.returned = true;
     callback_done.store(true, std::memory_order_release);
   }
   void released() {
@@ -93,6 +114,27 @@ struct Seek1402IOSlot {
       (!consumed || callback_done.load(std::memory_order_acquire));
   }
 };
+inline Seek1402IOSlot *&seek1402_callback_slot() {
+  static thread_local Seek1402IOSlot *slot = nullptr;
+  return slot;
+}
+struct Seek1402CallbackScope {
+  Seek1402IOSlot *previous;
+  explicit Seek1402CallbackScope(Seek1402IOSlot *slot) : previous(seek1402_callback_slot()) {
+    seek1402_callback_slot() = slot;
+  }
+  ~Seek1402CallbackScope() { seek1402_callback_slot() = previous; }
+};
+template <typename Call>
+int seek1402_observe_callback_epoch(int64_t &epoch, Call call) {
+  const int result = call();
+  Seek1402IOSlot *slot = seek1402_callback_slot();
+  if (slot != nullptr && result == 0) {
+    slot->callback_epoch = epoch;
+    slot->callback_epoch_present = true;
+  }
+  return result;
+}
 
 struct Seek1402IOLifecycle {
   static constexpr uint64_t limit = 8192;
@@ -176,6 +218,31 @@ struct Seek1402IOLifecycle {
       ok = ok && seek1402_write_io_phase(file, slot.append);
       ok = ok && std::fprintf(file, ",\"reuse\":") >= 0;
       ok = ok && seek1402_write_io_phase(file, slot.reuse);
+      ok = ok && std::fprintf(file, ",\"push\":") >= 0;
+      ok = ok && seek1402_write_io_phase(file, slot.push);
+      ok = ok && std::fprintf(file, ",\"callback_handler\":") >= 0;
+      ok = ok && seek1402_write_io_phase(file, slot.callback_handler);
+      ok = ok && std::fprintf(file, ",\"after_flush\":") >= 0;
+      ok = ok && seek1402_write_io_phase(file, slot.after_flush);
+      ok = ok && std::fprintf(file, ",\"max_flushed\":") >= 0;
+      ok = ok && seek1402_write_io_phase(file, slot.max_flushed);
+      ok = ok && std::fprintf(file, ",\"committed\":") >= 0;
+      ok = ok && seek1402_write_io_phase(file, slot.committed);
+      char callback_epoch[32] = "null";
+      char max_store_to[32] = "null";
+      char committed_from[32] = "null";
+      char committed_to[32] = "null";
+      if (slot.callback_epoch_present) std::snprintf(callback_epoch, sizeof(callback_epoch), "%lld", static_cast<long long>(slot.callback_epoch));
+      if (slot.max_store) std::snprintf(max_store_to, sizeof(max_store_to), "%llu", static_cast<unsigned long long>(slot.max_store_to));
+      if (slot.committed_cas_count != 0) {
+        std::snprintf(committed_from, sizeof(committed_from), "%llu", static_cast<unsigned long long>(slot.committed_cas_from));
+        std::snprintf(committed_to, sizeof(committed_to), "%llu", static_cast<unsigned long long>(slot.committed_cas_to));
+      }
+      ok = ok && std::fprintf(file,
+          ",\"callback_epoch\":%s,\"active\":%s,\"max_store_to\":%s,\"committed_cas_count\":%llu,\"committed_cas_from\":%s,\"committed_cas_to\":%s",
+          callback_epoch, slot.active_observed ? (slot.active ? "true" : "false") : "null", max_store_to,
+          static_cast<unsigned long long>(slot.committed_cas_count),
+          committed_from, committed_to) >= 0;
       ok = ok && std::fprintf(file, "}\n") >= 0;
     }
     ok = !std::ferror(file) && ok;

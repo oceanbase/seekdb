@@ -126,6 +126,11 @@ void LogIOTaskCbThreadPool::handle(common::LinkTask *task)
   int ret = OB_SUCCESS;
   LogIOTask *log_io_task = static_cast<LogIOTask*>(task);
   Seek1402IOSlot *diagnostic_slot = log_io_task == nullptr ? nullptr : log_io_task->get_diagnostic_slot();
+  Seek1402CallbackScope diagnostic_scope(diagnostic_slot);
+  if (diagnostic_slot != nullptr) {
+    diagnostic_slot->callback_handler.entered = true;
+    diagnostic_slot->callback_handler.begin_us = seek1402_io_now_us();
+  }
   bool diagnostic_consumed = false;
   if (diagnostic_slot != nullptr) diagnostic_slot->consumer_seen.store(true, std::memory_order_release);
   if (IS_NOT_INIT) {

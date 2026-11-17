@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX PALF
 #include "logservice/palf/seek1402_deferred_capture.h"
+#include "logservice/palf/seek1402_io_lifecycle.h"
 #include "log_sliding_window.h"
 #include "log_engine.h"
 #include "log_io_task_cb_utils.h"
@@ -1158,11 +1159,25 @@ int LogSlidingWindow::after_flush_log(const FlushLogCbCtx &flush_cb_ctx)
 
   common::ObTimeGuard time_guard("after flush log", 100 * 1000);
   if (OB_SUCC(ret) && can_exec_cb) {
-    (void) inc_update_max_flushed_log_info_(flush_cb_ctx.lsn_, log_end_lsn);
+    Seek1402IOSlot *slot = seek1402_callback_slot();
+    if (slot != nullptr) slot->observe_max_store = true;
+    (void) seek1402_observe_io_phase(slot == nullptr ? nullptr : &slot->max_flushed, [&] {
+      return inc_update_max_flushed_log_info_(flush_cb_ctx.lsn_, log_end_lsn);
+    });
+    if (slot != nullptr) slot->observe_max_store = false;
     time_guard.click();
-    if (state_mgr_->is_active()) {
+    const bool active = state_mgr_->is_active();
+    if (slot != nullptr) {
+      slot->active_observed = true;
+      slot->active = active;
+    }
+    if (active) {
       LSN new_committed_end_lsn;
-      (void) gen_committed_end_lsn_(new_committed_end_lsn);
+      if (slot != nullptr) slot->observe_committed_cas = true;
+      (void) seek1402_observe_io_phase(slot == nullptr ? nullptr : &slot->committed, [&] {
+        return gen_committed_end_lsn_(new_committed_end_lsn);
+      });
+      if (slot != nullptr) slot->observe_committed_cas = false;
     } else {}
 
     time_guard.click("before handle log");
@@ -1323,6 +1338,12 @@ int LogSlidingWindow::try_advance_committed_lsn_(const LSN &end_lsn)
     get_committed_end_lsn_(old_committed_end_lsn);
     while (end_lsn > old_committed_end_lsn) {
       if (ATOMIC_BCAS(&committed_end_lsn_.val_, old_committed_end_lsn.val_, end_lsn.val_)) {
+        Seek1402IOSlot *slot = seek1402_callback_slot();
+        if (slot != nullptr && slot->observe_committed_cas) {
+          ++slot->committed_cas_count;
+          slot->committed_cas_from = old_committed_end_lsn.val_;
+          slot->committed_cas_to = end_lsn.val_;
+        }
         break;
       } else {
         get_committed_end_lsn_(old_committed_end_lsn);
@@ -1368,6 +1389,11 @@ int LogSlidingWindow::inc_update_max_flushed_log_info_(const LSN &lsn,
     } else {
       max_flushed_lsn_ = lsn;
       ATOMIC_STORE(&max_flushed_end_lsn_.val_, end_lsn.val_);
+      Seek1402IOSlot *slot = seek1402_callback_slot();
+      if (slot != nullptr && slot->observe_max_store) {
+        slot->max_store = true;
+        slot->max_store_to = end_lsn.val_;
+      }
     }
   }
   return ret;

@@ -50,7 +50,8 @@ int push_task_into_cb_thread_pool(LogIOTaskCbThreadPool *cb_thread_pool, LogIOTa
 static int push_task_with_lifecycle(LogIOTaskCbThreadPool *pool, LogIOTask *task)
 {
   Seek1402IOSlot *slot = task->get_diagnostic_slot();
-  const int ret = push_task_into_cb_thread_pool(pool, task);
+  const int ret = seek1402_observe_io_phase(slot == nullptr ? nullptr : &slot->push,
+      [pool, task] { return push_task_into_cb_thread_pool(pool, task); });
   if (slot != nullptr) slot->produced(ret);
   return ret;
 }
@@ -112,7 +113,9 @@ int LogIOTask::after_consume(IPalfEnvImpl *palf_env_impl)
 		PALF_LOG(INFO, "[io delay]", K(after_consume_ts), K(delay_ts));
 	}
   if (OB_FAIL(palf_env_impl->get_palf_handle_impl(guard))) {
-  } else if (OB_FAIL(guard.get_palf_handle_impl()->get_palf_epoch(palf_epoch))) {
+  } else if (OB_FAIL(seek1402_observe_callback_epoch(palf_epoch, [&] {
+    return guard.get_palf_handle_impl()->get_palf_epoch(palf_epoch);
+  }))) {
   } else if (palf_epoch != palf_epoch_) {
     ret = OB_STATE_NOT_MATCH;
     PALF_LOG(WARN, "palf_epoch has changed, drop task", K(ret), KPC(this));
@@ -144,7 +147,9 @@ int LogIOTask::push_task_into_cb_thread_pool_(LogIOTaskCbThreadPool *cb_thread_p
 {
   int ret = OB_SUCCESS;
   push_cb_into_cb_pool_ts_ = ObTimeUtility::current_time();
-  return push_task_into_cb_thread_pool(cb_thread_pool, io_task);
+  Seek1402IOSlot *slot = diagnostic_slot_;
+  return seek1402_observe_io_phase(slot == nullptr ? nullptr : &slot->push,
+      [cb_thread_pool, io_task] { return push_task_into_cb_thread_pool(cb_thread_pool, io_task); });
 }
 
 LogIOFlushLogTask::LogIOFlushLogTask(const int64_t palf_epoch)
@@ -215,7 +220,10 @@ int LogIOFlushLogTask::after_consume_(IPalfHandleImplGuard &guard)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogIOFlushLogTask not inited", K(ret), KPC(this));
-  } else if (OB_FAIL(guard.get_palf_handle_impl()->inner_after_flush_log(flush_log_cb_ctx_))) {
+  } else if (OB_FAIL(seek1402_observe_io_phase(
+      diagnostic_slot_ == nullptr ? nullptr : &diagnostic_slot_->after_flush, [&] {
+        return guard.get_palf_handle_impl()->inner_after_flush_log(flush_log_cb_ctx_);
+      }))) {
   } else {
   }
   return ret;
