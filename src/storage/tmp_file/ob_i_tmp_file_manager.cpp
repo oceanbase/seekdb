@@ -17,11 +17,11 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tmp_file/ob_i_tmp_file_manager.h"
+#include "lib/utility/ob_platform_utils.h"
 
 #ifdef _WIN32
 #include <windows.h>
 #define sleep(sec) Sleep((sec) * 1000)
-#define usleep(us) Sleep((DWORD)((us) / 1000))
 #endif
 
 namespace oceanbase
@@ -188,7 +188,7 @@ int ObITmpFileManager::remove(const int64_t fd)
             K(start_remove_ts), KP(tmp_file), KPC(tmp_file), K(lbt()));
         sleep(2); // 2s
       } else {
-        usleep(100 * 1000); // 100ms
+        lib::ob_usleep(100 * 1000); // 100ms
       }
     }
     if (OB_FAIL(tmp_file->release_resource())) {
