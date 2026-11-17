@@ -1458,21 +1458,18 @@ int ObCommentExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     alter_table_arg.is_parallel_ = true;
     my_session = ctx.get_my_session();
     int64_t start_time = ObTimeUtility::current_time();
-    ObTimeoutCtx tctx;
-    const int64_t rpc_timeout = OB_DEFAULT_RPC_TIMEOUT;
     if (OB_ISNULL(my_session)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_INVALID_ID == alter_table_arg.session_id_
                && FALSE_IT(alter_table_arg.session_id_ = my_session->get_sessid_for_table())) {
       // should not in this field
-    } else if (OB_FAIL(tctx.set_timeout(rpc_timeout))) {
     } else if (OB_FAIL(assign_alter_to_comment_(alter_table_arg, set_comment_arg))) {
     } else if (OB_FAIL(query::serialize_root_service_call(
                    [&]{ return ctx.root_command_service().set_comment(set_comment_arg, set_comment_res); }))) {
     } else {
       int64_t refresh_time = ObTimeUtility::current_time();
       if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
-          tctx, my_session, set_comment_res.schema_version_))) {
+          my_session, set_comment_res.schema_version_))) {
       }
       int64_t end_time = ObTimeUtility::current_time();
       LOG_INFO("[parallel_comment_table]", KR(ret),
@@ -1561,14 +1558,12 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
         if (is_parallel_drop) {
           int64_t start_time = ObTimeUtility::current_time();
           obcall::ObDropTableRes res;
-          ObTimeoutCtx timeout_ctx;
           tmp_arg.is_parallel_ = true;
-          if (OB_FAIL(timeout_ctx.set_timeout(OB_DEFAULT_RPC_TIMEOUT))) {
-          } else if (OB_FAIL(ctx.root_command_service().parallel_drop_table(drop_table_arg, res))) {
+          if (OB_FAIL(ctx.root_command_service().parallel_drop_table(drop_table_arg, res))) {
           } else {
             int64_t refresh_time = ObTimeUtility::current_time();
             if (!res.do_nothing_ && OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
-                                            timeout_ctx, my_session, res.schema_version_))) {
+                                            my_session, res.schema_version_))) {
               LOG_ERROR("fail to wait for local schema visibility", KR(ret), K(res));
             }
             int64_t end_time = ObTimeUtility::current_time();
@@ -1713,41 +1708,38 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
         }
       } else {
         // new parallel truncate
-        ObTimeoutCtx timeout_ctx;
         tmp_arg.is_parallel_ = true;
-        if (OB_FAIL(timeout_ctx.set_timeout(OB_DEFAULT_RPC_TIMEOUT))) {
-        } else {
-          int64_t start_time = ObTimeUtility::current_time();
-          while (OB_SUCC(ret)) {
-            DEBUG_SYNC(BEFORE_PARELLEL_TRUNCATE);
-            if (OB_FAIL(query::serialize_root_service_call(
-                    [&]{ return ctx.root_command_service().truncate_table_v2(truncate_table_arg, res); }))) {
-              if ((OB_TRY_LOCK_ROW_CONFLICT == ret || OB_TIMEOUT == ret || OB_NOT_MASTER == ret
-                    || OB_RS_NOT_MASTER == ret || OB_RS_SHUTDOWN == ret || OB_SERVER_RUNTIME_NOT_READY == ret) && timeout_ctx.get_timeout() > 0) {
-                ob_usleep(1 * 1000 * 1000);
-                // retry
-                ret = OB_SUCCESS;
-              }
-            } else {
-              // success
-              break;
+        int64_t start_time = ObTimeUtility::current_time();
+        while (OB_SUCC(ret)) {
+          DEBUG_SYNC(BEFORE_PARELLEL_TRUNCATE);
+          if (OB_FAIL(query::serialize_root_service_call(
+                  [&]{ return ctx.root_command_service().truncate_table_v2(truncate_table_arg, res); }))) {
+            if ((OB_TRY_LOCK_ROW_CONFLICT == ret || OB_TIMEOUT == ret || OB_NOT_MASTER == ret
+                  || OB_RS_NOT_MASTER == ret || OB_RS_SHUTDOWN == ret || OB_SERVER_RUNTIME_NOT_READY == ret)
+                && OB_SUCCESS == ObDDLExecutorUtil::check_ddl_status()) {
+              ob_usleep(1 * 1000 * 1000);
+              // retry
+              ret = OB_SUCCESS;
             }
+          } else {
+            // success
+            break;
           }
-          int64_t step_time = ObTimeUtility::current_time();
-          LOG_INFO("truncate_table_v2 finish trans", K(ret), "cost", step_time-start_time, "table_name", truncate_table_arg.table_name_, K(res));
-          if (OB_FAIL(ret)) {
-          } else if (!res.is_valid()) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
-                     timeout_ctx, my_session, res.task_id_))) {
-          }
-          int64_t end_time = ObTimeUtility::current_time();
-          LOG_INFO("truncate_table_v2", KR(ret), "cost", end_time-start_time,
-                                                "trans_cost", step_time - start_time,
-                                                "wait_refresh", end_time - step_time,
-                                                "table_name", truncate_table_arg.table_name_,
-                                                K(res));
         }
+        int64_t step_time = ObTimeUtility::current_time();
+        LOG_INFO("truncate_table_v2 finish trans", K(ret), "cost", step_time-start_time, "table_name", truncate_table_arg.table_name_, K(res));
+        if (OB_FAIL(ret)) {
+        } else if (!res.is_valid()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
+                   my_session, res.task_id_))) {
+        }
+        int64_t end_time = ObTimeUtility::current_time();
+        LOG_INFO("truncate_table_v2", KR(ret), "cost", end_time-start_time,
+                                              "trans_cost", step_time - start_time,
+                                              "wait_refresh", end_time - step_time,
+                                              "table_name", truncate_table_arg.table_name_,
+                                              K(res));
       }
     }
     SERVER_EVENT_ADD("ddl", "truncate table execute finish",
