@@ -1,8 +1,11 @@
 package/README.md
   s_99bd9318300c1c::t_445d39e55bb65a 24-27,29-30
+  s_99bd9318300c1c::t_acba71915372ac 28
 .github/workflows/package.yml
   s_99bd9318300c1c::t_60583bc07d6250 192-201
   s_99bd9318300c1c::t_b075511024e8e9 189
+package/package.py
+  s_99bd9318300c1c::t_acba71915372ac 126-129
 ---
 {
   "schema_version": "authorship/3.0.0",
