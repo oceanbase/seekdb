@@ -16,6 +16,7 @@
 
 #include "log_group_buffer.h"
 #include "logservice/palf/seek1402_deferred_capture.h"
+#include "logservice/palf/seek1402_io_lifecycle.h"
 #include "share/rc/ob_server_runtime.h"
 #include "log_writer_utils.h"
 
@@ -160,6 +161,11 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
         observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
         (reuse_lsn + observed_capacity).val_, false);
     if (seek1402_capture().admission_scope) {
+      seek1402_io_lifecycle().record_space_comparison(reinterpret_cast<uintptr_t>(this),
+          total_len, lsn.val_, ref_reuse_lsn.val_, observed_reuse_lsn.val_, observed_capacity,
+          reuse_lsn.val_, (reuse_lsn + observed_capacity).val_, false, seek1402_capture().abort_scope);
+    }
+    if (seek1402_capture().admission_scope) {
       seek1402_capture().add(2, total_len, lsn.val_, ref_reuse_lsn.val_,
           observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
           (reuse_lsn + observed_capacity).val_, OB_SUCCESS);
@@ -173,6 +179,11 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
     seek1402_capture().first_space_comparison(total_len, lsn.val_, ref_reuse_lsn.val_,
         observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
         (reuse_lsn + observed_capacity).val_, true);
+    if (seek1402_capture().admission_scope) {
+      seek1402_io_lifecycle().record_space_comparison(reinterpret_cast<uintptr_t>(this),
+          total_len, lsn.val_, ref_reuse_lsn.val_, observed_reuse_lsn.val_, observed_capacity,
+          reuse_lsn.val_, (reuse_lsn + observed_capacity).val_, true, seek1402_capture().abort_scope);
+    }
     seek1402_capture().recover_space(total_len, lsn.val_, ref_reuse_lsn.val_,
         observed_reuse_lsn.val_, observed_capacity, reuse_lsn.val_,
         (reuse_lsn + observed_capacity).val_);

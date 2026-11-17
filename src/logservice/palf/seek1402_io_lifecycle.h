@@ -152,6 +152,13 @@ int seek1402_observe_callback_epoch(int64_t &epoch, Call call) {
   return result;
 }
 
+struct Seek1402SpacePoint {
+  uint64_t group_buffer = 0;
+  uint64_t value[8] = {};
+  bool abort_scope = false;
+  std::atomic<bool> ready{false};
+};
+
 struct Seek1402IOLifecycle {
   static constexpr uint64_t limit = 8192;
   static constexpr uint64_t closed = uint64_t{1} << 63;
@@ -164,6 +171,9 @@ struct Seek1402IOLifecycle {
   std::atomic<uint64_t> init_calls{0};
   std::atomic<uint64_t> batch_sequence{0};
   Seek1402IONotify notify;
+  Seek1402SpacePoint space_points[limit];
+  std::atomic<uint64_t> space_gate{0};
+  bool space_enabled = false;
   std::atomic<bool> multiple_envs{false};
   const char *path;
   char run_id[129] = {};
@@ -179,6 +189,8 @@ struct Seek1402IOLifecycle {
         run_id[count] = c;
       }
       identity_ready = count > 0 && identity[count] == '\0';
+      const char *space_option = std::getenv("SEEK1402_SPACE_CAPTURE");
+      space_enabled = identity_ready && space_option != nullptr && std::strcmp(space_option, "1") == 0;
     }
   }
   bool enabled() const { return path != nullptr && *path != '\0' && identity_ready; }
@@ -205,6 +217,26 @@ struct Seek1402IOLifecycle {
         slot->lsn = lsn;
         slot->length = length;
         return slot;
+      }
+    }
+  }
+  void record_space_comparison(uintptr_t buffer, uint64_t size, uint64_t lsn,
+                               uint64_t committed, uint64_t reuse, uint64_t capacity,
+                               uint64_t base, uint64_t upper, bool passed, bool abort_scope) {
+    if (!space_enabled || !enabled()) return;
+    uint64_t state = space_gate.load(std::memory_order_acquire);
+    for (;;) {
+      if (state & (closed | overflow)) return;
+      if ((state & count_mask) == limit) {
+        if (space_gate.compare_exchange_weak(state, state | overflow)) return;
+      } else if (space_gate.compare_exchange_weak(state, state + 1)) {
+        auto &point = space_points[state];
+        point.group_buffer = buffer;
+        const uint64_t values[8] = {size, lsn, committed, reuse, capacity, base, upper, passed ? 1UL : 0UL};
+        for (int i = 0; i < 8; ++i) point.value[i] = values[i];
+        point.abort_scope = abort_scope;
+        point.ready.store(true, std::memory_order_release);
+        return;
       }
     }
   }
@@ -301,7 +333,9 @@ struct Seek1402IOLifecycle {
     }
     ok = !std::ferror(file) && ok;
     ok = std::fclose(file) == 0 && ok;
-    return ok && identity_ready && unfinished == 0 && !(state & overflow) && !multiple_envs.load() && notify.lost.load() == 0;
+    // Space points require raw decoding; this text exporter does not serialize them.
+    return ok && !space_enabled && identity_ready && unfinished == 0 && !(state & overflow) &&
+        !multiple_envs.load() && notify.lost.load() == 0;
   }
 };
 static_assert(sizeof(Seek1402IOLifecycle) <= 4 * 1024 * 1024,
@@ -349,13 +383,20 @@ inline Seek1402IOLifecycle *seek1402_create_mapped_capture(const char *raw_path)
   SEEK1402_CAPTURE_OFFSET(gate);
   SEEK1402_CAPTURE_OFFSET(init_calls);
   SEEK1402_CAPTURE_OFFSET(multiple_envs);
+  SEEK1402_CAPTURE_OFFSET(space_gate);
+  SEEK1402_CAPTURE_OFFSET(space_enabled);
+  SEEK1402_CAPTURE_OFFSET(space_points);
   append("\"notify_requested\":%zu,\"notify_attempts\":%zu,\"notify_sent\":%zu,\"notify_lost\":%zu,",
          offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, requested),
          offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, attempts),
          offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, sent),
          offsetof(Seek1402IOLifecycle, notify) + offsetof(Seek1402IONotify, lost));
 #undef SEEK1402_CAPTURE_OFFSET
-  append("\"slots\":%zu},\"slot_offsets\":{", offsetof(Seek1402IOLifecycle, slots));
+  append("\"slots\":%zu},\"space_point_bytes\":%zu,\"space_offsets\":{"
+         "\"group_buffer\":%zu,\"value\":%zu,\"abort_scope\":%zu,\"ready\":%zu},\"slot_offsets\":{",
+         offsetof(Seek1402IOLifecycle, slots), sizeof(Seek1402SpacePoint),
+         offsetof(Seek1402SpacePoint, group_buffer), offsetof(Seek1402SpacePoint, value),
+         offsetof(Seek1402SpacePoint, abort_scope), offsetof(Seek1402SpacePoint, ready));
 #define SEEK1402_SLOT_OFFSET(field) append("\"" #field "\":%zu,", offsetof(Seek1402IOSlot, field))
   SEEK1402_SLOT_OFFSET(epoch); SEEK1402_SLOT_OFFSET(lsn); SEEK1402_SLOT_OFFSET(length);
   SEEK1402_SLOT_OFFSET(batch_group); SEEK1402_SLOT_OFFSET(batch_member); SEEK1402_SLOT_OFFSET(batch_size);
