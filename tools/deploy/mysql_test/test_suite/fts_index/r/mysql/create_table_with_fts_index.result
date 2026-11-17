@@ -270,4 +270,3 @@ DROP TABLE fts_char_binary;
 DROP TABLE IF EXISTS table_create_with_ik;
 CREATE TABLE table_create_with_ik(a CHAR(255), FULLTEXT(a) WITH PARSER ik);
 DROP TABLE table_create_with_ik;
-ERROR HY000: Too many partitions (including subpartitions) were defined
