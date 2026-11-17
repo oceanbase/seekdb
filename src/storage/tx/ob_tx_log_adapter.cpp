@@ -15,6 +15,7 @@
  */
 
 #include "logservice/palf/seek1402_deferred_capture.h"
+#include "logservice/palf/seek1402_io_lifecycle.h"
 #include "ob_tx_log_adapter.h"
 #include "src/storage/ls/ob_ls.h"
 
@@ -84,7 +85,8 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
       block_flag = false;
     }
     palf::Seek1402Capture &capture = palf::seek1402_capture();
-    capture.begin();
+    const auto &io_capture = palf::seek1402_io_lifecycle();
+    capture.begin(io_capture.enabled() && io_capture.space_enabled && !io_capture.space_config_error);
     do {
       if (is_big_log && OB_FAIL(log_handler_->append_big_log(buf, size, base_scn, block_flag,
                                                               cb, lsn, scn))) {
@@ -129,13 +131,24 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
           "v2", event.value[2], "v3", event.value[3], "v4", event.value[4],
           "v5", event.value[5], "v6", event.value[6], "v7", event.value[7]);
     }
-    if (capture.first_space_present) {
+    if (capture.abort_scope && capture.first_space_present) {
       const auto &event = capture.first_space;
       TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC first space comparison", KP(cb), K(size),
           "space_call_id", capture.space_call_id,
           "v0", event.value[0], "v1", event.value[1], "v2", event.value[2],
           "v3", event.value[3], "v4", event.value[4], "v5", event.value[5],
           "v6", event.value[6], "passed", event.value[7],
+          K(diagnostic_begin_us), K(diagnostic_end_us));
+    }
+    if (!capture.abort_scope && capture.bind_nonabort_space && capture.first_space_present &&
+        capture.space_call_id > 0 && capture.space_call_id <= palf::Seek1402IOLifecycle::limit) {
+      // One binding per retained first call; rejection/recovery telemetry remains ABORT-only.
+      const auto &event = capture.first_space;
+      TRANS_LOG(INFO, "SEEK1402_DIAGNOSTIC submit space binding", KP(cb), K(size),
+          "space_call_id", capture.space_call_id, "scope_abort", false,
+          "v0", event.value[0], "v1", event.value[1], "v2", event.value[2],
+          "v3", event.value[3], "v4", event.value[4], "v5", event.value[5],
+          "v6", event.value[6], "passed", event.value[7], K(ret),
           K(diagnostic_begin_us), K(diagnostic_end_us));
     }
     if (capture.recovery_present) {

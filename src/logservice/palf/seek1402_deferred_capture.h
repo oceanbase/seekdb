@@ -14,6 +14,7 @@ struct Seek1402Capture {
   Record records[8];
   Record first_space;
   bool first_space_present = false;
+  bool bind_nonabort_space = false;
   uint64_t space_call_id = 0;
   Record recovery;
   bool recovery_present = false;
@@ -23,9 +24,9 @@ struct Seek1402Capture {
   uint64_t kind_total[4] = {};
   int64_t first[4];
   int64_t last[4];
-  void begin() {
+  void begin(bool bind_space = false) {
     count = 0; dropped = 0; total = 0; active = abort_scope;
-    first_space_present = false; space_call_id = 0;
+    first_space_present = false; space_call_id = 0; bind_nonabort_space = bind_space;
     recovery_present = false; recovery_after_observed = 0;
     for (int64_t k = 0; k < 4; ++k) {
       kind_total[k] = 0; first[k] = -1; last[k] = -1;
@@ -34,7 +35,7 @@ struct Seek1402Capture {
   void first_space_comparison(uint64_t size, uint64_t lsn, uint64_t committed,
                               uint64_t reuse, uint64_t capacity, uint64_t base,
                               uint64_t upper, bool passed) {
-    if (active && admission_scope && !first_space_present) {
+    if ((active || bind_nonabort_space) && admission_scope && !first_space_present) {
       first_space = {2, {size,lsn,committed,reuse,capacity,base,upper,passed ? 1UL : 0UL}};
       first_space_present = true;
     }
