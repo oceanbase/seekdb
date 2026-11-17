@@ -1245,9 +1245,12 @@ int ObPushdownFilterExecutor::find_evaluated_datums(
     ObExpr *expr, const ObIArray<ObExpr*> &calc_exprs, ObIArray<ObExpr*> &eval_exprs)
 {
   int ret = OB_SUCCESS;
-  if (is_contain(calc_exprs, expr)) {
+  const bool is_calc_expr = is_contain(calc_exprs, expr);
+  if (is_calc_expr) {
     if (OB_FAIL(eval_exprs.push_back(expr))) {
     }
+  }
+  if (OB_SUCC(ret) && (is_calc_expr || T_OP_ROW == expr->type_)) {
     for (uint32_t i = 0; i < expr->arg_cnt_ && OB_SUCC(ret); ++i) {
       if (OB_FAIL(find_evaluated_datums(expr->args_[i], calc_exprs, eval_exprs))) {
       }
