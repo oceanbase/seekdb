@@ -229,9 +229,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
 {
   int ret = OB_SUCCESS;
   ObString model_name;
-  
-  ObSchemaGetterGuard schema_guard;
-  const ObAiModelSchema *ai_model_schema = nullptr;
+
   query::ObIRootCommandService *root_commands =
       OB_ISNULL(ctx.exec_ctx_) ? nullptr
                                : ctx.exec_ctx_->get_root_command_service();
@@ -253,13 +251,6 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
     ret = OB_AI_FUNC_PARAM_EMPTY;
     ObString var_name = "PARAMS";
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, var_name.length(), var_name.ptr());
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-  } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
-  } else if (OB_NOT_NULL(ai_model_schema)) {
-    ret = OB_AI_FUNC_MODEL_EXISTS;
-    LOG_USER_ERROR(OB_AI_FUNC_MODEL_EXISTS, model_name.length(), model_name.ptr());
   } else if (OB_ISNULL(ctx.exec_ctx_)) {
     ret =  OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(ctx.exec_ctx_->get_sql_ctx())) {
@@ -289,9 +280,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
 {
   int ret = OB_SUCCESS;
   ObString model_name;
-  
-  ObSchemaGetterGuard schema_guard;
-  const ObAiModelSchema *ai_model_schema = nullptr;
+
   query::ObIRootCommandService *root_commands =
       OB_ISNULL(ctx.exec_ctx_) ? nullptr
                                : ctx.exec_ctx_->get_root_command_service();
@@ -309,13 +298,6 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
     ret = OB_AI_FUNC_PARAM_EMPTY;
     ObString var_name = "name";
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, var_name.length(), var_name.ptr());
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-  } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
-  } else if (OB_ISNULL(ai_model_schema)) {
-    ret = OB_AI_FUNC_MODEL_NOT_FOUND;
-    LOG_USER_ERROR(OB_AI_FUNC_MODEL_NOT_FOUND, model_name.length(), model_name.ptr());
   } else if (OB_ISNULL(ctx.exec_ctx_)) {
     ret =  OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(ctx.exec_ctx_->get_sql_ctx())) {
