@@ -385,7 +385,7 @@ END_P SET_VAR DELIMITER
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
 %type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
-%type <node> copy_stmt copy_option_list copy_option_item copy_option_kw copy_option_val
+%type <node> copy_stmt copy_opts copy_option copy_option_kw copy_option_val
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
 %type <node> case_arg when_clause_list when_clause case_default
@@ -12322,7 +12322,7 @@ EXPLAIN {$$ = NULL;}
    the file. The options of the copy are the names and the values of the
    options, they are grouped by the resolver. */
 copy_stmt:
-COPY '(' select_no_parens ')' TO STRING_VALUE '(' copy_option_list ')'
+COPY '(' select_no_parens ')' TO STRING_VALUE '(' copy_opts ')'
 {
   ParseNode *format_list = NULL;
   merge_nodes(format_list, result, T_EXTERNAL_FILE_FORMAT, $8);
@@ -12338,20 +12338,25 @@ COPY '(' select_no_parens ')' TO STRING_VALUE '(' copy_option_list ')'
 }
 ;
 
-copy_option_list:
-copy_option_item
+copy_opts:
+copy_option
 {
   $$ = $1;
 }
-| copy_option_list ',' copy_option_item
+| copy_opts opt_comma copy_option
 {
+  (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
 }
 ;
 
-copy_option_item:
+copy_option:
 copy_option_kw
-| copy_option_val
+| copy_option_kw copy_option_val
+{
+  // The name of the option and the value of the option.
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $2);
+}
 ;
 
 copy_option_kw:
