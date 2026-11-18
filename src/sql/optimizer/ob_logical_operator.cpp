@@ -3729,6 +3729,11 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
         LOG_WARN("failed to check adaptive task splitting");
       }
 
+      if (OB_SUCC(ret) && ctx.force_partition()) {
+        // This GI consumes the scan's local request; siblings still need their own GI.
+        ctx.reset_state();
+      }
+
       LOG_TRACE("succ to allocate granule iterator nodes above operator", K(get_name()),
                 K(get_cost()), K(get_card()), K(ctx.is_in_pw_affinity_state()),
                 K(ctx.is_in_partition_wise_state()));

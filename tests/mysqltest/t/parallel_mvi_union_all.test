@@ -1,0 +1,26 @@
+# Verify partition granule allocation for both branches of UNION ALL.
+--disable_query_log
+SET ob_enable_aggregation_pushdown=true;
+--disable_warnings
+DROP TABLE IF EXISTS parallel_mvi_union_all;
+--enable_warnings
+CREATE TABLE parallel_mvi_union_all(id INT,p INT,c SMALLINT,j JSON,a ARRAY(INT),n ARRAY(ARRAY(ARRAY(ARRAY(SMALLINT)))),m MAP(INT,ARRAY(TINYINT)),PRIMARY KEY(id,p),INDEX mv((CAST(j->'$[*]' AS UNSIGNED ARRAY)))) PARTITION BY HASH(p) PARTITIONS 4;
+INSERT INTO parallel_mvi_union_all VALUES(1,1,1,'[1,2]',[1,2],[[[[1,2]]]],map(1,[1,2])),(2,2,2,'[1,2]',[1,2],[[[[1,2]]]],map(1,[1,2])),(3,3,3,'[1,2]',[3],[[[[3]]]],map(2,[3])),(4,4,4,'[1,2]',NULL,NULL,NULL),(5,5,5,'[1,2]',NULL,NULL,NULL);
+
+--echo partitioned_union_all_preserves_duplicates
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ a FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ a FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>=0) AS q;
+
+# The branch tags verify that each multivalue-index scan contributes five rows.
+--echo partitioned_union_all_raw_scalar_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,c FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,c FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_union_all_raw_array_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,a FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,a FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_union_all_raw_map_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,m FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,m FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+DROP TABLE parallel_mvi_union_all;
