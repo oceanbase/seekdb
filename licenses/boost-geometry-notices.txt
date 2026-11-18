@@ -1,0 +1,71 @@
+Source: src/share/geo/ob_geo_area_geographic.h
+
+// The strategy body below is adapted from Boost.Geometry:
+//
+// Boost.Geometry (aka GGL, Generic Geometry Library)
+//
+// Copyright (c) 2017 Adam Wulkiewicz, Lodz, Poland.
+//
+// Copyright (c) 2016-2018 Oracle and/or its affiliates.
+// Contributed and/or modified by Vissarion Fisikopoulos, on behalf of Oracle
+// Contributed and/or modified by Adam Wulkiewicz, on behalf of Oracle
+//
+// Use, modification and distribution is subject to the Boost Software License,
+// Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+// The andoyer inverse body below is adapted from Boost.Geometry:
+//
+// Copyright (c) 2018 Adam Wulkiewicz, Lodz, Poland.
+// Copyright (c) 2015-2020 Oracle and/or its affiliates.
+//
+// Use, modification and distribution is subject to the Boost Software License,
+// Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+Source: src/share/geo/ob_geo_buffer_join_round.h
+// This file is a modified copy of Boost.Geometry's
+// boost/geometry/strategies/cartesian/buffer_join_round.hpp at Boost 1.74.
+// The original is:
+//
+//   Copyright (c) 2012-2015 Barend Gehrels, Amsterdam, the Netherlands.
+//
+//   This file was modified by Oracle on 2015.
+//   Modifications copyright (c) 2015, Oracle and/or its affiliates.
+//
+//   Contributed and/or modified by Menelaos Karavelas, on behalf of Oracle
+//
+//   Use, modification and distribution is subject to the Boost Software
+//   License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//   http://www.boost.org/LICENSE_1_0.txt)
+//
+// Modification (OceanBase): the general-angle trigonometric calls inside
+// generate_points use oceanbase::math_compat::cos/sin instead of the C library
+// so every platform follows the same unified binary64 math path. Angle
+// normalization, ceil/max step count, promoted type selection,
+// equal-perpendicular handling, absolute distance, point push order and
+// max_distance are unchanged.
+
+
+Source: src/share/geo/ob_geo_buffer_point_circle.h
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * This file is a modified copy of Boost.Geometry's
+ * boost/geometry/strategies/cartesian/buffer_point_circle.hpp at Boost 1.74.
+ * The original is:
+ *
+ *   Copyright (c) 2012-2015 Barend Gehrels, Amsterdam, the Netherlands.
+ *
+ *   This file was modified by Oracle on 2015, 2018.
+ *   Modifications copyright (c) 2015, 2018, Oracle and/or its affiliates.
+ *
+ *   Contributed and/or modified by Menelaos Karavelas, on behalf of Oracle
+ *   Contributed and/or modified by Adam Wulkiewicz, on behalf of Oracle
+ *
+ *   Use, modification and distribution is subject to the Boost Software
+ *   License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+ *   http://www.boost.org/LICENSE_1_0.txt)
+ */
+
+
