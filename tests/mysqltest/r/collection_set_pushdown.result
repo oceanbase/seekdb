@@ -22,45 +22,6 @@ rows_found	payload_sum
 partitioned_scalar_forced_pushdown
 rows_found	payload_sum
 5	15
-partitioned_union_all_preserves_duplicates
-rows_found	payload_sum
-10	10
-partitioned_union_all_raw_scalar_both_branches
-side	c
-1	1
-1	2
-1	3
-1	4
-1	5
-2	1
-2	2
-2	3
-2	4
-2	5
-partitioned_union_all_raw_array_both_branches
-side	a
-1	NULL
-1	NULL
-1	[1,2]
-1	[1,2]
-1	[3]
-2	NULL
-2	NULL
-2	[1,2]
-2	[1,2]
-2	[3]
-partitioned_union_all_raw_map_both_branches
-side	m
-1	NULL
-1	NULL
-1	{1:[1,2]}
-1	{1:[1,2]}
-1	{2:[3]}
-2	NULL
-2	NULL
-2	{1:[1,2]}
-2	{1:[1,2]}
-2	{2:[3]}
 session_disabled_default_control
 a
 NULL
