@@ -32,6 +32,7 @@ pub(crate) const MYSQL_TYPE_COMPLEX: u32 = 160;
 const MYSQL_TYPE_NOT_DEFINED: u32 = 65_535;
 
 pub(crate) use crate::capability::{CLIENT_PROTOCOL_41, CLIENT_SESSION_TRACK, CLIENT_TRANSACTIONS};
+pub(crate) const SERVER_MORE_RESULTS_EXISTS: u16 = 1 << 3;
 pub(crate) const SERVER_SESSION_STATE_CHANGED: u16 = 1 << 14;
 
 const SESSION_TRACK_SYSTEM_VARIABLES: u8 = 0x00;

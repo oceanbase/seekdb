@@ -47,6 +47,7 @@ pub(crate) struct ResponseWriter {
     pub(crate) active_generation: u64,
     pub(crate) next_mysql_seq: u8,
     pub(crate) batch: Vec<u8>,
+    pub(crate) last_publication: Option<Instant>,
 }
 
 impl ResponseWriter {
@@ -55,6 +56,7 @@ impl ResponseWriter {
             active_generation: 0,
             next_mysql_seq: 0,
             batch: Vec::new(),
+            last_publication: None,
         }
     }
 
@@ -64,6 +66,7 @@ impl ResponseWriter {
         }
         self.active_generation = generation;
         self.next_mysql_seq = next_mysql_seq;
+        self.last_publication = None;
         true
     }
 
@@ -71,7 +74,16 @@ impl ResponseWriter {
         generation != 0 && self.active_generation == generation
     }
 
+    pub(crate) fn should_publish_progress(&self) -> bool {
+        // Coalesce fast statement completions, but publish the first result and
+        // regularly expose real progress in a slow multi-statement request.
+        // This is checked at statement completion, not a heartbeat or timer.
+        self.last_publication
+            .is_none_or(|published| published.elapsed() >= Duration::from_millis(1))
+    }
+
     pub(crate) fn clear_batch(&mut self) {
+        self.last_publication = None;
         self.batch.clear();
         if self.batch.capacity() > RETAINED_RESPONSE_CAPACITY.saturating_mul(4) {
             self.batch.shrink_to(RETAINED_RESPONSE_CAPACITY);

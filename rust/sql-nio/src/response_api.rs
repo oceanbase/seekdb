@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::response::SERVER_MORE_RESULTS_EXISTS;
 use crate::*;
 
 pub(crate) fn reserve_response_output(
@@ -35,6 +36,12 @@ pub(crate) fn append_response_locked(
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum ResponsePublication {
+    Buffered,
+    Progress,
+}
+
 /// # Safety
 /// `connection_handle` is null or is a live handle acquired for this
 /// connection and must not be released until this call returns. The semantic
@@ -43,6 +50,7 @@ pub(crate) unsafe fn append_encoded_response<F>(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     framed_len: *mut i64,
+    publication: ResponsePublication,
     mut encode: F,
 ) -> c_int
 where
@@ -119,7 +127,7 @@ where
             g.response.batch.truncate(old_len + actual_usize);
             g.response.next_mysql_seq = next_seq;
             unsafe { framed_len.write(actual) };
-            return 0;
+            break;
         }
         g.response.batch.truncate(old_len);
         if encode_rc != NIO_FRAME_NEED_MORE || actual <= headroom as i64 || next_seq != first_seq {
@@ -170,7 +178,42 @@ where
         }
         g.response.next_mysql_seq = next_seq;
         unsafe { framed_len.write(encoded) };
+        break;
+    }
+    if matches!(publication, ResponsePublication::Buffered)
+        || !g.response.should_publish_progress()
+    {
         return 0;
+    }
+    if !publish_response_batch_locked(conn, &mut g, generation, false) {
+        drop(g);
+        if conn.err.load(Ordering::Acquire) {
+            mark_connection_error(conn);
+        }
+        return -1;
+    }
+    // Try the nonblocking transport while the encoder already owns its lock.
+    // Small writable replies avoid a second lock and reactor registration.
+    if flush_buffer_locked(conn, &mut g) {
+        let failed = conn.err.load(Ordering::Acquire);
+        drop(g);
+        if failed {
+            mark_connection_error(conn);
+            return -1;
+        }
+        return 0;
+    }
+    let pending = g.outbuf.len().saturating_sub(g.out_pos);
+    // Snapshot interest under the same lock as publication: if the reactor
+    // disarms it next, it must first drain these newly published bytes.
+    let already_armed = g.want_write;
+    drop(g);
+    if pending >= RESPONSE_BATCH_TARGET {
+        drain_blocking_response(conn, generation)
+    } else if already_armed {
+        0
+    } else {
+        arm_progress_response(conn, generation)
     }
 }
 
@@ -645,6 +688,7 @@ pub unsafe fn nio_response_append_error(
             connection_handle,
             generation,
             framed_len,
+            ResponsePublication::Buffered,
             |buffer, len, seq, used, next| {
                 encode_mysql_error(
                     buffer,
@@ -683,6 +727,7 @@ pub unsafe fn nio_response_append_auth_switch(
             connection_handle,
             generation,
             framed_len,
+            ResponsePublication::Buffered,
             |buffer, len, seq, used, next| {
                 encode_mysql_auth_switch(
                     buffer,
@@ -717,6 +762,7 @@ pub unsafe fn nio_response_append_local_infile(
             connection_handle,
             generation,
             framed_len,
+            ResponsePublication::Buffered,
             |buffer, len, seq, used, next| {
                 encode_mysql_local_infile(buffer, len, filename, filename_len, seq, used, next)
             },
@@ -741,6 +787,7 @@ pub unsafe fn nio_response_append_string(
             connection_handle,
             generation,
             framed_len,
+            ResponsePublication::Buffered,
             |buffer, len, seq, used, next| {
                 encode_mysql_string(buffer, len, value, value_len, seq, used, next)
             },
@@ -760,11 +807,19 @@ pub unsafe fn nio_response_append_ok(
     ok_view: *const NioMysqlOkView,
     framed_len: *mut i64,
 ) -> c_int {
+    let publication = if unsafe { ok_view.as_ref() }
+        .is_some_and(|view| view.status_flags & SERVER_MORE_RESULTS_EXISTS != 0)
+    {
+        ResponsePublication::Progress
+    } else {
+        ResponsePublication::Buffered
+    };
     unsafe {
         append_encoded_response(
             connection_handle,
             generation,
             framed_len,
+            publication,
             |buffer, len, seq, used, next| encode_mysql_ok(buffer, len, ok_view, seq, used, next),
         )
     }
@@ -786,6 +841,7 @@ pub unsafe fn nio_response_append_field(
             connection_handle,
             generation,
             framed_len,
+            ResponsePublication::Buffered,
             |buffer, len, seq, used, next| {
                 encode_mysql_field(buffer, len, field_view, seq, used, next)
             },
@@ -810,6 +866,7 @@ pub unsafe fn nio_response_append_row(
             connection_handle,
             generation,
             framed_len,
+            ResponsePublication::Buffered,
             |buffer, len, seq, used, next| encode_mysql_row(buffer, len, row_view, seq, used, next),
         )
     }
@@ -833,6 +890,7 @@ pub unsafe fn nio_response_append_packed_row_blob(
             connection_handle,
             generation,
             framed_len,
+            ResponsePublication::Buffered,
             |buffer, len, seq, used, next| {
                 frame_mysql_packed_row_blob(buffer, len, blob, blob_len, seq, used, next)
             },
@@ -842,6 +900,20 @@ pub unsafe fn nio_response_append_packed_row_blob(
 
 pub(crate) fn publish_response_batch(conn: &Arc<Conn>, generation: u64, is_final: bool) -> bool {
     let mut g = conn.mu.lock().unwrap();
+    let published = publish_response_batch_locked(conn, &mut g, generation, is_final);
+    drop(g);
+    if !published && conn.err.load(Ordering::Acquire) {
+        mark_connection_error(conn);
+    }
+    published
+}
+
+pub(crate) fn publish_response_batch_locked(
+    conn: &Arc<Conn>,
+    g: &mut ConnInner,
+    generation: u64,
+    is_final: bool,
+) -> bool {
     debug_assert!(
         g.tls.as_ref().is_none_or(|t| !t.conn.is_handshaking()),
         "response staged during a TLS handshake"
@@ -854,6 +926,7 @@ pub(crate) fn publish_response_batch(conn: &Arc<Conn>, generation: u64, is_final
         return false;
     }
     let mut batch = std::mem::take(&mut g.response.batch);
+    let has_bytes = !batch.is_empty();
     let append_result: Result<(), TryReserveError> = if batch.is_empty() {
         Ok(())
     } else if !g.req_compressed && g.output_is_empty() {
@@ -861,7 +934,7 @@ pub(crate) fn publish_response_batch(conn: &Arc<Conn>, generation: u64, is_final
         std::mem::swap(&mut g.outbuf, &mut batch);
         Ok(())
     } else {
-        append_response_locked(&mut g, &batch)
+        append_response_locked(g, &batch)
     };
     batch.clear();
     if batch.capacity() > RETAINED_RESPONSE_CAPACITY.saturating_mul(4) {
@@ -871,14 +944,29 @@ pub(crate) fn publish_response_batch(conn: &Arc<Conn>, generation: u64, is_final
     if append_result.is_err() {
         conn.err.store(true, Ordering::Release);
         g.clear_output();
-        drop(g);
-        mark_connection_error(conn);
         return false;
+    }
+    if has_bytes {
+        g.response.last_publication = Some(Instant::now());
     }
     if is_final {
         g.final_response = FinalResponseState::Staged { generation };
     }
     true
+}
+
+// Arm the existing reactor without turning intermediate publication into final
+// request completion. Only a newly armed interest needs a wakeup.
+pub(crate) fn arm_progress_response(conn: &Arc<Conn>, generation: u64) -> c_int {
+    if !arm_writable(conn, Some(generation)) {
+        return -1;
+    }
+    if conn.waker.wake().is_err() {
+        mark_connection_error(conn);
+        -1
+    } else {
+        0
+    }
 }
 
 pub(crate) fn drain_blocking_response(conn: &Arc<Conn>, generation: u64) -> c_int {
