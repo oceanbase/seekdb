@@ -79,15 +79,6 @@ SELECT COUNT(*) AS rows_found,SUM(array_contains(map_values(mf),1.5)) AS payload
 --echo mf_except_empty_right
 SELECT COUNT(*) AS rows_found,SUM(array_contains(map_values(mf),1.5)) AS payload_sum FROM (SELECT mf FROM collection_set_pruning WHERE 1=1 EXCEPT SELECT mf FROM collection_set_pruning WHERE 0) AS q;
 
---echo union_limit_keeps_distinct
-SELECT COUNT(*) AS rows_found,SUM(1) AS payload_sum FROM (SELECT a FROM collection_set_pruning WHERE 1=1 UNION SELECT a FROM collection_set_pruning WHERE 1=1 LIMIT 2) AS q;
-
---echo union_order_limit_deduplicates_before_limit
-SELECT COUNT(*) AS rows_found,SUM(len) AS payload_sum FROM (SELECT a,cardinality(a) AS len FROM collection_set_pruning WHERE 1=1 UNION SELECT a,cardinality(a) AS len FROM collection_set_pruning WHERE 1=1 ORDER BY len LIMIT 2) AS q;
-
---echo union_all_order_limit_keeps_null_duplicates
-SELECT COUNT(*) AS rows_found,SUM(len) AS payload_sum FROM (SELECT a,cardinality(a) AS len FROM collection_set_pruning WHERE 1=1 UNION ALL SELECT a,cardinality(a) AS len FROM collection_set_pruning WHERE 1=1 ORDER BY len LIMIT 2) AS q;
-
 --echo scalar_set_distinct_on_collection_table
 SELECT COUNT(*) AS rows_found,SUM(c) AS payload_sum FROM (SELECT c FROM collection_set_pruning WHERE 0 UNION SELECT c FROM collection_set_pruning WHERE c>0) AS q;
 

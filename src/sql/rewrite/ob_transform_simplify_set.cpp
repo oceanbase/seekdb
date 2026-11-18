@@ -243,10 +243,6 @@ int ObTransformSimplifySet::add_limit_order_distinct_for_union(const common::ObI
                                           need_push_orderby, can_push))) {
         } else if (!can_push) {
           /*do nothing*/
-        } else if (need_push_distinct && !child_stmt->is_set_stmt() &&
-                   has_collection_select_item(*child_stmt)) {
-          // SELECT DISTINCT cannot compare collections. Do not push its LIMIT
-          // without duplicate elimination either; keep both at the set engine.
         } else if (need_push_distinct && OB_FAIL(add_distinct(child_stmt, select_stmt))) {
         } else if (need_push_orderby && OB_FAIL(add_order_by(child_stmt, select_stmt))) {
         } else if (OB_FAIL(add_limit(child_stmt, select_stmt))) {

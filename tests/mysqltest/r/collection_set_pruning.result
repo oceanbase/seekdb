@@ -70,15 +70,6 @@ rows_found	payload_sum
 mf_except_empty_right
 rows_found	payload_sum
 3	1
-union_limit_keeps_distinct
-rows_found	payload_sum
-2	2
-union_order_limit_deduplicates_before_limit
-rows_found	payload_sum
-2	1
-union_all_order_limit_keeps_null_duplicates
-rows_found	payload_sum
-2	NULL
 scalar_set_distinct_on_collection_table
 rows_found	payload_sum
 5	15

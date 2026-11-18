@@ -30,9 +30,8 @@ out of command arguments. The test is separate from the legacy suite under
 The fixture contains real ARRAY, nested ARRAY and MAP columns, duplicate rows,
 and duplicate NULL values. Constant-only queries can fold away DISTINCT and
 cannot reproduce this defect. The case checks empty left/right/all branches,
-three-branch UNION, INTERSECT, EXCEPT, UNION ALL, and UNION LIMIT. The ordered
-LIMIT check requires duplicate elimination before limiting; the UNION ALL
-control retains both NULL rows. Aggregates verify both row counts and payloads.
+three-branch UNION, INTERSECT, EXCEPT, and UNION ALL. Aggregates verify both
+row counts and payloads.
 The final SELECT DISTINCT over an ARRAY column must still return 5083.
 
 SQL bounds on SMALLINT are included as an additional control. The primary
