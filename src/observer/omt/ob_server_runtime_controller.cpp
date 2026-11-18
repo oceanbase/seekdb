@@ -861,14 +861,16 @@ int ObServerRuntimeController::refresh_server_config_()
     periodically_check_runtime_();
   }
 
-  FLOG_INFO("refresh runtime resource config", K(runtime_config), KR(ret));
-
-  // Keep the log allocator sizing aligned with the current runtime memory budget.
-  int tmp_ret = OB_SUCCESS;
-  if (OB_SUCCESS != (tmp_ret = LOG_ALLOCATOR_MGR_INSTANCE.update_memory_limit(runtime_config))) {
+  if (OB_SERVER_RUNTIME_NOT_READY == ret && !has_synced()) {
+    LOG_DEBUG("defer resource refresh until the server runtime is ready", KR(ret));
+  } else {
+    FLOG_INFO("refresh runtime resource config", K(runtime_config), KR(ret));
+    if (OB_SUCC(ret)) {
+      // Keep the log allocator sizing aligned with the current runtime memory budget.
+      IGNORE_RETURN LOG_ALLOCATOR_MGR_INSTANCE.update_memory_limit(runtime_config);
+    }
+    FLOG_INFO("refresh runtime config", K(ret));
   }
-
-  FLOG_INFO("refresh runtime config", K(ret));
 
   return ret;
 }
