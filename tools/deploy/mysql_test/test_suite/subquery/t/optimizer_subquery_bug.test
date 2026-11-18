@@ -510,3 +510,34 @@ WHERE JOIN_A.pk in (
     );
 
 drop table case_partition_10_parent, case_partition_10_set_null_parent, case6_grandparent1;
+
+# SEEK-1428 / SEEK-1468: preserve window and set-query ownership during rewrite.
+--disable_query_log
+--explain_protocol 0
+--result_format 1
+--disable_warnings
+DROP TABLE IF EXISTS seek1428_l, seek1428_r;
+--enable_warnings
+CREATE TABLE seek1428_l(id INT PRIMARY KEY,n INT);
+CREATE TABLE seek1428_r(n INT);
+INSERT INTO seek1428_l VALUES (1,1),(2,2),(3,3);
+INSERT INTO seek1428_r VALUES (2),(3);
+--echo Window value IN subquery
+SELECT n, IF(LEAD(n) OVER(ORDER BY n) IN (SELECT n FROM seek1428_r),1,0) AS matched FROM seek1428_l ORDER BY n;
+--echo Wrapped window value IN subquery
+SELECT n, IF(CAST(LEAD(n) OVER(ORDER BY n) AS SIGNED) IN (SELECT n FROM seek1428_r),1,0) AS matched FROM seek1428_l ORDER BY n;
+--echo STD expansion retains window ownership
+SELECT n, IF(STD(n) OVER() IN (SELECT n FROM seek1428_r),1,0) AS matched FROM seek1428_l ORDER BY n;
+--echo Other window expressions retain membership semantics
+SELECT n, IF(SUM(n) OVER(ORDER BY n) IN (SELECT n FROM seek1428_r),1,0) AS matched FROM seek1428_l ORDER BY n;
+--echo Non-window IN remains supported
+SELECT n, IF(n IN (SELECT n FROM seek1428_r),1,0) AS matched FROM seek1428_l ORDER BY n;
+--echo Filter query remains supported
+SELECT id FROM seek1428_l l WHERE 70 <> ANY(SELECT SUM(r.n) FROM seek1428_r r WHERE r.n < l.n LIMIT 39) ORDER BY id;
+--echo Non-scalar query inside aggregate before view separation
+SELECT SUM(IF(70 <> ANY(SELECT SUM(r.n) FROM seek1428_r r WHERE r.n < l.n LIMIT 39),l.n,l.n+1)) AS total FROM seek1428_l l;
+--echo Non-scalar query inside UPDATE assignment
+UPDATE seek1428_l l SET n=CASE WHEN 70 <> ANY(SELECT SUM(r.n) FROM seek1428_r r WHERE r.n < l.n LIMIT 39) THEN NULL ELSE NULL END;
+SELECT id,n FROM seek1428_l ORDER BY id;
+DROP TABLE seek1428_l, seek1428_r;
+--enable_query_log
