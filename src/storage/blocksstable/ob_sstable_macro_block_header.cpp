@@ -132,7 +132,8 @@ bool ObSSTableMacroBlockHeader::FixedHeader::is_valid() const
       && micro_block_data_offset_ > 0
       && micro_block_data_size_ > 0
       && data_checksum_ >= 0
-      && compressor_type_ > ObCompressorType::INVALID_COMPRESSOR;
+      && compressor_type_ > ObCompressorType::INVALID_COMPRESSOR
+      && compressor_type_ < ObCompressorType::MAX_COMPRESSOR;
 }
 
 void ObSSTableMacroBlockHeader::FixedHeader::reset()
