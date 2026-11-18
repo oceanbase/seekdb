@@ -466,14 +466,14 @@ pub mod ffi {
             status_flags: u16,
             packet_count: *mut i64,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_result_header"]
         unsafe fn nio_response_append_result_header(
             connection_handle: *mut NioConnectionHandle,
             generation: u64,
             field_count: u64,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_eof"]
         unsafe fn nio_response_append_eof(
             connection_handle: *mut NioConnectionHandle,
@@ -482,7 +482,7 @@ pub mod ffi {
             warnings: u16,
             status_flags: u16,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_prepare_ok"]
         unsafe fn nio_response_append_prepare_ok(
             connection_handle: *mut NioConnectionHandle,
@@ -492,7 +492,7 @@ pub mod ffi {
             parameter_count: u16,
             warnings: u16,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_error"]
         unsafe fn nio_response_append_error(
             connection_handle: *mut NioConnectionHandle,
@@ -503,7 +503,7 @@ pub mod ffi {
             message: *const c_char,
             message_len: i64,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_auth_switch"]
         unsafe fn nio_response_append_auth_switch(
             connection_handle: *mut NioConnectionHandle,
@@ -513,7 +513,7 @@ pub mod ffi {
             scramble: *const c_char,
             scramble_len: i64,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_local_infile"]
         unsafe fn nio_response_append_local_infile(
             connection_handle: *mut NioConnectionHandle,
@@ -521,7 +521,7 @@ pub mod ffi {
             filename: *const c_char,
             filename_len: i64,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_string"]
         unsafe fn nio_response_append_string(
             connection_handle: *mut NioConnectionHandle,
@@ -529,28 +529,28 @@ pub mod ffi {
             value: *const c_char,
             value_len: i64,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_ok"]
         unsafe fn nio_response_append_ok(
             connection_handle: *mut NioConnectionHandle,
             generation: u64,
             ok_view: *const NioMysqlOkView,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_field"]
         unsafe fn nio_response_append_field(
             connection_handle: *mut NioConnectionHandle,
             generation: u64,
             field_view: *const NioMysqlFieldView,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_row"]
         unsafe fn nio_response_append_row(
             connection_handle: *mut NioConnectionHandle,
             generation: u64,
             row_view: *const NioMysqlRowView,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_append_packed_row_blob"]
         unsafe fn nio_response_append_packed_row_blob(
             connection_handle: *mut NioConnectionHandle,
@@ -558,13 +558,13 @@ pub mod ffi {
             blob: *const c_char,
             blob_len: i64,
             framed_len: *mut i64,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "response_flush"]
         unsafe fn nio_response_flush(
             connection_handle: *mut NioConnectionHandle,
             generation: u64,
             is_final: i32,
-        ) -> i32;
+        ) -> ResponseStatus;
         #[cxx_name = "encode_mysql_packed_row_blob"]
         unsafe fn nio_encode_mysql_packed_row_blob(
             buffer: *mut c_char,

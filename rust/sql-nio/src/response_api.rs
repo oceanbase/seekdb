@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::bridge::ffi::ResponseStatus;
 use crate::*;
 
 /// Failure of the response producer, distinct from an encoder's frame status.
@@ -22,11 +23,11 @@ enum ResponseError {
 }
 
 impl ResponseError {
-    fn status(self) -> c_int {
+    fn status(self) -> ResponseStatus {
         match self {
-            Self::ConnectionClosed => ffi::ResponseStatus::ConnectionClosed.repr,
-            Self::InvalidState => ffi::ResponseStatus::Error.repr,
-            Self::AllocationFailed => ffi::ResponseStatus::AllocationFailed.repr,
+            Self::ConnectionClosed => ResponseStatus::ConnectionClosed,
+            Self::InvalidState => ResponseStatus::Error,
+            Self::AllocationFailed => ResponseStatus::AllocationFailed,
         }
     }
 }
@@ -74,17 +75,17 @@ pub(crate) unsafe fn append_encoded_response<F>(
     generation: u64,
     framed_len: *mut i64,
     mut encode: F,
-) -> c_int
+) -> ResponseStatus
 where
     F: FnMut(*mut c_char, i64, u8, *mut i64, *mut u8) -> c_int,
 {
     if framed_len.is_null() {
-        return -1;
+        return ResponseStatus::Error;
     }
     let conn = match unsafe { connection_handle.as_ref() } {
         Some(handle) if !handle.conn.close_notified.load(Ordering::Acquire) => &handle.conn,
-        None => return -1,
-        Some(_) => return ResponseError::ConnectionClosed.status(),
+        None => return ResponseStatus::Error,
+        Some(_) => return ResponseStatus::ConnectionClosed,
     };
     let mut g = conn.mu.lock().unwrap();
     if let Err(error) = validate_response(conn, &g, generation) {
@@ -142,22 +143,22 @@ where
                 Ok(actual) if actual > 0 && actual <= headroom => actual,
                 _ => {
                     g.response.batch.truncate(old_len);
-                    return -1;
+                    return ResponseStatus::Error;
                 }
             };
             g.response.batch.truncate(old_len + actual_usize);
             g.response.next_mysql_seq = next_seq;
             unsafe { framed_len.write(actual) };
-            return 0;
+            return ResponseStatus::Ok;
         }
         g.response.batch.truncate(old_len);
         if encode_rc != NIO_FRAME_NEED_MORE || actual <= headroom as i64 || next_seq != first_seq {
-            return -1;
+            return ResponseStatus::Error;
         }
 
         let required = match usize::try_from(actual) {
             Ok(required) => required,
-            Err(_) => return -1,
+            Err(_) => return ResponseStatus::Error,
         };
         if old_len != 0
             && old_len
@@ -182,7 +183,7 @@ where
             g.clear_output();
             drop(g);
             mark_connection_error(conn);
-            return ResponseError::AllocationFailed.status();
+            return ResponseStatus::AllocationFailed;
         }
         g.response.batch.resize(old_len + required, 0);
         let output = unsafe { g.response.batch.as_mut_ptr().add(old_len).cast::<c_char>() };
@@ -191,11 +192,11 @@ where
         let retry_rc = encode(output, actual, first_seq, &mut encoded, &mut next_seq);
         if retry_rc != NIO_FRAME_OK || encoded != actual {
             g.response.batch.truncate(old_len);
-            return -1;
+            return ResponseStatus::Error;
         }
         g.response.next_mysql_seq = next_seq;
         unsafe { framed_len.write(encoded) };
-        return 0;
+        return ResponseStatus::Ok;
     }
 }
 
@@ -207,22 +208,22 @@ pub(crate) unsafe fn append_fixed_response(
     generation: u64,
     payload: &[u8],
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     if framed_len.is_null() || payload.len() >= MAX_PAYLOAD {
-        return -1;
+        return ResponseStatus::Error;
     }
     let conn = match unsafe { connection_handle.as_ref() } {
         Some(handle) if !handle.conn.close_notified.load(Ordering::Acquire) => &handle.conn,
-        None => return -1,
-        Some(_) => return ResponseError::ConnectionClosed.status(),
+        None => return ResponseStatus::Error,
+        Some(_) => return ResponseStatus::ConnectionClosed,
     };
     let frame_len = match HEADER_SIZE.checked_add(payload.len()) {
         Some(frame_len) => frame_len,
-        None => return -1,
+        None => return ResponseStatus::Error,
     };
     let frame_len_i64 = match i64::try_from(frame_len) {
         Ok(frame_len) => frame_len,
-        Err(_) => return -1,
+        Err(_) => return ResponseStatus::Error,
     };
 
     let mut g = conn.mu.lock().unwrap();
@@ -256,7 +257,7 @@ pub(crate) unsafe fn append_fixed_response(
             g.clear_output();
             drop(g);
             mark_connection_error(conn);
-            return ResponseError::AllocationFailed.status();
+            return ResponseStatus::AllocationFailed;
         }
         let payload_len = payload.len();
         let seq = g.response.next_mysql_seq;
@@ -269,7 +270,7 @@ pub(crate) unsafe fn append_fixed_response(
         g.response.batch.extend_from_slice(payload);
         g.response.next_mysql_seq = seq.wrapping_add(1);
         unsafe { framed_len.write(frame_len_i64) };
-        return 0;
+        return ResponseStatus::Ok;
     }
 }
 
@@ -367,10 +368,10 @@ pub(crate) unsafe fn append_single_field_metadata(
     semantic_packet_count: i64,
     packet_count: *mut i64,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     let field = match unsafe { ffi_mysql_field_plan(fields, 0) } {
         Some(field) => field,
-        None => return -1,
+        None => return ResponseStatus::Error,
     };
     let mut wire_len = field.frame.wire_len;
     let mut header_payload = [0; response::MAX_LENENC_SIZE];
@@ -378,11 +379,11 @@ pub(crate) unsafe fn append_single_field_metadata(
         let payload_len = response::encode_result_header_payload(1, &mut header_payload);
         let layout = match response::frame_layout(payload_len) {
             Some(layout) => layout,
-            None => return -1,
+            None => return ResponseStatus::Error,
         };
         wire_len = match wire_len.checked_add(layout.wire_len) {
             Some(len) => len,
-            None => return -1,
+            None => return ResponseStatus::Error,
         };
         payload_len
     } else {
@@ -394,20 +395,20 @@ pub(crate) unsafe fn append_single_field_metadata(
         .filter(|len| *len <= isize::MAX as usize)
     {
         Some(len) => len,
-        None => return -1,
+        None => return ResponseStatus::Error,
     };
     let framed_len_i64 = match i64::try_from(wire_len) {
         Ok(len) => len,
-        Err(_) => return -1,
+        Err(_) => return ResponseStatus::Error,
     };
 
     let old_len = response_writer.batch.len();
     let new_len = match old_len.checked_add(wire_len) {
         Some(len) if len <= isize::MAX as usize => len,
-        _ => return -1,
+        _ => return ResponseStatus::Error,
     };
     if reserve_response_output(&mut response_writer.batch, wire_len).is_err() {
-        return -1;
+        return ResponseStatus::AllocationFailed;
     }
     let first_seq = response_writer.next_mysql_seq;
     response_writer.batch.resize(new_len, 0);
@@ -431,7 +432,7 @@ pub(crate) unsafe fn append_single_field_metadata(
         Some(next_seq) => next_seq,
         None => {
             response_writer.batch.truncate(old_len);
-            return -1;
+            return ResponseStatus::Error;
         }
     };
     response_writer.next_mysql_seq = next_seq;
@@ -439,7 +440,7 @@ pub(crate) unsafe fn append_single_field_metadata(
         packet_count.write(semantic_packet_count);
         framed_len.write(framed_len_i64);
     }
-    0
+    ResponseStatus::Ok
 }
 
 /// # Safety
@@ -459,11 +460,11 @@ pub unsafe fn nio_response_append_resultset_metadata(
     status_flags: u16,
     packet_count: *mut i64,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     let conn = match unsafe { connection_handle.as_ref() } {
         Some(handle) if !handle.conn.close_notified.load(Ordering::Acquire) => &handle.conn,
-        None => return -1,
-        Some(_) => return ResponseError::ConnectionClosed.status(),
+        None => return ResponseStatus::Error,
+        Some(_) => return ResponseStatus::ConnectionClosed,
     };
     let mut g = conn.mu.lock().unwrap();
     if let Err(error) = validate_response(conn, &g, generation) {
@@ -477,12 +478,12 @@ pub unsafe fn nio_response_append_resultset_metadata(
     let include_result_header = match include_result_header {
         0 => false,
         1 => true,
-        _ => return -1,
+        _ => return ResponseStatus::Error,
     };
     let field_count = field_count as usize;
     let result_header_field_count = match u64::try_from(field_count) {
         Ok(field_count) => field_count,
-        Err(_) => return -1,
+        Err(_) => return ResponseStatus::Error,
     };
     let semantic_packet_count = match field_count
         .checked_add(1)
@@ -490,7 +491,7 @@ pub unsafe fn nio_response_append_resultset_metadata(
         .and_then(|count| i64::try_from(count).ok())
     {
         Some(count) => count,
-        None => return -1,
+        None => return ResponseStatus::Error,
     };
     if field_count == 1 {
         return unsafe {
@@ -515,21 +516,21 @@ pub unsafe fn nio_response_append_resultset_metadata(
             response::encode_result_header_payload(result_header_field_count, &mut payload);
         let layout = match response::frame_layout(payload_len) {
             Some(layout) => layout,
-            None => return -1,
+            None => return ResponseStatus::Error,
         };
         wire_len = match wire_len.checked_add(layout.wire_len) {
             Some(len) => len,
-            None => return -1,
+            None => return ResponseStatus::Error,
         };
     }
     for index in 0..field_count {
         let field = match unsafe { ffi_mysql_field_plan(fields, index) } {
             Some(field) => field,
-            None => return -1,
+            None => return ResponseStatus::Error,
         };
         wire_len = match wire_len.checked_add(field.frame.wire_len) {
             Some(len) => len,
-            None => return -1,
+            None => return ResponseStatus::Error,
         };
     }
     let eof = response::encode_eof_payload(eof_field_count, warnings, status_flags);
@@ -538,20 +539,20 @@ pub unsafe fn nio_response_append_resultset_metadata(
         .filter(|len| *len <= isize::MAX as usize)
     {
         Some(len) => len,
-        None => return -1,
+        None => return ResponseStatus::Error,
     };
     let framed_len_i64 = match i64::try_from(wire_len) {
         Ok(len) => len,
-        Err(_) => return -1,
+        Err(_) => return ResponseStatus::Error,
     };
 
     let old_len = g.response.batch.len();
     let new_len = match old_len.checked_add(wire_len) {
         Some(len) if len <= isize::MAX as usize => len,
-        _ => return -1,
+        _ => return ResponseStatus::Error,
     };
     if reserve_response_output(&mut g.response.batch, wire_len).is_err() {
-        return ResponseError::AllocationFailed.status();
+        return ResponseStatus::AllocationFailed;
     }
     let first_seq = g.response.next_mysql_seq;
     g.response.batch.resize(new_len, 0);
@@ -571,7 +572,7 @@ pub unsafe fn nio_response_append_resultset_metadata(
         Some(next_seq) => next_seq,
         None => {
             g.response.batch.truncate(old_len);
-            return -1;
+            return ResponseStatus::Error;
         }
     };
     g.response.next_mysql_seq = next_seq;
@@ -579,7 +580,7 @@ pub unsafe fn nio_response_append_resultset_metadata(
         packet_count.write(semantic_packet_count);
         framed_len.write(framed_len_i64);
     }
-    0
+    ResponseStatus::Ok
 }
 
 /// # Safety
@@ -591,7 +592,7 @@ pub unsafe fn nio_response_append_result_header(
     generation: u64,
     field_count: u64,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     let mut payload = [0; response::MAX_LENENC_SIZE];
     let payload_len = response::encode_result_header_payload(field_count, &mut payload);
     unsafe {
@@ -615,7 +616,7 @@ pub unsafe fn nio_response_append_eof(
     warnings: u16,
     status_flags: u16,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     let payload = response::encode_eof_payload(field_count, warnings, status_flags);
     unsafe { append_fixed_response(connection_handle, generation, &payload, framed_len) }
 }
@@ -632,7 +633,7 @@ pub unsafe fn nio_response_append_prepare_ok(
     parameter_count: u16,
     warnings: u16,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     let payload =
         response::encode_prepare_ok_payload(statement_id, column_count, parameter_count, warnings);
     unsafe { append_fixed_response(connection_handle, generation, &payload, framed_len) }
@@ -652,7 +653,7 @@ pub unsafe fn nio_response_append_error(
     message: *const c_char,
     message_len: i64,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     unsafe {
         append_encoded_response(
             connection_handle,
@@ -690,7 +691,7 @@ pub unsafe fn nio_response_append_auth_switch(
     scramble: *const c_char,
     scramble_len: i64,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     unsafe {
         append_encoded_response(
             connection_handle,
@@ -724,7 +725,7 @@ pub unsafe fn nio_response_append_local_infile(
     filename: *const c_char,
     filename_len: i64,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     unsafe {
         append_encoded_response(
             connection_handle,
@@ -748,7 +749,7 @@ pub unsafe fn nio_response_append_string(
     value: *const c_char,
     value_len: i64,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     unsafe {
         append_encoded_response(
             connection_handle,
@@ -772,7 +773,7 @@ pub unsafe fn nio_response_append_ok(
     generation: u64,
     ok_view: *const NioMysqlOkView,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     unsafe {
         append_encoded_response(
             connection_handle,
@@ -793,7 +794,7 @@ pub unsafe fn nio_response_append_field(
     generation: u64,
     field_view: *const NioMysqlFieldView,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     unsafe {
         append_encoded_response(
             connection_handle,
@@ -817,7 +818,7 @@ pub unsafe fn nio_response_append_row(
     generation: u64,
     row_view: *const NioMysqlRowView,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     unsafe {
         append_encoded_response(
             connection_handle,
@@ -840,7 +841,7 @@ pub unsafe fn nio_response_append_packed_row_blob(
     blob: *const c_char,
     blob_len: i64,
     framed_len: *mut i64,
-) -> c_int {
+) -> ResponseStatus {
     unsafe {
         append_encoded_response(
             connection_handle,
@@ -950,23 +951,23 @@ pub unsafe fn nio_response_flush(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     is_final: c_int,
-) -> c_int {
+) -> ResponseStatus {
     if is_final != 0 && is_final != 1 {
-        return -1;
+        return ResponseStatus::Error;
     }
     let conn = match unsafe { connection_handle.as_ref() } {
         Some(handle) if !handle.conn.close_notified.load(Ordering::Acquire) => &handle.conn,
-        None => return -1,
-        Some(_) => return ResponseError::ConnectionClosed.status(),
+        None => return ResponseStatus::Error,
+        Some(_) => return ResponseStatus::ConnectionClosed,
     };
     if let Err(error) = publish_response_batch(conn, generation, is_final != 0) {
         return error.status();
     }
     if is_final != 0 {
-        0
+        ResponseStatus::Ok
     } else {
         match drain_blocking_response(conn, generation) {
-            Ok(()) => 0,
+            Ok(()) => ResponseStatus::Ok,
             Err(error) => error.status(),
         }
     }
