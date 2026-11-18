@@ -94,9 +94,7 @@ int ObDASScanIter::reuse_result_for_rescan()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tsc_service_) || OB_ISNULL(scan_param_) || OB_ISNULL(result_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (scan_param_->need_switch_param_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(tsc_service_->reuse_scan_iter(false, result_))) {
+  } else if (OB_FAIL(tsc_service_->reuse_scan_iter(scan_param_->need_switch_param_, result_))) {
   }
   return ret;
 }

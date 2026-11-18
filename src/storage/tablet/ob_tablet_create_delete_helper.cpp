@@ -363,15 +363,6 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
   return ret;
 }
 
-int ObTabletCreateDeleteHelper::prepare_create_msd_tablet()
-{
-  int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
-  if (OB_FAIL(t3m->get_mstx_tablet_creator().throttle_tablet_creation())) {
-  }
-  return ret;
-}
-
 int ObTabletCreateDeleteHelper::create_msd_tablet(
     const ObTabletMapKey &key,
     ObTabletHandle &handle)

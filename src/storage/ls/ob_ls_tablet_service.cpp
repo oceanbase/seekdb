@@ -1225,31 +1225,28 @@ int ObLSTabletService::create_tablet(
   ObFreezer *freezer = ls_->get_freezer();
   tablet_handle.reset();
 
-  if (OB_FAIL(ObTabletCreateDeleteHelper::prepare_create_msd_tablet())) {
+  ObUpdateTabletPointerParam param;
+  ObBucketHashWLockGuard lock_guard(bucket_lock_, key.tablet_id_.hash());
+  if (OB_FAIL(ObTabletCreateDeleteHelper::create_msd_tablet(key, tablet_handle))) {
+  } else if (OB_ISNULL(tablet = tablet_handle.get_obj())
+      || OB_ISNULL(allocator = tablet_handle.get_allocator())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("new tablet is null", K(ret), KP(tablet), KP(allocator), K(tablet_handle));
+  } else if (OB_FAIL(tablet->init_for_first_time_creation(*allocator, tablet_id, data_tablet_id,
+      create_scn, snapshot_version, create_tablet_schema, need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn,
+      micro_index_clustered, freezer, fork_info))) {
+  } else if (OB_FAIL(tablet->get_updating_tablet_pointer_param(param))) {
+  } else if (OB_FAIL(t3m->compare_and_swap_tablet(key, tablet_handle, tablet_handle, param))) {
+  } else if (OB_FAIL(tablet_id_set_.set(tablet_id))) {
   } else {
-    ObUpdateTabletPointerParam param;
-    ObBucketHashWLockGuard lock_guard(bucket_lock_, key.tablet_id_.hash());
-    if (OB_FAIL(ObTabletCreateDeleteHelper::create_msd_tablet(key, tablet_handle))) {
-    } else if (OB_ISNULL(tablet = tablet_handle.get_obj())
-        || OB_ISNULL(allocator = tablet_handle.get_allocator())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("new tablet is null", K(ret), KP(tablet), KP(allocator), K(tablet_handle));
-    } else if (OB_FAIL(tablet->init_for_first_time_creation(*allocator, tablet_id, data_tablet_id,
-        create_scn, snapshot_version, create_tablet_schema, need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn,
-        micro_index_clustered, freezer, fork_info))) {
-    } else if (OB_FAIL(tablet->get_updating_tablet_pointer_param(param))) {
-    } else if (OB_FAIL(t3m->compare_and_swap_tablet(key, tablet_handle, tablet_handle, param))) {
-    } else if (OB_FAIL(tablet_id_set_.set(tablet_id))) {
-    } else {
-      report_tablet_to_rs(tablet_id);
-    }
+    report_tablet_to_rs(tablet_id);
+  }
 
-    if (OB_SUCC(ret)) {
-      LOG_INFO("succeed to create tablet", K(ret), K(tablet_id));
-    } else {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(rollback_remove_tablet_without_lock(tablet_id))) {
-      }
+  if (OB_SUCC(ret)) {
+    LOG_INFO("succeed to create tablet", K(ret), K(tablet_id));
+  } else {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(rollback_remove_tablet_without_lock(tablet_id))) {
     }
   }
 

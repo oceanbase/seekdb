@@ -15,7 +15,6 @@
  */
 
 #include "ob_full_tablet_creator.h"
-#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet.h"
 
@@ -28,7 +27,6 @@ namespace storage
 ObFullTabletCreator::ObFullTabletCreator()
   : is_inited_(false),
     tiny_allocator_(),
-    wait_create_tablets_cnt_(0),
     created_tablets_cnt_(0),
     mstx_mem_ctx_(nullptr)
 {
@@ -63,7 +61,6 @@ int ObFullTabletCreator::init()
 
 void ObFullTabletCreator::reset()
 {
-  wait_create_tablets_cnt_ = 0;
   created_tablets_cnt_ = 0;
   tiny_allocator_.reset();
   if (NULL != mstx_mem_ctx_) {
@@ -83,41 +80,6 @@ void ObFullTabletCreator::free_tablet(ObTablet *tablet)
     ATOMIC_DEC(&created_tablets_cnt_);
   }
   return;
-}
-
-int ObFullTabletCreator::throttle_tablet_creation()
-{
-  int ret = OB_SUCCESS;
-
-  bool need_wait = false;
-  const int64_t limit_size = lib::get_memory_budget() / 20; // 5%
-  const int64_t timeout = 5 * 1000L; // 5ms for effective replay
-  const int64_t log_timeout = 1 * 1000 * 1000L; // 1s
-  const int64_t start_time = ObTimeUtility::fast_current_time();
-
-  ATOMIC_INC(&wait_create_tablets_cnt_);
-  do {
-    if (need_wait) {
-      ob_usleep(10); // sleep 10us, do not get mutex here
-    }
-    if (total() < limit_size) {
-      need_wait = false;
-    } else if (ObTimeUtility::fast_current_time() - start_time >= timeout) {
-      ret = OB_EAGAIN;
-      break;
-    } else {
-      need_wait = true;
-      if (REACH_THREAD_TIME_INTERVAL(log_timeout)) {
-        const int64_t wait_create_tablets_cnt = ATOMIC_LOAD(&wait_create_tablets_cnt_);
-        LOG_WARN("prepare create tablet timeout",
-            K_(created_tablets_cnt), K(wait_create_tablets_cnt), K(limit_size),
-            K(tiny_allocator_.total()), K(tiny_allocator_.used()),
-            K(mstx_mem_ctx_->hold()), K(mstx_mem_ctx_->used()));
-      }
-    }
-  } while (need_wait);
-  ATOMIC_DEC(&wait_create_tablets_cnt_);
-  return ret;
 }
 
 int ObFullTabletCreator::create_tablet(ObTabletHandle &tablet_handle)
