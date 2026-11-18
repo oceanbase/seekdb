@@ -96,12 +96,13 @@ class TimeZoneInfoImporter:
         self.cur = self.conn.cursor(buffered=True)
         print ("INFO : sucess to connect server {0}:{1}".format(self.host, self.port))
     def execute_sql(self):
+        sql = None
         try:
             for sql in self.sql_list:
                 self.cur.execute(sql);
                 print ("INFO : execute sql -- {0}".format(sql))
         except mysql.connector.Error as err:
-            print("ERROR : " + sql)
+            print("ERROR : fail to execute statement: {0}".format(sql))
             print(err)
             print("ERROR : fail to import time zone info")
             raise
@@ -122,12 +123,13 @@ class TimeZoneInfoImporter:
         if self.expect_count[1] == self.result_count[1] \
             and self.expect_count[2] == self.result_count[2] \
             and self.expect_count[3] == self.result_count[3]:
+            sql = None
             try:
                 for sql in self.tz_version_sql_list:
                     self.cur.execute(sql)
                     print ("INFO : execute sql -- {0}".format(sql))
             except mysql.connector.Error as err:
-                print("ERROR : " + sql)
+                print("ERROR : fail to execute statement: {0}".format(sql))
                 print(err)
                 print("ERROR : fail to insert time zone version")
                 raise
