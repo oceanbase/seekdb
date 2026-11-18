@@ -1,0 +1,27 @@
+.github/scripts/package.py
+  s_99bd9318300c1c::t_7886a33fa016f4 247
+package/package.py
+  s_99bd9318300c1c::t_7886a33fa016f4 81-82,86-88,123-124,222-223
+tools/deploy/copy.sh
+  s_99bd9318300c1c::t_7886a33fa016f4 12-14
+package/msi/build_msi.py
+  s_99bd9318300c1c::t_7886a33fa016f4 80-81
+package/binary.py
+  s_99bd9318300c1c::t_7886a33fa016f4 592,597
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "130a21d625d1ee18c7fd96b1d5000bb7c0aba19f",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai <5187215+hnwyllmm@users.noreply.github.com>"
+    }
+  }
+}
