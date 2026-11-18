@@ -1,3 +1,6 @@
+row_avg_at_integer_bounds
+signed_ok	unsigned_ok
+1	1
 integer_column_averages
 id	signed_ok	unsigned_ok
 1	1	1

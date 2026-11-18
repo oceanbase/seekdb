@@ -1,6 +1,16 @@
 # Integer AVG returns DOUBLE, so an overflowing 64-bit intermediate sum must
 # not reject an average that is representable. Real columns exercise execution.
 --disable_query_log
+
+--echo row_avg_at_integer_bounds
+SELECT AVG(s)=CAST('4611686018427387904' AS DECIMAL(20,0)) AS signed_ok,
+       AVG(u)=CAST('9223372036854775808' AS DECIMAL(20,0)) AS unsigned_ok
+FROM (
+  SELECT CAST('9223372036854775807' AS SIGNED) AS s,
+         CAST('18446744073709551615' AS UNSIGNED) AS u
+  UNION ALL SELECT CAST(1 AS SIGNED),CAST(1 AS UNSIGNED)
+) AS integer_rows;
+
 --disable_warnings
 DROP TABLE IF EXISTS array_avg_integer_bounds;
 --enable_warnings
