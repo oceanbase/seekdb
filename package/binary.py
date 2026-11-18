@@ -146,25 +146,19 @@ def linux_platform():
     return linux_token("PLATFORM", dict.fromkeys((native, "haswell", "xeon_phi")))
 
 
-def linux_hwcaps(output=None):
-    output = linux_loader_help() if output is None else output
-    section = output.partition("Subdirectories of glibc-hwcaps directories, in priority order:")[2]
-    section = section.split("\n\n", 1)[0]
-    return tuple("glibc-hwcaps/" + name for name in re.findall(
-        r"^\s+(\S+) \(supported, searched\)$", section, re.MULTILINE))
+def linux_hwcaps_path(path):
+    return "glibc-hwcaps" in path.parent.parts or "glibc-hwcaps" in path.resolve().parent.parts
 
 
-def linux_cache(output, capabilities):
+def linux_cache(output):
     cache = {}
-    ranks = {name[len("glibc-hwcaps/"):]: index for index, name in enumerate(capabilities)}
     for name, attributes, path in re.findall(r"^\s*(\S+)\s+\(([^\n]*)\)\s+=>\s+(\S+)", output, re.MULTILINE):
-        hwcap = re.search(r'hwcap:\s*"([^"]+)"', attributes)
-        if "hwcap:" in attributes and (not hwcap or hwcap.group(1) not in ranks):
+        # Portable archives flatten dependencies, so only cache entries that do
+        # not rely on the loader's CPU-capability gating can be copied safely.
+        if "hwcap:" in attributes:
             continue
-        rank = ranks[hwcap.group(1)] if hwcap else len(ranks)
-        cache.setdefault(name, []).append((rank, Path(path)))
-    return {name: [path for _, path in sorted(values, key=lambda item: item[0])]
-            for name, values in cache.items()}
+        cache.setdefault(name, []).append(Path(path))
+    return cache
 
 
 def linux_libraries(prefix, original, directories, extra_libraries, fallback_directories=()):
@@ -173,10 +167,9 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
     executable = prefix / "bin/seekdb"
     system = re.compile(r"^(ld-linux[^/]*|lib(c|m|mvec|dl|rt|pthread|resolv|util|anl|thread_db|BrokenLocale|nss_[^.]*)\.so)(\.|$)")
     loader_help = linux_loader_help()
-    capabilities = linux_hwcaps(loader_help)
     ldconfig = shutil.which("ldconfig") or "/sbin/ldconfig"
     cache = linux_cache(subprocess.check_output([ldconfig, "-p"], text=True,
-                        env={**os.environ, "LC_ALL": "C"}), capabilities)
+                        env={**os.environ, "LC_ALL": "C"}))
     pending = deque([(original, executable, ())])
     origins = {}
     identities = {}
@@ -184,7 +177,6 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
     executable_arch = architecture(executable, "linux")
     libdir = None
     native_platform = None
-    subdirectories = capabilities + ("",)
     defaults = [Path(name) for name in re.findall(r"^\s+(/\S+) \(system search path\)$", loader_help, re.MULTILINE)]
     if not defaults:
         libdir = linux_libdir()
@@ -213,7 +205,7 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
 
     def matching(path):
         try:
-            return path.is_file() and architecture(path, "linux") == executable_arch
+            return path.is_file() and not linux_hwcaps_path(path) and architecture(path, "linux") == executable_arch
         except ValueError:
             return False
 
@@ -221,6 +213,9 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
         if system.match(name):
             raise ValueError("system runtime libraries must not be bundled: %s" % name)
         source = source.absolute()
+        if linux_hwcaps_path(source):
+            raise ValueError("CPU-specific glibc-hwcaps libraries must not be flattened: %s; "
+                             "supply its baseline library instead" % source)
         canonical = source.resolve()
         if name in origins:
             if origins[name] != canonical:
@@ -270,15 +265,13 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
                 continue
             if Path(name).name != name:
                 raise ValueError("runtime dependency must use a library basename: %s" % name)
-            candidates = [directory / subdirectory / name for directory in search
-                          for subdirectory in subdirectories] + cache.get(name, [])
-            candidates += [directory / subdirectory / name for directory in defaults
-                           for subdirectory in subdirectories]
-            candidates += [directory / subdirectory / name for directory in fallback_directories
-                           for subdirectory in subdirectories]
+            candidates = [directory / name for directory in search] + cache.get(name, [])
+            candidates += [directory / name for directory in defaults]
+            candidates += [directory / name for directory in fallback_directories]
             resolved = next((path for path in candidates if matching(path)), None)
             if resolved is None:
-                raise ValueError("unresolved dependency %s imported by %s; supply --runtime-lib-dir" % (name, source))
+                raise ValueError("unresolved dependency %s imported by %s; "
+                                 "supply a baseline library using --runtime-lib-dir" % (name, source))
             enqueue(resolved, name, inherited)
         rpath = "$ORIGIN/../lib/seekdb:$ORIGIN/../libexec/seekdb/lib" if target == executable else "$ORIGIN"
         alignment = elf_relocation_page_size(target)
