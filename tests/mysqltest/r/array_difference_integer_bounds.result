@@ -1,3 +1,6 @@
+unsigned_differences_cross_signed_boundary
+d
+[0,1,-1]
 unsigned_out_of_range_1
 ERROR 22003: Array value is out of range in 'BIGINT'
 unsigned_out_of_range_2

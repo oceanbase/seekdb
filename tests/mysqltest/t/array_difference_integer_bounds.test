@@ -21,6 +21,12 @@ INSERT INTO array_difference_unsigned_bounds VALUES(13,NULL);
 INSERT INTO array_difference_unsigned_bounds VALUES(14,array_filter((x)->false,[CAST('1' AS UNSIGNED)]));
 INSERT INTO array_difference_unsigned_bounds VALUES(15,[CAST('0' AS UNSIGNED),CAST('1' AS UNSIGNED),CAST('2' AS UNSIGNED)]);
 INSERT INTO array_difference_unsigned_bounds VALUES(16,[CAST('1' AS UNSIGNED),NULL]);
+INSERT INTO array_difference_unsigned_bounds VALUES
+  (17,[CAST('9223372036854775807' AS UNSIGNED),
+       CAST('9223372036854775808' AS UNSIGNED),
+       CAST('9223372036854775807' AS UNSIGNED)]);
+--echo unsigned_differences_cross_signed_boundary
+SELECT array_difference(a) AS d FROM array_difference_unsigned_bounds WHERE id=17;
 --echo unsigned_out_of_range_1
 --error 1690
 SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=1;
