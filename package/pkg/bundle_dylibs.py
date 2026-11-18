@@ -66,6 +66,6 @@ if __name__ == "__main__":
     prefix, original = Path(sys.argv[1]), Path(sys.argv[2])
     bundle(prefix, original)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import binary
+    import binary_distribution
     staged = prefix / "bin" / original.name
-    binary.macos_binaries(prefix, binary.architecture(staged, "macos"), executable=staged)
+    binary_distribution.macos_binaries(prefix, binary_distribution.architecture(staged, "macos"), executable=staged)

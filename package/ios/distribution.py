@@ -17,8 +17,8 @@ import zipfile
 import package_framework
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import binary
-import symbols
+import binary_distribution
+import debug_symbols
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_MAP = 'framework module SeekDB {\n  umbrella header "seekdb.h"\n  export *\n}\n'
@@ -32,15 +32,15 @@ def verify_framework(framework, sdk, options):
     platform = "IOSSIMULATOR" if sdk == "iphonesimulator" else "IOS"
     minimum, dependencies, exports = package_framework.verify(
         framework / "SeekDB", ROOT / "src/observer/ios/exports.txt", options.source_commit, platform)
-    if binary.version_tuple(minimum) != binary.version_tuple(options.minimum_os):
+    if binary_distribution.version_tuple(minimum) != binary_distribution.version_tuple(options.minimum_os):
         raise ValueError("iOS framework deployment target does not match " + options.minimum_os)
     manifest = json.loads((framework / "build-manifest.json").read_text())
     expected = {
         "source_revision": options.source_commit, "platform": platform, "architecture": "arm64",
-        "deployment_target": minimum, "binary_sha256": binary.digest(framework / "SeekDB"),
-        "public_header_sha256": binary.digest(framework / "Headers/seekdb.h"),
+        "deployment_target": minimum, "binary_sha256": binary_distribution.digest(framework / "SeekDB"),
+        "public_header_sha256": binary_distribution.digest(framework / "Headers/seekdb.h"),
         "dynamic_dependencies": dependencies, "exported_symbols": exports,
-        "rust_lock_sha256": binary.digest(framework / "rust-Cargo.lock"),
+        "rust_lock_sha256": binary_distribution.digest(framework / "rust-Cargo.lock"),
     }
     if any(manifest.get(key) != value for key, value in expected.items()):
         raise ValueError("iOS framework build manifest does not match its contents")
@@ -69,8 +69,8 @@ def swift_import(framework, sdk, options):
 def write_distribution(prefix, kind, variant, options, inputs=None, built_at=None, **extra):
     built_at = built_at or datetime.now(timezone.utc).replace(microsecond=0)
     files = {path.relative_to(prefix).as_posix(): {
-        "sha256": binary.digest(path), "size": metadata.st_size,
-    } for path, metadata in sorted(binary.entries(prefix)) if stat.S_ISREG(metadata.st_mode)}
+        "sha256": binary_distribution.digest(path), "size": metadata.st_size,
+    } for path, metadata in sorted(binary_distribution.entries(prefix)) if stat.S_ISREG(metadata.st_mode)}
     manifest = {
         "format": kind, "schema_version": 1, "version": options.version,
         "source_commit": options.source_commit, "built_at": built_at.isoformat().replace("+00:00", "Z"),
@@ -82,7 +82,7 @@ def write_distribution(prefix, kind, variant, options, inputs=None, built_at=Non
         manifest["input_archives"] = inputs
     (prefix / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     checksums = {name: info["sha256"] for name, info in files.items()}
-    checksums["manifest.json"] = binary.digest(prefix / "manifest.json")
+    checksums["manifest.json"] = binary_distribution.digest(prefix / "manifest.json")
     (prefix / "SHA256SUMS").write_text("".join(
         "%s  %s\n" % (digest, name) for name, digest in sorted(checksums.items())))
     suffix = "-simulator" if variant == "simulator" else ""
@@ -95,20 +95,20 @@ def write_distribution(prefix, kind, variant, options, inputs=None, built_at=Non
         for path in sorted(prefix.rglob("*")):
             if path.is_file():
                 stream.write(path, path.relative_to(prefix).as_posix())
-    archive.with_name(name + ".sha256").write_text("%s  %s\n" % (binary.digest(archive), name))
+    archive.with_name(name + ".sha256").write_text("%s  %s\n" % (binary_distribution.digest(archive), name))
     print(archive, flush=True)
     return archive
 
 
 def load_distribution(archive, destination, options):
     expected = archive.with_name(archive.name + ".sha256").read_text().split()
-    if expected != [binary.digest(archive), archive.name]:
+    if expected != [binary_distribution.digest(archive), archive.name]:
         raise ValueError("iOS archive checksum mismatch: " + archive.name)
     destination.mkdir()
     seen = set()
     with zipfile.ZipFile(archive) as stream:
         for member in stream.infolist():
-            path = binary.relative(member.filename)
+            path = binary_distribution.relative(member.filename)
             key = path.as_posix().casefold()
             mode = member.external_attr >> 16
             if key in seen or mode & 0o7000 or not (
@@ -134,24 +134,24 @@ def load_distribution(archive, destination, options):
     if platform != expected_platform or variant not in ("device", "simulator"):
         raise ValueError("iOS archive target does not match the selected platform")
     actual = {path.relative_to(destination).as_posix()
-              for path, mode in binary.entries(destination) if stat.S_ISREG(mode.st_mode)}
+              for path, mode in binary_distribution.entries(destination) if stat.S_ISREG(mode.st_mode)}
     files = manifest["files"]
     if actual != set(files) | {"manifest.json", "SHA256SUMS"}:
         raise ValueError("iOS archive file set does not match its manifest")
     checksums = {}
     for name, info in files.items():
-        path = destination / binary.relative(name)
-        if path.stat().st_size != info["size"] or binary.digest(path) != info["sha256"]:
+        path = destination / binary_distribution.relative(name)
+        if path.stat().st_size != info["size"] or binary_distribution.digest(path) != info["sha256"]:
             raise ValueError("iOS archive file checksum mismatch: " + name)
         checksums[name] = info["sha256"]
-    checksums["manifest.json"] = binary.digest(destination / "manifest.json")
+    checksums["manifest.json"] = binary_distribution.digest(destination / "manifest.json")
     expected_sums = "".join("%s  %s\n" % (digest, name) for name, digest in sorted(checksums.items()))
     if (destination / "SHA256SUMS").read_text() != expected_sums:
         raise ValueError("iOS archive checksum list does not match its manifest")
     sdk = "iphonesimulator" if variant == "simulator" else "iphoneos"
     framework = destination / "SeekDB.framework"
     verify_framework(framework, sdk, options)
-    symbols.verify_stripped(framework)
+    debug_symbols.verify_stripped(framework)
     if (framework / "Modules/module.modulemap").read_text() != MODULE_MAP:
         raise ValueError("Unexpected iOS framework module map")
     return framework, variant
@@ -164,11 +164,11 @@ def framework(options, temporary):
     shutil.copytree(options.input, result)
     verify_framework(result, options.sdk, options)
     debug = temporary / "debug-info"
-    records = symbols.separate(destination, debug, "ios", options.input / "SeekDB",
+    records = debug_symbols.separate(destination, debug, "ios", options.input / "SeekDB",
                                Path("SeekDB.framework/SeekDB"))
     manifest_path = result / "build-manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    manifest["binary_sha256"] = binary.digest(result / "SeekDB")
+    manifest["binary_sha256"] = binary_distribution.digest(result / "SeekDB")
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     verify_framework(result, options.sdk, options)
     (result / "Modules").mkdir(exist_ok=True)
@@ -179,7 +179,7 @@ def framework(options, temporary):
     related = {}
     if records:
         archive = write_distribution(debug, "seekdb-debug-info", variant, options, built_at=built_at, binaries=records)
-        related = {"archive": archive.name, "sha256": binary.digest(archive)}
+        related = {"archive": archive.name, "sha256": binary_distribution.digest(archive)}
     write_distribution(destination, "seekdb-framework", variant, options, built_at=built_at, debug_info=related)
 
 
@@ -194,7 +194,7 @@ def xcframework(options, temporary):
         if variant in frameworks:
             raise ValueError("XCFramework contains duplicate iOS variants")
         frameworks[variant] = result
-        inputs[archive.name] = binary.digest(archive)
+        inputs[archive.name] = binary_distribution.digest(archive)
     if set(frameworks) != {"device", "simulator"}:
         raise ValueError("XCFramework requires both iOS variants")
     destination = temporary / "package"
@@ -213,9 +213,9 @@ def xcframework(options, temporary):
             raise ValueError("Unexpected XCFramework platform/architecture")
         variants.add(variant)
         sdk = "iphonesimulator" if variant == "simulator" else "iphoneos"
-        nested = result / binary.relative(library["LibraryIdentifier"]) / "SeekDB.framework"
+        nested = result / binary_distribution.relative(library["LibraryIdentifier"]) / "SeekDB.framework"
         verify_framework(nested, sdk, options)
-        symbols.verify_stripped(nested)
+        debug_symbols.verify_stripped(nested)
         swift_import(nested, sdk, options)
     if variants != {"device", "simulator"}:
         raise ValueError("XCFramework is missing an iOS variant")

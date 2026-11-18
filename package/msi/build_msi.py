@@ -14,6 +14,8 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "package"))
+import debug_symbols
+
 spec = importlib.util.spec_from_file_location("seekdb_package", ROOT / "package/package.py")
 package = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(package)
@@ -95,7 +97,7 @@ def main():
             package.copy(configurator, payload / "bin/seekdbConfigurator.exe", True)
             runtime_dependencies([payload / "bin/seekdbConfigurator.exe"],
                                  [payload / "bin"] + options.dll_dir, payload / "bin")
-        package.symbols.strip_tree(payload, "windows")
+        debug_symbols.strip_tree(payload, "windows")
         payload_source(payload, work / "payload.wxs")
         license_text = (ROOT / "LICENSE").read_text().replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
         license_file = work / "LICENSE.rtf"

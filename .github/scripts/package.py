@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / ".ci-cache"
 CONFIG = json.loads((ROOT / ".github/packaging.json").read_text())
 sys.path.insert(0, str(ROOT / "package"))
-import binary
+import binary_distribution
 import package as native
 
 
@@ -77,14 +77,14 @@ def matrix():
             if requirements["format"] not in formats:
                 continue
             candidates = [target for target in linux if target["arch"] == arch and
-                          binary.version_tuple(target["glibc"]) <= binary.version_tuple(requirements["glibc"])]
+                          binary_distribution.version_tuple(target["glibc"]) <= binary_distribution.version_tuple(requirements["glibc"])]
             if requirements["format"] == "rpm":
                 candidates = [target for target in candidates if target["glibc"] == requirements["glibc"]]
             if not candidates:
                 continue
             # Produce one package per distribution/arch. For DEB, prefer the
             # newer selected baseline rather than publishing duplicate versions.
-            binary_target = max(candidates, key=lambda target: binary.version_tuple(target["glibc"]))
+            binary_target = max(candidates, key=lambda target: binary_distribution.version_tuple(target["glibc"]))
             packages.append(dict(binary_target, id=distribution + "-" + arch, binary_id=binary_target["id"],
                                  distribution=distribution, format=requirements["format"],
                                  image=requirements.get("image", "")))
@@ -254,7 +254,7 @@ def export():
         if len(archives) != 1:
             raise ValueError("expected exactly one macOS binary distribution")
         with tempfile.TemporaryDirectory(prefix="seekdb-package-check-") as temporary:
-            bundle, _ = binary.load(archives[0], Path(temporary) / "binary", os.environ["PACKAGE_VERSION"])
+            bundle, _ = binary_distribution.load(archives[0], Path(temporary) / "binary", os.environ["PACKAGE_VERSION"])
             run([bundle / "bin/seekdb", "--version"])
     if os.environ["PACKAGE_OS"] == "linux":
         helper = ROOT / "deps/3rd/home/admin/oceanbase/bin/obshell"
@@ -263,8 +263,8 @@ def export():
         shutil.copyfile(helper, staged / helper.name)
         (staged / helper.name).chmod(0o755)
         sys.path.insert(0, str(ROOT / "package"))
-        import symbols
-        symbols.strip_tree(staged, "linux")
+        import debug_symbols
+        debug_symbols.strip_tree(staged, "linux")
         run(["tar", "-czf", ROOT / "dist/obshell.tar.gz", "-C", staged, helper.name])
 
 
@@ -280,13 +280,13 @@ def xcframework():
 
 def system_packages():
     sys.path.insert(0, str(ROOT / "package"))
-    import binary
+    import binary_distribution
     archives = list((ROOT / "input").glob("seekdb-binary-*.tar.gz"))
     if len(archives) != 1:
         raise ValueError("expected exactly one Linux binary distribution")
     with tempfile.TemporaryDirectory(prefix="system-packages-", dir=CACHE) as temporary:
         work = Path(temporary)
-        bundle, manifest = binary.load(archives[0], work / "binary", os.environ["PACKAGE_VERSION"] or None)
+        bundle, manifest = binary_distribution.load(archives[0], work / "binary", os.environ["PACKAGE_VERSION"] or None)
         if manifest["source_commit"] != os.environ["BINARY_SOURCE_COMMIT"]:
             raise ValueError("binary distribution does not match the source run's commit")
         target = manifest["platform"]

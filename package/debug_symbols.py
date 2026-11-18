@@ -9,7 +9,7 @@ import subprocess
 import uuid
 import zlib
 
-import binary
+import binary_distribution
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -231,7 +231,7 @@ def separate(root, destination, layout, original, primary):
                 raise ValueError("Windows symbol export requires the matching PDB: " + str(pdb))
             strip_file(path, kind, layout)
         if symbol is not None:
-            records[relative.as_posix()] = {"binary_sha256": binary.digest(path),
+            records[relative.as_posix()] = {"binary_sha256": binary_distribution.digest(path),
                 "symbols": symbol.relative_to(destination).as_posix()}
             if identity is not None:
                 records[relative.as_posix()]["uuids" if kind == "macho" else "pdb"] = identity

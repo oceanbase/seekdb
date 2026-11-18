@@ -14,7 +14,7 @@ import subprocess
 import tarfile
 import tempfile
 
-import symbols
+import debug_symbols
 
 ROOT = Path(__file__).resolve().parents[1]
 SYSPACK = Path("src/share/inner_table/sys_package/bazel_generated/syspack_release")
@@ -177,7 +177,7 @@ def deb(payload, output, version, release, distribution, architecture=None):
 def rpm(payload, work, output, version, release, dependencies, distribution, architecture=None):
     for directory in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
         (work / directory).mkdir()
-    strip = symbols.tool("strip", "linux")
+    strip = debug_symbols.tool("strip", "linux")
     spec = work / "SPECS/seekdb.spec"
     content = (ROOT / "package/rpm/seekdb.spec.in").read_text()
     values = {"STRIP": str(strip), "VERSION": version, "RELEASE": release,
@@ -284,8 +284,8 @@ def main():
         binary_package = None
         metadata = None
         if options.binary_package:
-            import binary
-            binary_package, manifest = binary.load(options.binary_package.resolve(), work / "binary", options.version)
+            import binary_distribution
+            binary_package, manifest = binary_distribution.load(options.binary_package.resolve(), work / "binary", options.version)
             metadata = manifest["platform"]
             if options.layout and options.layout != metadata["os"]:
                 parser.error("binary package OS does not match --layout")
@@ -302,7 +302,7 @@ def main():
         if options.layout != "linux" and (options.runtime_lib_dir or options.glibc_version):
             parser.error("--runtime-lib-dir and --glibc-version support Linux only")
         if options.format == "binary" or options.seekdb_bin:
-            import binary
+            import binary_distribution
             binary_package = work / "binary"
             stage(binary_package, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
                   options.version, options.release, timezone=options.timezone_file,
@@ -315,7 +315,7 @@ def main():
                 "usr/local/oceanbase/deps/devel/lib/vsag_lib")]
             fallbacks.insert(0, options.dependencies.resolve().parent / "prebuilt" /
                              ("android" if options.layout == "android" else "native") / "lib")
-            metadata = binary.prepare(binary_package, original.resolve(), options.layout, directories,
+            metadata = binary_distribution.prepare(binary_package, original.resolve(), options.layout, directories,
                                       options.extra_library, options.glibc_version, fallbacks)
             if options.format == "binary":
                 for name in ("LICENSE", "NOTICE"):
@@ -323,20 +323,20 @@ def main():
                 metadata["build_config"] = options.build_config
                 debug = work / "debug-info"
                 primary = Path("bin/seekdb.exe" if options.layout == "windows" else "bin/seekdb")
-                records = symbols.separate(binary_package, debug, options.layout, original.resolve(), primary)
+                records = debug_symbols.separate(binary_package, debug, options.layout, original.resolve(), primary)
                 built_at = datetime.now(timezone.utc).replace(microsecond=0)
                 related = {}
                 if records:
-                    archive = binary.write(debug, output, options.version, options.release, options.source_commit,
+                    archive = binary_distribution.write(debug, output, options.version, options.release, options.source_commit,
                                            metadata, kind="seekdb-debug-info", built_at=built_at, binaries=records)
-                    related = {"archive": archive.name, "sha256": binary.digest(archive)}
-                binary.write(binary_package, output, options.version, options.release, options.source_commit, metadata,
+                    related = {"archive": archive.name, "sha256": binary_distribution.digest(archive)}
+                binary_distribution.write(binary_package, output, options.version, options.release, options.source_commit, metadata,
                              built_at=built_at, debug_info=related)
                 return
         release = options.release
         if options.distribution:
             baseline = DISTRIBUTIONS[options.distribution]["glibc"]
-            if metadata and binary.version_tuple(metadata["glibc"]) > binary.version_tuple(baseline):
+            if metadata and binary_distribution.version_tuple(metadata["glibc"]) > binary_distribution.version_tuple(baseline):
                 raise ValueError("binary glibc baseline %s exceeds %s's glibc %s" %
                                  (metadata["glibc"], options.distribution, baseline))
             release = package_release(release, options.distribution)
@@ -345,10 +345,10 @@ def main():
               options.version, release, options.component, options.timezone_file,
               binary_package=binary_package, obshell_bin=options.obshell_bin)
         if metadata and options.layout == "linux" and options.component == "server":
-            if binary.architecture(payload / "usr/bin/obshell", "linux") != metadata["arch"]:
+            if binary_distribution.architecture(payload / "usr/bin/obshell", "linux") != metadata["arch"]:
                 raise ValueError("obshell architecture does not match the seekdb binary")
-            required = binary.glibc_requirement([payload / "usr/bin/obshell"])
-            if binary.version_tuple(required) > binary.version_tuple(metadata["glibc"]):
+            required = binary_distribution.glibc_requirement([payload / "usr/bin/obshell"])
+            if binary_distribution.version_tuple(required) > binary_distribution.version_tuple(metadata["glibc"]):
                 raise ValueError("obshell requires GLIBC_%s, exceeding the binary package baseline %s; "
                                  "rebuild obshell for the target glibc" % (required, metadata["glibc"]))
         if options.format in ("rpm", "deb"):
@@ -359,12 +359,12 @@ def main():
                 shutil.copytree(binary_package / "lib/seekdb", libraries, dirs_exist_ok=True,
                                 ignore=shutil.ignore_patterns("libaio.so", "libaio.so.*"))
             normalize_permissions(payload)
-            import binary
-            required = binary.glibc_requirement([path for path, kind in symbols.native_files(payload) if kind == "elf"])
-            if binary.version_tuple(required) > binary.version_tuple(baseline):
+            import binary_distribution
+            required = binary_distribution.glibc_requirement([path for path, kind in debug_symbols.native_files(payload) if kind == "elf"])
+            if binary_distribution.version_tuple(required) > binary_distribution.version_tuple(baseline):
                 raise ValueError("payload requires GLIBC_%s, exceeding %s's glibc %s" %
                                  (required, options.distribution, baseline))
-        symbols.strip_tree(payload, options.layout)
+        debug_symbols.strip_tree(payload, options.layout)
         if options.format == "rpm":
             rpm(payload, work, output, options.version, options.release, options.dependencies.resolve(),
                 options.distribution, metadata["arch"] if metadata else None)
@@ -378,7 +378,7 @@ def main():
                 libs = work / "libs"
                 stage(libs, options.artifacts.resolve(), options.dependencies.resolve(), "linux",
                       options.version, options.release, "libs", binary_package=binary_package)
-                symbols.strip_tree(libs, "linux")
+                debug_symbols.strip_tree(libs, "linux")
                 tgz(libs, output, options.version, options.release, "libs", "linux",
                     metadata["arch"] if metadata else None)
 
