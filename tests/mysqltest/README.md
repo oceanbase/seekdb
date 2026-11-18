@@ -15,9 +15,9 @@ same command to cover physical partial DISTINCT on a partitioned table with
 a multi-value index. It uses real duplicate ARRAY/MAP values and NULLs,
 `parallel(2)`, and `DISTINCT_PUSHDOWN(@"SET$1")` targeting the SET parent.
 The forced-hint case also runs with session pushdown disabled to verify that
-the capability guard still wins when the hint overrides that setting. Scalar
-keys remain eligible, UNION ALL preserves duplicates, and the session is
-restored to enabled before the ordinary collection DISTINCT negative check.
+the capability guard still wins when the hint overrides that setting. The
+scalar control exercises partial DISTINCT. This case reenables session
+pushdown before the ordinary collection DISTINCT negative check.
 
 Use the normal client authentication mechanism for the endpoint; keep passwords
 out of command arguments. The test is separate from the legacy suite under
