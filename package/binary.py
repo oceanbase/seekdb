@@ -589,12 +589,12 @@ def load(source, destination, version=None):
         if version_tuple(required) > version_tuple(metadata["glibc"]):
             raise ValueError("binary package requires GLIBC_%s, exceeding manifest baseline %s" %
                              (required, metadata["glibc"]))
-    for path in ("share/seekdb/admin", "share/seekdb/srs", "share/seekdb/timezone", "etc/seekdb", "libexec/seekdb", "lib/seekdb"):
+    for path in ("share/seekdb/admin", "share/seekdb/srs", "etc/seekdb", "libexec/seekdb", "lib/seekdb"):
         if not (root / path).is_dir():
             raise ValueError("missing binary package directory: %s" % path)
     if not list((root / "share/seekdb/admin").glob("*.sql")):
         raise ValueError("binary package has no generated SQL resources")
-    for path in ("share/seekdb/srs/default_srs_data_mysql.sql", "share/seekdb/timezone/timezone_V1.log",
+    for path in ("share/seekdb/srs/default_srs_data_mysql.sql",
                  "etc/seekdb/ob_system_variable_init.json", "etc/seekdb/seekdb.cnf"):
         if path not in files:
             raise ValueError("missing binary package resource: %s" % path)

@@ -236,18 +236,6 @@ def build():
             subprocess.run(["sysctl", "vm.swapusage"], check=False)
 
 
-def timezone():
-    destination = CACHE / "timezone_V1.log"
-    metadata = CONFIG["timezone"]
-    if not destination.is_file() or hashlib.sha256(destination.read_bytes()).hexdigest() != metadata["sha256"]:
-        with urllib.request.urlopen(metadata["url"], timeout=60) as source:
-            data = source.read()
-        if hashlib.sha256(data).hexdigest() != metadata["sha256"]:
-            raise ValueError("timezone checksum mismatch")
-        destination.write_bytes(data)
-    return destination
-
-
 def export():
     if os.environ["PACKAGE_OS"] == "ios":
         run([sys.executable, "package/ios/distribution.py", "framework",
@@ -256,7 +244,7 @@ def export():
         return
     arguments = [sys.executable, "package/package.py", "binary", "--version", os.environ["PACKAGE_VERSION"],
                  "--package-timestamp", os.environ["PACKAGE_RELEASE"], "--layout", os.environ["PACKAGE_OS"],
-                 "--source-commit", os.environ["GITHUB_SHA"], "--timezone-file", timezone(),
+                 "--source-commit", os.environ["GITHUB_SHA"],
                  "--build-config", "O2,line_tables_only,package", "--output", ROOT / "dist"]
     if os.environ["PACKAGE_OS"] == "linux":
         arguments += ["--glibc-version", os.environ["PACKAGE_GLIBC"]]

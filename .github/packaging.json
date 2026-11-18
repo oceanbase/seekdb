@@ -1,8 +1,4 @@
 {
-  "timezone": {
-    "url": "https://raw.githubusercontent.com/oceanbase/oceanbase/93a1074b0ccc5ab9dadd25e5b3bf447aadcca19b/tools/timezone_V1.log",
-    "sha256": "84bb2c709e06b6f62623dacac0f5cb870c88df6562bc347cce318c58b1d7e9d8"
-  },
   "micromamba": "2.8.1-0",
   "linux_sysroots": {
     "x86_64": {

@@ -78,19 +78,20 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
     directories = ("bin", "etc/seekdb", "share/seekdb", "libexec/seekdb") if portable else paths[layout]
     binary, config, share, helpers = [destination / path for path in directories]
     executable = "seekdb.exe" if layout == "windows" else "seekdb"
+    if timezone is None and os.environ.get("SEEKDB_TIMEZONE_FILE"):
+        timezone = Path(os.environ["SEEKDB_TIMEZONE_FILE"])
     if binary_package:
         for source, target in (("bin", binary), ("etc/seekdb", config), ("share/seekdb", share),
                                ("libexec/seekdb", helpers)):
-            shutil.copytree(binary_package / source, target, dirs_exist_ok=True)
+            # Time zone data remains opt-in when repackaging an older bundle.
+            ignore = shutil.ignore_patterns("timezone") if source == "share/seekdb" else None
+            shutil.copytree(binary_package / source, target, dirs_exist_ok=True, ignore=ignore)
         if layout == "macos":
             shutil.copytree(binary_package / "lib", destination / "opt/seekdb/lib", dirs_exist_ok=True)
         elif layout == "android":
             shutil.copytree(binary_package / "lib", destination / "lib", dirs_exist_ok=True)
         (binary / executable).chmod(0o755)
     else:
-        timezone = timezone or Path(os.environ.get("SEEKDB_TIMEZONE_FILE", ROOT / "tools/timezone_V1.log"))
-        if not timezone.is_file():
-            raise ValueError("required timezone data is missing: %s; supply --timezone-file or SEEKDB_TIMEZONE_FILE" % timezone)
         sql = sorted((artifacts / SYSPACK).glob("*.sql"))
         if not sql:
             raise ValueError("missing generated SQL in %s; build //src/share/inner_table/sys_package:syspack_release" % (artifacts / SYSPACK))
@@ -106,7 +107,6 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
         copy(source_binary, binary / executable, True)
         for source in sql:
             copy(source, share / "admin" / source.name)
-        copy(timezone, share / "timezone/timezone_V1.log")
         copy(ROOT / "tools/default_srs_data_mysql.sql", share / "srs/default_srs_data_mysql.sql")
         variables = json.loads((ROOT / "src/share/system_variable/ob_system_variable_init.json").read_text(encoding="utf-8"))
         def clear_links(value):
@@ -120,6 +120,8 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
         if layout != "windows":
             for script in ("import_time_zone_info.py", "import_srs_data.py"):
                 copy(ROOT / "tools" / script, helpers / script, True)
+    if timezone is not None:
+        copy(timezone, share / "timezone/timezone_V1.log")
     if layout == "windows":
         if not binary_package:
             copy(ROOT / "package/msi/seekdb.cnf", config / "seekdb.cnf")
@@ -217,7 +219,8 @@ def main():
     parser.add_argument("--artifacts", type=Path, default=ROOT / "build/bin",
                         help="Bazel bin directory from a --config=package build on Linux")
     parser.add_argument("--dependencies", type=Path, default=ROOT / "deps/3rd")
-    parser.add_argument("--timezone-file", type=Path)
+    parser.add_argument("--timezone-file", type=Path,
+                        help="optional named time zone import data; omitted by default")
     parser.add_argument("--layout", choices=("linux", "macos", "windows", "android"),
                         help="target layout; inferred from --binary-package, otherwise Linux (native OS for binary)")
     parser.add_argument("--component", choices=("server", "libs"), default="server")
