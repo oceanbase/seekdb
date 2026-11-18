@@ -303,3 +303,58 @@ recursive_locations
 SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('9223372036854775808' AS JSON)) ELSE JSON_TYPE(CAST('9223372036854775808' AS JSON)) END AS type_name;
 type_name
 UNSIGNED INTEGER
+set names utf8mb4;
+select json_object(cast('{"c1":1}' as json),1) = json_object(cast(cast('{"c1":1}' as json) as char),1) as object_key, json_object(cast('[1,2]' as json),1) = json_object(cast(cast('[1,2]' as json) as char),1) as array_key, json_object(cast('1' as json),1) = json_object(cast(cast('1' as json) as char),1) as number_key, json_object(cast('"key"' as json),1) = json_object(cast(cast('"key"' as json) as char),1) as string_key, json_object(cast('null' as json),1) = json_object(cast(cast('null' as json) as char),1) as json_null_key, json_object(cast('true' as json),1) = json_object(cast(cast('true' as json) as char),1) as boolean_key, json_object(cast('"中文😀"' as json),1) = json_object(cast(cast('"中文😀"' as json) as char),1) as unicode_key;
+object_key	array_key	number_key	string_key	json_null_key	boolean_key	unicode_key
+1	1	1	1	1	1	1
+create table json_object_key_regression(id int primary key, doc json);
+insert into json_object_key_regression values (1,'{"c1":1}'),(2,'[1,2]'),(3,'1'),(4,'"key"'),(5,'null'),(6,'true'),(7,'"中文😀"'),(8,concat('{"c1":"',repeat('x',12000),'"}'));
+select id, json_object(cast(doc as json),1) = json_object(cast(doc as char),1) as cast_column_key from json_object_key_regression order by id;
+id	cast_column_key
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+select id, json_object(doc,1) = json_object(cast(doc as char),1) as plain_column_key from json_object_key_regression order by id;
+id	plain_column_key
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+select json_object(cast('1' as json),1,cast('2' as json),2) = cast('{"1":1,"2":2}' as json) as distinct_keys, json_object(cast('1' as json),1,cast('1' as json),2) = cast('{"1":2}' as json) as duplicate_key, json_object('key',1) = cast('{"key":1}' as json) as plain_string_key, json_object(cast('1' as json),null) = cast('{"1":null}' as json) as null_value;
+distinct_keys	duplicate_key	plain_string_key	null_value
+1	1	1	1
+prepare json_object_key_regression_stmt from 'select json_object(cast(? as json),1) = json_object(cast(cast(? as json) as char),1) as prepared_key';
+set @json_object_key_document = '{"c1":1}';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+prepared_key
+1
+set @json_object_key_document = '[1,2]';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+prepared_key
+1
+set @json_object_key_document = '"中文😀"';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+prepared_key
+1
+set @json_object_key_document = concat('{"c1":"',repeat('x',12000),'"}');
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+prepared_key
+1
+deallocate prepare json_object_key_regression_stmt;
+set @json_object_key_document = null;
+select json_object(null,1);
+ERROR 22032: JSON documents may not contain NULL member names.
+select json_object(_binary'x',1);
+ERROR 22032: Cannot create a JSON value from a string.
+select json_object('key');
+ERROR 42000: Incorrect parameter count in the call to native function 'json_object'
+drop table json_object_key_regression;

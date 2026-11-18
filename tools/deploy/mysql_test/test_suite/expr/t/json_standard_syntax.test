@@ -123,3 +123,30 @@ select json_extract(json_array(repeat('x',300),-1),'$[1]') as constructed_negati
 select json_search('{"a":"leaf","nested":{"a":"leaf"}}','all','leaf',null,'$**.a') as recursive_locations;
 # JSON_TYPE length must be valid for CASE and cover its longest type name.
 SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('9223372036854775808' AS JSON)) ELSE JSON_TYPE(CAST('9223372036854775808' AS JSON)) END AS type_name;
+
+# JSON-valued member names must use text, including quotes on JSON strings.
+set names utf8mb4;
+select json_object(cast('{"c1":1}' as json),1) = json_object(cast(cast('{"c1":1}' as json) as char),1) as object_key, json_object(cast('[1,2]' as json),1) = json_object(cast(cast('[1,2]' as json) as char),1) as array_key, json_object(cast('1' as json),1) = json_object(cast(cast('1' as json) as char),1) as number_key, json_object(cast('"key"' as json),1) = json_object(cast(cast('"key"' as json) as char),1) as string_key, json_object(cast('null' as json),1) = json_object(cast(cast('null' as json) as char),1) as json_null_key, json_object(cast('true' as json),1) = json_object(cast(cast('true' as json) as char),1) as boolean_key, json_object(cast('"中文😀"' as json),1) = json_object(cast(cast('"中文😀"' as json) as char),1) as unicode_key;
+create table json_object_key_regression(id int primary key, doc json);
+insert into json_object_key_regression values (1,'{"c1":1}'),(2,'[1,2]'),(3,'1'),(4,'"key"'),(5,'null'),(6,'true'),(7,'"中文😀"'),(8,concat('{"c1":"',repeat('x',12000),'"}'));
+select id, json_object(cast(doc as json),1) = json_object(cast(doc as char),1) as cast_column_key from json_object_key_regression order by id;
+select id, json_object(doc,1) = json_object(cast(doc as char),1) as plain_column_key from json_object_key_regression order by id;
+select json_object(cast('1' as json),1,cast('2' as json),2) = cast('{"1":1,"2":2}' as json) as distinct_keys, json_object(cast('1' as json),1,cast('1' as json),2) = cast('{"1":2}' as json) as duplicate_key, json_object('key',1) = cast('{"key":1}' as json) as plain_string_key, json_object(cast('1' as json),null) = cast('{"1":null}' as json) as null_value;
+prepare json_object_key_regression_stmt from 'select json_object(cast(? as json),1) = json_object(cast(cast(? as json) as char),1) as prepared_key';
+set @json_object_key_document = '{"c1":1}';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+set @json_object_key_document = '[1,2]';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+set @json_object_key_document = '"中文😀"';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+set @json_object_key_document = concat('{"c1":"',repeat('x',12000),'"}');
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+deallocate prepare json_object_key_regression_stmt;
+set @json_object_key_document = null;
+--error 3158
+select json_object(null,1);
+--error 3144
+select json_object(_binary'x',1);
+--error 1582
+select json_object('key');
+drop table json_object_key_regression;
