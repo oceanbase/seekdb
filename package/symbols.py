@@ -6,6 +6,8 @@ import re
 import shutil
 import struct
 import subprocess
+import uuid
+import zlib
 
 import binary
 
@@ -18,6 +20,8 @@ def tool(name, layout):
         directories += sorted((Path(os.environ["ANDROID_NDK_HOME"]) / "toolchains/llvm/prebuilt").glob("*/bin"))
     if os.environ.get("BAZEL_LLVM"):
         directories.append(Path(os.environ["BAZEL_LLVM"]) / "bin")
+    if layout == "windows":
+        directories.append(ROOT / "deps/3rd/tools/llvm18/bin")
     directories.append(ROOT / "deps/3rd/usr/local/oceanbase/devtools/bin")
     for directory in directories:
         for suffix in ("", ".exe"):
@@ -30,7 +34,7 @@ def tool(name, layout):
     return result
 
 
-def elf_sections(path):
+def elf_section_headers(path):
     with path.open("rb") as stream:
         header = stream.read(64)
         if header[:6] != b"\x7fELF\x02\x01":
@@ -41,12 +45,55 @@ def elf_sections(path):
         table = stream.read(size)
         stream.seek(struct.unpack_from("<Q", table, 24)[0])
         names = stream.read(struct.unpack_from("<Q", table, 32)[0])
-        result = set()
+        result = {}
         for index in range(count):
             stream.seek(offset + index * size)
-            start = struct.unpack("<I", stream.read(4))[0]
-            result.add(names[start:].split(b"\0", 1)[0].decode())
+            section = stream.read(size)
+            start = struct.unpack_from("<I", section)[0]
+            name = names[start:].split(b"\0", 1)[0].decode()
+            result[name] = struct.unpack_from("<QQ", section, 24)
         return result
+
+
+def elf_sections(path):
+    return set(elf_section_headers(path))
+
+
+def verify_debuglink(path, symbol):
+    section = elf_section_headers(path).get(".gnu_debuglink")
+    if section is None:
+        raise ValueError("Missing GNU debuglink: " + str(path))
+    with path.open("rb") as stream:
+        stream.seek(section[0])
+        data = stream.read(section[1])
+    end = data.find(b"\0")
+    checksum_offset = (end + 4) & ~3
+    if end < 0 or data[:end] != os.fsencode(symbol.name) or len(data) < checksum_offset + 4:
+        raise ValueError("GNU debuglink does not name its exported symbols: " + str(path))
+    checksum = 0
+    with symbol.open("rb") as stream:
+        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            checksum = zlib.crc32(block, checksum)
+    if struct.unpack_from("<I", data, checksum_offset)[0] != checksum:
+        raise ValueError("GNU debuglink CRC does not match its exported symbols: " + str(path))
+
+
+def matching_pdb(path, pdb, layout):
+    executable = subprocess.check_output([tool("readobj", layout), "--coff-debug-directory", str(path)], text=True)
+    records = re.findall(r"PDBGUID:\s*\(([0-9A-Fa-f ]+)\)\s+PDBAge:\s*(\d+)", executable)
+    if len(records) != 1:
+        raise ValueError("Expected one CodeView PDB identity in " + str(path))
+    expected = (uuid.UUID(bytes_le=bytes.fromhex(records[0][0])), int(records[0][1]))
+    summary = subprocess.check_output([tool("pdbutil", layout), "dump", "-summary", str(pdb)], text=True)
+    guid = re.search(r"^\s*GUID:\s*(\{[0-9A-Fa-f-]+\})", summary, re.MULTILINE)
+    age = re.search(r"^\s*Age:\s*(\d+)", summary, re.MULTILINE)
+    if not guid or not age:
+        raise ValueError("Missing PDB GUID/age in " + str(pdb))
+    actual = (uuid.UUID(guid.group(1)), int(age.group(1)))
+    if actual != expected:
+        raise ValueError("PDB GUID/age does not match its binary: %s (expected %s/%s, got %s/%s)" %
+                         (pdb, *expected, *actual))
+    return {"guid": str(actual[0]), "age": actual[1]}
 
 
 def macho_debug(path):
@@ -112,7 +159,7 @@ def strip_file(path, kind, layout):
     if not has_debug(path, kind):
         return
     if kind == "elf":
-        subprocess.run([tool("strip", layout), "--strip-unneeded", str(path)], check=True)
+        subprocess.run([tool("strip", layout), "--strip-unneeded", "--remove-section=.gnu_debugdata", str(path)], check=True)
     elif kind == "macho":
         subprocess.run(["xcrun", "strip", "-S", "-x", str(path)], check=True)
         subprocess.run(["codesign", "--force", "--sign", "-", str(path)], check=True)
@@ -156,9 +203,12 @@ def separate(root, destination, layout, original, primary):
         if kind == "elf" and has_debug(path, kind):
             symbol = destination / relative.with_name(path.name + ".debug")
             symbol.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run([tool("objcopy", layout), "--only-keep-debug", str(path), str(symbol)], check=True)
+            subprocess.run([tool("objcopy", layout), "--only-keep-debug", "--keep-section=.gnu_debugdata",
+                            str(path), str(symbol)], check=True)
             strip_file(path, kind, layout)
-            subprocess.run([tool("objcopy", layout), "--add-gnu-debuglink=" + str(symbol), str(path)], check=True)
+            subprocess.run([tool("objcopy", layout), "--remove-section=.gnu_debuglink",
+                            "--add-gnu-debuglink=" + str(symbol), str(path)], check=True)
+            verify_debuglink(path, symbol)
         elif kind == "macho" and has_debug(path, kind):
             symbol = destination / relative.with_name(path.name + ".dSYM")
             symbol.parent.mkdir(parents=True, exist_ok=True)
@@ -173,6 +223,7 @@ def separate(root, destination, layout, original, primary):
             source = original if relative == primary else original.parent / path.name
             pdb = source.resolve().with_suffix(".pdb")
             if pdb.is_file():
+                identity = matching_pdb(path, pdb, layout)
                 symbol = destination / relative.with_suffix(".pdb")
                 symbol.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(pdb, symbol)
@@ -183,6 +234,6 @@ def separate(root, destination, layout, original, primary):
             records[relative.as_posix()] = {"binary_sha256": binary.digest(path),
                 "symbols": symbol.relative_to(destination).as_posix()}
             if identity is not None:
-                records[relative.as_posix()]["uuids"] = identity
+                records[relative.as_posix()]["uuids" if kind == "macho" else "pdb"] = identity
     verify_stripped(root)
     return records
