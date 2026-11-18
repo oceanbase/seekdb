@@ -50,7 +50,7 @@ private:
 private:
   enum
   {
-        FILE_ID,
+    FILE_ID = common::OB_APP_MIN_COLUMN_ID,
     TRACE_ID,
     DIR_ID,
     DATA_BYTES,
