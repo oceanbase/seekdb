@@ -187,12 +187,6 @@ int64_t ObTimeUtility::current_time_us()
   return ObTimeUtility::current_time();
 }
 
-int64_t ObTimeUtility::monotonic_timestamp(int64_t monotonic_time)
-{
-  static const int64_t epoch_offset = current_time() - current_monotonic_time();
-  return epoch_offset + monotonic_time;
-}
-
 int64_t ObTimeUtility::current_time_ns()
 {
 #ifdef _WIN32

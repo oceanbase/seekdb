@@ -2888,7 +2888,7 @@ def_table_schema(
       ('object_status', 'int'),
       ('rule_name', 'varchar:256'),
       ('is_in_pc', 'bool'),
-      ('erase_time', 'timestamp'),
+      ('erase_time', 'int'),
       ('compile_time', 'uint'),
       ('pl_evict_version', 'int'),
       ('first_get_plan_time', 'int'),

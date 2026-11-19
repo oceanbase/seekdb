@@ -2080,7 +2080,7 @@ id	field	type	length	precision	nullable
 72	object_status	5	0	20	0
 73	rule_name	22	256	-1	0
 74	is_in_pc	1	0	4	0
-75	erase_time	18	0	25	0
+75	erase_time	5	0	20	0
 76	compile_time	10	0	20	0
 77	pl_evict_version	5	0	20	0
 78	first_get_plan_time	5	0	20	0

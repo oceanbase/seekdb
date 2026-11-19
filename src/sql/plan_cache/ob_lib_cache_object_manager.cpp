@@ -101,7 +101,7 @@ int ObLCObjectManager::erase_cache_obj(ObCacheObjID id)
   } else {
     if (NULL != cache_obj) {
       // set logical deleted time
-      cache_obj->set_logical_del_time(ObTimeUtility::monotonic_timestamp());
+      cache_obj->set_logical_del_time(common::ObTimeUtility::current_monotonic_time());
       LOG_DEBUG("set logical del time", K(cache_obj->get_logical_del_time()),
                                         K(cache_obj->get_object_id()),
                                         K(cache_obj->added_lc()),
@@ -120,7 +120,7 @@ void ObLCObjectManager::common_free(ObILibCacheObject *cache_obj)
     // do nothing
   } else {
     if (!cache_obj->added_lc()) {
-      cache_obj->set_logical_del_time(ObTimeUtility::monotonic_timestamp());
+      cache_obj->set_logical_del_time(ObTimeUtility::current_monotonic_time());
       LOG_WARN("set logical del time", K(cache_obj->get_logical_del_time()),
                                        K(cache_obj->added_lc()),
                                        K(cache_obj->get_object_id()),
