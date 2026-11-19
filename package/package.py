@@ -362,7 +362,7 @@ def main():
             binaries = [path for path, kind in debug_symbols.native_files(payload) if kind == "elf"]
             aio = {name for path in binaries for name in re.findall(
                 r"^\s*0x[0-9a-fA-F]+\s+\(NEEDED\)[^\n]*?\[(.*?)\]",
-                binary_distribution.linux_dynamic(path), re.MULTILINE) if name.startswith("libaio.so")}
+                binary_distribution.dynamic(path), re.MULTILINE) if name.startswith("libaio.so")}
             if binary_package:
                 aio.update(path.name for path in (binary_package / "lib/seekdb").glob("libaio.so*"))
             unsupported = aio - {"libaio.so.1", "libaio.so.1t64"}

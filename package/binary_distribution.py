@@ -65,18 +65,6 @@ def linux_system_libraries(arch):
     return GLIBC_SONAMES | {Path(LINUX_INTERPRETERS[arch]).name}
 
 
-def linux_dynamic(binary):
-    metadata = dynamic(binary)
-    tags = re.findall(r"^\s*0x[0-9a-fA-F]+\s+\(([^)]+)\)\s*(.*)$", metadata, re.MULTILINE)
-    unsupported = sorted({tag for tag, _ in tags if tag in ("FILTER", "AUXILIARY", "AUDIT", "DEPAUDIT")})
-    if unsupported:
-        raise ValueError("unsupported Linux ELF dynamic tags %s in %s; relink without these tags" %
-                         (", ".join("DT_" + tag for tag in unsupported), binary))
-    if any(tag == "FLAGS_1" and "NODEFLIB" in value.split() for tag, value in tags):
-        raise ValueError("unsupported Linux ELF DF_1_NODEFLIB in %s; relink without -z nodefaultlib" % binary)
-    return metadata
-
-
 def linux_interpreter(binary):
     headers = subprocess.check_output(["readelf", "-lW", str(binary)], text=True)
     interpreters = re.findall(r"\[Requesting program interpreter: (.*?)\]", headers)
@@ -89,7 +77,7 @@ def linux_interpreter(binary):
 def linux_system_dependencies(binary):
     linux_interpreter(binary)
     imports = re.findall(r"^\s*0x[0-9a-fA-F]+\s+\(NEEDED\)[^\n]*?\[(.*?)\]",
-                         linux_dynamic(binary), re.MULTILINE)
+                         dynamic(binary), re.MULTILINE)
     system = {"libc.so.6", "libm.so.6", "libpthread.so.0", "libdl.so.2",
               "librt.so.1", "libresolv.so.2", "libutil.so.1", "libanl.so.1",
               Path(LINUX_INTERPRETERS[architecture(binary, "linux")]).name}
@@ -122,7 +110,6 @@ def glibc_requirement(binaries):
     versions = set()
     for binary in binaries:
         # Reused bundles and raw system packages need the same loader constraints.
-        linux_dynamic(binary)
         linux_interpreter(binary)
         output = subprocess.check_output(["readelf", "--version-info", "-W", str(binary)], text=True)
         special = re.findall(r"\bName: (GLIBC_[A-Za-z][A-Za-z0-9_]*)\b", output)
@@ -284,13 +271,13 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
         identities[identity] = name
         origins[name] = canonical
         loaded.add(name)
-        loaded.update(dynamic_strings(linux_dynamic(source), "SONAME"))
+        loaded.update(dynamic_strings(dynamic(source), "SONAME"))
         target = libraries / name
         shutil.copyfile(source, target)
         target.chmod(0o755)
         pending.append((source, target, inherited))
 
-    root_paths = dict(re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", linux_dynamic(original)))
+    root_paths = dict(re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", dynamic(original)))
     root_inherited = () if "RUNPATH" in root_paths else search_paths(root_paths.get("RPATH", ""), original)
     environment = search_paths(os.environ.get("LD_LIBRARY_PATH", ""), original, environment=True)
     extras = deque(extra_libraries)
@@ -302,7 +289,7 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
             if not pending:
                 continue
         source, target, inherited = pending.popleft()
-        metadata = linux_dynamic(source)
+        metadata = dynamic(source)
         tags = re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", metadata)
         paths = {kind: search_paths(value, source) for kind, value in tags}
         if "RUNPATH" not in paths:
@@ -638,7 +625,7 @@ def load(source, destination, version=None):
         for path in binaries:
             if architecture(path, "linux") != metadata["arch"]:
                 raise ValueError("Linux runtime architecture mismatch: %s" % path)
-        records = [(path, linux_dynamic(path)) for path in binaries]
+        records = [(path, dynamic(path)) for path in binaries]
         available = {path.name for path in binaries}
         available.update(name for _, data in records for name in dynamic_strings(data, "SONAME"))
         system = linux_system_libraries(metadata["arch"])
