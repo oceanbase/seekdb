@@ -77,13 +77,11 @@ int ObTransformSemiToInner::transform_one_stmt(
   ObTryTransHelper try_trans_helper;
   ObSEArray<ObParentDMLStmt, 4> eval_parents;
   bool use_branch_cost = false;
+  bool eval_parents_ready = false;
   bool last_partial_cost_check = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(semi_infos.assign(stmt->get_semi_infos()))) {
-  } else if (!semi_infos.empty() && OB_FAIL(get_cost_eval_parents(parent_stmts,
-                                                                eval_parents,
-                                                                use_branch_cost))) {
   } else {
     bool cost_based_trans_tried = cost_based_trans_tried_;
     for (int64_t i = 0; OB_SUCC(ret) && i < semi_infos.count() && !spj_view_added; ++i) {
@@ -131,11 +129,23 @@ int ObTransformSemiToInner::transform_one_stmt(
                                                                             stmt, true, 
                                                                             partial_cost_check))) {
       } else {
+        if (!eval_parents_ready && need_check_cost && !ctx.hint_force_
+            && !partial_cost_check && !ctx_->is_set_stmt_oversize_ && !ctx_->eval_cost_) {
+          if (OB_FAIL(get_cost_eval_parents(parent_stmts, eval_parents, use_branch_cost))) {
+          } else {
+            eval_parents_ready = true;
+            if (use_branch_cost) {
+              reset_stmt_cost();
+            }
+          }
+        }
         if (use_branch_cost && last_partial_cost_check != partial_cost_check) {
           reset_stmt_cost();
         }
         last_partial_cost_check = partial_cost_check;
-        if (OB_FAIL(accept_transform(eval_parents, stmt, trans_stmt,
+        ObIArray<ObParentDMLStmt> &cost_parents = eval_parents_ready ? eval_parents : parent_stmts;
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(accept_transform(cost_parents, stmt, trans_stmt,
                                     !need_check_cost || ctx.hint_force_, false,
                                     accepted, partial_cost_check, &ctx))) {
         } else if (OB_FAIL(try_trans_helper.finish(accepted, stmt->get_query_ctx(), ctx_))) {
