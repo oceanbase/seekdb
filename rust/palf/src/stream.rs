@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
-const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN1";
+const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN2";
 
 #[derive(Clone, Copy, Debug)]
 pub struct BaseInfo {
@@ -72,11 +72,20 @@ impl RecordMeta {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct CommittedTail {
+    end_lsn: u64,
+    end_scn: u64,
+    log_id: i64,
+    accumulated_checksum: u64,
+}
+
 #[derive(Clone, Debug)]
 struct Manifest {
     base_lsn: u64,
     previous: BaseInfo,
     ref_scn: u64,
+    committed: CommittedTail,
 }
 
 struct State {
@@ -134,6 +143,12 @@ impl Stream {
                     prev_accumulated_checksum: 0,
                 },
                 ref_scn: 0,
+                committed: CommittedTail {
+                    end_lsn: 0,
+                    end_scn: 0,
+                    log_id: 0,
+                    accumulated_checksum: 0,
+                },
             },
             records: BTreeMap::new(),
             segment_lengths: BTreeMap::new(),
@@ -208,11 +223,10 @@ impl Stream {
             len: group.len() as u64,
             header: header.clone(),
         };
-        state.end_lsn = meta.end_lsn();
-        state.end_scn = scn;
-        state.next_log_id = state.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
-        state.accumulated_checksum = header.accumulated_checksum;
-        state.records.insert(lsn, meta);
+        if let Err(error) = state.commit_record(meta) {
+            state.failed = Some(error);
+            return Err(error);
+        }
         Ok(AppendResult {
             lsn: lsn + GROUP_HEADER_SIZE as u64,
             scn,
@@ -257,11 +271,10 @@ impl Stream {
             len: bytes.len() as u64,
             header: header.clone(),
         };
-        state.end_lsn = meta.end_lsn();
-        state.end_scn = source_scn;
-        state.next_log_id = state.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
-        state.accumulated_checksum = header.accumulated_checksum;
-        state.records.insert(source_lsn, meta);
+        if let Err(error) = state.commit_record(meta) {
+            state.failed = Some(error);
+            return Err(error);
+        }
         Ok(AppendResult {
             lsn: source_lsn,
             scn: source_scn,
@@ -319,13 +332,11 @@ impl Stream {
             return Err(Error::Invalid);
         }
         let previous = state.previous_info(lsn);
-        let manifest = Manifest {
-            base_lsn: lsn,
-            previous: BaseInfo {
-                curr_lsn: lsn,
-                ..previous
-            },
-            ref_scn: state.manifest.ref_scn,
+        let mut manifest = state.manifest.clone();
+        manifest.base_lsn = lsn;
+        manifest.previous = BaseInfo {
+            curr_lsn: lsn,
+            ..previous
         };
         write_manifest(&state.directory, &manifest)?;
         state.manifest = manifest;
@@ -706,6 +717,25 @@ impl State {
         Ok(())
     }
 
+    fn commit_record(&mut self, meta: RecordMeta) -> Result<()> {
+        let next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
+        let mut manifest = self.manifest.clone();
+        manifest.committed = CommittedTail {
+            end_lsn: meta.end_lsn(),
+            end_scn: meta.header.max_scn,
+            log_id: meta.header.log_id,
+            accumulated_checksum: meta.header.accumulated_checksum,
+        };
+        write_manifest(&self.directory, &manifest)?;
+        self.manifest = manifest;
+        self.end_lsn = meta.end_lsn();
+        self.end_scn = meta.header.max_scn;
+        self.next_log_id = next_log_id;
+        self.accumulated_checksum = meta.header.accumulated_checksum;
+        self.records.insert(meta.lsn, meta);
+        Ok(())
+    }
+
     fn read_record(&self, lsn: u64) -> Result<Vec<u8>> {
         let meta = self.records.get(&lsn).ok_or(Error::OutLower)?;
         let mut file = File::open(segment_path(&self.directory, block_id(lsn)))?;
@@ -743,6 +773,12 @@ fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64, disk_limit: u64)
         base_lsn: base.curr_lsn,
         previous: base,
         ref_scn,
+        committed: CommittedTail {
+            end_lsn: base.curr_lsn,
+            end_scn: base.prev_scn,
+            log_id: base.prev_log_id,
+            accumulated_checksum: base.prev_accumulated_checksum,
+        },
     };
     write_manifest(directory, &manifest)?;
     sync_directory(directory)?;
@@ -764,6 +800,10 @@ fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64, disk_limit: u64)
 
 fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
     let manifest = read_manifest(directory)?;
+    let committed = manifest.committed;
+    if committed.end_lsn < manifest.base_lsn {
+        return Err(Error::Corrupt);
+    }
     let mut records = BTreeMap::new();
     let mut segment_lengths = BTreeMap::new();
     let mut ids = Vec::new();
@@ -780,13 +820,25 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
         }
     }
     ids.sort_unstable();
+    if ids
+        .first()
+        .is_some_and(|id| *id < block_id(manifest.base_lsn))
+    {
+        return Err(Error::Corrupt);
+    }
     let mut end_lsn = manifest.base_lsn;
     let mut end_scn = manifest.previous.prev_scn;
-    let mut next_log_id = manifest.previous.prev_log_id + 1;
+    let mut next_log_id = manifest
+        .previous
+        .prev_log_id
+        .checked_add(1)
+        .ok_or(Error::Corrupt)?;
     let mut accumulated_checksum = manifest.previous.prev_accumulated_checksum;
-    let mut truncate_tail = false;
-    for (index, id) in ids.iter().copied().enumerate() {
-        if id < block_id(manifest.base_lsn) {
+    for id in ids.iter().copied() {
+        if end_lsn == committed.end_lsn {
+            break;
+        }
+        if id != block_id(end_lsn) {
             return Err(Error::Corrupt);
         }
         let path = segment_path(directory, id);
@@ -799,65 +851,44 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
         file.read_exact(&mut segment_header)?;
         validate_segment_header(&segment_header, id)?;
         segment_lengths.insert(id, length);
-        let mut lsn = if id == block_id(manifest.base_lsn) {
-            manifest.base_lsn.max(id * BLOCK_SIZE)
-        } else {
-            id * BLOCK_SIZE
-        };
-        while physical_offset(lsn) < length {
-            let remaining = length - physical_offset(lsn);
-            if remaining < GROUP_HEADER_SIZE as u64 {
-                file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-                let mut tail = vec![0; remaining as usize];
-                file.read_exact(&mut tail)?;
-                if tail.iter().any(|byte| *byte != 0) && index + 1 != ids.len() {
+        while end_lsn < committed.end_lsn && block_id(end_lsn) == id {
+            let lsn = end_lsn;
+            let remaining = BLOCK_SIZE - block_offset(lsn);
+            if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64 {
+                if physical_offset(lsn) + remaining > length {
                     return Err(Error::Corrupt);
                 }
-                if index + 1 == ids.len() {
-                    let valid_length = physical_offset(end_lsn);
-                    file.set_len(valid_length)?;
-                    segment_lengths.insert(id, valid_length);
+                let mut padding = vec![0; remaining as usize];
+                file.seek(SeekFrom::Start(physical_offset(lsn)))?;
+                file.read_exact(&mut padding)?;
+                if padding.iter().any(|byte| *byte != 0) {
+                    return Err(Error::Corrupt);
                 }
-                break;
+                end_lsn += remaining;
+                continue;
+            }
+            if physical_offset(lsn) + GROUP_HEADER_SIZE as u64 > length {
+                return Err(Error::Corrupt);
             }
             file.seek(SeekFrom::Start(physical_offset(lsn)))?;
             let mut header_bytes = vec![0; GROUP_HEADER_SIZE];
             file.read_exact(&mut header_bytes)?;
             if header_bytes.iter().all(|byte| *byte == 0) {
-                break;
-            }
-            let header = match decode_group_header(&header_bytes) {
-                Ok(header) => header,
-                Err(Error::UnknownVersion) => return Err(Error::UnknownVersion),
-                Err(_) if index + 1 == ids.len() => {
-                    truncate_tail = true;
-                    break;
-                }
-                Err(error) => return Err(error),
-            };
-            let record_len = GROUP_HEADER_SIZE as u64 + header.data_len as u64;
-            if block_offset(lsn) + record_len > BLOCK_SIZE {
                 return Err(Error::Corrupt);
             }
-            if physical_offset(lsn) + record_len > length {
-                if index + 1 != ids.len() {
-                    return Err(Error::Corrupt);
-                }
-                truncate_tail = true;
-                break;
+            let header = decode_group_header(&header_bytes)?;
+            let record_len = GROUP_HEADER_SIZE as u64 + header.data_len as u64;
+            let record_end = lsn.checked_add(record_len).ok_or(Error::Corrupt)?;
+            if block_offset(lsn) + record_len > BLOCK_SIZE
+                || record_end > committed.end_lsn
+                || physical_offset(lsn) + record_len > length
+            {
+                return Err(Error::Corrupt);
             }
             let mut bytes = vec![0; record_len as usize];
             file.seek(SeekFrom::Start(physical_offset(lsn)))?;
             file.read_exact(&mut bytes)?;
-            let header = match validate_group(&bytes, lsn) {
-                Ok(header) => header,
-                Err(Error::UnknownVersion) => return Err(Error::UnknownVersion),
-                Err(_) if index + 1 == ids.len() => {
-                    truncate_tail = true;
-                    break;
-                }
-                Err(error) => return Err(error),
-            };
+            let header = validate_group(&bytes, lsn)?;
             if header.committed_end_lsn != lsn
                 || header.log_id != next_log_id
                 || header.accumulated_checksum
@@ -871,21 +902,47 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
                 header: header.clone(),
             };
             records.insert(lsn, meta);
-            lsn += record_len;
-            end_lsn = lsn;
+            end_lsn = record_end;
             end_scn = header.max_scn;
-            next_log_id = header.log_id + 1;
+            next_log_id = header.log_id.checked_add(1).ok_or(Error::Corrupt)?;
             accumulated_checksum = header.accumulated_checksum;
         }
-        if truncate_tail {
-            let valid_length = physical_offset(end_lsn);
-            file.set_len(valid_length)?;
-            segment_lengths.insert(id, valid_length);
-            break;
-        }
-        if lsn < (id + 1) * BLOCK_SIZE && index + 1 != ids.len() {
+        if end_lsn != committed.end_lsn.min((id + 1) * BLOCK_SIZE) {
             return Err(Error::Corrupt);
         }
+    }
+    if end_lsn != committed.end_lsn
+        || end_scn != committed.end_scn
+        || next_log_id != committed.log_id.checked_add(1).ok_or(Error::Corrupt)?
+        || accumulated_checksum != committed.accumulated_checksum
+    {
+        return Err(Error::Corrupt);
+    }
+    let last_required = records
+        .values()
+        .next_back()
+        .map(|record| block_id(record.lsn));
+    let mut removed_segment = false;
+    for id in ids {
+        if Some(id) == last_required {
+            let valid_length = if id == block_id(committed.end_lsn) {
+                physical_offset(committed.end_lsn)
+            } else {
+                PHYSICAL_BLOCK_SIZE
+            };
+            let path = segment_path(directory, id);
+            OpenOptions::new()
+                .write(true)
+                .open(&path)?
+                .set_len(valid_length)?;
+            segment_lengths.insert(id, valid_length);
+        } else if last_required.is_none_or(|last| id > last) {
+            fs::remove_file(segment_path(directory, id))?;
+            removed_segment = true;
+        }
+    }
+    if removed_segment {
+        sync_directory(directory)?;
     }
     Ok(State {
         directory: directory.to_path_buf(),
@@ -912,8 +969,12 @@ fn write_manifest(directory: &Path, manifest: &Manifest) -> Result<()> {
     bytes[32..40].copy_from_slice(&manifest.previous.prev_log_id.to_le_bytes());
     bytes[40..48].copy_from_slice(&manifest.previous.prev_accumulated_checksum.to_le_bytes());
     bytes[48..56].copy_from_slice(&manifest.ref_scn.to_le_bytes());
-    let checksum = crc64(&bytes[..56]);
-    bytes[56..64].copy_from_slice(&checksum.to_le_bytes());
+    bytes[56..64].copy_from_slice(&manifest.committed.end_lsn.to_le_bytes());
+    bytes[64..72].copy_from_slice(&manifest.committed.end_scn.to_le_bytes());
+    bytes[72..80].copy_from_slice(&manifest.committed.log_id.to_le_bytes());
+    bytes[80..88].copy_from_slice(&manifest.committed.accumulated_checksum.to_le_bytes());
+    let checksum = crc64(&bytes[..88]);
+    bytes[88..96].copy_from_slice(&checksum.to_le_bytes());
     let temporary = directory.join("manifest.tmp");
     let mut file = File::create(&temporary)?;
     file.write_all(&bytes)?;
@@ -928,7 +989,7 @@ fn read_manifest(directory: &Path) -> Result<Manifest> {
     File::open(directory.join(MANIFEST_FILE))?.read_to_end(&mut bytes)?;
     if bytes.len() != MANIFEST_SIZE
         || bytes.get(..8) != Some(MANIFEST_MAGIC)
-        || crc64(&bytes[..56]) != u64::from_le_bytes(bytes[56..64].try_into().unwrap())
+        || crc64(&bytes[..88]) != u64::from_le_bytes(bytes[88..96].try_into().unwrap())
     {
         return Err(Error::Corrupt);
     }
@@ -946,6 +1007,12 @@ fn read_manifest(directory: &Path) -> Result<Manifest> {
         base_lsn,
         previous,
         ref_scn: number(48),
+        committed: CommittedTail {
+            end_lsn: number(56),
+            end_scn: number(64),
+            log_id: signed(72),
+            accumulated_checksum: number(80),
+        },
     })
 }
 
@@ -1023,6 +1090,88 @@ mod tests {
         assert_eq!(cursor.payload(), b"one");
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"two");
+        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+    }
+
+    #[test]
+    fn complete_but_unconfirmed_group_is_removed() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let confirmed = stream.append(b"confirmed", 10).unwrap();
+        {
+            let mut state = stream.inner.state.lock().unwrap();
+            let lsn = state.end_lsn;
+            let entry = encode_entry(b"unconfirmed", 11, false);
+            let group = encode_group(
+                &entry,
+                lsn,
+                11,
+                state.next_log_id,
+                state.accumulated_checksum,
+                false,
+            )
+            .unwrap();
+            state.write_record(lsn, &group).unwrap();
+        }
+        drop(stream);
+
+        let reopened = Stream::open(&path, 0);
+        assert_eq!(reopened.progress().unwrap().end_lsn, confirmed.end_lsn);
+        reopened.append(b"next", 11).unwrap();
+        let mut cursor = reopened.cursor(confirmed.lsn, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"confirmed");
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"next");
+        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+    }
+
+    #[test]
+    fn confirmed_corruption_is_not_truncated() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        stream.append(b"one", 10).unwrap();
+        let second = stream.append(b"two", 11).unwrap();
+        drop(stream);
+        let segment = segment_path(&directory.0, 0);
+        let original_length = fs::metadata(&segment).unwrap().len();
+        let mut file = OpenOptions::new().write(true).open(&segment).unwrap();
+        file.seek(SeekFrom::Start(
+            physical_offset(0) + (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64,
+        ))
+        .unwrap();
+        file.write_all(b"X").unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+
+        assert_eq!(Stream::open(&path, 0).status(), Err(Error::Corrupt));
+        assert_eq!(fs::metadata(segment).unwrap().len(), original_length);
+        assert_eq!(
+            fs::metadata(segment_path(&directory.0, 0)).unwrap().len(),
+            physical_offset(second.end_lsn)
+        );
+    }
+
+    #[test]
+    fn committed_short_zero_padding_survives_reopen() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let payload_len = BLOCK_SIZE as usize - GROUP_HEADER_SIZE - ENTRY_HEADER_SIZE - 32;
+        let entry = encode_entry(&vec![7; payload_len], 10, false);
+        let group = encode_group(&entry, 0, 10, 1, 0, false).unwrap();
+        stream.append_imported(0, 10, &group).unwrap();
+        let appended = stream.append(b"next", 11).unwrap();
+        assert_eq!(block_id(appended.lsn), 1);
+        drop(stream);
+
+        let reopened = Stream::open(&path, 0);
+        assert_eq!(reopened.status(), Ok(true));
+        let mut cursor = reopened.cursor(appended.lsn, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"next");
         assert_eq!(cursor.next(u64::MAX), Err(Error::End));
     }
 
