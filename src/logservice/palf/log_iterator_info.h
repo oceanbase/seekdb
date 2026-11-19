@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#pragma once
+
 #include <cstdint>                                       // UINT64_MAX
 #include "lib/ob_errno.h"                                // errno
 #include "lib/utility/ob_print_utils.h"                  // TO_STRING_KV

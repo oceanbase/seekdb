@@ -17,6 +17,8 @@
 #include "ob_log_replay_service.h"
 #include "logservice/ob_i_log_storage.h"
 #include "share/config/ob_server_config.h"
+#include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase

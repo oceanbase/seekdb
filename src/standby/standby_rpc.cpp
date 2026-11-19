@@ -913,7 +913,6 @@ int StandbyRpcService::fetch_log(
         int64_t size = 0;
         share::SCN log_scn;
         palf::LSN log_lsn;
-        palf::LogGroupEntry group_entry;
         if (writer->cancelled()) {
           ret = OB_CANCELED;
         } else if (OB_FAIL(iterator.next())) {
@@ -921,10 +920,8 @@ int StandbyRpcService::fetch_log(
             ret = OB_SUCCESS;
           }
           break;
-        } else if (OB_FAIL(iterator.get_entry(buf, group_entry, log_lsn))) {
+        } else if (OB_FAIL(iterator.get_entry(buf, size, log_scn, log_lsn))) {
           LOG_WARN("failed to read source log group", K(ret));
-        } else if (FALSE_IT(size = group_entry.get_group_entry_size())) {
-        } else if (FALSE_IT(log_scn = group_entry.get_scn())) {
         } else {
           rpc::Message response;
           response.set_buf(buf, size);

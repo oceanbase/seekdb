@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_APPLY_SERVICE_
 #define OCEANBASE_LOGSERVICE_LOG_APPLY_SERVICE_
 #include "common/ob_role.h"
+#include "share/ob_define.h"
 #include "lib/lock/ob_qsync_lock.h"
 #include "lib/queue/ob_link_queue.h"
 #include "lib/thread/ob_simple_thread_pool.h"

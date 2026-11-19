@@ -15,7 +15,7 @@
 use crate::format::{Error, Result};
 use crate::stream::{self, Cursor, Stream};
 
-#[cxx::bridge(namespace = "oceanbase::palf::rust")]
+#[cxx::bridge(namespace = "oceanbase::palf::palf_rs")]
 mod ffi {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Code {

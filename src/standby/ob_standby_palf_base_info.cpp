@@ -123,15 +123,17 @@ int ObStandbyPalfBaseInfoBuilder::build(
           LOG_WARN("failed to set source iterator io context", K(ret), K(ls_id), K(arg));
         } else if (FALSE_IT(iterator.set_need_print_error(false))) {
         } else {
-          palf::LogGroupEntry entry;
+          const char *entry = nullptr;
+          int64_t entry_size = 0;
+          share::SCN entry_scn;
           palf::LSN curr_lsn;
           while (OB_SUCC(ret) && OB_SUCC(iterator.next())) {
-            if (OB_FAIL(iterator.get_entry(entry, curr_lsn))) {
+            if (OB_FAIL(iterator.get_entry(entry, entry_size, entry_scn, curr_lsn))) {
               LOG_WARN("failed to get source log entry", K(ret), K(ls_id), K(iterator), K(arg));
-            } else if (entry.get_scn() >= arg.replay_start_scn_) {
+            } else if (entry_scn >= arg.replay_start_scn_) {
               result.located_log_ = true;
               LOG_INFO("located standby replay start log",
-                  K(ls_id), K(arg), K(curr_lsn), K(entry), K(result.palf_base_info_));
+                  K(ls_id), K(arg), K(curr_lsn), K(entry_scn), K(result.palf_base_info_));
               break;
             }
           }

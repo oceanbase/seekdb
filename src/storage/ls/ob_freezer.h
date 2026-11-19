@@ -306,7 +306,7 @@ private:
   int wait_data_memtable_freeze_finish_(ObITabletMemtable *tablet_memtable);
   int set_tablet_freeze_flag_(const ObTabletID tablet_id,
                               const bool need_rewrite_meta,
-                              const SCN freeze_snapshot_version,
+                              const share::SCN freeze_snapshot_version,
                               ObIArray<ObTableHandleV2> &frozen_memtable_handles);
   int handle_no_active_memtable_(const ObTabletID &tablet_id,
                                  const ObTablet *tablet,
