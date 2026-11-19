@@ -13,6 +13,7 @@ rust_static_library(
         "//conditions:default": ["default", "native-network", "native-http"],
     }),
     deps = all_crate_deps(normal = True) + [
+        "//rust/palf",
         "//rust/mvt",
         "//rust/file-io:file_io",
         "//rust/storage-io:storage_io",
