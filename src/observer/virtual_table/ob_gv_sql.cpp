@@ -948,11 +948,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       }
       break;
     }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::ERASE_TIME: {
-      // Show the monotonic deletion time in microseconds.
-      cells[i].set_int(cache_obj->get_logical_del_time());
-      break;
-    }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::COMPILE_TIME: {
       uint64_t compile_time = 0;
       if (NULL != pl_object) {
