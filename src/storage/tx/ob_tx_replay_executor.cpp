@@ -271,8 +271,10 @@ void ObTxReplayExecutor::finish_replay_(const int retcode)
       mt_ctx_->replay_end(false, /*is_replay_succ*/
                           callback_list_idx,
                           log_ts_ns_);
-      TRANS_LOG_RET(ERROR, OB_EAGAIN, "[Replay Tx]Tx Redo replay error, rollback to start",
-                    K(callback_list_idx), KPC(this));
+      if (OB_EAGAIN != retcode) {
+        TRANS_LOG_RET(ERROR, retcode, "[Replay Tx]Tx Redo replay error, rollback to start",
+                      K(callback_list_idx), KPC(this));
+      }
     } else {
       mt_ctx_->replay_end(true, /*is_replay_succ*/
                           callback_list_idx,
