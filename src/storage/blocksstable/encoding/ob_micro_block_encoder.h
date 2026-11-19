@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_ENCODING_OB_MICRO_BLOCK_ENCODER_H_
 #define OCEANBASE_ENCODING_OB_MICRO_BLOCK_ENCODER_H_
 
+#include <memory>
+
 #include "lib/container/ob_array.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_data_buffer.h"
@@ -87,6 +89,8 @@ private:
   int inner_init();
   int reserve_header(const ObMicroBlockEncodingCtx &ctx);
   int pivot();
+  int try_build_rust_block(char *&buf, int64_t &size);
+  int build_cpp_block(char *&buf, int64_t &size);
   int try_to_append_row(const int64_t &store_size);
   int init_column_ctxs();
   // only deep copy the cell part
@@ -154,10 +158,12 @@ private:
   int set_datum_rows_ptr();
 
 private:
+  struct RustBlockBuffer;
   ObMicroBlockEncodingCtx ctx_;
   ObMicroBlockHeader *header_;
   ObArenaAllocator encoding_meta_allocator_;
   ObMicroBufferWriter data_buffer_;
+  std::unique_ptr<RustBlockBuffer> rust_block_;
   ObConstDatumRowArray datum_rows_;
   common::ObArray<ObColDatums *> all_col_datums_;
   ObArenaAllocator pivot_allocator_;

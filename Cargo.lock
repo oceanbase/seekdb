@@ -1064,6 +1064,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "micro-block"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+]
+
+[[package]]
 name = "miette"
 version = "7.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1623,6 +1630,7 @@ dependencies = [
  "local",
  "logger",
  "math",
+ "micro-block",
  "mvt",
  "number-parser",
  "path-utils",

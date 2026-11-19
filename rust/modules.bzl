@@ -13,6 +13,7 @@ MODULES = {
     },
     "wal": {"bridge": "src/bridge.rs", "headers": ["include/callbacks.h"]},
     "mvt": {"bridge": "src/bridge.rs"},
+    "micro-block": {"bridge": "src/bridge.rs"},
     "standby-rpc": {
         "bridge": "src/bridge.rs",
         "headers": ["include/service.h"],

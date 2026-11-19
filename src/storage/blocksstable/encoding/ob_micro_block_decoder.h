@@ -121,6 +121,8 @@ protected:
   const ObBlockCachedDecoderHeader *cached_decoder_;
   const char *meta_data_;
   const char *row_data_;
+  const char *block_data_;
+  int64_t block_size_;
   ObVarRowIndex var_row_index_;
   ObFixRowIndex fix_row_index_;
   ObIRowIndex *row_index_;
@@ -187,7 +189,7 @@ private:
       const int64_t request_cnt);
   int locate_row(
       const ObDatumRowkey &rowkey,
-      const ObStorageDatumUtils &datum_utils,
+      const ObITableReadInfo &read_info,
       const char *&row_data,
       int64_t &row_len,
       int64_t &row_id,

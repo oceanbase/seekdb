@@ -17,6 +17,7 @@ rust_static_library(
         "//rust/mvt",
         "//rust/file-io:file_io",
         "//rust/storage-io:storage_io",
+        "//rust/micro-block:micro_block",
         "//rust/config",
         "//rust/in-process:in_process",
         "//rust/local",

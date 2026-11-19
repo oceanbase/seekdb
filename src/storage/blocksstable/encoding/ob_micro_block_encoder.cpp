@@ -17,6 +17,10 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_micro_block_encoder.h"
+
+#include <new>
+
+#include "rust/micro_block.h"
 #include "storage/blocksstable/index_block/ob_index_block_aggregator.h"
 
 namespace oceanbase
@@ -73,9 +77,15 @@ int ObMicroBlockEncoder::try_encoder(ObIColumnEncoder *&encoder, const int64_t c
 }
 
 #define MICRO_BLOCK_PAGE_ALLOCATOR ModulePageAllocator(common::ObModIds::OB_ENCODER_ALLOCATOR)
+struct ObMicroBlockEncoder::RustBlockBuffer
+{
+  rust::Vec<uint8_t> bytes;
+};
+
 ObMicroBlockEncoder::ObMicroBlockEncoder() : ctx_(), header_(NULL),
     encoding_meta_allocator_(),
     data_buffer_(),
+    rust_block_(),
     datum_rows_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     all_col_datums_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     pivot_allocator_(lib::ObMemAttr(blocksstable::OB_ENCODING_LABEL_PIVOT), OB_MALLOC_MIDDLE_BLOCK_SIZE),
@@ -178,6 +188,7 @@ int ObMicroBlockEncoder::inner_init()
 void ObMicroBlockEncoder::reset()
 {
   ObIMicroBlockWriter::reset();
+  rust_block_.reset();
   is_inited_ = false;
   encoder_freezed_ = false;
   //ctx_
@@ -216,6 +227,9 @@ void ObMicroBlockEncoder::reset()
 void ObMicroBlockEncoder::reuse()
 {
   ObIMicroBlockWriter::reuse();
+  if (rust_block_) {
+    rust_block_->bytes = rust::Vec<uint8_t>();
+  }
   // is_inited_
   // ctx_
   encoding_meta_allocator_.reuse();
@@ -522,9 +536,6 @@ int ObMicroBlockEncoder::store_encoding_meta_and_fix_cols(ObBufferWriter &buf_wr
 int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
 {
   int ret = OB_SUCCESS;
-  int64_t encoders_need_size = 0;
-  const int64_t col_header_size = ctx_.column_cnt_ * (sizeof(ObColumnHeader));
-  char *encoding_meta_buf = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(datum_rows_.empty())) {
@@ -533,7 +544,162 @@ int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
     ret = OB_ERR_UNEXPECTED;
   } else if (FALSE_IT(encoder_freezed_ = true)) {
   } else if (OB_FAIL(set_datum_rows_ptr())) {
-  } else if (OB_FAIL(pivot())) {
+  } else if (OB_FAIL(try_build_rust_block(buf, size))) {
+    if (OB_NOT_SUPPORTED == ret) {
+      ret = build_cpp_block(buf, size);
+    }
+  }
+  return ret;
+}
+
+int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
+{
+  int ret = OB_SUCCESS;
+  rust::Vec<micro_block::BridgeColumn> columns;
+  rust::Vec<micro_block::InputCell> cells;
+  if (ENCODING_ROW_STORE != ctx_.row_store_type_ || has_lob_out_row_ || has_string_out_row_) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (!rust_block_) {
+    rust_block_.reset(new (std::nothrow) RustBlockBuffer());
+    if (!rust_block_) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    columns.reserve(ctx_.column_cnt_);
+    cells.reserve(datum_rows_.count() * ctx_.column_cnt_);
+  }
+  for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < ctx_.column_cnt_; ++col_idx) {
+    const ObObjType type = ctx_.col_descs_->at(col_idx).col_type_.get_type();
+    const ObObjTypeStoreClass store_class = get_store_class_map()[ob_obj_type_class(type)];
+    switch (store_class) {
+      case ObIntSC:
+      case ObUIntSC:
+      case ObNumberSC:
+      case ObDecimalIntSC:
+      case ObStringSC:
+      case ObTextSC:
+      case ObJsonSC:
+      case ObGeometrySC: {
+        const int64_t fixed_length = get_type_size_map()[type];
+        micro_block::BridgeColumn column;
+        column.obj_type = static_cast<uint8_t>(type);
+        column.fixed_length = fixed_length > 0 ? static_cast<uint32_t>(fixed_length) : 0;
+        column.enable_bit_packing = false;
+        columns.push_back(column);
+        break;
+      }
+      default:
+        ret = OB_NOT_SUPPORTED;
+    }
+  }
+  for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < datum_rows_.count(); ++row_idx) {
+    for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < ctx_.column_cnt_; ++col_idx) {
+      const ObDatum &datum = datum_rows_.at(row_idx).get_datum(col_idx);
+      micro_block::InputCell cell;
+      if (datum.is_outrow() || (ctx_.need_calc_column_chksum_ && datum.is_nop())) {
+        ret = OB_NOT_SUPPORTED;
+      } else if (OB_UNLIKELY(!datum.is_null() && !datum.is_nop()
+                             && datum.len_ > 0 && nullptr == datum.ptr_)) {
+        ret = OB_INVALID_DATA;
+      } else {
+        cell.kind = datum.is_null() ? 1 : (datum.is_nop() ? 2 : 0);
+        cell.pointer = reinterpret_cast<std::size_t>(datum.ptr_);
+        cell.length = datum.len_;
+        const uint32_t fixed_length = columns[col_idx].fixed_length;
+        if (0 == cell.kind && fixed_length > 0 && datum.len_ != fixed_length) {
+          if (datum.len_ < fixed_length) {
+            ret = OB_NOT_SUPPORTED;
+          } else {
+            cell.length = fixed_length;
+          }
+        }
+        if (OB_SUCC(ret)) {
+          cells.push_back(cell);
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    micro_block::BuildResult result = micro_block::build_pax_block(
+        std::move(columns),
+        std::move(cells),
+        static_cast<uint32_t>(ctx_.rowkey_column_cnt_),
+        ctx_.need_calc_column_chksum_,
+        static_cast<uint64_t>(estimate_size_),
+        max_merged_trans_version_);
+    switch (result.code) {
+      case micro_block::Code::Ok:
+        break;
+      case micro_block::Code::Unsupported:
+        ret = OB_NOT_SUPPORTED;
+        break;
+      case micro_block::Code::InvalidArgument:
+        ret = OB_INVALID_ARGUMENT;
+        break;
+      case micro_block::Code::InvalidData:
+        ret = OB_INVALID_DATA;
+        break;
+      case micro_block::Code::ChecksumMismatch:
+        ret = OB_CHECKSUM_ERROR;
+        break;
+      case micro_block::Code::OutputTooSmall:
+        ret = OB_BUF_NOT_ENOUGH;
+        break;
+      case micro_block::Code::SizeOverflow:
+        ret = OB_SIZE_OVERFLOW;
+        break;
+      default:
+        ret = OB_ERR_UNEXPECTED;
+    }
+    if (OB_SUCC(ret)) {
+      const int64_t metadata_size = header_size_;
+      if (OB_UNLIKELY(result.accepted_rows != static_cast<std::size_t>(datum_rows_.count())
+                      || result.column_types.size() != static_cast<std::size_t>(ctx_.column_cnt_)
+                      || result.block.size() > static_cast<std::size_t>(INT64_MAX)
+                      || result.block.size() < static_cast<std::size_t>(metadata_size))) {
+        ret = OB_INVALID_DATA;
+      } else {
+        ctx_.estimate_block_size_ += estimate_size_;
+        ctx_.real_block_size_ += result.block.size() - metadata_size;
+        ctx_.micro_block_cnt_++;
+        for (int64_t idx = 0; OB_SUCC(ret) && idx < ctx_.column_cnt_; ++idx) {
+          const ObPreviousEncoding pe(static_cast<ObColumnHeader::Type>(result.column_types[idx]), 0);
+          if (idx < ctx_.previous_encodings_.count()) {
+            ret = ctx_.previous_encodings_.at(idx).put(pe);
+          } else {
+            ObPreviousEncodingArray<ObMicroBlockEncodingCtx::MAX_PREV_ENCODING_COUNT> pe_array;
+            if (OB_FAIL(pe_array.put(pe))) {
+            } else {
+              ret = ctx_.previous_encodings_.push_back(pe_array);
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        rust_block_->bytes = std::move(result.block);
+        buf = reinterpret_cast<char *>(rust_block_->bytes.data());
+        size = static_cast<int64_t>(rust_block_->bytes.size());
+        ObMicroBlockHeader *micro_header = reinterpret_cast<ObMicroBlockHeader *>(buf);
+        if (micro_header->has_column_checksum_) {
+          micro_header->column_checksums_ = reinterpret_cast<int64_t *>(
+              buf + ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET);
+        }
+        block_generated_ = true;
+        STORAGE_LOG(DEBUG, "built micro block with Rust", K(size), K(datum_rows_.count()));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObMicroBlockEncoder::build_cpp_block(char *&buf, int64_t &size)
+{
+  int ret = OB_SUCCESS;
+  int64_t encoders_need_size = 0;
+  const int64_t col_header_size = ctx_.column_cnt_ * (sizeof(ObColumnHeader));
+  char *encoding_meta_buf = nullptr;
+  if (OB_FAIL(pivot())) {
   } else if (OB_FAIL(row_indexs_.reserve(datum_rows_.count()))) {
   } else if (OB_FAIL(encoder_detection(encoders_need_size))) {
   } else if (OB_FAIL(data_buffer_.ensure_space(col_header_size + encoders_need_size))) {

@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_micro_block_decoder.h"
+
+#include "rust/micro_block.h"
 #include "storage/access/ob_pushdown_aggregate.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_table_access_param.h"
@@ -192,6 +194,7 @@ ObColumnDecoderCtx ObIEncodeBlockReader::none_exist_column_decoder_ctx_;
 ObIEncodeBlockReader::ObIEncodeBlockReader()
   : request_cnt_(0),
     header_(NULL), col_header_(NULL), cached_decoder_(NULL), meta_data_(NULL), row_data_(NULL),
+    block_data_(NULL), block_size_(0),
     var_row_index_(), fix_row_index_(), row_index_(&var_row_index_),
     decoders_(nullptr),
     default_decoders_(),
@@ -219,6 +222,8 @@ void ObIEncodeBlockReader::reuse()
   col_header_ = nullptr;
   meta_data_ = nullptr;
   row_data_ = nullptr;
+  block_data_ = nullptr;
+  block_size_ = 0;
   ctxs_ = nullptr;
   store_id_array_ = nullptr;
   column_type_array_ = nullptr;
@@ -235,6 +240,8 @@ void ObIEncodeBlockReader::reset()
   col_header_ = NULL;
   meta_data_ = NULL;
   row_data_ = NULL;
+  block_data_ = NULL;
+  block_size_ = 0;
   ctxs_ = NULL;
   store_id_array_ = NULL;
   column_type_array_ = NULL;
@@ -278,6 +285,8 @@ int ObIEncodeBlockReader::do_init(
     ret = OB_INVALID_ARGUMENT;
   } else {
     request_cnt_ = request_cnt;
+    block_data_ = block_data.get_buf();
+    block_size_ = block_data.get_buf_size();
     row_data_ = block_data.get_buf() + header_->row_data_offset_;
     const int64_t row_data_len = block_data.get_buf_size() - header_->row_data_offset_;
 
@@ -541,7 +550,7 @@ int ObEncodeBlockGetReader::get_row(
 
   reuse();
   if (OB_FAIL(init_by_read_info(block_data, read_info))) {
-  } else if (OB_FAIL(locate_row(rowkey, read_info.get_datum_utils(), row_data, row_len, row_id, found))) {
+  } else if (OB_FAIL(locate_row(rowkey, read_info, row_data, row_len, row_id, found))) {
   } else {
     row.row_flag_.reset();
     row.mvcc_row_flag_.reset();
@@ -582,13 +591,14 @@ int ObEncodeBlockGetReader::get_all_columns(
 
 int ObEncodeBlockGetReader::locate_row(
     const ObDatumRowkey &rowkey,
-    const ObStorageDatumUtils &datum_utils,
+    const ObITableReadInfo &read_info,
     const char *&row_data,
     int64_t &row_len,
     int64_t &row_id,
     bool &found)
 {
   int ret = OB_SUCCESS;
+  const ObStorageDatumUtils &datum_utils = read_info.get_datum_utils();
 
   if (OB_UNLIKELY(rowkey.get_datum_cnt() > datum_utils.get_rowkey_count())) {
     ret = OB_INVALID_ARGUMENT;
@@ -601,13 +611,61 @@ int ObEncodeBlockGetReader::locate_row(
     //reader_
     const int64_t rowkey_cnt = rowkey.get_datum_cnt();
     const ObStorageDatum *datums = rowkey.datums_;
+    bool located_by_rust = false;
+    if (1 == rowkey_cnt && 1 == read_info.get_schema_rowkey_count()
+        && read_info.get_columns_desc().at(0).col_order_ == common::ASC
+        && read_info.get_columns_desc().at(0).col_type_.is_integer_type()
+        && !datums[0].is_null_or_nop() && sizeof(int64_t) == datums[0].len_
+        && header_->column_count_ > 0
+        && (ObColumnHeader::RAW == col_header_[0].type_
+            || ObColumnHeader::CONST == col_header_[0].type_)) {
+      const rust::Slice<const uint8_t> block(
+          reinterpret_cast<const uint8_t *>(block_data_), static_cast<std::size_t>(block_size_));
+      const micro_block::LocateResult result =
+          read_info.get_columns_desc().at(0).col_type_.is_unsigned_integer()
+              ? micro_block::locate_uint(block, 0, datums[0].get_uint64())
+              : micro_block::locate_int(block, 0, datums[0].get_int());
+      switch (result.code) {
+        case micro_block::Code::Ok:
+          located_by_rust = true;
+          if (UINT32_MAX == result.row) {
+            found = false;
+          } else if (result.row >= header_->row_count_) {
+            ret = OB_INVALID_DATA;
+          } else {
+            found = true;
+            row_id = result.row;
+            ret = setup_row(row_id, row_len, row_data);
+          }
+          break;
+        case micro_block::Code::Unsupported:
+          break;
+        case micro_block::Code::InvalidArgument:
+          ret = OB_INVALID_ARGUMENT;
+          break;
+        case micro_block::Code::InvalidData:
+          ret = OB_INVALID_DATA;
+          break;
+        case micro_block::Code::ChecksumMismatch:
+          ret = OB_CHECKSUM_ERROR;
+          break;
+        case micro_block::Code::OutputTooSmall:
+          ret = OB_BUF_NOT_ENOUGH;
+          break;
+        case micro_block::Code::SizeOverflow:
+          ret = OB_SIZE_OVERFLOW;
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+      }
+    }
     //binary search
     int32_t high = header_->row_count_ - 1;
     int32_t low = 0;
     int32_t middle = 0;
     int32_t cmp_result = 0;
 
-    while (OB_SUCC(ret) && low <= high) {
+    while (OB_SUCC(ret) && !located_by_rust && low <= high) {
       middle = (low + high) >> 1;
       cmp_result = 0;
       if (OB_FAIL(setup_row(middle, row_len, row_data))) {
@@ -686,7 +744,7 @@ int ObEncodeBlockGetReader::exist_row(
               read_info.get_schema_rowkey_count(),
               read_info.get_columns_desc(),
               rowkey_cnt))) {
-  } else if (OB_FAIL(locate_row(rowkey, read_info.get_datum_utils(), row_data, row_len, row_id, found))) {
+  } else if (OB_FAIL(locate_row(rowkey, read_info, row_data, row_len, row_id, found))) {
   } else if (found) {
     exist = true;
   }
@@ -733,7 +791,7 @@ int ObEncodeBlockGetReader::get_row_id(
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(init_by_read_info(block_data, read_info))) {
-  } else if (OB_FAIL(locate_row(rowkey, read_info.get_datum_utils(), row_data, row_len, row_id, found))) {
+  } else if (OB_FAIL(locate_row(rowkey, read_info, row_data, row_len, row_id, found))) {
   } else if (!found) {
     ret = OB_BEYOND_THE_RANGE;
   }

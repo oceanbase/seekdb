@@ -14,26 +14,28 @@
 
 //! One static library (and one Rust runtime/allocator) for all seekdb components.
 pub use compression;
+pub use config as parameter_config;
 pub use crypto;
 #[cfg(feature = "native-http")]
 pub use http_client;
 pub use config as parameter_config;
 pub use file_io;
 pub use in_process;
+pub use json;
 pub use local as local_storage;
 pub use logger::*;
+pub use math;
+pub use micro_block;
 pub use mvt;
 pub use number_parser;
 pub use path_utils;
 pub use regex_engine;
-pub use json;
 pub use spatial_covering;
 pub use sql_nio as network;
 #[cfg(not(target_family = "wasm"))]
 pub use standby_rpc;
 pub use storage_io;
 pub use uuid_generator;
-pub use xml_parser;
-pub use math;
 pub use vector_kernels;
 pub use wal;
+pub use xml_parser;
