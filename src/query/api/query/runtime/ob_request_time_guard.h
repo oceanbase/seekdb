@@ -129,6 +129,7 @@ public:
         safe_timestamp = MIN(safe_timestamp, cur_safe_time);
       }
     }
+    safe_timestamp = common::ObTimeUtility::monotonic_timestamp(safe_timestamp);
     return ret;
   }
 

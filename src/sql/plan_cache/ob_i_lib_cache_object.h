@@ -71,8 +71,13 @@ public:
   inline lib::MemoryContext &get_mem_context() { return mem_context_; }
   inline bool added_lc() const { return added_to_lc_; }
   inline void set_added_lc(const bool added_to_lc) { added_to_lc_ = added_to_lc; }
-  inline int64_t get_logical_del_time() const { return ATOMIC_LOAD(&log_del_time_); }
-  bool should_release(const int64_t safe_monotonic_time) const;
+  inline int64_t get_logical_del_time() const { return log_del_time_; }
+  inline void set_logical_del_time(const int64_t timestamp) { log_del_time_ = timestamp; }
+  inline bool should_release(const int64_t safe_timestamp) const
+  {
+    // only free leaked cache object
+    return 0 != get_ref_count() && get_logical_del_time() < safe_timestamp;
+  }
   inline void set_obj_status(CacheObjStatus status) { obj_status_ = status; }
   inline CacheObjStatus get_obj_status() const { return obj_status_; }
   inline ObPlanCache *get_plan_cache() const { return plan_cache_; }
@@ -87,12 +92,11 @@ public:
   
   VIRTUAL_TO_STRING_KV(K_(ref_count),
                        K_(object_id),
-                       "log_del_time", get_logical_del_time(),
+                       K_(log_del_time),
                        K_(added_to_lc),
                        K_(ns));
                        
 private:
-  void mark_logically_deleted();
   int64_t dec_ref_count();
 protected:
   lib::MemoryContext mem_context_;
