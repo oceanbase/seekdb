@@ -48,17 +48,7 @@ void set_thread_name_inner(const char* name)
     MultiByteToWideChar(CP_UTF8, 0, name, 14, wname, 15);
   }
   wname[15] = L'\0';
-  // Windows 10 1607 and Server 2016 expose this optional API only in KernelBase.dll.
-  using SetThreadDescriptionFn = HRESULT (WINAPI *)(HANDLE, PCWSTR);
-  static const auto set_thread_description = []() -> SetThreadDescriptionFn {
-    const HMODULE module = GetModuleHandleW(L"KernelBase.dll");
-    return module != nullptr
-        ? reinterpret_cast<SetThreadDescriptionFn>(GetProcAddress(module, "SetThreadDescription"))
-        : nullptr;
-  }();
-  if (set_thread_description != nullptr) {
-    set_thread_description(GetCurrentThread(), wname);
-  }
+  SetThreadDescription(GetCurrentThread(), wname);
 #else
   prctl(PR_SET_NAME, name);
 #endif
