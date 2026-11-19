@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 #include "ob_i_lib_cache_object.h"
+#include "lib/time/ob_time_utility.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -30,6 +31,7 @@ ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext 
     ref_count_(0),
     object_id_(OB_INVALID_ID),
     log_del_time_(INT64_MAX),
+    log_del_wall_time_(INT64_MAX),
     added_to_lc_(false),
     ns_(ns),
     obj_status_(ObILibCacheObject::ACTIVE),
@@ -43,11 +45,19 @@ void ObILibCacheObject::reset()
   ref_count_ = 0;
   object_id_ = OB_INVALID_ID;
   log_del_time_ = INT64_MAX;
+  log_del_wall_time_ = INT64_MAX;
   added_to_lc_ = false;
   ns_ = NS_INVALID;
   obj_status_ = ObILibCacheObject::ACTIVE;
   accounted_size_ = 0;
   plan_cache_ = nullptr;
+}
+
+void ObILibCacheObject::mark_logically_deleted()
+{
+  // ERASE_TIME is displayed as a SQL timestamp. Cache reclamation uses monotonic time.
+  ATOMIC_STORE(&log_del_wall_time_, ObTimeUtility::current_time());
+  log_del_time_ = ObTimeUtility::current_monotonic_time();
 }
 
 void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true */) const

@@ -949,7 +949,7 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       break;
     }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::ERASE_TIME: {
-      cells[i].set_timestamp(cache_obj->get_logical_del_time());
+      cells[i].set_timestamp(cache_obj->get_logical_del_wall_time());
       break;
     }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::COMPILE_TIME: {
