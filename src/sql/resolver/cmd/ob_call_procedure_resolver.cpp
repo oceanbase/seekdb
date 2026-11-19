@@ -351,16 +351,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                             *name_node,
                                                             db_name, package_name, sp_name,
                                                             nullptr))) {
-          if (name_node->children_[0] == nullptr && name_node->children_[1] != nullptr && ret == OB_ERR_BAD_DATABASE) {
-            const ParseNode &qualifier = *name_node->children_[1];
-            const ObString name(qualifier.str_len_, qualifier.str_value_);
-            const int body_ret = ObResolverUtils::check_builtin_package_body(*schema_checker_->get_schema_guard(), name);
-            if (body_ret != OB_SUCCESS) {
-              ret = body_ret;
-            }
-          }
-        } else if (0 == db_name.case_compare(OB_SYS_DATABASE_NAME) && !package_name.empty()
-                   && OB_FAIL(ObResolverUtils::check_builtin_package_body(*schema_checker_->get_schema_guard(), package_name))) {
         } else if (db_name.empty() && session_info_->get_database_name().empty()) {
           ret = OB_ERR_NO_DB_SELECTED;
         } else {

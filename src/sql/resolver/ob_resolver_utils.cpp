@@ -5293,20 +5293,6 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
   return ret;
 }
 
-int ObResolverUtils::check_builtin_package_body(ObSchemaGetterGuard &guard, const ObString &name)
-{
-  int ret = OB_SUCCESS;
-  if (pl::ObPLPackageManager::is_common_system_package(name)) {
-    const ObPackageInfo *body = nullptr;
-    if (OB_FAIL(guard.get_package_info(OB_SYS_DATABASE_ID, name, share::schema::PACKAGE_BODY_TYPE, body))) {
-    } else if (nullptr == body) {
-      ret = OB_OP_NOT_ALLOW;
-      LOG_USER_ERROR(OB_OP_NOT_ALLOW, "calling a built-in package before its body is available is");
-    }
-  }
-  return ret;
-}
-
 int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                              sql::ObRawExprFactory &expr_factory,
                                              sql::ObSQLSessionInfo &session_info,
@@ -5382,13 +5368,6 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
         if (OB_SUCC(ret)) {
           ObPLDependencyGuard switch_guard(&pl_resolver.get_external_ns(), pl_resolver.get_current_namespace().get_external_ns());
           if (OB_FAIL(pl_resolver.resolve_qualified_name(q_name, columns, real_exprs, func_ast, expr))) {
-            const int64_t count = q_name.access_idents_.count();
-            if (count == 2 || (count == 3 && 0 == q_name.access_idents_.at(0).access_name_.case_compare(OB_SYS_DATABASE_NAME))) {
-              const int body_ret = check_builtin_package_body(schema_guard, q_name.access_idents_.at(count - 2).access_name_);
-              if (OB_SUCCESS != body_ret) {
-                ret = body_ret;
-              }
-            }
             if (is_check_mode) {
               LOG_INFO("failed to resolve var", K(q_name), K(ret));
             } else {

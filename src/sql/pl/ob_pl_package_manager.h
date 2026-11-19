@@ -152,7 +152,6 @@ public:
   static int load_sys_package(common::ObMySQLProxy &sql_proxy,
                               common::ObString &package_name,
                               bool from_file);
-  static bool is_common_system_package(const common::ObString &name);
   static int load_all_common_sys_package(common::ObMySQLProxy &sql_proxy,
                                          bool from_file);
   static int load_all_special_sys_package(common::ObMySQLProxy &sql_proxy);
