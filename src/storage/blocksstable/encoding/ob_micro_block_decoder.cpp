@@ -806,6 +806,8 @@ ObMicroBlockDecoder::ObMicroBlockDecoder()
     col_header_(nullptr),
     meta_data_(nullptr),
     row_data_(nullptr),
+    block_data_(nullptr),
+    block_size_(0),
     var_row_index_(),
     fix_row_index_(),
     cached_decoder_(nullptr),
@@ -1040,6 +1042,8 @@ void ObMicroBlockDecoder::inner_reset()
   col_header_ = NULL;
   meta_data_ = NULL;
   row_data_ = NULL;
+  block_data_ = NULL;
+  block_size_ = 0;
   ObIMicroBlockReader::reset();
   decoder_allocator_.reuse();
   flat_row_reader_.reset();
@@ -1232,6 +1236,8 @@ int ObMicroBlockDecoder::do_init(const ObMicroBlockData &block_data)
     row_count_ = header_->row_count_;
     original_data_length_ = header_->original_length_;
     row_data_ = block_data.get_buf() + header_->row_data_offset_;
+    block_data_ = block_data.get_buf();
+    block_size_ = block_data.get_buf_size();
     const int64_t row_data_len = block_data.get_buf_size() - header_->row_data_offset_;
 
     if (block_data.type_ == ObMicroBlockData::Type::DATA_BLOCK
@@ -1870,11 +1876,18 @@ int ObMicroBlockDecoder::get_rows(
                          cols.count() != datum_infos.count())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
+    ret = try_get_rows_rust(cols, row_ids, row_cap, datum_infos, datum_offset);
+    if (OB_NOT_SUPPORTED == ret) {
+      ret = OB_SUCCESS;
+      for (int64_t i = 0; OB_SUCC(ret) && i < cols.count(); i++) {
+        common::ObDatum *col_datums = datum_infos.at(i).datum_ptr_ + datum_offset;
+        if (OB_FAIL(get_col_datums(cols.at(i), row_ids, cell_datas, row_cap, col_datums))) {
+        }
+      }
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < cols.count(); i++) {
-      int32_t col_id = cols.at(i);
       common::ObDatum *col_datums = datum_infos.at(i).datum_ptr_ + datum_offset;
-      if (OB_FAIL(get_col_datums(col_id, row_ids, cell_datas, row_cap, col_datums))) {
-      } else if (nullptr != col_params.at(i) && need_padding(is_padding_mode, col_params.at(i)->get_meta_type())) {
+      if (nullptr != col_params.at(i) && need_padding(is_padding_mode, col_params.at(i)->get_meta_type())) {
         // need padding
         if (OB_FAIL(storage::pad_on_datums(
                     col_params.at(i)->get_accuracy(),
@@ -1882,6 +1895,114 @@ int ObMicroBlockDecoder::get_rows(
                     decoder_allocator_.get_inner_allocator(),
                     row_cap,
                     col_datums))) {
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObMicroBlockDecoder::try_get_rows_rust(
+    const common::ObIArray<int32_t> &cols,
+    const int32_t *row_ids,
+    const int64_t row_cap,
+    common::ObIArray<ObSqlDatumInfo> &datum_infos,
+    const int64_t datum_offset)
+{
+  int ret = OB_NOT_SUPPORTED;
+  if (row_cap < 0 || row_cap > UINT32_MAX || cols.count() <= 0
+      || block_size_ <= 0 || nullptr == block_data_) {
+    return ret;
+  }
+  std::vector<uint32_t> rust_rows;
+  std::vector<uint32_t> rust_columns;
+  rust_rows.reserve(row_cap);
+  rust_columns.reserve(cols.count());
+  for (int64_t i = 0; i < row_cap; ++i) {
+    if (row_ids[i] < 0 || row_ids[i] >= row_count_) {
+      return ret;
+    }
+    rust_rows.push_back(static_cast<uint32_t>(row_ids[i]));
+  }
+  for (int64_t i = 0; i < cols.count(); ++i) {
+    const int32_t col_id = cols.at(i);
+    if (col_id < 0 || col_id >= request_cnt_) {
+      return ret;
+    }
+    const ObColumnHeader *column = decoders_[col_id].ctx_->col_header_;
+    if (nullptr == column) {
+      return ret;
+    }
+    const int64_t store_idx = column - col_header_;
+    if (store_idx < 0 || store_idx >= header_->column_count_) {
+      return ret;
+    }
+    if ((ObColumnHeader::RAW != column->type_ && ObColumnHeader::CONST != column->type_)
+        || column->is_bit_packing()) {
+      return ret;
+    }
+    switch (get_store_class_map()[ob_obj_type_class(column->get_store_obj_type())]) {
+      case ObIntSC:
+      case ObUIntSC:
+      case ObNumberSC:
+      case ObDecimalIntSC:
+      case ObStringSC:
+      case ObTextSC:
+      case ObJsonSC:
+      case ObGeometrySC:
+        break;
+      default:
+        return ret;
+    }
+    rust_columns.push_back(static_cast<uint32_t>(store_idx));
+  }
+
+  const rust::Slice<const uint8_t> block(
+      reinterpret_cast<const uint8_t *>(block_data_), static_cast<std::size_t>(block_size_));
+  const rust::Slice<const uint32_t> rows(rust_rows.data(), rust_rows.size());
+  const rust::Slice<const uint32_t> columns(rust_columns.data(), rust_columns.size());
+  micro_block::BatchResult result = micro_block::project_pax_block(block, rows, columns);
+  switch (result.code) {
+    case micro_block::Code::Ok:
+      ret = OB_SUCCESS;
+      break;
+    case micro_block::Code::Unsupported:
+      return OB_NOT_SUPPORTED;
+    case micro_block::Code::InvalidArgument:
+      return OB_INVALID_ARGUMENT;
+    case micro_block::Code::InvalidData:
+      return OB_INVALID_DATA;
+    case micro_block::Code::ChecksumMismatch:
+      return OB_CHECKSUM_ERROR;
+    case micro_block::Code::OutputTooSmall:
+      return OB_BUF_NOT_ENOUGH;
+    case micro_block::Code::SizeOverflow:
+      return OB_SIZE_OVERFLOW;
+    default:
+      return OB_ERR_UNEXPECTED;
+  }
+  if (result.cells.size() != rust_rows.size() * rust_columns.size()) {
+    return OB_INVALID_DATA;
+  }
+  for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < cols.count(); ++col_idx) {
+    common::ObDatum *datums = datum_infos.at(col_idx).datum_ptr_ + datum_offset;
+    const ObObjType obj_type = decoders_[cols.at(col_idx)].ctx_->col_header_->get_store_obj_type();
+    int64_t integer_mask = 0;
+    if (ObIntTC == ob_obj_type_class(obj_type)) {
+      integer_mask = ~INTEGER_MASK_TABLE[get_type_size_map()[obj_type]];
+    }
+    for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < row_cap; ++row_idx) {
+      const micro_block::CellDesc &cell = result.cells[row_idx * cols.count() + col_idx];
+      common::ObDatum &datum = datums[row_idx];
+      if (1 == cell.kind || 2 == cell.kind) {
+        datum.set_null();
+        datum.len_ = 0;
+      } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size_)
+                 || cell.length > static_cast<uint64_t>(block_size_) - cell.offset) {
+        ret = OB_INVALID_DATA;
+      } else {
+        const char *data = block_data_ + cell.offset;
+        if (OB_FAIL(load_data_to_datum(obj_type, data, cell.length, integer_mask, datum))) {
         }
       }
     }

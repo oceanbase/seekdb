@@ -367,6 +367,12 @@ private:
                      const char **cell_datas,
                      const int64_t row_cap,
                      common::ObDatum *col_datums);
+  int try_get_rows_rust(
+      const common::ObIArray<int32_t> &cols,
+      const int32_t *row_ids,
+      const int64_t row_cap,
+      common::ObIArray<ObSqlDatumInfo> &datum_infos,
+      const int64_t datum_offset);
   int get_row_impl(int64_t index, ObDatumRow &row);
   OB_INLINE static const ObRowHeader &get_major_store_row_header()
   {
@@ -402,6 +408,8 @@ private:
   const ObColumnHeader *col_header_;
   const char *meta_data_;
   const char *row_data_;
+  const char *block_data_;
+  int64_t block_size_;
   ObVarRowIndex var_row_index_;
   ObFixRowIndex fix_row_index_;
   const ObBlockCachedDecoderHeader *cached_decoder_;
