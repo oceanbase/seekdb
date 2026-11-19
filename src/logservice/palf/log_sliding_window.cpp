@@ -19,7 +19,6 @@
 #include "log_engine.h"
 #include "log_io_task_cb_utils.h"
 #include "log_state_mgr.h"
-#include "log_mode_mgr.h"
 namespace oceanbase
 {
 using namespace share;
@@ -31,7 +30,6 @@ LogSlidingWindow::LogSlidingWindow()
     sw_(),
     checksum_(),
     state_mgr_(NULL),
-    mode_mgr_(NULL),
     log_engine_(NULL),
     lsn_allocator_(),
     group_buffer_(),
@@ -81,12 +79,10 @@ void LogSlidingWindow::destroy()
   group_buffer_.destroy();
   state_mgr_ = NULL;
   log_engine_ = NULL;
-  mode_mgr_ = NULL;
 }
 
 int LogSlidingWindow::init(const common::ObAddr &self,
                            LogStateMgr *state_mgr,
-                           LogModeMgr *mode_mgr,
                            LogEngine *log_engine,
                            palf::PalfFSCbWrapper *palf_fs_cb,
                            common::ObILogAllocator *alloc_mgr,
@@ -99,17 +95,15 @@ int LogSlidingWindow::init(const common::ObAddr &self,
   } else if (false == self.is_valid()
              || false == palf_base_info.is_valid()
              || NULL == state_mgr
-             || NULL == mode_mgr
              || NULL == log_engine
              || NULL == palf_fs_cb) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argumetns", K(ret), K(self), K(palf_base_info),
-        KP(state_mgr), KP(mode_mgr), KP(log_engine), KP(palf_fs_cb));
+        KP(state_mgr), KP(log_engine), KP(palf_fs_cb));
   } else if (OB_FAIL(do_init_mem_(palf_base_info, alloc_mgr))) {
   } else {
     self_ = self;
     state_mgr_ = state_mgr;
-    mode_mgr_ = mode_mgr;
     log_engine_ = log_engine;
     palf_fs_cb_ = palf_fs_cb;
 
@@ -1630,17 +1624,16 @@ int LogSlidingWindow::activate()
   // Resize group_buffer
   int ret = OB_SUCCESS;
   SCN ref_scn;
-  AccessMode access_mode = AccessMode::INVALID_ACCESS_MODE;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(mode_mgr_->get_access_mode_ref_scn(access_mode, ref_scn))) {
+  } else if (FALSE_IT(ref_scn = log_engine_->get_log_meta().get_log_mode_meta().ref_scn_)) {
   } else if (!is_all_log_flushed_()) {
     ret = OB_EAGAIN;
     PALF_LOG(WARN, "activate need retry, because there is some log has not been flushed", K(ret),
         K_(self));
   } else if (OB_FAIL(clean_log_())) {
   } else if (OB_FAIL(group_buffer_.activate())) {
-  } else if (ref_scn.is_valid() && AccessMode::APPEND == access_mode &&
+  } else if (ref_scn.is_valid() &&
              OB_FAIL(lsn_allocator_.inc_update_scn_base(ref_scn))) {
     PALF_LOG(ERROR, "inc_update_scn_base failed", K(ret), K_(self), K(ref_scn));
   } else {

@@ -50,7 +50,6 @@ class FlushLogCbCtx;
 class LogGroupEntryHeader;
 class LogTaskHeaderInfo;
 class LogStateMgr;
-class LogModeMgr;
 class LogTask;
 class LogGroupEntry;
 
@@ -83,7 +82,6 @@ public:
   virtual void destroy();
   virtual int init(const common::ObAddr &self,
                    LogStateMgr *state_mgr,
-                   LogModeMgr *mode_mgr,
                    LogEngine *log_engine,
                    palf::PalfFSCbWrapper *palf_fs_cb,
                    common::ObILogAllocator *alloc_mgr,
@@ -241,7 +239,6 @@ private:
   FixedSlidingWindow<LogTask> sw_;
   LogChecksum checksum_;
   LogStateMgr *state_mgr_;
-  LogModeMgr *mode_mgr_;
   LogEngine *log_engine_;
   palf::PalfFSCbWrapper *palf_fs_cb_;
   LSNAllocator lsn_allocator_;

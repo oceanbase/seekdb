@@ -25,7 +25,6 @@ namespace oceanbase
 {
 namespace palf
 {
-class LogModeMgr;
 class LogSlidingWindow;
 
 class LogStateMgr
@@ -35,8 +34,7 @@ public:
   virtual ~LogStateMgr() { destroy(); }
 
   virtual int init(const common::ObAddr &self,
-                   LogSlidingWindow *sw,
-                   LogModeMgr *mode_mgr);
+                   LogSlidingWindow *sw);
   virtual void destroy();
   virtual bool is_state_changed();
   virtual int switch_state();
@@ -62,7 +60,6 @@ private:
 private:
   common::ObAddr self_;
   LogSlidingWindow *sw_;
-  LogModeMgr *mode_mgr_;
   int32_t state_;
   int64_t recovery_start_time_us_;
   bool scan_disk_log_finished_;

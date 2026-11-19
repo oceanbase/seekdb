@@ -59,12 +59,6 @@ bool  PalfHandle::operator==(const PalfHandle &rhs) const
   return palf_handle_impl_ == rhs.palf_handle_impl_;
 }
 
-int PalfHandle::bootstrap()
-{
-  CHECK_VALID;
-  return palf_handle_impl_->bootstrap();
-}
-
 int PalfHandle::append(const PalfAppendOptions &opts,
                        const void *buffer,
                        const int64_t nbytes,

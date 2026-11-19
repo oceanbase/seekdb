@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_state_mgr.h"
-#include "log_mode_mgr.h"
 #include "log_sliding_window.h"
 
 namespace oceanbase
@@ -28,7 +27,6 @@ namespace palf
 LogStateMgr::LogStateMgr()
   : self_(),
     sw_(NULL),
-    mode_mgr_(NULL),
     state_(INIT),
     recovery_start_time_us_(OB_INVALID_TIMESTAMP),
     scan_disk_log_finished_(false),
@@ -36,19 +34,17 @@ LogStateMgr::LogStateMgr()
 {}
 
 int LogStateMgr::init(const common::ObAddr &self,
-                      LogSlidingWindow *sw,
-                      LogModeMgr *mode_mgr)
+                      LogSlidingWindow *sw)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (!self.is_valid() || OB_ISNULL(sw) || OB_ISNULL(mode_mgr)) {
+  } else if (!self.is_valid() || OB_ISNULL(sw)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid arguments", K(ret), K(self), KP(sw), KP(mode_mgr));
+    PALF_LOG(WARN, "invalid arguments", K(ret), K(self), KP(sw));
   } else {
     self_ = self;
     sw_ = sw;
-    mode_mgr_ = mode_mgr;
     set_state_(INIT);
     scan_disk_log_finished_ = false;
     is_inited_ = true;
@@ -62,7 +58,6 @@ void LogStateMgr::destroy()
   is_inited_ = false;
   scan_disk_log_finished_ = false;
   sw_ = NULL;
-  mode_mgr_ = NULL;
   self_.reset();
   set_state_(INIT);
 }
@@ -103,7 +98,7 @@ int LogStateMgr::set_scan_disk_log_finished()
 
 bool LogStateMgr::can_append() const
 {
-  return is_active() && mode_mgr_->can_append();
+  return is_active();
 }
 
 bool LogStateMgr::can_slide_sw() const

@@ -27,7 +27,6 @@
 #include "log_meta.h"
 #include "log_cache.h"
 #include "share/log/palf/lsn.h"
-#include "log_mode_mgr.h"
 #include "log_sliding_window.h"
 #include "log_state_mgr.h"
 #include "log_io_task_cb_utils.h"
@@ -93,7 +92,6 @@ public:
 public:
   virtual bool check_can_be_used() const = 0;
 
-  virtual int bootstrap() = 0;
   // Persist one log and invoke exactly one completion path: callback success,
   // callback failure, or replay.
   //
@@ -271,7 +269,6 @@ public:
            LogIOAdapter *io_adapter);
   void destroy();
   int start();
-  int bootstrap() override final;
   int submit_log(const PalfAppendOptions &opts,
                  const char *buf,
                  const int64_t buf_len,
@@ -419,7 +416,6 @@ private:
   mutable RWLock lock_;
   char log_dir_[common::MAX_PATH_SIZE];
   LogSlidingWindow sw_;
-  LogModeMgr mode_mgr_;
   LogStateMgr state_mgr_;
   LogEngine log_engine_;
   LogCache log_cache_;

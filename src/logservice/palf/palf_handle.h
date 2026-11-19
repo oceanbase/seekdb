@@ -49,7 +49,6 @@ public:
   // @brief move-assignment operator
   PalfHandle& operator=(PalfHandle &&rhs);
   bool operator==(const PalfHandle &rhs) const;
-  int bootstrap();
   //================ File access related interfaces =======================
   int append(const PalfAppendOptions &opts,
              const void *buffer,
