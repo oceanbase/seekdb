@@ -81,6 +81,33 @@ FROM lambda_capture_rand ORDER BY id;
 SELECT id, array_map((x)->CAST(ROUND(RAND(42) * 1000000) AS SIGNED),a) AS m
 FROM lambda_capture_rand ORDER BY id;
 
+--echo random_and_uuid_per_element
+SELECT id, cardinality(array_distinct(array_map((x)->RANDOM(42),a))) AS random_samples,
+       cardinality(array_distinct(array_map((x)->UUID(),a))) AS uuid_samples,
+       cardinality(array_distinct(array_map((x)->UUID_SHORT(),a))) AS short_uuid_samples
+FROM lambda_capture_rand ORDER BY id;
+
+--echo random_bytes_per_element
+SELECT id, cardinality(array_distinct(array_map((x)->HEX(RANDOM_BYTES(32)),a))) AS constant_length,
+       cardinality(array_distinct(array_map((x)->HEX(RANDOM_BYTES(id + 31)),a))) AS captured_length
+FROM lambda_capture_rand ORDER BY id;
+
+--echo random_bytes_across_rows
+SELECT LENGTH(RANDOM_BYTES(32)) AS byte_length;
+SELECT COUNT(DISTINCT HEX(RANDOM_BYTES(32))) AS distinct_values FROM lambda_capture_rand;
+
+--echo independent_random_calls
+SELECT id, RANDOM_BYTES(id + 31) = RANDOM_BYTES(id + 31) AS equal_bytes,
+       UUID() = UUID() AS equal_uuids, UUID_SHORT() = UUID_SHORT() AS equal_short_uuids
+FROM lambda_capture_rand ORDER BY id;
+
+--echo user_variable_per_element
+SET @lambda_capture_counter = 0;
+SELECT id, array_map((x)->(@lambda_capture_counter := @lambda_capture_counter + 1),a) AS m
+FROM lambda_capture_rand ORDER BY id;
+SELECT @lambda_capture_counter AS counter;
+SET @lambda_capture_counter = NULL;
+
 --echo statement_timestamp
 SET SESSION timestamp = 1700000000.123456;
 SELECT id, array_map((x)->(x + CAST(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(6)) * 1000000 AS SIGNED)),a) AS m
