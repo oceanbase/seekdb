@@ -78,7 +78,18 @@ this order:
 2. take `incr_data_->bitmap_rwlock_`, update `insert_bitmap_`, then
    `set_vid_bound()` (`:1533-1543`)
 
-Two consequences matter, and neither is visible from the insert path alone:
+Immediate-mode insertion is also speculative with respect to the transaction.
+`ObLSTabletService::insert_rows_to_tablet()` calls `insert_vector_index_rows()`
+before `insert_tablet_rows()`
+(`src/storage/ls/ob_ls_tablet_service.cpp:2837-2839`), and `insert_rows()` adds
+membership immediately (`ob_plugin_vector_index_adaptor.cpp:1533-1536`). An
+`INSERT` followed by `ROLLBACK` on an already-loaded immediate-mode index can
+therefore leave a physical graph vertex and its VID in adapter membership even
+though the transaction leaves no committed index-id insert or tombstone. This
+document calls that VID an **orphan membership entry**. Repeating visibility
+catch-up cannot manufacture a committed record for it.
+
+Two locking consequences matter, and neither is visible from the insert path alone:
 
 - `insert_rows()` never takes `incr_data_->mem_data_rwlock_`. A checkpoint that
   takes `mem_data_rwlock_` for read plus `bitmap_rwlock_` for read therefore does
@@ -151,7 +162,9 @@ Sections:
 - `graph` — the serialized `incr_data_->index_`, produced by the existing
   `ObVectorIndexSerializer`. The payload is opaque to this design; the serializer
   already supports both flat and SQ variants.
-- `membership` — `incr_data_->bitmap_->insert_bitmap_`, serialized with
+- `membership` — the committed checkpoint membership view derived from
+  `incr_data_->bitmap_->insert_bitmap_` as specified in "Coverage boundary", not
+  an unconditional copy of that raw adapter bitmap. It is serialized with
   `roaring64_bitmap_portable_serialize()`. The incremental delete bitmap does not
   exist (`init_mem_data(VIRT_INC)` leaves it `nullptr` at `:809`), so the section
   records that explicitly as an empty marker instead of serializing a null pointer.
@@ -195,23 +208,43 @@ existing critical section advances both views. The capture protocol therefore
    section.
 2. Set `coverage_scn = vbitmap_data_->scn_`. The visibility baseline is what was
    actually replayed, so it is the boundary the payload can honestly claim.
-3. Require `incr_data_->last_dml_scn_ <= coverage_scn` and both set relations:
-   - `membership ⊆ visibility.insert ∪ visibility.delete` rejects graph
-     membership that the visibility baseline has not resolved;
-   - `visibility.insert ⊆ membership` rejects every live VID whose vector has
-     not been materialized. Empty membership is valid only when live visibility
-     is empty.
+3. Under the same gate, distinguish the raw adapter set from the committed set
+   that will be persisted:
+   - `adapter_membership = incr_data_->bitmap_->insert_bitmap_`;
+   - `resolved = visibility.insert ∪ visibility.delete`;
+   - `orphan_membership = adapter_membership − resolved`;
+   - `checkpoint_membership = adapter_membership ∩ resolved`.
 
-   Membership is added only after graph insertion (`:1512` then `:1533`), so under
-   the mutation gate the second relation proves that no live VID in the claimed
-   prefix is still waiting for `QUERY_ROWKEY_VEC`. Tombstones need no membership
-   bit. A separate graph-completion watermark could provide the same proof, but
-   phase 1 uses these two containment checks and adds no second watermark.
-4. If any check fails, do not publish. Record the attempt as deferred with its
-   reason and leave the published `coverage_scn` where it was. Before retrying,
-   run catch-up again rather than repeating validation against unchanged state.
-   An under-eager boundary only costs replay; an over-eager one is a correctness
-   bug.
+   Require `incr_data_->last_dml_scn_ <= coverage_scn`,
+   `visibility.insert ⊆ checkpoint_membership`, and
+   `checkpoint_membership ⊆ resolved`. The latter is true by construction but is
+   still checked against the staged copy before publication. The live-visibility
+   relation rejects every committed live VID whose vector has not been
+   materialized. Empty checkpoint membership is valid whenever live visibility
+   is empty; resolved tombstones do not require membership bits.
+
+   Adapter membership is added only after graph insertion (`:1512` then `:1533`),
+   so under the mutation gate the live-visibility relation proves that no live
+   VID in the claimed prefix is still waiting for `QUERY_ROWKEY_VEC`. Tombstones
+   need no membership bit. A separate graph-completion watermark could provide
+   the same proof, but phase 1 uses these containment checks and adds no second
+   watermark.
+4. Orphan membership is reconciled, not retried forever. Once catch-up has
+   established the committed visibility view at `coverage_scn`, phase 1 excludes
+   `orphan_membership` from the checkpoint copy and persists only
+   `checkpoint_membership`. It need not mutate the serving adapter's raw bitmap
+   or physically delete an orphan vertex from the serialized graph: the graph
+   may be a physical superset, but an orphan bit must never be restored into
+   committed membership or made visible by membership/visibility filtering.
+   Rebuilding the graph or reconciling the serving bitmap is an acceptable
+   alternative only if it produces the same committed view. Repeating the old
+   raw test `adapter_membership ⊆ resolved` after every catch-up is not an
+   acceptable recovery strategy.
+5. If any remaining check fails, do not publish. Record the attempt as deferred
+   with its reason and leave the published `coverage_scn` where it was. Before
+   retrying, run catch-up again rather than repeating validation against
+   unchanged state. An under-eager boundary only costs replay; an over-eager one
+   is a correctness bug.
 
 The watermark relation in step 3 is not new: it is the same
 `base_scn >= last_dml_scn_` condition `complete_index_mem_data_incremental()`
@@ -353,14 +386,19 @@ Under the Option 1 contract the complete sequence is:
 2. Take the mutation gate for write, then `incr_data_->bitmap_rwlock_` for write,
    then `vbitmap_data_`'s lock pair.
 3. Under those locks, re-read `incr_data_->last_dml_scn_` and
-   `vbitmap_data_->scn_` and run all boundary checks in "Coverage boundary". If a
+   `vbitmap_data_->scn_`, derive `checkpoint_membership`, and run all boundary
+   checks in "Coverage boundary". Orphan bits are excluded from that derived
+   view rather than treated as a permanent stale-coverage failure. If any other
    check fails, release, record a deferred attempt with its reason, and publish
    nothing. The next retry starts with catch-up, not another immediate capture.
-4. Still under the gate, copy the membership bitmap and both visibility bitmaps
-   with `roaring64_bitmap_copy()`. The copies are required: the handles are not a
-   snapshot, and the bitmaps keep mutating.
+4. Still under the gate, copy the raw adapter membership bitmap and both
+   visibility bitmaps with `roaring64_bitmap_copy()`, then remove every orphan
+   bit from the membership copy to materialize `checkpoint_membership`. Copies
+   are required: the handles are not a snapshot, and the bitmaps keep mutating.
 5. Still under the gate, serialize `incr_data_->index_` into the staging buffer,
-   then append `vid_bound_` and the watermarks.
+   then append `vid_bound_` and the watermarks. A physical orphan vertex may be
+   present in this graph payload, but its VID is absent from the persisted
+   committed membership view and remains invisible.
 6. Release the gate. Compute the footer over the staged bytes and publish.
 
 Steps 2-5 are inside one critical section, so the graph, the membership bitmap and
@@ -395,21 +433,56 @@ On adapter load:
 2. Verify the footer. On failure, log at `WARN` with the generation and the expected
    length, then fall back to replay. This is the one failure the CRC does catch, and
    it never results in a partial apply.
-3. Deserialize the graph into `incr_data_->index_`, restore `membership` into
-   `incr_data_->bitmap_->insert_bitmap_`, restore `vid_bound_` and the watermarks,
-   then restore `vbitmap_data_->bitmap_->insert_bitmap_`,
+3. Deserialize the graph into `incr_data_->index_`, restore the committed
+   `membership` view into `incr_data_->bitmap_->insert_bitmap_`, restore
+   `vid_bound_` and the watermarks, then restore
+   `vbitmap_data_->bitmap_->insert_bitmap_`,
    `vbitmap_data_->bitmap_->delete_bitmap_` and `vbitmap_data_->scn_` from
    `visibility`.
 4. Run the restore validation below. On failure, drop the whole checkpoint rather
    than the failing section, and fall back to replay.
-5. Set the replay start to `coverage_scn + 1` and let
-   `complete_index_mem_data_incremental()` handle only the tail.
+5. Set the replay start to `coverage_scn + 1`, mark the one-shot
+   `initial_tail_scan_required` state, and complete the mandatory initial durable
+   tail scan below before trusting either skip path.
 
-The replay entry point does not change. What changes is its input: instead of
-starting from the snapshot SCN and rebuilding every appended row, it starts from the
-restored boundary. Every live VID at or below `coverage_scn` is already
-materialized in the graph and membership bitmap, and the visibility bitmaps
-resolve both live and tombstoned VIDs.
+### Mandatory initial durable tail scan
+
+Restored watermarks describe the checkpoint prefix only. They do not prove that
+no index-id row was committed after checkpoint publication. Restoring
+`last_dml_scn_ <= coverage_scn` lets `complete_index_mem_data_incremental()` set
+`can_omit_4th_table_scan` when `base_scn >= last_dml_scn_`
+(`ob_plugin_vector_index_adaptor.cpp:2866-2874`). Independently, a restored
+`last_read_scn_ > last_dml_scn_` makes `is_pruned_read_index_id()` true
+(`:1126-1132`), allowing the synchronous bypass in
+`check_index_id_table_readnext_status()` to set `is_skip_4th_index`
+(`:2359-2370`). Either path can skip every durable tail row when no new DML
+arrives after restart.
+
+Phase 1 therefore requires one forced durable tail scan after every successful
+checkpoint restore. While `initial_tail_scan_required` is set:
+
+- the synchronous branch must not use `is_pruned_read_index_id()` to set
+  `is_skip_4th_index`, even if `vbitmap_data_->scn_ <= query_scn`;
+- `complete_index_mem_data_incremental()` must treat
+  `can_omit_4th_table_scan` as false, regardless of the restored watermark
+  comparison.
+
+The scan starts strictly above `coverage_scn` and reads the durable index-id
+table through the replay's `query_scn`. It must apply all committed tail inserts
+and deletes to visibility and finish their vector materialization before the
+restored graph is used for that query. Clear the one-shot state only after the
+scan reaches iterator end and materialization succeeds; an error leaves it set
+and must not silently fall back to either bypass. Subsequent replay may use the
+normal skip decisions. Merely advancing the replay cursor, restoring different
+watermark values, or observing that no post-restart DML arrived does not satisfy
+this requirement.
+
+The replay entry point and table-scan machinery do not change. What changes is
+their input and the one-shot bypass state: instead of starting from the snapshot
+SCN and rebuilding every appended row, replay starts from the restored boundary
+and is guaranteed to consume the durable tail once. Every live VID at or below
+`coverage_scn` is already materialized in the graph and committed membership
+bitmap, and the visibility bitmaps resolve both live and tombstoned VIDs.
 
 Tail replay is not a substitute for prefix materialization. If no rows exist above
 `coverage_scn`, `tail_rows=0` must coincide with a query-ready restored graph:
@@ -459,12 +532,16 @@ reads the index-id table:
 | `membership ⊆ visibility.insert ∪ visibility.delete` | the graph claims a VID the visibility view never resolved |
 | `visibility.insert ⊆ membership` | a live VID in the claimed prefix still lacks graph membership and materialization |
 
-The two subset tests protect opposite directions. Membership is only advanced
-after `obvectorutil::add_index()` (`insert_rows()` `:1512` then `:1533`), so the
-first test detects a graph that ran ahead of its baseline. The second detects a
-baseline that ran ahead of graph materialization, including the interval before
-`QUERY_ROWKEY_VEC`; an empty membership bitmap cannot validate a non-empty live
-visibility set. Both are mandatory at capture and restore.
+The two subset tests protect opposite directions, and they apply to the persisted
+committed membership view, not to the raw adapter bitmap. Raw adapter membership
+is only advanced after `obvectorutil::add_index()` (`insert_rows()` `:1512` then
+`:1533`), so the first test detects committed graph membership that is not
+resolved by the baseline. The second detects a baseline that ran ahead of graph
+materialization, including the interval before `QUERY_ROWKEY_VEC`; an empty
+membership bitmap cannot validate a non-empty live visibility set. Both are
+mandatory at capture and restore. An orphan physical graph vertex does not fail
+these checks because its orphan membership bit was excluded before publication;
+restoring that bit is invalid.
 
 On failure nothing is partially applied: the graph, the membership bitmap and both
 visibility bitmaps are all discarded, and replay runs from the snapshot SCN. The
@@ -689,11 +766,30 @@ one-to-one:
    subset of membership. Assert full fallback to replay in both cases, that both
    `incr_data_` and `vbitmap_data_` are left empty with `last_read_scn_` cleared,
    and that post-restart results still match the pre-restart results.
-9. **Replacement.** Write concurrently with a full optimization; assert the new
-   adapter's first query does not reconstruct a graph that the old adapter had
-   already built, that its visibility baseline is not empty, and that no transaction
-   visibility is lost across the switch.
-10. **Measurements.** Report first-query latency, online query latency distribution,
+9. **Durable tail with no post-restart write.** Checkpoint a committed prefix,
+   then commit at least one insert and one delete above `coverage_scn`. Restart
+   and issue no further DML before the first ANN query. Assert that the one-shot
+   initial scan reads the index-id table through that query's SCN, both skip
+   paths remain disabled until it completes, and `tail_rows` equals the durable
+   post-checkpoint row count. The inserted row must be visible, the deleted row
+   must remain invisible, and results must match a full-replay control. Run the
+   fixture in both `sync_mode=immediate` and asynchronous modes so each bypass
+   is covered. Repeat with an empty tail and assert exactly one empty scan
+   rather than a bypass.
+10. **Rollback reconciliation and flush.** On an already-loaded immediate-mode
+    index, run **BEGIN → INSERT → ROLLBACK → committed INSERT → flush**, with no
+    intervening ANN query and with distinct VIDs for the rolled-back and committed
+    rows. Flush must finish in bounded catch-up/defer cycles and publish a
+    checkpoint rather than retrying raw membership containment forever. Assert
+    that the rolled-back VID is absent from checkpoint membership, the new
+    committed VID is present with a materialized vector, and any orphan physical
+    vertex remains invisible. After restart, query results must contain only the
+    committed row and must match the full-replay control.
+11. **Replacement.** Write concurrently with a full optimization; assert the new
+    adapter's first query does not reconstruct a graph that the old adapter had
+    already built, that its visibility baseline is not empty, and that no transaction
+    visibility is lost across the switch.
+12. **Measurements.** Report first-query latency, online query latency distribution,
     catch-up duration, exclusive checkpoint duration, the length of the time writers
     are blocked on the mutation gate, and peak memory across at least two data sizes
     and two memory budgets. Show that table scans and vector lookups are outside the
@@ -710,13 +806,17 @@ observes it but before the previous generation is retired.
 
 1. Envelope format, serialize and verify, the four restore checks, and the
    visibility baseline (`vbitmap_data_` bitmaps plus `scn_`) in both the payload and
-   the restore path. Add the mutation gate to every writer, including the complete
-   asynchronous `write_to_vsag_()` sequence, and add background catch-up through
-   vector materialization. Checkpointing stays off by default; the only behaviour
-   change is that a valid checkpoint is restored when present. Phase 1 is not
-   shippable without all three pieces: the gate makes capture atomic, the live-set
-   containment proof makes the claimed prefix complete, and catch-up lets an
-   ingest-only workload reach that state without a query.
+   the restore path. Derive and persist committed checkpoint membership so that
+   rollback orphans cannot block capture, and gate both restore-time bypasses behind
+   the one-shot initial durable tail scan. Add the mutation gate to every writer,
+   including the complete asynchronous `write_to_vsag_()` sequence, and add
+   background catch-up through vector materialization. Checkpointing stays off by
+   default; the only behaviour change is that a valid checkpoint is restored when
+   present. Phase 1 is not shippable without every piece: the gate makes capture
+   atomic, the committed-membership and live-set proofs make the claimed prefix
+   complete, catch-up lets an ingest-only workload reach that state without a
+   query, orphan reconciliation makes capture terminate after rollback, and the
+   forced initial scan makes post-checkpoint durable rows visible after restart.
 2. Scheduling on size and age, plus the observability surface and the flush entry
    point, all using the phase-1 catch-up before capture and stale retry.
 3. Replacement catch-up (Option A), gated behind its own switch, carrying the
@@ -769,3 +869,12 @@ mutation-gate hold justifies building the immutable-generation option.
     the exclusive serialization hold before capture and every stale retry, with
     age-triggered and insert → flush → restart tests that use no intervening ANN
     query.
+- Revision 4:
+  - Required a one-shot initial durable tail scan after checkpoint restore, with
+    both the synchronous `is_skip_4th_index` bypass and the
+    `can_omit_4th_table_scan` path disabled until that scan and materialization
+    complete. Added restart acceptance coverage with durable tail rows and no
+    post-restart DML.
+  - Replaced raw adapter membership persistence with a committed checkpoint
+    membership view that reconciles rollback orphans instead of deferring
+    forever, and added rollback → committed insert → flush acceptance coverage.
