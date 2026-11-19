@@ -4,11 +4,19 @@
 --disable_warnings
 DROP TABLE IF EXISTS lambda_capture_int;
 DROP TABLE IF EXISTS lambda_capture_big;
+DROP TABLE IF EXISTS lambda_capture_rand;
 --enable_warnings
 CREATE TABLE lambda_capture_int(id INT PRIMARY KEY,a ARRAY(INT),n ARRAY(ARRAY(INT)));
 INSERT INTO lambda_capture_int VALUES(1,[1,2],[[1,2],[3]]),(2,[3,4],[[4],[5,6]]),(3,[5,6],[[7,8]]),(4,NULL,NULL),(5,array_filter((x)->(x IS NULL),[1]),NULL),(6,[NULL,7],[[NULL,1],[2]]),(7,[8],[[3]]),(8,[9,10,11],[[4,5]]);
 CREATE TABLE lambda_capture_big(id INT PRIMARY KEY,a ARRAY(BIGINT),n ARRAY(ARRAY(BIGINT)));
 INSERT INTO lambda_capture_big SELECT * FROM lambda_capture_int;
+CREATE TABLE lambda_capture_rand(id INT PRIMARY KEY,a ARRAY(INT));
+INSERT INTO lambda_capture_rand VALUES(1,[0,0,0]),(2,[0,0,0]),(3,[0,0,0]);
+
+--echo ordinary_array_lambdas
+SELECT id, array_map((x)->(x*2),a) AS m, array_map((x,y)->(x+10*y),a,a) AS zipped,
+       array_filter((x)->(x>2),a) AS f, array_sortby((x)->(-x),a) AS s
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
 
 --echo shared_reverse_int
 SELECT id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
@@ -57,5 +65,35 @@ SELECT id,reverse(a) AS r,array_map((x)->array_map((y)->(y+cardinality(reverse(a
 
 --echo nested_bigint_row_capture
 SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,reverse(a) AS r,array_map((x)->array_map((y)->(y+cardinality(reverse(a))),x),n) AS m FROM lambda_capture_big WHERE id IN (1,2,3,7,8) ORDER BY id;
+
+# Round the seeded sequence to integers for consistent output formatting.
+--echo random_seeded_scalar
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */ id,
+       array_map((x)->CAST(ROUND((x + RAND(42)) * 1000000) AS SIGNED),a) AS m
+FROM lambda_capture_rand ORDER BY id;
+
+--echo random_seeded_batch
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,
+       array_map((x)->CAST(ROUND((x + RAND(42)) * 1000000) AS SIGNED),a) AS m
+FROM lambda_capture_rand ORDER BY id;
+
+--echo random_seeded_without_parameter
+SELECT id, array_map((x)->CAST(ROUND(RAND(42) * 1000000) AS SIGNED),a) AS m
+FROM lambda_capture_rand ORDER BY id;
+
+--echo statement_timestamp
+SET SESSION timestamp = 1700000000.123456;
+SELECT id, array_map((x)->(x + CAST(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(6)) * 1000000 AS SIGNED)),a) AS m
+FROM lambda_capture_int WHERE id <= 2 ORDER BY id;
+SET SESSION timestamp = DEFAULT;
+
+# Separate the clock reads and check their distinctness without recording wall-clock values.
+--echo per_element_sysdate
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */
+       cardinality(array_distinct(array_map((x)->(x + SLEEP(0.05) +
+           CAST(UNIX_TIMESTAMP(SYSDATE(6)) * 1000000 AS SIGNED)),a))) AS distinct_timestamps
+FROM lambda_capture_rand WHERE id = 1;
+
+DROP TABLE lambda_capture_rand;
 DROP TABLE lambda_capture_big;
 DROP TABLE lambda_capture_int;

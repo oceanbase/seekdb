@@ -36,32 +36,32 @@ namespace sql
 
 namespace
 {
-int collect_lambda_dependent_exprs(ObExpr &expr,
+int collect_lambda_recompute_exprs(ObExpr &expr,
                                    const ObExprArrayMapInfo &info,
-                                   ObIArray<ObExpr *> &dependent_exprs,
-                                   bool &depends_on_param)
+                                   ObIArray<ObExpr *> &recompute_exprs,
+                                   bool &needs_recompute)
 {
   int ret = OB_SUCCESS;
-  depends_on_param = false;
+  needs_recompute = expr.is_volatile_;
   if (T_EXEC_VAR == expr.type_) {
-    for (int64_t i = 0; !depends_on_param && i < info.param_num_; ++i) {
-      depends_on_param = &expr == info.param_exprs_[i];
+    for (int64_t i = 0; !needs_recompute && i < info.param_num_; ++i) {
+      needs_recompute = &expr == info.param_exprs_[i];
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
-      bool child_depends_on_param = false;
+      bool child_needs_recompute = false;
       if (OB_ISNULL(expr.args_[i])) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(SMART_CALL(collect_lambda_dependent_exprs(
-                     *expr.args_[i], info, dependent_exprs, child_depends_on_param)))) {
+      } else if (OB_FAIL(SMART_CALL(collect_lambda_recompute_exprs(
+                     *expr.args_[i], info, recompute_exprs, child_needs_recompute)))) {
       } else {
-        depends_on_param |= child_depends_on_param;
+        needs_recompute |= child_needs_recompute;
       }
     }
   }
-  if (OB_SUCC(ret) && depends_on_param
+  if (OB_SUCC(ret) && needs_recompute
       && (nullptr != expr.eval_func_ || T_OP_ROW == expr.type_)) {
-    ret = dependent_exprs.push_back(&expr);
+    ret = recompute_exprs.push_back(&expr);
   }
   return ret;
 }
@@ -188,26 +188,24 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
   uint16_t subschema_id  = info->lambda_subschema_id_;
   ObDatum *datum = NULL;
   ObIArrayType *elem_arr = NULL;
-  ObSEArray<ObExpr *, 16> dependent_exprs;
-  bool depends_on_param = false;
+  ObSEArray<ObExpr *, 16> recompute_exprs;
+  bool needs_recompute = false;
 
   if (info->param_num_ > 0 && OB_ISNULL(info->param_exprs_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id , lambda_arr, false))) {
-  } else if (arr_dim > 0 && info->param_num_ > 0
-             && OB_FAIL(collect_lambda_dependent_exprs(
-                    *lambda_expr, *info, dependent_exprs, depends_on_param))) {
+  } else if (arr_dim > 0 && OB_FAIL(collect_lambda_recompute_exprs(
+                    *lambda_expr, *info, recompute_exprs, needs_recompute))) {
   }
   // fill the lambda array
   for (uint32_t i = 0; i < arr_dim && OB_SUCC(ret); i++) {
-    bool is_set_lambda_para  = false;
+    bool is_set_lambda_para = false;
     if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, arr_obj, arr_obj_size, i, is_set_lambda_para))) {
-    } else if (is_set_lambda_para) {
-      // Captures may also be input arrays or projections. Only the paths
-      // changed by this lambda's parameters need invalidating, and SQL batch
-      // expressions must clear the current row's bit rather than PL flags.
-      for (int64_t j = 0; j < dependent_exprs.count(); ++j) {
-        dependent_exprs.at(j)->clear_evaluated_flag(ctx);
+    } else {
+      // Stable captures can share results with inputs and projections.
+      // Volatile expressions need evaluating even when no parameter is bound.
+      for (int64_t j = 0; j < recompute_exprs.count(); ++j) {
+        recompute_exprs.at(j)->clear_evaluated_flag(ctx);
       }
     }
     if (OB_FAIL(ret)) {

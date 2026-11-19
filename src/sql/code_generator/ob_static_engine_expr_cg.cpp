@@ -250,6 +250,10 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
     rt_expr->is_static_const_ = raw_expr->is_static_const_expr();
     rt_expr->is_dynamic_const_ = raw_expr->is_dynamic_const_expr();
     rt_expr->is_boolean_ = raw_expr->is_bool_expr();
+    rt_expr->is_volatile_ = raw_expr->has_flag(IS_RAND_FUNC)
+                          || raw_expr->has_flag(IS_STATE_FUNC)
+                          || raw_expr->has_flag(IS_DYNAMIC_USER_VARIABLE)
+                          || raw_expr->has_flag(IS_ASSIGN_EXPR);
     rt_expr->nullable_ = !(raw_expr->is_column_ref_expr()
                             && (static_cast<ObColumnRefRawExpr *> (raw_expr))->get_result_type().has_result_flag(NOT_NULL_FLAG));
     if (T_OP_ROW != raw_expr->get_expr_type()) {
