@@ -19311,16 +19311,15 @@ int ObDDLService::create_user(ObUserInfo &user_info,
   ObSqlString ddl_stmt_str;
   bool name_exists = false;
   bool id_exists = false;
-  uint64_t new_user_id = user_info.get_user_id();
+  const uint64_t requested_user_id = user_info.get_user_id();
   if (OB_FAIL(check_inner_stat())) {
   } else if (OB_FAIL(trans.start_with_runtime_schema(sql_proxy_, schema_guard))) {
   } else if (OB_FAIL(schema_guard.check_user_exist(
       user_info.get_user_name_str(), user_info.get_host_name_str(), name_exists))) {
-  } else if (!name_exists && OB_INVALID_ID != new_user_id
-             && OB_FAIL(schema_guard.check_user_exist(new_user_id, id_exists))) {
+  } else if (!name_exists && OB_INVALID_ID != requested_user_id
+             && OB_FAIL(schema_guard.check_user_exist(requested_user_id, id_exists))) {
   } else if (name_exists || id_exists) {
     ret = OB_ERR_USER_EXIST;
-  } else if (OB_FAIL(schema_service_->get_schema_service()->fetch_new_user_id(new_user_id))) {
   } else if (OB_FAIL(ObDDLSqlGenerator::gen_create_user_sql(
       ObAccountArg(user_info.get_user_name_str(), user_info.get_host_name_str(), user_info.is_role()),
       user_info.get_passwd_str(), ddl_stmt_str))) {
@@ -19328,7 +19327,6 @@ int ObDDLService::create_user(ObUserInfo &user_info,
       user_info.get_ssl_cipher_str(), user_info.get_x509_issuer_str(),
       user_info.get_x509_subject_str(), ddl_stmt_str))) {
   } else {
-    user_info.set_user_id(new_user_id);
     const ObString ddl_sql = ddl_stmt_str.string();
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     if (OB_FAIL(ddl_operator.create_user(user_info, &ddl_sql, trans))) {
@@ -19343,7 +19341,7 @@ int ObDDLService::create_user(ObUserInfo &user_info,
     }
   }
   if (OB_SUCC(ret)) {
-    user_id = new_user_id;
+    user_id = user_info.get_user_id();
     LOG_INFO("Succeed in inserting user in user table", K(user_id),
              "user_name", user_info.get_user_name_str());
   }
