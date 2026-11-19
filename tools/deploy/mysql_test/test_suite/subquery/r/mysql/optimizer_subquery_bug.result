@@ -1698,3 +1698,20 @@ id	n
 1	NULL
 2	NULL
 3	NULL
+Empty view: nonconstant JSON projection with IN
+j
+Populated view: JSON projection retains its value
+id
+1
+49
+Wrapped JSON projection retains its value
+id
+1
+49
+Column-dependent JSON projection remains supported
+id
+49
+Ordinary constant projection remains supported
+id
+1
+49
