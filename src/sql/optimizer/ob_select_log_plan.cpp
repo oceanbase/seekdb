@@ -3552,24 +3552,6 @@ int ObSelectLogPlan::generate_merge_set_plans(const EqualSets &equal_sets,
                                               ObIArray<CandidatePlan> &merge_set_plans)
 {
   int ret = OB_SUCCESS;
-  bool has_collection_key = false;
-  const ObIArray<ObRawExpr*> *key_lists[] = {&left_set_keys, &right_set_keys};
-  for (int64_t side = 0; side < 2; ++side) {
-    const ObIArray<ObRawExpr*> &keys = *key_lists[side];
-    for (int64_t i = 0; i < keys.count(); ++i) {
-      if (OB_ISNULL(keys.at(i))) {
-        return OB_ERR_UNEXPECTED;
-      }
-      has_collection_key |= ObCollectionSQLType == keys.at(i)->get_data_type();
-    }
-  }
-  if (has_collection_key) {
-    // Merge sets require ordering, which collection keys do not support.
-    // Leave no merge candidate so the caller can fall back to hash sets,
-    // including when a hint requested a merge algorithm.
-    OPT_TRACE("skip merge set plans for collection keys");
-    return OB_SUCCESS;
-  }
   ObArenaAllocator allocator;
   ObSEArray<MergeKeyInfo*, 8> merge_key_list;
   ObSEArray<ObSEArray<MergeKeyInfo*, 8>, 8> left_merge_keys;
@@ -4301,22 +4283,9 @@ int ObSelectLogPlan::check_need_pushdown_set_distinct(ObLogicalOperator *&child,
   int ret = OB_SUCCESS;
   bool is_const = true;
   bool is_unique = true;
-  bool has_collection = false;
   is_valid = false;
-  for (int64_t i = 0; OB_SUCC(ret) && !has_collection && i < set_keys.count(); ++i) {
-    if (OB_ISNULL(set_keys.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      has_collection = ObCollectionSQLType == set_keys.at(i)->get_data_type();
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(child) || OB_ISNULL(optimizer_context_.get_query_ctx())) {
+  if (OB_ISNULL(child) || OB_ISNULL(optimizer_context_.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (has_collection) {
-    // Partial deduplication uses ordinary DISTINCT, which rejects collections.
-    // Keep duplicate elimination in the final set operator, even with a hint.
-    OPT_TRACE("skip collection set distinct pushdown");
   } else if (!child->is_distributed() && is_set_op_parallel) {
     // do nothing
   } else if (LOG_SET == child->get_type()
