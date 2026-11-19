@@ -541,3 +541,25 @@ UPDATE seek1428_l l SET n=CASE WHEN 70 <> ANY(SELECT SUM(r.n) FROM seek1428_r r 
 SELECT id,n FROM seek1428_l ORDER BY id;
 DROP TABLE seek1428_l, seek1428_r;
 --enable_query_log
+
+# SEEK-1428: retain ownership of nonconstant JSON projections across view merging.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS seek1428_json_l, seek1428_json_r;
+--enable_warnings
+CREATE TABLE seek1428_json_l(id INT PRIMARY KEY);
+CREATE TABLE seek1428_json_r(n INT, j JSON);
+--echo Empty view: nonconstant JSON projection with IN
+SELECT q.j FROM (SELECT JSON_OBJECT('key0',49) j FROM seek1428_json_l WHERE FALSE) q WHERE q.j IN (SELECT 39 FROM seek1428_json_r);
+INSERT INTO seek1428_json_l VALUES (1),(49);
+INSERT INTO seek1428_json_r VALUES (39,'{"key0":49}'),(NULL,NULL);
+--echo Populated view: JSON projection retains its value
+SELECT q.id FROM (SELECT id,JSON_OBJECT('key0',49) j FROM seek1428_json_l) q WHERE q.j IN (SELECT j FROM seek1428_json_r) ORDER BY q.id;
+--echo Wrapped JSON projection retains its value
+SELECT q.id FROM (SELECT id,CAST(JSON_OBJECT('key0',49) AS CHAR) j FROM seek1428_json_l) q WHERE q.j IN (SELECT CAST(j AS CHAR) FROM seek1428_json_r) ORDER BY q.id;
+--echo Column-dependent JSON projection remains supported
+SELECT q.id FROM (SELECT id,JSON_OBJECT('key0',id) j FROM seek1428_json_l) q WHERE q.j IN (SELECT j FROM seek1428_json_r) ORDER BY q.id;
+--echo Ordinary constant projection remains supported
+SELECT q.id FROM (SELECT id,39 n FROM seek1428_json_l) q WHERE q.n IN (SELECT n FROM seek1428_json_r) ORDER BY q.id;
+DROP TABLE seek1428_json_l, seek1428_json_r;
+--enable_query_log
