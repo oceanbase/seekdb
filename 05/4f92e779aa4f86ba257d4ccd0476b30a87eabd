@@ -1,0 +1,28 @@
+src/sql/plan_cache/ob_i_lib_cache_object.h
+  s_46fa640584bf31::t_13872767e32f23 74-75,90
+src/sql/plan_cache/ob_i_lib_cache_object.cpp
+  s_46fa640584bf31::t_13872767e32f23 28-32,51,61-66,68-80,83-86,97,105
+  s_46fa640584bf31::t_c79609e90b7c6b 67,81-82
+src/observer/virtual_table/ob_gv_sql.cpp
+  s_46fa640584bf31::t_13872767e32f23 952
+src/sql/plan_cache/ob_cache_object.cpp
+  s_46fa640584bf31::t_13872767e32f23 343,352
+src/pl/ob_pl.cpp
+  s_46fa640584bf31::t_13872767e32f23 3106,3122,3133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "054f92e779aa4f86ba257d4ccd0476b30a87eabd",
+  "prompts": {},
+  "sessions": {
+    "s_46fa640584bf31": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e81a-4b81-7eb0-bb35-f4b1c76ec66b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}
