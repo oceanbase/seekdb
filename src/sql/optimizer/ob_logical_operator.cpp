@@ -3695,7 +3695,7 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
 
       if (OB_SUCC(ret)) {
         partition_granule = gi_op->is_partition_gi();
-        if (ctx.force_partition() || partition_granule) {
+        if (ctx.is_force_partition() || partition_granule) {
           gi_op->add_flag(GI_FORCE_PARTITION_GRANULE);
         }
       }
@@ -3729,11 +3729,6 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
         LOG_WARN("failed to check adaptive task splitting");
       }
 
-      if (OB_SUCC(ret) && ctx.force_partition()) {
-        // This GI consumes the scan's local request; siblings still need their own GI.
-        ctx.reset_state();
-      }
-
       LOG_TRACE("succ to allocate granule iterator nodes above operator", K(get_name()),
                 K(get_cost()), K(get_card()), K(ctx.is_in_pw_affinity_state()),
                 K(ctx.is_in_partition_wise_state()));
@@ -3744,6 +3739,8 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
 	 * if we forget reset this var, may get some wrong log plan.
 	 * */
   ctx.alloc_gi_ = false;
+  // The force-partition request is local to this GI allocation.
+  ctx.is_force_partition_ = false;
   return ret;
 }
 
@@ -3977,6 +3974,7 @@ void AllocGIContext::reset_info()
   state_ = GIS_NORMAL;
   multi_child_op_above_count_in_dfo_ = 0;
   alloc_gi_ = false;
+  is_force_partition_ = false;
 }
 
 
