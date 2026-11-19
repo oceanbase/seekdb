@@ -71,7 +71,6 @@ int response_status_to_error(const ResponseStatus status)
     case ResponseStatus::Error:
       return OB_ERR_UNEXPECTED;
   }
-  LOG_WARN("unknown Rust response status", "status", static_cast<int32_t>(status));
   return OB_ERR_UNEXPECTED;
 }
 
