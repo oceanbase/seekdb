@@ -16,7 +16,6 @@
 #ifndef _OCEANBASE_ROOTSERVER_OB_SYSTEM_PACKAGE_LOAD_TASK_H_
 #define _OCEANBASE_ROOTSERVER_OB_SYSTEM_PACKAGE_LOAD_TASK_H_ 1
 
-#include "common/ob_timeout_ctx.h"
 #include "lib/task/ob_timer.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_define.h"
@@ -39,10 +38,8 @@ public:
 
   virtual void runTimerTask() override;
 
-  static int wait_system_package_ready(const common::ObTimeoutCtx &ctx);
-
 private:
-  static int load_system_package_();
+  int load_system_package_();
 
 private:
   bool inited_;

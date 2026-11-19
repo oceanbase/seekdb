@@ -189,21 +189,5 @@ void ObSystemPackageLoadTask::runTimerTask()
   }
 }
 
-int ObSystemPackageLoadTask::wait_system_package_ready(const common::ObTimeoutCtx &ctx)
-{
-  int ret = OB_SUCCESS;
-  do {
-    if (ctx.is_timeouted()) {
-      ret = OB_TIMEOUT;
-      break;
-    }
-    ret = load_system_package_();
-    if (OB_SUCCESS != ret) {
-      ob_usleep(500 * 1000);
-    }
-  } while (ret != OB_SUCCESS);
-  return ret;
-}
-
 } // namespace rootserver
 } // namespace oceanbase
