@@ -157,10 +157,11 @@ def deb(payload, output, version, release, distribution, architecture=None):
     release = package_release(release, distribution)
     architecture = architecture or subprocess.check_output(["dpkg", "--print-architecture"], text=True).strip()
     multiarch = {"amd64": "x86_64-linux-gnu", "arm64": "aarch64-linux-gnu"}[architecture]
-    # Both supported architectures have 64-bit time_t. Let the private SONAME
-    # alias use libaio1t64; if absent, the loader falls back to system libaio1.
-    (payload / "usr/libexec/seekdb/lib/libaio.so.1").symlink_to(
-        "/usr/lib/%s/libaio.so.1t64" % multiarch)
+    # Both supported architectures have 64-bit time_t. Cross-alias the system
+    # SONAMEs; if a target is absent, the loader finds the original system name.
+    # Absolute system targets keep these two private aliases from forming a loop.
+    for name, target in (("libaio.so.1", "libaio.so.1t64"), ("libaio.so.1t64", "libaio.so.1")):
+        (payload / "usr/libexec/seekdb/lib" / name).symlink_to("/usr/lib/%s/%s" % (multiarch, target))
     control = payload / "DEBIAN"
     control.mkdir()
     (control / "control").write_text(
@@ -358,7 +359,18 @@ def main():
                                 ignore=shutil.ignore_patterns("libaio.so", "libaio.so.*"))
             normalize_permissions(payload)
             import binary_distribution
-            required = binary_distribution.glibc_requirement([path for path, kind in debug_symbols.native_files(payload) if kind == "elf"])
+            binaries = [path for path, kind in debug_symbols.native_files(payload) if kind == "elf"]
+            aio = {name for path in binaries for name in re.findall(
+                r"^\s*0x[0-9a-fA-F]+\s+\(NEEDED\)[^\n]*?\[(.*?)\]",
+                binary_distribution.linux_dynamic(path), re.MULTILINE) if name.startswith("libaio.so")}
+            if binary_package:
+                aio.update(path.name for path in (binary_package / "lib/seekdb").glob("libaio.so*"))
+            unsupported = aio - {"libaio.so.1", "libaio.so.1t64"}
+            if unsupported:
+                raise ValueError("unsupported libaio SONAMEs for system packages: %s" % ", ".join(sorted(unsupported)))
+            if options.format == "rpm" and "libaio.so.1t64" in aio:
+                raise ValueError("EL7/EL8 RPMs require libaio.so.1; relink against the target libaio")
+            required = binary_distribution.glibc_requirement(binaries)
             if binary_distribution.version_tuple(required) > binary_distribution.version_tuple(baseline):
                 raise ValueError("payload requires GLIBC_%s, exceeding %s's glibc %s" %
                                  (required, options.distribution, baseline))
