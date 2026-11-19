@@ -18154,9 +18154,7 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obcall:
     int64_t refreshed_schema_version = 0;
     ObDDLSQLTransaction trans(schema_service_);
     DropTableIdHashSet drop_table_set;
-    const int64_t drop_table_count = drop_table_arg.tables_.count();
-    if (OB_FAIL(drop_table_set.create(drop_table_count))) {
-    } else if (TMP_TABLE == drop_table_arg.table_type_
+    if (TMP_TABLE == drop_table_arg.table_type_
         || TMP_TABLE_ALL == drop_table_arg.table_type_) {
       if (drop_table_arg.tables_.count() == 0) {
         if (OB_FAIL(collect_temporary_tables_in_session(drop_table_arg))) {
@@ -18169,6 +18167,9 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obcall:
     }
 
     if (OB_FAIL(ret)) {
+    } else if (drop_table_arg.tables_.empty()) {
+      return OB_SUCCESS; // The session has already dropped all of its temporary tables.
+    } else if (OB_FAIL(drop_table_set.create(drop_table_arg.tables_.count()))) {
     } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
     } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
