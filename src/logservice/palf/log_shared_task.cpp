@@ -15,6 +15,7 @@
  */
 
 #include "log_shared_task.h"
+#include "logservice/ob_log_allocator.h"
 #include "palf_env_impl.h"                    // PalfEnvImpl
 #include "logservice/palf/palf_handle_impl_guard.h"
 

@@ -435,7 +435,6 @@ int PalfEnvImpl::create_directory(const char *base_dir)
   if (OB_FAIL(log_block_pool_->create_directory_at(*parent, tmp_name.c_str(), 0775))) {
   } else if (OB_FAIL(directory_error(file_io::open_child_directory(*parent,
       {reinterpret_cast<const uint8_t *>(tmp_name.data()), tmp_name.size()}, *temporary)))) {
-  } else if (OB_FAIL(log_block_pool_->create_directory_at(*temporary, "log", 0775))) {
   } else if (OB_FAIL(log_block_pool_->rename_directory_at(*parent, tmp_name.c_str(), name.c_str()))) {
   } else {
     PALF_LOG(INFO, "prepare_directory_for_creating_ls success", K(base_dir));

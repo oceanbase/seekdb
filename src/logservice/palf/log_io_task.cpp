@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX PALF
 
 #include "log_io_task.h"
+#include "logservice/ob_log_allocator.h"
 #include "log_io_task_cb_thread_pool.h"
 #include "palf_handle_impl_guard.h" // PalfHandleImplGuard
 #include "palf_env_impl.h"          // IPalfEnvImpl

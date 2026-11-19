@@ -73,7 +73,7 @@ public:
                              palf::LSN &lsn,
                              share::SCN &scn) = 0;
 
-  virtual int get_append_mode_initial_scn(SCN &ref_scn) const = 0;
+  virtual int get_append_mode_initial_scn(share::SCN &ref_scn) const = 0;
   virtual int seek(const palf::LSN &lsn, palf::PalfBufferIterator &iter) = 0;
   virtual int seek(const palf::LSN &lsn, palf::PalfGroupBufferIterator &iter) = 0;
 

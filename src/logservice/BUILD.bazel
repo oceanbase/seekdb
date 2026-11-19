@@ -97,6 +97,7 @@ grouped_unity_cc_library(
     deps = [
         "//rust:file_io_headers",
         "//rust:storage_io_headers",
+        "//rust:palf_headers",
         "//src/share:startup_result",
         ":append_callback_interface",
         "//src/share:log_protocol",

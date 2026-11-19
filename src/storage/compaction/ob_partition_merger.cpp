@@ -19,6 +19,7 @@
 #include "rust/config.h"
 #include <inttypes.h>
 #include "ob_partition_merger.h"
+#include "lib/file/file_directory_utils.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tablet_scheduler.h"
 #include "storage/blocksstable/ob_data_macro_block_merge_writer.h"

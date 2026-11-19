@@ -16,71 +16,99 @@
 
 #ifndef OCEANBASE_LOGSERVICE_PALF_ITERATOR_
 #define OCEANBASE_LOGSERVICE_PALF_ITERATOR_
-#include "log_iterator_impl.h"           // LogIteratorImpl
-#include "log_iterator_storage.h"        // LogIteratorStorage
-#include "share/log/palf/log_define.h"
-#include "lib/profile/ob_trace_id.h"  // ObCurTraceId(self-contained include fix)
+
+#include <optional>
+#include <type_traits>
+#include "lib/function/ob_function.h"
+#include "log_entry.h"
+#include "log_group_entry.h"
+#include "log_io_context.h"
+#include "log_iterator_info.h"
+#include "rust/palf.h"
+#include "share/ob_errno.h"
+
 namespace oceanbase
 {
-namespace share
-{
-class SCN;
-}
 namespace palf
 {
-typedef ObFunction<void()> DestroyStorageFunctor;
+typedef common::ObFunction<void()> DestroyStorageFunctor;
+
+inline int from_rust_code(const palf_rs::Code code)
+{
+  switch (code) {
+    case palf_rs::Code::Ok: return OB_SUCCESS;
+    case palf_rs::Code::Invalid: return OB_INVALID_ARGUMENT;
+    case palf_rs::Code::NotInit: return OB_NOT_INIT;
+    case palf_rs::Code::End: return OB_ITER_END;
+    case palf_rs::Code::OutLower: return OB_ERR_OUT_OF_LOWER_BOUND;
+    case palf_rs::Code::OutUpper: return OB_ERR_OUT_OF_UPPER_BOUND;
+    case palf_rs::Code::Partial: return common::OB_PARTIAL_LOG;
+    case palf_rs::Code::Duplicate: return OB_ENTRY_EXIST;
+    case palf_rs::Code::Corrupt:
+    case palf_rs::Code::UnknownVersion: return OB_INVALID_DATA;
+    case palf_rs::Code::Io: return OB_IO_ERROR;
+    case palf_rs::Code::NoSpace: return common::OB_LOG_OUTOF_DISK_SPACE;
+    case palf_rs::Code::Closed: return OB_NOT_RUNNING;
+    default: return OB_ERR_UNEXPECTED;
+  }
+}
+
+inline share::SCN from_rust_scn(const uint64_t value)
+{
+  share::SCN scn;
+  (void)scn.convert_for_logservice(value);
+  return scn;
+}
 
 template <class LogEntryType>
 class PalfIterator
 {
 public:
-  PalfIterator()
-      : iterator_storage_(), iterator_impl_(), need_print_error_(true),
-        is_inited_(false), io_ctx_(LogIOUser::DEFAULT), last_print_time_(0) {}
-  ~PalfIterator() {destroy();}
-  int init(const LSN &start_offset,
-           const GetFileEndLSN &get_file_end_lsn,
-           ILogStorage *log_storage)
+  PalfIterator() = default;
+  ~PalfIterator() { destroy(); }
+
+  int init(::rust::Box<palf_rs::Cursor> cursor)
   {
     int ret = OB_SUCCESS;
-    if (IS_INIT) {
+    if (cursor_.has_value()) {
       ret = OB_INIT_TWICE;
-    } else if (OB_FAIL(do_init_(start_offset, get_file_end_lsn, log_storage))) {
     } else {
+      cursor_.emplace(std::move(cursor));
       is_inited_ = true;
     }
     return ret;
   }
+
   int set_io_context(const LogIOContext &io_ctx)
   {
     int ret = OB_SUCCESS;
-    if (IS_NOT_INIT) {
+    if (!is_inited_) {
       ret = OB_NOT_INIT;
     } else if (!io_ctx.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-      PALF_LOG(WARN, "LogIOContext is invalid!", K(ret), K(io_ctx));
     } else {
       io_ctx_ = io_ctx;
     }
     return ret;
   }
-  
+
   int reuse(const LSN &start_lsn)
   {
     int ret = OB_SUCCESS;
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
+    if (!is_inited_ || !start_lsn.is_valid()) {
+      ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
     } else {
-      (void)iterator_impl_.reuse();
-      (void)iterator_storage_.reuse(start_lsn);
+      ret = from_rust_code(palf_rs::reuse_ffi(**cursor_, start_lsn.val_));
+      has_entry_ = false;
     }
     return ret;
   }
+
   void destroy()
   {
+    cursor_.reset();
+    has_entry_ = false;
     is_inited_ = false;
-    iterator_impl_.destroy();
-    iterator_storage_.destroy();
     io_ctx_.destroy();
     if (destroy_storage_functor_.is_valid()) {
       destroy_storage_functor_();
@@ -88,211 +116,99 @@ public:
     }
   }
 
-  // @brief access next log entry of palf
-  // @retval
-  //   OB_SUCCESS.
-  //   OB_INVALID_DATA.
-  //   OB_ITER_END, has iterated to the end of block.
-  //   OB_NEED_RETRY, the data in cache is not integrity, and the integrity data has been truncate from disk,
-  //                  need read data from storage eagain.(data in cache will not been clean up, therefore,
-  //                  user need used a new iterator to read data again)
-  //   OB_ERR_OUT_LOWER_BOUND, block has been recycled
-  //   OB_PARTIAL_LOG, iterator start lsn is not the header of LogGroupEntry.
   int next()
   {
-    int ret = OB_SUCCESS;
-    const share::SCN replayable_point_scn = SCN::max_scn();
-    bool iterate_end_by_replayable_point = false;
-    SCN next_min_scn;
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-    } else {
-      ret = next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point);
-    }
-    return ret;
+    return next(share::SCN::max_scn());
   }
 
-  // @brief access next log entry of palf
-  // param[in] replayable point scn; no log newer than it will be returned.
-  // @retval
-  //   OB_SUCCESS.
-  //   OB_INVALID_DATA.
-  //   OB_ITER_END, has iterated to the end of block.
-  //   OB_NEED_RETRY, the data in cache is not integrity, and the integrity data has been truncate from disk,
-  //                  need read data from storage eagain.(data in cache will not been clean up, therefore,
-  //                  user need used a new iterator to read data again)
-  //   OB_ERR_OUT_LOWER_BOUND, block has been recycled
-  //   OB_PARTIAL_LOG, iterator start lsn is not the header of LogGroupEntry.
   int next(const share::SCN &replayable_point_scn)
   {
-    int ret = OB_SUCCESS;
+    share::SCN next_min_scn;
     bool iterate_end_by_replayable_point = false;
-    SCN next_min_scn;
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-    } else {
-      ret = next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point);
-    }
-    return ret;
+    return next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point);
   }
 
-  // @brief access next log entry of palf
-  // param[in] replayable point scn; no log newer than it will be returned.
-  // param[out] the min log scn of next log, it's valid only when return value is OB_ITER_END
-  // param[out] return OB_ITER_END whether casused by replayable_point_scn, it's valid only when return value is OB_ITER_END
-  // @retval
-  //   OB_SUCCESS.
-  //   OB_INVALID_DATA.
-  //   OB_ITER_END, has iterated to the end of block.
-  //   OB_NEED_RETRY:
-  //     1. cached data was truncated from disk; read from storage again.
-  //     2. data was truncated concurrently while reading from disk.
-  //   OB_ERR_OUT_LOWER_BOUND, block has been recycled
-  //   OB_PARTIAL_LOG, iterator start lsn is not the header of LogGroupEntry.
   int next(const share::SCN &replayable_point_scn,
            share::SCN &next_min_scn,
            bool &iterate_end_by_replayable_point)
   {
     int ret = OB_SUCCESS;
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-    } else if (OB_FAIL(iterator_impl_.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point, io_ctx_))
-        && OB_ITER_END != ret) {
-      PALF_LOG(WARN, "PalfIterator next failed", K(ret), KPC(this));
-      print_error_log(ret);
+    next_min_scn.reset();
+    iterate_end_by_replayable_point = false;
+    if (!is_inited_ || !replayable_point_scn.is_valid()) {
+      ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
     } else {
-      if (palf_reach_time_interval(PALF_STAT_PRINT_INTERVAL_US, last_print_time_)) {
-        PALF_LOG(INFO, "[PALF STAT ITERATOR INFO]", K_(io_ctx));
+      ret = from_rust_code(palf_rs::next_ffi(**cursor_, replayable_point_scn.get_val_for_logservice()));
+      has_entry_ = OB_SUCCESS == ret;
+      if (OB_ITER_END == ret) {
+        const uint64_t next_scn = palf_rs::next_min_scn(**cursor_);
+        if (0 != next_scn) {
+          next_min_scn = from_rust_scn(next_scn);
+          iterate_end_by_replayable_point = true;
+        }
       }
     }
     return ret;
   }
-  // @brief get log entry from iterator
-  // @retval
-  //  OB_SUCCESS
-  //  OB_INVALID_DATA
-  //  OB_ITER_END
-  int get_entry(LogEntryType &entry, LSN &lsn)
-  {
-    int ret = OB_SUCCESS;
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-    } else if (OB_FAIL(iterator_impl_.get_entry(entry, lsn)) && OB_ITER_END != ret) {
-      PALF_LOG(WARN, "PalfIterator get_entry failed", K(ret), K(entry), K(lsn), KPC(this));
-    } else {
-    }
-    return ret;
-  }
-  int get_entry(const char *&buffer, LogEntryType &entry, LSN& lsn)
-  {
-    int ret = OB_SUCCESS;
-    // OB_ASSERT((std::is_same<LogEntryType, LogGroupEntry>::value) == true);
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-    } else if (OB_FAIL(iterator_impl_.get_entry(entry, lsn)) && OB_ITER_END != ret) {
-      PALF_LOG(WARN, "PalfIterator get_entry failed", K(ret), K(entry), K(lsn), KPC(this));
-    } else {
-      buffer = entry.get_data_buf() - entry.get_header_size();
-    }
-    return ret;
-  }
+
   int get_entry(const char *&buffer, int64_t &nbytes, share::SCN &scn, LSN &lsn)
   {
-    return get_entry_(buffer, nbytes, scn, lsn);
+    int ret = OB_SUCCESS;
+    if (!is_inited_ || !has_entry_) {
+      ret = is_inited_ ? OB_ITER_END : OB_NOT_INIT;
+    } else {
+      constexpr bool group_mode = std::is_same<LogEntryType, LogGroupEntry>::value;
+      const auto data = group_mode ? palf_rs::bytes(**cursor_) : palf_rs::payload(**cursor_);
+      buffer = reinterpret_cast<const char *>(data.data());
+      nbytes = data.size();
+      scn = from_rust_scn(palf_rs::scn(**cursor_));
+      lsn = LSN(palf_rs::lsn(**cursor_));
+    }
+    return ret;
   }
-  bool is_inited() const
+
+  LSN get_entry_end_lsn() const
   {
-    return true == is_inited_;
+    return is_valid() ? LSN(palf_rs::end_lsn(**cursor_)) : LSN();
   }
-  bool is_valid() const
-  {
-    return iterator_impl_.is_valid();
-  }
+
+  bool is_inited() const { return is_inited_; }
+  bool is_valid() const { return is_inited_ && cursor_.has_value() && has_entry_; }
   bool check_is_the_last_entry()
   {
-    return iterator_impl_.check_is_the_last_entry(io_ctx_);
+    return is_valid() && palf_rs::is_last_ffi(**cursor_);
   }
-  void print_error_log(int ret) const
-  {
-    if (need_print_error_ && (OB_INVALID_DATA == ret || OB_CHECKSUM_ERROR == ret)) {
-      PALF_LOG(ERROR, "invalid data or checksum mismatch", KR(ret), KPC(this));
-      LOG_DBA_ERROR_V2(OB_LOG_CHECKSUM_MISMATCH, ret, "invalid data or checksum mismatch");
-    }
-  }
-  void set_need_print_error(const bool need_print_error)
-  {
-    need_print_error_ = need_print_error;
-  }
-  // @brief cleanup some resource when calling 'destroy'.
+  void set_need_print_error(const bool need_print_error) { need_print_error_ = need_print_error; }
+
   int set_destroy_iterator_storage_functor(const DestroyStorageFunctor &destroy_func)
   {
-    int ret = OB_SUCCESS; 
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-      PALF_LOG(WARN, "not inited");
-    } else if (!destroy_func.is_valid()) {
-      ret = OB_INVALID_ARGUMENT;
-      PALF_LOG(WARN, "invalid argument", K(destroy_func));
-    } else if (FALSE_IT(destroy_storage_functor_ = destroy_func)) {
-    } else if (!destroy_storage_functor_.is_valid()) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      PALF_LOG(WARN, "alloc memory failed, destroy_storage_functor_ is invalid", KR(ret), KPC(this));
-    } else {}
-    return ret;
-  }
-  TO_STRING_KV(K_(iterator_impl), K_(io_ctx));
-
-private:
-  int do_init_(const LSN &start_offset,
-               const GetFileEndLSN &get_file_end_lsn,
-               ILogStorage *log_storage)
-  {
     int ret = OB_SUCCESS;
-    if (IS_INIT) {
-      ret = OB_INIT_TWICE;
-    } else if (!get_file_end_lsn.is_valid() || NULL == log_storage) {
-      ret = OB_INVALID_ARGUMENT;
-      PALF_LOG(WARN, "invalid argument", K(ret), K(start_offset), K(get_file_end_lsn), K(log_storage));
-    } else if (OB_FAIL(iterator_storage_.init(start_offset, LogEntryType::BLOCK_SIZE, get_file_end_lsn, log_storage))) {
-    } else if (OB_FAIL(iterator_impl_.init(&iterator_storage_))) {
+    if (!is_inited_ || !destroy_func.is_valid()) {
+      ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
     } else {
-      io_ctx_.set_start_lsn(start_offset);
-      is_inited_ = true;
+      destroy_storage_functor_ = destroy_func;
+      if (!destroy_storage_functor_.is_valid()) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      }
     }
     return ret;
   }
 
-  int get_entry_(const char *&buffer, int64_t &nbytes, share::SCN &scn, LSN &lsn)
-  {
-    int ret = OB_SUCCESS;
-    LogEntryType entry;
-    OB_ASSERT((std::is_same<LogEntryType, LogEntry>::value) == true);
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-    } else if (OB_FAIL(iterator_impl_.get_entry(entry, lsn)) && OB_ITER_END != ret) {
-      PALF_LOG(WARN, "PalfIterator get_entry failed", K(ret), K(entry), K(lsn), KPC(this));
-    } else {
-      buffer = entry.get_data_buf();
-      nbytes = entry.get_data_len();
-      scn = entry.get_scn();
-    }
-    return ret;
-  }
+  TO_STRING_KV(K_(is_inited), K_(io_ctx));
 
 private:
-  IteratorStorage iterator_storage_;
-  LogIteratorImpl<LogEntryType> iterator_impl_;
+  std::optional<::rust::Box<palf_rs::Cursor>> cursor_;
   DestroyStorageFunctor destroy_storage_functor_;
-  bool need_print_error_;
-  bool is_inited_;
-  LogIOContext io_ctx_;
-  int64_t last_print_time_;
+  bool need_print_error_ = true;
+  bool has_entry_ = false;
+  bool is_inited_ = false;
+  LogIOContext io_ctx_ = LogIOContext(LogIOUser::DEFAULT);
 };
 
 typedef PalfIterator<LogEntry> MemPalfBufferIterator;
 typedef PalfIterator<LogGroupEntry> MemPalfGroupBufferIterator;
 typedef PalfIterator<LogEntry> PalfBufferIterator;
 typedef PalfIterator<LogGroupEntry> PalfGroupBufferIterator;
-}
-}
+} // namespace palf
+} // namespace oceanbase
 #endif

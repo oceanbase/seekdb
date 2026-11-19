@@ -32,6 +32,7 @@
 #include "lib/thread/ob_thread_lease.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/ob_define.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_errno.h"
 #include "logservice/ob_log_handler.h"
 

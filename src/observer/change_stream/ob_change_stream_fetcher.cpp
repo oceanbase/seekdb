@@ -211,7 +211,8 @@ int ObCSFetcher::init_consumption_position_()
       LOG_INFO("CSFetcher: min_dep_lsn is 0, schema_version stays 0");
     } else {
       int64_t timestamp_us = 0;
-      palf::LogEntry peek_entry;
+      const char *peek_buf = nullptr;
+      int64_t peek_buf_len = 0;
       palf::LSN peek_lsn;
       if (OB_FAIL(iter_.next())) {
         if (OB_ITER_END == ret) {
@@ -220,10 +221,9 @@ int ObCSFetcher::init_consumption_position_()
           LOG_INFO("CSFetcher: no logs at min_dep_lsn, schema_version stays 0");
         } else {
         }
-      } else if (OB_FAIL(iter_.get_entry(peek_entry, peek_lsn))) {
+      } else if (OB_FAIL(iter_.get_entry(peek_buf, peek_buf_len, current_scn_, peek_lsn))) {
         LOG_WARN("CSFetcher: fail to get_entry for schema init", KR(ret));
       } else {
-        current_scn_ = peek_entry.get_scn();
         timestamp_us = current_scn_.convert_to_ts(true /* ignore_invalid */);
         if (timestamp_us <= 0) {
           LOG_WARN("CSFetcher: scn convert_to_ts invalid, schema_version stays 0");
@@ -1115,18 +1115,17 @@ void ObCSFetcher::run1()
       continue;
     }
 
-    palf::LogEntry log_entry;
+    const char *buf = nullptr;
+    int64_t buf_len = 0;
+    SCN scn;
     palf::LSN lsn;
-    if (OB_FAIL(iter_.get_entry(log_entry, lsn))) {
+    if (OB_FAIL(iter_.get_entry(buf, buf_len, scn, lsn))) {
       unbind_log_();
       iter_ready = false;
       continue;
     }
 
-    const char *buf = log_entry.get_data_buf();
-    const int64_t buf_len = log_entry.get_data_len();
-    const SCN scn = log_entry.get_scn();
-    const palf::LSN entry_end_lsn = lsn + log_entry.get_header_size() + buf_len;
+    const palf::LSN entry_end_lsn = iter_.get_entry_end_lsn();
 
     // Pre-check: only process transaction logs.
     logservice::ObLogBaseHeader base_header;

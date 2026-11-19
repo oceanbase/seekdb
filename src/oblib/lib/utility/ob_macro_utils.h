@@ -925,4 +925,8 @@ for (int64_t __INNER_I_NAME__(it) = 0, __INNER_ONCE_NAME__(it) = 1; \
 
 #define TLOCAL(TYPE, VAR) thread_local TYPE VAR
 
+#ifdef __cplusplus
+#include "lib/atomic/atomic128.h"
+#endif
+
 #endif /* _OB_MACRO_UTILS_H_ */

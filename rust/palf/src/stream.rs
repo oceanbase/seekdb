@@ -453,71 +453,92 @@ impl Cursor {
     }
 
     pub fn next(&mut self, replayable_point: u64) -> Result<()> {
-        if !self.group_mode && !self.bytes.is_empty() {
-            let entries = group_entries(&self.bytes[GROUP_HEADER_SIZE..], self.group_lsn)?;
-            if self.entry_offset + 1 < entries.len() {
-                self.entry_offset += 1;
-                return self.set_entry(&entries[self.entry_offset]);
+        loop {
+            if !self.group_mode && !self.bytes.is_empty() {
+                let entries = group_entries(&self.bytes[GROUP_HEADER_SIZE..], self.group_lsn)?;
+                let mut index = self.entry_offset + 1;
+                while index < entries.len() {
+                    let entry = &entries[index];
+                    if entry.header.scn > replayable_point {
+                        self.next_min_scn = entry.header.scn;
+                        return Err(Error::End);
+                    }
+                    if !entry.header.padding {
+                        self.entry_offset = index;
+                        return self.set_entry(entry);
+                    }
+                    index += 1;
+                }
             }
-        }
-        let state = self.lock()?;
-        state.check_open()?;
-        if self.next_lsn < state.manifest.base_lsn {
-            return Err(Error::OutLower);
-        }
-        if self.next_lsn >= state.end_lsn {
-            return Err(Error::End);
-        }
-        let meta = state
-            .records
-            .range(..=self.next_lsn)
-            .next_back()
-            .map(|(_, meta)| meta.clone())
-            .ok_or(Error::OutLower)?;
-        if self.next_lsn >= meta.end_lsn() {
-            return Err(Error::Partial);
-        }
-        let bytes = state.read_record(meta.lsn)?;
-        let header = validate_group(&bytes, meta.lsn)?;
-        if self.group_mode {
-            if self.next_lsn != meta.lsn {
+            let state = self.lock()?;
+            state.check_open()?;
+            if self.next_lsn < state.manifest.base_lsn {
+                return Err(Error::OutLower);
+            }
+            if self.next_lsn >= state.end_lsn {
+                return Err(Error::End);
+            }
+            let meta = state
+                .records
+                .range(..=self.next_lsn)
+                .next_back()
+                .map(|(_, meta)| meta.clone())
+                .ok_or(Error::OutLower)?;
+            if self.next_lsn >= meta.end_lsn() {
                 return Err(Error::Partial);
+            }
+            let bytes = state.read_record(meta.lsn)?;
+            let header = validate_group(&bytes, meta.lsn)?;
+            if self.group_mode {
+                if self.next_lsn != meta.lsn {
+                    return Err(Error::Partial);
+                }
+                drop(state);
+                self.bytes = bytes;
+                self.payload_offset = GROUP_HEADER_SIZE;
+                self.group_lsn = meta.lsn;
+                self.current_lsn = meta.lsn;
+                self.current_end_lsn = meta.end_lsn();
+                self.current_scn = header.max_scn;
+                self.current_log_id = header.log_id;
+                self.current_committed_end_lsn = header.committed_end_lsn;
+                self.current_accumulated_checksum = header.accumulated_checksum;
+                self.current_padding = header.padding;
+                self.next_lsn = meta.end_lsn();
+                self.next_min_scn = 0;
+                return Ok(());
+            }
+            let entries = group_entries(&bytes[GROUP_HEADER_SIZE..], meta.lsn)?;
+            let mut index = entries
+                .iter()
+                .position(|entry| entry.lsn >= self.next_lsn)
+                .ok_or(Error::Partial)?;
+            if entries[index].lsn != self.next_lsn && self.next_lsn != meta.lsn {
+                return Err(Error::Partial);
+            }
+            while index < entries.len() && entries[index].header.padding {
+                index += 1;
+            }
+            if index == entries.len() {
+                drop(state);
+                self.bytes.clear();
+                self.next_lsn = meta.end_lsn();
+                continue;
+            }
+            if entries[index].header.scn > replayable_point {
+                drop(state);
+                self.next_min_scn = entries[index].header.scn;
+                return Err(Error::End);
             }
             drop(state);
             self.bytes = bytes;
-            self.payload_offset = GROUP_HEADER_SIZE;
+            self.entry_offset = index;
             self.group_lsn = meta.lsn;
             self.current_lsn = meta.lsn;
             self.current_end_lsn = meta.end_lsn();
-            self.current_scn = header.max_scn;
-            self.current_log_id = header.log_id;
-            self.current_committed_end_lsn = header.committed_end_lsn;
-            self.current_accumulated_checksum = header.accumulated_checksum;
-            self.current_padding = header.padding;
             self.next_lsn = meta.end_lsn();
-            return Ok(());
+            return self.set_entry(&entries[index]);
         }
-        let entries = group_entries(&bytes[GROUP_HEADER_SIZE..], meta.lsn)?;
-        let index = entries
-            .iter()
-            .position(|entry| entry.lsn >= self.next_lsn)
-            .ok_or(Error::Partial)?;
-        if entries[index].lsn != self.next_lsn && self.next_lsn != meta.lsn {
-            return Err(Error::Partial);
-        }
-        if entries[index].header.scn > replayable_point {
-            drop(state);
-            self.next_min_scn = entries[index].header.scn;
-            return Err(Error::End);
-        }
-        drop(state);
-        self.bytes = bytes;
-        self.entry_offset = index;
-        self.group_lsn = meta.lsn;
-        self.current_lsn = meta.lsn;
-        self.current_end_lsn = meta.end_lsn();
-        self.next_lsn = meta.end_lsn();
-        self.set_entry(&entries[index])
     }
 
     fn set_entry(&mut self, entry: &crate::format::EntryMeta) -> Result<()> {
@@ -763,13 +784,13 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
     let mut end_scn = manifest.previous.prev_scn;
     let mut next_log_id = manifest.previous.prev_log_id + 1;
     let mut accumulated_checksum = manifest.previous.prev_accumulated_checksum;
-    let mut integrity = true;
+    let mut truncate_tail = false;
     for (index, id) in ids.iter().copied().enumerate() {
         if id < block_id(manifest.base_lsn) {
             return Err(Error::Corrupt);
         }
         let path = segment_path(directory, id);
-        let mut file = File::open(&path)?;
+        let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
         let length = file.metadata()?.len();
         if length < SEGMENT_HEADER_SIZE || length > PHYSICAL_BLOCK_SIZE {
             return Err(Error::Corrupt);
@@ -792,7 +813,11 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
                 if tail.iter().any(|byte| *byte != 0) && index + 1 != ids.len() {
                     return Err(Error::Corrupt);
                 }
-                lsn = (id + 1) * BLOCK_SIZE;
+                if index + 1 == ids.len() {
+                    let valid_length = physical_offset(end_lsn);
+                    file.set_len(valid_length)?;
+                    segment_lengths.insert(id, valid_length);
+                }
                 break;
             }
             file.seek(SeekFrom::Start(physical_offset(lsn)))?;
@@ -805,7 +830,7 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
                 Ok(header) => header,
                 Err(Error::UnknownVersion) => return Err(Error::UnknownVersion),
                 Err(_) if index + 1 == ids.len() => {
-                    integrity = false;
+                    truncate_tail = true;
                     break;
                 }
                 Err(error) => return Err(error),
@@ -818,7 +843,7 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
                 if index + 1 != ids.len() {
                     return Err(Error::Corrupt);
                 }
-                integrity = false;
+                truncate_tail = true;
                 break;
             }
             let mut bytes = vec![0; record_len as usize];
@@ -828,7 +853,7 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
                 Ok(header) => header,
                 Err(Error::UnknownVersion) => return Err(Error::UnknownVersion),
                 Err(_) if index + 1 == ids.len() => {
-                    integrity = false;
+                    truncate_tail = true;
                     break;
                 }
                 Err(error) => return Err(error),
@@ -852,9 +877,10 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
             next_log_id = header.log_id + 1;
             accumulated_checksum = header.accumulated_checksum;
         }
-        if !integrity {
+        if truncate_tail {
             let valid_length = physical_offset(end_lsn);
             file.set_len(valid_length)?;
+            segment_lengths.insert(id, valid_length);
             break;
         }
         if lsn < (id + 1) * BLOCK_SIZE && index + 1 != ids.len() {
@@ -871,7 +897,7 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
         next_log_id,
         accumulated_checksum,
         disk_limit,
-        integrity,
+        integrity: true,
         closed: false,
         failed: None,
     })
@@ -990,6 +1016,8 @@ mod tests {
         assert!(reopened.status().unwrap());
         let progress = reopened.progress().unwrap();
         assert_eq!(progress.end_lsn, second.end_lsn);
+        assert!(progress.integrity);
+        assert_eq!(progress.used_disk, physical_offset(second.end_lsn));
         let mut cursor = reopened.cursor(first.lsn, false);
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"one");
@@ -1055,6 +1083,52 @@ mod tests {
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"three");
         assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+    }
+
+    #[test]
+    fn entry_cursor_honors_replayable_point_within_a_group() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let mut payload = encode_entry(b"one", 10, false);
+        payload.extend(encode_entry(b"two", 11, false));
+        payload.extend(encode_entry(b"three", 12, false));
+        let group = encode_group(&payload, 0, 12, 1, 0, false).unwrap();
+        stream.append_imported(0, 12, &group).unwrap();
+
+        let mut cursor = stream.cursor(GROUP_HEADER_SIZE as u64, false);
+        cursor.next(10).unwrap();
+        assert_eq!(cursor.payload(), b"one");
+        assert_eq!(cursor.next(10), Err(Error::End));
+        assert_eq!(cursor.next_min_scn(), 11);
+        cursor.next(11).unwrap();
+        assert_eq!(cursor.payload(), b"two");
+        assert_eq!(cursor.next(11), Err(Error::End));
+        assert_eq!(cursor.next_min_scn(), 12);
+        cursor.next(12).unwrap();
+        assert_eq!(cursor.payload(), b"three");
+    }
+
+    #[test]
+    fn only_group_cursor_returns_padding() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let entry = encode_entry(&[0; 8], 10, true);
+        let group = encode_group(&entry, 0, 10, 1, 0, true).unwrap();
+        stream.append_imported(0, 10, &group).unwrap();
+        stream.append(b"visible", 11).unwrap();
+
+        let mut entries = stream.cursor(0, false);
+        entries.next(u64::MAX).unwrap();
+        assert_eq!(entries.payload(), b"visible");
+        assert!(!entries.padding());
+
+        let mut groups = stream.cursor(0, true);
+        groups.next(u64::MAX).unwrap();
+        assert!(groups.padding());
+        groups.next(u64::MAX).unwrap();
+        assert!(!groups.padding());
     }
 
     #[test]
