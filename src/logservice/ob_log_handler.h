@@ -76,7 +76,6 @@ public:
   virtual int get_append_mode_initial_scn(SCN &ref_scn) const = 0;
   virtual int seek(const palf::LSN &lsn, palf::PalfBufferIterator &iter) = 0;
   virtual int seek(const palf::LSN &lsn, palf::PalfGroupBufferIterator &iter) = 0;
-  virtual int bootstrap() = 0;
 
   virtual int locate_by_scn_coarsely(const share::SCN &scn, palf::LSN &result_lsn) = 0;
   virtual int locate_by_lsn_coarsely(const palf::LSN &lsn, share::SCN &result_scn) = 0;
@@ -234,7 +233,6 @@ public:
   // - OB_ERR_OUT_OF_LOWER_BOUND: scn is too old, log files may have been recycled
   // - others: bug
 
-  int bootstrap() override final;
   // @desc: query coarse lsn by ts(ns), that means there is a LogGroupEntry in disk,
   // its lsn and scn are result_lsn and result_scn, and result_scn <= scn.
   // Note that this function may be time-consuming

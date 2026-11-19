@@ -263,15 +263,6 @@ int ObLogHandler::seek(const LSN &lsn, PalfGroupBufferIterator &iter)
   return ret;
 }
 
-int ObLogHandler::bootstrap()
-{
-  RLockGuard guard(lock_);
-  int ret = palf_handle_.bootstrap();
-  if (OB_FAIL(ret)) {
-  }
-  return ret;
-}
-
 int ObLogHandler::locate_by_scn_coarsely(const SCN &scn, LSN &result_lsn)
 {
   int ret = OB_SUCCESS;

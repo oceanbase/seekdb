@@ -30,7 +30,6 @@ namespace palf
 PalfHandleImpl::PalfHandleImpl()
   : lock_(common::ObLatchIds::PALF_HANDLE_IMPL_LOCK),
     sw_(),
-    mode_mgr_(),
     state_mgr_(),
     log_engine_(),
     log_cache_(),
@@ -174,7 +173,6 @@ void PalfHandleImpl::destroy()
     log_cache_.destroy();
     log_engine_.destroy();
     state_mgr_.destroy();
-    mode_mgr_.destroy();
     sw_.destroy();
     if (false == check_can_be_used()) {
       palf_env_impl_->remove_directory(log_dir_);
@@ -195,11 +193,6 @@ int PalfHandleImpl::start()
     PALF_LOG(INFO, "PalfHandleImpl start success", K(ret), KPC(this));
   }
   return ret;
-}
-
-int PalfHandleImpl::bootstrap()
-{
-  return IS_NOT_INIT ? OB_NOT_INIT : OB_SUCCESS;
 }
 
 int PalfHandleImpl::get_begin_lsn(LSN &lsn) const
@@ -286,7 +279,7 @@ int PalfHandleImpl::submit_log(
     } else if (!state_mgr_.can_append()) {
       ret = OB_STATE_NOT_MATCH;
       PALF_LOG(WARN, "cannot submit_log", KPC(this), KP(buf), K(buf_len),
-          "state", state_mgr_.get_state(), K(opts), "mode_mgr can_append", mode_mgr_.can_append());
+          "state", state_mgr_.get_state(), K(opts));
     } else if (OB_FAIL(sw_.submit_log(buf, buf_len, ref_scn, lsn, scn))) {
       if (OB_EAGAIN != ret) {
         PALF_LOG(WARN, "submit_log failed", KPC(this), KP(buf), K(buf_len));
@@ -669,7 +662,9 @@ int PalfHandleImpl::get_access_mode_ref_scn(AccessMode &access_mode,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "PalfHandleImpl is not inited", K(ret), KPC(this));
-  } else if (OB_FAIL(mode_mgr_.get_access_mode_ref_scn(access_mode, ref_scn))) {
+  } else {
+    access_mode = AccessMode::APPEND;
+    ref_scn = log_engine_.get_log_meta().get_log_mode_meta().ref_scn_;
   }
   return ret;
 }
@@ -839,7 +834,7 @@ int PalfHandleImpl::check_and_switch_state()
     if (palf_reach_time_interval(PALF_DUMP_DEBUG_INFO_INTERVAL_US, last_dump_info_time_us_)) {
       RLockGuard guard(lock_);
       FLOG_INFO("[PALF_DUMP]", K_(self), "[SlidingWindow]", sw_, "[StateMgr]", state_mgr_,
-          "[ModeMgr]", mode_mgr_, "[LogEngine]", log_engine_);
+          "[LogEngine]", log_engine_);
       (void) sw_.report_log_task_trace(sw_.get_start_id());
     }
   }
@@ -859,11 +854,10 @@ int PalfHandleImpl::do_init_mem_(
   if ((pret = snprintf(log_dir_, MAX_PATH_SIZE, "%s", log_dir)) && false) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "error unexpected", K(ret));
-  } else if (OB_FAIL(sw_.init(self, &state_mgr_, &mode_mgr_,
+  } else if (OB_FAIL(sw_.init(self, &state_mgr_,
           &log_engine_, &fs_cb_wrapper_, alloc_mgr, palf_base_info))) {
   } else if (OB_FAIL(log_cache_.init(this))) {
-  } else if (OB_FAIL(state_mgr_.init(self, &sw_, &mode_mgr_))) {
-  } else if (OB_FAIL(mode_mgr_.init(self, log_meta.get_log_mode_meta()))) {
+  } else if (OB_FAIL(state_mgr_.init(self, &sw_))) {
   } else {
     allocator_ = alloc_mgr;
     self_ = self;
@@ -1090,7 +1084,7 @@ int PalfHandleImpl::stat(PalfStat &palf_stat)
     block_id_t min_block_id = LOG_INVALID_BLOCK_ID;
     SCN min_block_min_scn;
     palf_stat.self_ = self_;
-    (void)mode_mgr_.get_access_mode(palf_stat.access_mode_);
+    palf_stat.access_mode_ = AccessMode::APPEND;
     palf_stat.base_lsn_ = log_engine_.get_log_meta().get_log_snapshot_meta().base_lsn_;
     (void)log_engine_.get_min_block_info(min_block_id, min_block_min_scn);
     palf_stat.begin_lsn_ = LSN(min_block_id * PALF_BLOCK_SIZE);

@@ -79,7 +79,6 @@ LOGSERVICE_UNITY_GROUPS = [
             "src/logservice/palf/log_cache.cpp",
             "src/logservice/palf/palf_handle_impl_guard.cpp",
             "src/logservice/palf/log_block_pool_interface.cpp",
-            "src/logservice/palf/log_mode_mgr.cpp",
             "src/logservice/palf/log_io_utils.cpp",
             "src/logservice/palf/log_io_worker_wrapper.cpp",
             "src/logservice/palf/log_throttle.cpp",

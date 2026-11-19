@@ -55,7 +55,6 @@ _PUBLIC_HDRS = [
     "palf/log_loop_thread.h",
     "palf/log_meta.h",
     "palf/log_meta_info.h",
-    "palf/log_mode_mgr.h",
     "palf/log_reader.h",
     "palf/log_reader_utils.h",
     "palf/log_shared_queue_thread.h",
