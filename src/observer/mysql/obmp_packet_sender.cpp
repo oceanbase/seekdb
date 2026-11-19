@@ -57,6 +57,23 @@ namespace observer
 namespace
 {
 
+using oceanbase::nio::ResponseStatus;
+
+int response_status_to_error(const ResponseStatus status)
+{
+  switch (status) {
+    case ResponseStatus::Ok:
+      return OB_SUCCESS;
+    case ResponseStatus::ConnectionClosed:
+      return OB_CONNECT_ERROR;
+    case ResponseStatus::AllocationFailed:
+      return OB_ALLOCATE_MEMORY_FAILED;
+    case ResponseStatus::Error:
+      return OB_ERR_UNEXPECTED;
+  }
+  return OB_ERR_UNEXPECTED;
+}
+
 static_assert(sizeof(oceanbase::nio::NioByteView) == 16, "oceanbase::nio::NioByteView ABI mismatch");
 static_assert(sizeof(oceanbase::nio::NioMysqlKvView) == 32, "oceanbase::nio::NioMysqlKvView ABI mismatch");
 static_assert(std::is_standard_layout<oceanbase::nio::NioMysqlKvView>::value,
@@ -114,21 +131,21 @@ oceanbase::nio::NioMysqlFieldView make_field_view(const ObMySQLField &field) {
   return view;
 }
 
-OB_NOINLINE int encode_field_packet(const OMPKField &field_packet,
-                                    oceanbase::nio::NioConnectionHandle *connection_handle,
-                                    const uint64_t generation,
-                                    int64_t *framed_len) {
+OB_NOINLINE ResponseStatus
+encode_field_packet(const OMPKField &field_packet,
+                    oceanbase::nio::NioConnectionHandle *connection_handle,
+                    const uint64_t generation, int64_t *framed_len) {
   const oceanbase::nio::NioMysqlFieldView view = make_field_view(field_packet.get_field());
-  return oceanbase::nio::response_append_field(connection_handle, generation, &view,
-                                   framed_len);
+  return oceanbase::nio::response_append_field(
+      connection_handle, generation, &view, framed_len);
 }
 
-OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
-                                  oceanbase::nio::NioConnectionHandle *connection_handle,
-                                  const uint64_t generation,
-                                  int64_t *framed_len, int &encode_ret) {
+OB_NOINLINE ResponseStatus
+encode_row_packet(const OMPKRow &row_packet,
+                  oceanbase::nio::NioConnectionHandle *connection_handle,
+                  const uint64_t generation, int64_t *framed_len, int &encode_ret) {
   int ret = OB_SUCCESS;
-  int frame_ret = static_cast<int32_t>(oceanbase::nio::FrameStatus::Error);
+  ResponseStatus append_status = ResponseStatus::Error;
   const ObMySQLRow &row = row_packet.get_row();
   if (row.is_packed()) {
     const char *blob = NULL;
@@ -136,7 +153,7 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
     if (OB_FAIL(row.get_packed_row_blob(blob, blob_len))) {
       encode_ret = ret;
     } else {
-      frame_ret = oceanbase::nio::response_append_packed_row_blob(
+      append_status = oceanbase::nio::response_append_packed_row_blob(
           connection_handle, generation, blob, blob_len, framed_len);
     }
   } else {
@@ -170,14 +187,14 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
                                                         view.protocol))) {
             encode_ret = ret;
           } else {
-            frame_ret = oceanbase::nio::response_append_row(connection_handle, generation,
-                                                &view, framed_len);
+            append_status = oceanbase::nio::response_append_row(
+                connection_handle, generation, &view, framed_len);
           }
         }
       }
     }
   }
-  return frame_ret;
+  return append_status;
 }
 
 int append_ok_kv_views(const ObIArray<ObStringKV> &source,
@@ -213,13 +230,13 @@ void fill_ok_view(const OMPKOK &ok, oceanbase::nio::NioMysqlOkView &view) {
   view.changed_schema = make_byte_view(ok.get_changed_schema());
 }
 
-OB_NOINLINE int
+OB_NOINLINE ResponseStatus
 encode_ok_packet_with_vars(const OMPKOK &ok, oceanbase::nio::NioMysqlOkView &view,
                            oceanbase::nio::NioConnectionHandle *connection_handle,
                            const uint64_t generation,
                            int64_t *framed_len, int &encode_ret) {
   int ret = OB_SUCCESS;
-  int frame_ret = static_cast<int32_t>(oceanbase::nio::FrameStatus::Error);
+  ResponseStatus append_status = ResponseStatus::Error;
   const int64_t system_var_count = ok.get_system_vars().count();
   ObSEArray<oceanbase::nio::NioMysqlKvView, 24> variable_views;
   if (OB_FAIL(variable_views.reserve(system_var_count))) {
@@ -230,24 +247,24 @@ encode_ok_packet_with_vars(const OMPKOK &ok, oceanbase::nio::NioMysqlOkView &vie
   } else {
     view.system_vars = 0 == system_var_count ? NULL : &variable_views.at(0);
     view.system_var_count = system_var_count;
-    frame_ret = oceanbase::nio::response_append_ok(connection_handle, generation, &view,
-                                       framed_len);
+    append_status = oceanbase::nio::response_append_ok(
+        connection_handle, generation, &view, framed_len);
   }
-  return frame_ret;
+  return append_status;
 }
 
-OB_NOINLINE int encode_ok_packet(const OMPKOK &ok,
-                                 oceanbase::nio::NioConnectionHandle *connection_handle,
-                                 const uint64_t generation, int64_t *framed_len,
-                                 int &encode_ret) {
+OB_NOINLINE ResponseStatus
+encode_ok_packet(const OMPKOK &ok,
+                 oceanbase::nio::NioConnectionHandle *connection_handle,
+                 const uint64_t generation, int64_t *framed_len, int &encode_ret) {
   oceanbase::nio::NioMysqlOkView view = {};
   fill_ok_view(ok, view);
   const bool has_system_vars = !ok.get_system_vars().empty();
   return has_system_vars
              ? encode_ok_packet_with_vars(ok, view, connection_handle,
                                           generation, framed_len, encode_ret)
-             : oceanbase::nio::response_append_ok(connection_handle, generation, &view,
-                                      framed_len);
+             : oceanbase::nio::response_append_ok(connection_handle, generation,
+                                                 &view, framed_len);
 }
 
 } // namespace
@@ -512,14 +529,12 @@ int ObMPPacketSender::response_resultset_metadata(
       }
       const oceanbase::nio::NioMysqlFieldView *view_data =
           views.count() == 0 ? NULL : &views.at(0);
-      const int append_ret = oceanbase::nio::response_append_resultset_metadata(
-          nio_connection_handle_, request_generation_,
-          include_result_header ? 1 : 0, view_data, views.count(),
-          eof_field_count, warnings, status_flags, &packet_count, &framed_len);
-      if (0 != append_ret) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-      }
+      const ResponseStatus append_status =
+          oceanbase::nio::response_append_resultset_metadata(
+              nio_connection_handle_, request_generation_,
+              include_result_header ? 1 : 0, view_data, views.count(),
+              eof_field_count, warnings, status_flags, &packet_count, &framed_len);
+      ret = response_status_to_error(append_status);
     }
   }
 
@@ -940,13 +955,13 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
     response_started_ = true;
     oceanbase::nio::NioConnectionHandle *connection_handle = nio_connection_handle_;
     int encode_ret = OB_SUCCESS;
-    int append_ret = -1;
+    ResponseStatus append_status = ResponseStatus::Error;
     switch (pkt.get_mysql_packet_type()) {
       case ObMySQLPacketType::PKT_ERR: {
         const OMPKError &error = static_cast<const OMPKError &>(pkt);
         const ObString sql_state = error.get_sql_state();
         const ObString message = error.get_message();
-        append_ret = oceanbase::nio::response_append_error(
+        append_status = oceanbase::nio::response_append_error(
             connection_handle, request_generation_, error.get_err_code(),
             sql_state.ptr(), sql_state.length(), message.ptr(),
             message.length(), &seri_size);
@@ -957,7 +972,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
             static_cast<const OMPKAuthSwitch &>(pkt);
         const ObString &plugin_name = auth_switch.get_plugin_name();
         const ObString &scramble = auth_switch.get_scramble();
-        append_ret = oceanbase::nio::response_append_auth_switch(
+        append_status = oceanbase::nio::response_append_auth_switch(
             connection_handle, request_generation_, plugin_name.ptr(),
             plugin_name.length(), scramble.ptr(), scramble.length(),
             &seri_size);
@@ -967,7 +982,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
         const OMPKLocalInfile &local_infile =
             static_cast<const OMPKLocalInfile &>(pkt);
         const ObString &filename = local_infile.get_filename();
-        append_ret = oceanbase::nio::response_append_local_infile(
+        append_status = oceanbase::nio::response_append_local_infile(
             connection_handle, request_generation_, filename.ptr(),
             filename.length(), &seri_size);
         break;
@@ -975,22 +990,21 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
       case ObMySQLPacketType::PKT_STR: {
         const OMPKString &string = static_cast<const OMPKString &>(pkt);
         const ObString &value = string.get_string();
-        append_ret =
-            oceanbase::nio::response_append_string(connection_handle, request_generation_,
-                                       value.ptr(), value.length(), &seri_size);
+        append_status = oceanbase::nio::response_append_string(
+            connection_handle, request_generation_, value.ptr(), value.length(), &seri_size);
         break;
       }
       case ObMySQLPacketType::PKT_RESHEAD: {
         const OMPKResheader &resheader =
             static_cast<const OMPKResheader &>(pkt);
-        append_ret = oceanbase::nio::response_append_result_header(
+        append_status = oceanbase::nio::response_append_result_header(
             connection_handle, request_generation_, resheader.get_field_count(),
             &seri_size);
         break;
       }
       case ObMySQLPacketType::PKT_EOF: {
         const OMPKEOF &eof = static_cast<const OMPKEOF &>(pkt);
-        append_ret = oceanbase::nio::response_append_eof(
+        append_status = oceanbase::nio::response_append_eof(
             connection_handle, request_generation_, eof.get_field_count(),
             eof.get_warning_count(), eof.get_server_status().flags_,
             &seri_size);
@@ -998,28 +1012,28 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
       }
       case ObMySQLPacketType::PKT_PREPARE: {
         const OMPKPrepare &prepare = static_cast<const OMPKPrepare &>(pkt);
-        append_ret = oceanbase::nio::response_append_prepare_ok(
+        append_status = oceanbase::nio::response_append_prepare_ok(
             connection_handle, request_generation_, prepare.get_statement_id(),
             prepare.get_column_num(), prepare.get_param_num(),
             prepare.get_warning_count(), &seri_size);
         break;
       }
       case ObMySQLPacketType::PKT_FIELD: {
-        append_ret = encode_field_packet(static_cast<const OMPKField &>(pkt),
-                                         connection_handle, request_generation_,
-                                         &seri_size);
+        append_status = encode_field_packet(static_cast<const OMPKField &>(pkt),
+                                            connection_handle, request_generation_,
+                                            &seri_size);
         break;
       }
       case ObMySQLPacketType::PKT_ROW: {
-        append_ret = encode_row_packet(static_cast<const OMPKRow &>(pkt),
-                                       connection_handle, request_generation_,
-                                       &seri_size, encode_ret);
+        append_status = encode_row_packet(static_cast<const OMPKRow &>(pkt),
+                                          connection_handle, request_generation_,
+                                          &seri_size, encode_ret);
         break;
       }
       case ObMySQLPacketType::PKT_OKP: {
-        append_ret = encode_ok_packet(static_cast<const OMPKOK &>(pkt),
-                                      connection_handle, request_generation_,
-                                      &seri_size, encode_ret);
+        append_status = encode_ok_packet(static_cast<const OMPKOK &>(pkt),
+                                         connection_handle, request_generation_,
+                                         &seri_size, encode_ret);
         break;
       }
       default:
@@ -1030,8 +1044,11 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
     }
     if (OB_FAIL(encode_ret)) {
       ret = encode_ret;
-    } else if (0 != append_ret) {
-      ret = OB_ERR_UNEXPECTED;
+    } else if (ResponseStatus::Ok != append_status) {
+      ret = response_status_to_error(append_status);
+      LOG_INFO("Rust MySQL response append failed", K(ret),
+               "append_ret", static_cast<int32_t>(append_status),
+               K(pkt.get_mysql_packet_type()));
     }
   }
   return ret;
@@ -1048,9 +1065,10 @@ int ObMPPacketSender::flush_buffer(const bool is_last) {
   } else if (OB_ISNULL(req_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("req_ is null", KP_(req), K(ret));
-  } else if (0 != oceanbase::nio::response_flush(connection_handle, request_generation_,
-                                     is_last ? 1 : 0)) {
-    ret = OB_IO_ERROR;
+  } else {
+    const ResponseStatus flush_status = oceanbase::nio::response_flush(
+        connection_handle, request_generation_, is_last ? 1 : 0);
+    ret = response_status_to_error(flush_status);
   }
   if (is_last) {
     const int finish_ret = finish_sql_request();
