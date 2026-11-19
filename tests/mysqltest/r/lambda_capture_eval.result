@@ -3,6 +3,12 @@ id	m	zipped	f	s
 1	[2,4]	[11,22]	[]	[2,1]
 2	[6,8]	[33,44]	[3,4]	[4,3]
 8	[18,20,22]	[99,110,121]	[9,10,11]	[11,10,9]
+constant_lambda_without_bound_parameters
+id	m
+1	[42,42]
+4	NULL
+5	[]
+8	[42,42,42]
 shared_reverse_int
 id	r	m
 1	[2,1]	[4,3]
@@ -129,11 +135,22 @@ id	m
 1	[662911,151644,769488]
 2	[392506,654067,92816]
 3	[501880,230954,649127]
-random_seeded_without_parameter
+random_seeded_two_parameters_scalar
+id	m
+1	[663121,151764]
+2	[769918,392846]
+8	[655257,93916,502890]
+random_seeded_two_parameters_batch
+id	m
+1	[663121,151764]
+2	[769918,392846]
+8	[655257,93916,502890]
+random_seeded_without_bound_parameters
 id	m
 1	[662911,151644,769488]
 2	[392506,654067,92816]
 3	[501880,230954,649127]
+empty_lambda_parameter_list
 random_and_uuid_per_element
 id	random_samples	uuid_samples	short_uuid_samples
 1	3	3	3

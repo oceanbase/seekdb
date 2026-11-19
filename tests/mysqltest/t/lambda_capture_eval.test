@@ -18,6 +18,10 @@ SELECT id, array_map((x)->(x*2),a) AS m, array_map((x,y)->(x+10*y),a,a) AS zippe
        array_filter((x)->(x>2),a) AS f, array_sortby((x)->(-x),a) AS s
 FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
 
+--echo constant_lambda_without_bound_parameters
+SELECT id, array_map((x)->42,a) AS m
+FROM lambda_capture_int WHERE id IN (1,4,5,8) ORDER BY id;
+
 --echo shared_reverse_int
 SELECT id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
 
@@ -77,9 +81,26 @@ SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,
        array_map((x)->CAST(ROUND((x + RAND(42)) * 1000000) AS SIGNED),a) AS m
 FROM lambda_capture_rand ORDER BY id;
 
---echo random_seeded_without_parameter
+# Give each parameter its own subexpression so stale results from either one are visible.
+--echo random_seeded_two_parameters_scalar
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */ id,
+       array_map((x,y)->(10*x + 100*y + CAST(ROUND(RAND(42) * 1000000) AS SIGNED)),a,reverse(a)) AS m
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo random_seeded_two_parameters_batch
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,
+       array_map((x,y)->(10*x + 100*y + CAST(ROUND(RAND(42) * 1000000) AS SIGNED)),a,reverse(a)) AS m
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo random_seeded_without_bound_parameters
 SELECT id, array_map((x)->CAST(ROUND(RAND(42) * 1000000) AS SIGNED),a) AS m
 FROM lambda_capture_rand ORDER BY id;
+
+--echo empty_lambda_parameter_list
+--disable_result_log
+--error 1064
+SELECT array_map(()->42,a) FROM lambda_capture_int WHERE id = 1;
+--enable_result_log
 
 --echo random_and_uuid_per_element
 SELECT id, cardinality(array_distinct(array_map((x)->RANDOM(42),a))) AS random_samples,
