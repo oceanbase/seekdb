@@ -36,7 +36,7 @@ pub(super) enum Stage {
 
 #[derive(Clone, Copy)]
 enum Fault {
-    #[cfg(any(target_os = "linux", target_os = "emscripten"))]
+    #[cfg(any(target_os = "linux", target_os = "emscripten", windows))]
     Error(i32),
     Short,
     Corrupt,
@@ -70,7 +70,7 @@ fn take(stage: Stage) -> Option<Fault> {
 
 pub(super) fn check(stage: Stage) -> io::Result<()> {
     match take(stage) {
-        #[cfg(any(target_os = "linux", target_os = "emscripten"))]
+        #[cfg(any(target_os = "linux", target_os = "emscripten", windows))]
         Some(Fault::Error(error)) => Err(io::Error::from_raw_os_error(error)),
         None => Ok(()),
         _ => panic!("transfer fault at non-transfer stage"),
@@ -83,7 +83,7 @@ pub(super) fn transfer(direction: Direction, bytes: &mut [u8]) -> Option<io::Res
         Direction::Write => Stage::Write,
     };
     take(stage).map(|fault| match fault {
-        #[cfg(any(target_os = "linux", target_os = "emscripten"))]
+        #[cfg(any(target_os = "linux", target_os = "emscripten", windows))]
         Fault::Error(error) => Err(io::Error::from_raw_os_error(error)),
         Fault::Short => Ok(bytes.len() - 1),
         Fault::Corrupt => {
@@ -142,7 +142,12 @@ impl Drop for Directory {
 fn actual_directory_probe_removes_temporary_name() {
     let directory = Directory::new();
     let capability = probe_directory(&directory.0).unwrap();
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_vendor = "apple",
+        windows
+    )))]
     assert_eq!(capability, DirectoryCapabilities::BufferedWorker);
     #[cfg(any(target_os = "linux", target_os = "android"))]
     assert!(matches!(
@@ -150,6 +155,11 @@ fn actual_directory_probe_removes_temporary_name() {
         DirectoryCapabilities::BufferedWorker
             | DirectoryCapabilities::DirectWorker
             | DirectoryCapabilities::DirectNativeAio
+    ));
+    #[cfg(any(target_vendor = "apple", windows))]
+    assert!(matches!(
+        capability,
+        DirectoryCapabilities::BufferedWorker | DirectoryCapabilities::DirectWorker
     ));
     directory.assert_empty();
 }
@@ -471,12 +481,51 @@ fn native_wide_path_and_delete_on_close_survive_probe_failure() {
     let directory = Directory::new();
     let path = directory.0.join("目录-Δ");
     std::fs::create_dir(&path).unwrap();
-    assert_eq!(
+    assert!(matches!(
         probe_directory(&path).unwrap(),
-        DirectoryCapabilities::BufferedWorker
-    );
+        DirectoryCapabilities::BufferedWorker | DirectoryCapabilities::DirectWorker
+    ));
     assert_eq!(std::fs::read_dir(&path).unwrap().count(), 0);
     let (result, _) = with_faults(&[(Stage::Read, Fault::Short)], || probe_directory(&path));
     assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
     assert_eq!(std::fs::read_dir(&path).unwrap().count(), 0);
+}
+
+#[cfg(windows)]
+#[test]
+fn direct_unsupported_reopens_and_verifies_a_buffered_probe() {
+    let directory = Directory::new();
+    let (result, calls) = with_faults(
+        &[(
+            Stage::Write,
+            Fault::Error(windows_sys::Win32::Foundation::ERROR_NOT_SUPPORTED as i32),
+        )],
+        || probe_directory(&directory.0),
+    );
+    assert_eq!(result.unwrap(), DirectoryCapabilities::BufferedWorker);
+    assert_eq!(
+        calls,
+        [
+            Stage::Write,
+            Stage::Close,
+            Stage::Write,
+            Stage::Read,
+            Stage::Sync,
+            Stage::Close,
+        ]
+    );
+    directory.assert_empty();
+}
+
+#[cfg(windows)]
+#[test]
+fn direct_io_failures_other_than_unsupported_do_not_fallback() {
+    let directory = Directory::new();
+    let error = windows_sys::Win32::Foundation::ERROR_IO_DEVICE as i32;
+    let (result, calls) = with_faults(&[(Stage::Write, Fault::Error(error))], || {
+        probe_directory(&directory.0)
+    });
+    assert_eq!(result.unwrap_err().raw_os_error(), Some(error));
+    assert_eq!(calls, [Stage::Write, Stage::Close]);
+    directory.assert_empty();
 }

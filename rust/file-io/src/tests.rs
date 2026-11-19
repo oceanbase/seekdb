@@ -566,6 +566,20 @@ fn direct_io_preserves_flags_and_transfers_aligned_bytes() {
     assert!(buffer.as_slice().iter().all(|b| *b == 47));
 }
 
+#[cfg(target_vendor = "apple")]
+#[test]
+fn direct_io_enables_uncached_transfers_on_apple_platforms() {
+    let directory = Directory::new();
+    let file = directory.file();
+    enable_direct_io(&file).unwrap();
+    let mut buffer = AlignedBuffer::zeroed(4096, 4096).unwrap();
+    buffer.as_mut_slice().fill(47);
+    write_all_at(&file, buffer.as_slice(), 0).unwrap();
+    buffer.as_mut_slice().fill(0);
+    read_exact_at(&file, buffer.as_mut_slice(), 0).unwrap();
+    assert!(buffer.as_slice().iter().all(|b| *b == 47));
+}
+
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -622,10 +636,7 @@ fn synchronous_file_writes_remain_synchronous_with_or_without_direct_io() {
     let directory = Directory::new();
     drop(directory.file());
     for direct in [false, true] {
-        let file = open_synchronous_read_write(&directory.0.join("data")).unwrap();
-        if direct {
-            enable_direct_io(&file).unwrap();
-        }
+        let file = open_synchronous_read_write(&directory.0.join("data"), direct).unwrap();
         // SAFETY: F_GETFL reads flags from this live, owned descriptor.
         let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
         assert_ne!(flags, -1);

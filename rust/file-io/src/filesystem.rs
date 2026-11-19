@@ -17,12 +17,22 @@ use std::path::{Path, PathBuf};
 
 pub use std::fs::{exists, metadata, remove_dir, remove_file, rename, symlink_metadata};
 
-pub fn open_read_write(path: &Path) -> io::Result<std::fs::File> {
-    std::fs::OpenOptions::new().read(true).write(true).open(path)
+pub fn open_read_write(path: &Path, direct_io: bool) -> io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true);
+    #[cfg(windows)]
+    {
+        crate::open_with_direct_io(&mut options, path, direct_io)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = direct_io;
+        options.open(path)
+    }
 }
 
 /// Opens an existing file whose successful writes include file data and metadata durability.
-pub fn open_synchronous_read_write(path: &Path) -> io::Result<std::fs::File> {
+pub fn open_synchronous_read_write(path: &Path, direct_io: bool) -> io::Result<std::fs::File> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true).write(true);
     #[cfg(unix)]
@@ -34,12 +44,17 @@ pub fn open_synchronous_read_write(path: &Path) -> io::Result<std::fs::File> {
     {
         use std::os::windows::fs::OpenOptionsExt;
         use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_WRITE_THROUGH;
-        options.custom_flags(FILE_FLAG_WRITE_THROUGH);
+        options.custom_flags(FILE_FLAG_WRITE_THROUGH | crate::direct::direct_io_flag(direct_io));
     }
-    options.open(path)
+    let file = options.open(path)?;
+    #[cfg(not(windows))]
+    if direct_io {
+        crate::enable_direct_io(&file)?;
+    }
+    Ok(file)
 }
 
-pub fn create_new_read_write(path: &Path, mode: u32) -> io::Result<std::fs::File> {
+pub fn create_new_read_write(path: &Path, mode: u32, direct_io: bool) -> io::Result<std::fs::File> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true).write(true).create_new(true);
     #[cfg(unix)]
@@ -49,7 +64,15 @@ pub fn create_new_read_write(path: &Path, mode: u32) -> io::Result<std::fs::File
     }
     #[cfg(windows)]
     let _ = mode;
-    options.open(path)
+    #[cfg(windows)]
+    {
+        crate::open_with_direct_io(&mut options, path, direct_io)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = direct_io;
+        options.open(path)
+    }
 }
 
 pub fn create_dir(path: &Path, mode: u32) -> io::Result<()> {

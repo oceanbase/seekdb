@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{enable_direct_io, read_at, write_at, AlignedBuffer, Transfer};
+use crate::{read_at, write_at, AlignedBuffer, Transfer};
 use std::alloc::Layout;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -69,21 +69,51 @@ fn range_end(offset: u64, size: usize, alignment: usize) -> io::Result<u64> {
         .ok_or_else(|| io::ErrorKind::InvalidInput.into())
 }
 
+#[cfg(not(windows))]
 fn select_mode(file: &File, mode: IoMode) -> io::Result<EffectiveMode> {
     if mode == IoMode::Buffered {
         return Ok(EffectiveMode::Buffered);
     }
-    match enable_direct_io(file) {
+    match crate::enable_direct_io(file) {
         Ok(()) => Ok(EffectiveMode::Direct),
-        Err(e)
-            if mode == IoMode::PreferDirect
-                && (e.kind() == io::ErrorKind::Unsupported
-                    || e.raw_os_error() == Some(libc::EINVAL)
-                    || e.raw_os_error() == Some(libc::EOPNOTSUPP)) =>
-        {
+        Err(e) if mode == IoMode::PreferDirect && crate::capability::unsupported(&e) => {
             Ok(EffectiveMode::Buffered)
         }
         Err(e) => Err(e),
+    }
+}
+
+fn open_with_mode(
+    options: &mut OpenOptions,
+    path: &Path,
+    mode: IoMode,
+) -> io::Result<(File, EffectiveMode)> {
+    #[cfg(not(windows))]
+    {
+        let file = options.open(path)?;
+        let effective = select_mode(&file, mode)?;
+        Ok((file, effective))
+    }
+    #[cfg(windows)]
+    {
+        let direct = mode != IoMode::Buffered;
+        match crate::open_with_direct_io(options, path, direct) {
+            Ok(file) => Ok((
+                file,
+                if direct {
+                    EffectiveMode::Direct
+                } else {
+                    EffectiveMode::Buffered
+                },
+            )),
+            Err(error)
+                if mode == IoMode::PreferDirect && crate::capability::unsupported(&error) =>
+            {
+                let file = crate::open_with_direct_io(options, path, false)?;
+                Ok((file, EffectiveMode::Buffered))
+            }
+            Err(error) => Err(error),
+        }
     }
 }
 
@@ -97,8 +127,9 @@ pub struct Reader {
 }
 impl Reader {
     pub fn open(path: impl AsRef<Path>, mode: IoMode, layout: BufferLayout) -> io::Result<Self> {
-        let file = File::open(path)?;
-        let mode = select_mode(&file, mode)?;
+        let mut options = OpenOptions::new();
+        options.read(true);
+        let (file, mode) = open_with_mode(&mut options, path.as_ref(), mode)?;
         let scratch = if mode == EffectiveMode::Direct {
             Some(AlignedBuffer::zeroed(layout.capacity, layout.alignment)?)
         } else {
@@ -234,6 +265,7 @@ impl Appender {
         mode: IoMode,
         layout: BufferLayout,
     ) -> io::Result<Self> {
+        let path = path.as_ref();
         let mut options = OpenOptions::new();
         options.write(true).read(mode != IoMode::Buffered);
         #[cfg(unix)]
@@ -256,8 +288,7 @@ impl Appender {
                 options.create_new(true);
             }
         }
-        let file = options.open(path)?;
-        let mode = select_mode(&file, mode)?;
+        let (file, mode) = open_with_mode(&mut options, path, mode)?;
         let logical_end = file.metadata()?.len();
         range_end(logical_end, 0, layout.alignment)?;
         let mut buffer = AlignedBuffer::zeroed(layout.capacity, layout.alignment)?;

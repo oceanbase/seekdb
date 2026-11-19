@@ -199,7 +199,7 @@ impl UnmarkedBlockFile {
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
-        let (file, mut created, initial_size) = match file_io::open_read_write(path) {
+        let (file, mut created, initial_size) = match file_io::open_read_write(path, config.direct_io) {
             Ok(file) => (file, None, 0),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 let initial_size = config.initial_size.resolve(
@@ -217,7 +217,7 @@ impl UnmarkedBlockFile {
                     .file_name()
                     .ok_or(BlockError::InvalidInput("missing creation leaf"))?
                     .to_owned();
-                let file = file_io::create_new_read_write(path, 0o644)?;
+                let file = file_io::create_new_read_write(path, 0o644, config.direct_io)?;
                 (
                     file,
                     Some(CreatedEntry {
@@ -258,6 +258,7 @@ impl UnmarkedBlockFile {
             }
         };
         let initialized = (|| {
+            #[cfg(not(windows))]
             if config.direct_io {
                 file_io::enable_direct_io(file.as_file())?;
             }

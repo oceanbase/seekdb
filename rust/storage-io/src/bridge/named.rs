@@ -90,13 +90,14 @@ impl NamedOwnerHandle {
             let owner = self.get()?;
             let path = legacy_path(path)?;
             let file = if read_only {
-                std::fs::File::open(path)?
+                file_io::open_with_direct_io(
+                    std::fs::OpenOptions::new().read(true),
+                    &path,
+                    endpoint.direct_io,
+                )?
             } else {
-                file_io::open_synchronous_read_write(&path)?
+                file_io::open_synchronous_read_write(&path, endpoint.direct_io)?
             };
-            if endpoint.direct_io {
-                file_io::enable_direct_io(&file)?;
-            }
             output.0 = Some((owner.bind(Arc::new(file))?, Arc::clone(endpoint)));
             Ok(())
         }))

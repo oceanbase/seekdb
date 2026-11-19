@@ -16,6 +16,7 @@ use crate::{read_at, write_at, AlignedBuffer};
 use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
+#[cfg(not(windows))]
 use std::sync::Arc;
 
 const PROBE_SIZE: usize = 4096;
@@ -29,10 +30,22 @@ pub enum DirectoryCapabilities {
 
 /// Verifies directory I/O, durability, and cleanup before publishing a capability.
 pub fn probe_directory(directory: &Path) -> io::Result<DirectoryCapabilities> {
+    #[cfg(windows)]
+    {
+        probe_directory_windows(directory)
+    }
+    #[cfg(not(windows))]
+    {
+        probe_directory_non_windows(directory)
+    }
+}
+
+#[cfg(not(windows))]
+fn probe_directory_non_windows(directory: &Path) -> io::Result<DirectoryCapabilities> {
     if directory.as_os_str().is_empty() {
         return Err(io::ErrorKind::InvalidInput.into());
     }
-    let (file, path) = temporary_file(directory)?;
+    let (file, path) = temporary_file(directory, false)?;
     let file = Arc::new(file);
     #[cfg(all(unix, not(target_os = "emscripten")))]
     let mut named = true;
@@ -82,9 +95,41 @@ pub fn probe_directory(directory: &Path) -> io::Result<DirectoryCapabilities> {
     result.and_then(|capability| closed.map(|()| capability))
 }
 
-fn temporary_file(directory: &Path) -> io::Result<(File, PathBuf)> {
+#[cfg(windows)]
+fn probe_directory_windows(directory: &Path) -> io::Result<DirectoryCapabilities> {
+    if directory.as_os_str().is_empty() {
+        return Err(io::ErrorKind::InvalidInput.into());
+    }
+    let mut buffer = AlignedBuffer::zeroed(PROBE_SIZE, PROBE_SIZE)?;
+    let finish = |file: File, result: io::Result<DirectoryCapabilities>| {
+        let result = result.and_then(|capability| {
+            #[cfg(test)]
+            tests::check(tests::Stage::Sync)?;
+            file.sync_all()?;
+            Ok(capability)
+        });
+        let closed = close(file);
+        result.and_then(|capability| closed.map(|()| capability))
+    };
+    match temporary_file(directory, true) {
+        Ok((file, _path)) => match sync_round_trip(&file, &mut buffer) {
+            Ok(()) => return finish(file, Ok(DirectoryCapabilities::DirectWorker)),
+            Err(error) if unsupported(&error) => close(file)?,
+            Err(error) => return finish(file, Err(error)),
+        },
+        Err(error) if unsupported(&error) => (),
+        Err(error) => return Err(error),
+    }
+    let (file, _path) = temporary_file(directory, false)?;
+    let result =
+        sync_round_trip(&file, &mut buffer).map(|()| DirectoryCapabilities::BufferedWorker);
+    finish(file, result)
+}
+
+fn temporary_file(directory: &Path, direct_io: bool) -> io::Result<(File, PathBuf)> {
     #[cfg(unix)]
     {
+        let _ = direct_io;
         use std::ffi::{CString, OsString};
         use std::os::fd::FromRawFd;
         use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -119,7 +164,7 @@ fn temporary_file(directory: &Path) -> io::Result<(File, PathBuf)> {
                 .read(true)
                 .write(true)
                 .create_new(true)
-                .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
+                .custom_flags(FILE_FLAG_DELETE_ON_CLOSE | crate::direct::direct_io_flag(direct_io))
                 .open(&path)
             {
                 Ok(file) => return Ok((file, path)),
@@ -131,6 +176,7 @@ fn temporary_file(directory: &Path) -> io::Result<(File, PathBuf)> {
     }
 }
 
+#[cfg(not(windows))]
 fn direct_round_trip(file: &File, buffer: &mut AlignedBuffer) -> io::Result<bool> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
@@ -147,6 +193,18 @@ fn direct_round_trip(file: &File, buffer: &mut AlignedBuffer) -> io::Result<bool
             Ok(()) => match sync_round_trip(file, buffer) {
                 Ok(()) => return Ok(true),
                 Err(error) if unsupported(&error) => set_flags(file, flags & !libc::O_DIRECT)?,
+                Err(error) => return Err(error),
+            },
+            Err(error) if unsupported(&error) => (),
+            Err(error) => return Err(error),
+        }
+    }
+    #[cfg(target_vendor = "apple")]
+    {
+        match crate::enable_direct_io(file) {
+            Ok(()) => match sync_round_trip(file, buffer) {
+                Ok(()) => return Ok(true),
+                Err(error) if unsupported(&error) => crate::direct::disable_direct_io(file)?,
                 Err(error) => return Err(error),
             },
             Err(error) if unsupported(&error) => (),
@@ -215,12 +273,25 @@ fn sync_round_trip(file: &File, buffer: &mut AlignedBuffer) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(not(windows))]
 pub(crate) fn unsupported(error: &io::Error) -> bool {
-    matches!(
-        error.raw_os_error(),
-        Some(libc::EINVAL | libc::EOPNOTSUPP | libc::ENOSYS)
-    )
+    error.kind() == io::ErrorKind::Unsupported
+        || matches!(
+            error.raw_os_error(),
+            Some(libc::EINVAL | libc::EOPNOTSUPP | libc::ENOSYS)
+        )
+}
+
+#[cfg(windows)]
+pub(crate) fn unsupported(error: &io::Error) -> bool {
+    use windows_sys::Win32::Foundation::{
+        ERROR_INVALID_FUNCTION, ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED,
+    };
+    error.kind() == io::ErrorKind::Unsupported
+        || matches!(
+            error.raw_os_error().map(|code| code as u32),
+            Some(ERROR_INVALID_FUNCTION | ERROR_INVALID_PARAMETER | ERROR_NOT_SUPPORTED)
+        )
 }
 
 fn close(file: File) -> io::Result<()> {

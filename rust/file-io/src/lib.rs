@@ -38,7 +38,7 @@ pub use asynchronous::{
 };
 pub use buffer::AlignedBuffer;
 pub use capability::{probe_directory, DirectoryCapabilities};
-pub use direct::enable_direct_io;
+pub use direct::{enable_direct_io, open_with_direct_io};
 pub use directory::{
     read_dir, BindingRequirement, Directory, Entries, Entry, EntryKind, Follow, LeafName, Mutation,
     Observation,
