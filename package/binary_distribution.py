@@ -15,6 +15,9 @@ import tarfile
 import zipfile
 from collections import deque
 
+LINUX_INTERPRETERS = {"x86_64": "/lib64/ld-linux-x86-64.so.2",
+                      "aarch64": "/lib/ld-linux-aarch64.so.1"}
+
 
 def digest(path):
     result = hashlib.sha256()
@@ -61,6 +64,28 @@ def linux_dynamic(binary):
     return metadata
 
 
+def linux_interpreter(binary):
+    headers = subprocess.check_output(["readelf", "-lW", str(binary)], text=True)
+    interpreters = re.findall(r"\[Requesting program interpreter: (.*?)\]", headers)
+    expected = LINUX_INTERPRETERS[architecture(binary, "linux")]
+    if interpreters and interpreters != [expected]:
+        raise ValueError("unsupported Linux ELF PT_INTERP in %s: %s; relink using %s" %
+                         (binary, ", ".join(interpreters), expected))
+
+
+def linux_system_dependencies(binary):
+    linux_interpreter(binary)
+    imports = re.findall(r"^\s*0x[0-9a-fA-F]+\s+\(NEEDED\)[^\n]*?\[(.*?)\]",
+                         linux_dynamic(binary), re.MULTILINE)
+    system = {"libc.so.6", "libm.so.6", "libpthread.so.0", "libdl.so.2",
+              "librt.so.1", "libresolv.so.2", "libutil.so.1", "libanl.so.1",
+              Path(LINUX_INTERPRETERS[architecture(binary, "linux")]).name}
+    unsupported = sorted(set(imports) - system)
+    if unsupported:
+        raise ValueError("obshell must use only supported glibc system runtime libraries; unsupported dependencies in %s: %s" %
+                         (binary, ", ".join(unsupported)))
+
+
 def elf_relocation_page_size(binary):
     with binary.open("rb") as stream:
         header = stream.read(64)
@@ -85,6 +110,7 @@ def glibc_requirement(binaries):
     for binary in binaries:
         # Reused bundles and raw system packages need the same loader constraints.
         linux_dynamic(binary)
+        linux_interpreter(binary)
         output = subprocess.check_output(["readelf", "--version-info", "-W", str(binary)], text=True)
         special = re.findall(r"\bName: (GLIBC_[A-Za-z][A-Za-z0-9_]*)\b", output)
         if special:

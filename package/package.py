@@ -136,6 +136,8 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
         return
     if layout == "linux":
         copy(obshell_bin or dependencies / "home/admin/oceanbase/bin/obshell", binary / "obshell", True)
+        import binary_distribution
+        binary_distribution.linux_system_dependencies(binary / "obshell")
         copy(profile / "seekdb.service", destination / "usr/lib/systemd/system/seekdb.service")
         for script in ("seekdb_systemd_start", "seekdb_systemd_stop"):
             copy(profile / script, helpers / "scripts" / script, True)
@@ -229,7 +231,8 @@ def main():
                         help="additional Linux library search directory (repeatable)")
     parser.add_argument("--extra-library", type=Path, action="append", default=[],
                         help="additional Linux library loaded dynamically (repeatable)")
-    parser.add_argument("--obshell-bin", type=Path, help="existing obshell for Linux system packages")
+    parser.add_argument("--obshell-bin", type=Path,
+                        help="existing obshell linked statically or only to supported glibc runtime libraries")
     parser.add_argument("--source-commit", help="full seekdb source commit recorded in a binary distribution")
     parser.add_argument("--glibc-version", help="Linux binary distribution ABI baseline, e.g. 2.28")
     parser.add_argument("--build-config", default="package", help="production build configuration recorded in the binary manifest")
