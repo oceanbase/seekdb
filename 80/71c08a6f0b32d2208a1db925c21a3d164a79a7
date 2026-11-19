@@ -1,0 +1,28 @@
+tests/mysqltest/t/lambda_capture_eval.test
+  s_1450aec9a62cfa::t_481978fb9118d4 96
+  s_1450aec9a62cfa::t_377cebeb06a7cc 84-95,97-110
+src/sql/resolver/expr/ob_raw_expr.cpp
+  s_1450aec9a62cfa::t_481978fb9118d4 901
+  s_1450aec9a62cfa::t_377cebeb06a7cc 3872
+src/sql/resolver/expr/ob_raw_expr_info_extractor.cpp
+  s_1450aec9a62cfa::t_377cebeb06a7cc 442-445
+tests/mysqltest/r/lambda_capture_eval.result
+  s_1450aec9a62cfa::t_481978fb9118d4 148-149
+  s_1450aec9a62cfa::t_377cebeb06a7cc 137-147,150-163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8071c08a6f0b32d2208a1db925c21a3d164a79a7",
+  "prompts": {},
+  "sessions": {
+    "s_1450aec9a62cfa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e8a1-2018-73d3-957b-6e23cb3716ec",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}
