@@ -19,6 +19,7 @@
 #include "common/udt/ob_collection_type.h"
 #include "common/udt/ob_array_type.h"
 #include "common/udt/ob_array_utils.h"
+#include "lib/container/ob_se_array.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
@@ -120,24 +121,27 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObExprArrayMapInfo *info = static_cast<ObExprArrayMapInfo *>(expr.extra_info_);
   ObIArrayType *src_arrs[expr.arg_cnt_ - 1];
   ObDatum *datum_val = NULL;
+  ObSEArray<ObExpr *, 16> recompute_exprs;
+  bool needs_recompute = false;
   bool is_null_res = false;
   uint32_t arr_dim = 0;
 
   if (ob_is_null(expr.obj_meta_.get_type())) {
     res.set_null();
-  } else if (OB_UNLIKELY(OB_ISNULL(info))) {
+  } else if (OB_UNLIKELY(OB_ISNULL(info)
+                        || (info->param_num_ > 0 && OB_ISNULL(info->param_exprs_)))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(eval_src_arrays(expr, ctx, tmp_allocator, src_arrs, arr_dim, is_null_res))) {
   } else if (is_null_res) {
     res.set_null();
+  } else if (arr_dim > 0 && OB_FAIL(collect_lambda_recompute_exprs(
+                    *expr.args_[0], *info, recompute_exprs, needs_recompute))) {
   } else {
-    ObExprArrayMapInfo *info = static_cast<ObExprArrayMapInfo *>(expr.extra_info_);
-    bool is_set_lambda_para = true;
     bool found_res = false;
-    for (uint32_t i = 0; i < arr_dim && !found_res && is_set_lambda_para && OB_SUCC(ret); i++) {
-      if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, src_arrs, expr.arg_cnt_ - 1, i, is_set_lambda_para))) {
-      } else if (is_set_lambda_para && OB_FALSE_IT(ObSQLUtils::clear_expr_eval_flags(*expr.args_[0], ctx))) {
-      } else if (OB_FAIL(expr.args_[0]->eval(ctx, datum_val))) {
+    // A stable predicate has the same result for all elements in this row.
+    for (uint32_t i = 0; OB_SUCC(ret) && i < arr_dim && !found_res && (i == 0 || needs_recompute); ++i) {
+      if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, src_arrs, expr.arg_cnt_ - 1, i))) {
+      } else if (OB_FAIL(eval_lambda_expr(*expr.args_[0], ctx, recompute_exprs, datum_val))) {
       } else if (datum_val->is_null()) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
       } else if (datum_val->get_bool()) {

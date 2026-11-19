@@ -9,6 +9,13 @@ id	m
 4	NULL
 5	[]
 8	[42,42,42]
+ordinary_array_first
+id	first_match	no_match
+1	2	NULL
+2	4	NULL
+4	NULL	NULL
+5	NULL	NULL
+8	11	NULL
 shared_reverse_int
 id	r	m
 1	[2,1]	[4,3]
@@ -111,6 +118,16 @@ id	r	m
 1	[2,1]	[1,2]
 2	[4,3]	[3,4]
 3	[6,5]	[5,6]
+shared_first_scalar
+id	r	m
+1	[2,1]	1
+2	[4,3]	3
+8	[11,10,9]	10
+shared_first_batch
+id	r	m
+1	[2,1]	1
+2	[4,3]	3
+8	[11,10,9]	10
 nested_row_capture
 id	r	m
 1	[2,1]	[[3,4],[5]]
@@ -150,6 +167,16 @@ id	m
 1	[662911,151644,769488]
 2	[392506,654067,92816]
 3	[501880,230954,649127]
+random_seeded_first_filter_sortby
+id	first_match	filtered	sorted
+1	2	[2]	[2,1]
+2	4	[4]	[4,3]
+8	10	[10]	[10,11,9]
+first_stops_after_matching
+first_match
+10
+predicate_calls
+2
 empty_lambda_parameter_list
 random_and_uuid_per_element
 id	random_samples	uuid_samples	short_uuid_samples

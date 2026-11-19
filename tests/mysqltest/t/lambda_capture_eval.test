@@ -22,6 +22,11 @@ FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
 SELECT id, array_map((x)->42,a) AS m
 FROM lambda_capture_int WHERE id IN (1,4,5,8) ORDER BY id;
 
+--echo ordinary_array_first
+SELECT id, array_first((x,y)->(10*x > 10*y),a,reverse(a)) AS first_match,
+       array_first((x)->(1=0),a) AS no_match
+FROM lambda_capture_int WHERE id IN (1,2,4,5,8) ORDER BY id;
+
 --echo shared_reverse_int
 SELECT id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
 
@@ -64,6 +69,16 @@ SELECT id,reverse(a) AS r,array_filter((x)->(x>array_min(reverse(a))),reverse(a)
 --echo shared_sortby
 SELECT id,reverse(a) AS r,array_sortby((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
 
+--echo shared_first_scalar
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */ id, reverse(a) AS r,
+       array_first((x)->(x < array_max(reverse(a))),reverse(a)) AS m
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo shared_first_batch
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id, reverse(a) AS r,
+       array_first((x)->(x < array_max(reverse(a))),reverse(a)) AS m
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
 --echo nested_row_capture
 SELECT id,reverse(a) AS r,array_map((x)->array_map((y)->(y+cardinality(reverse(a))),x),n) AS m FROM lambda_capture_int WHERE id IN (1,2,3,7,8) ORDER BY id;
 
@@ -95,6 +110,20 @@ FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
 --echo random_seeded_without_bound_parameters
 SELECT id, array_map((x)->CAST(ROUND(RAND(42) * 1000000) AS SIGNED),a) AS m
 FROM lambda_capture_rand ORDER BY id;
+
+--echo random_seeded_first_filter_sortby
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,
+       array_first((x)->(RAND(42) < 0.5),a) AS first_match,
+       array_filter((x)->(x >= 0 AND RAND(42) < 0.5),a) AS filtered,
+       array_sortby((x)->RAND(42),a) AS sorted
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo first_stops_after_matching
+SET @lambda_first_counter = 0;
+SELECT array_first((x)->((@lambda_first_counter := @lambda_first_counter + 1) = 2),a) AS first_match
+FROM lambda_capture_int WHERE id = 8;
+SELECT @lambda_first_counter AS predicate_calls;
+SET @lambda_first_counter = NULL;
 
 --echo empty_lambda_parameter_list
 --disable_result_log

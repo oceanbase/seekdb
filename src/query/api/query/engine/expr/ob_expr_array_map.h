@@ -72,13 +72,16 @@ protected:
   static int eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tmp_allocator, ObExprArrayMapInfo *info,
                                ObIArrayType **arr_obj, uint32_t arr_obj_size, uint32_t arr_dim,
                                ObExpr *lambda_expr, ObIArrayType *&lambda_arr);
+  static int collect_lambda_recompute_exprs(ObExpr &expr, const ObExprArrayMapInfo &info,
+                                           ObIArray<ObExpr *> &recompute_exprs, bool &needs_recompute);
+  static int eval_lambda_expr(const ObExpr &expr, ObEvalCtx &ctx,
+                              const ObIArray<ObExpr *> &recompute_exprs, ObDatum *&datum);
   static int set_lambda_para(ObIAllocator &alloc,
                              ObEvalCtx &ctx,
                              ObExprArrayMapInfo *info,
                              ObIArrayType **arr_obj,
                              uint32_t arr_obj_size,
-                             uint32_t idx,
-                             bool &is_set);
+                             uint32_t idx);
 
   int get_array_map_lambda_params(const ObRawExpr *raw_expr, ObArray<uint32_t> &param_idx, int depth, ObArray<ObExpr *> &param_exprs) const;
   int get_lambda_subschema_id(ObExecContext *exec_ctx,
