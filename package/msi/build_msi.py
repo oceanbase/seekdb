@@ -79,8 +79,6 @@ def main():
     parser.add_argument("--dll-dir", type=Path, action="append", default=[],
                         help="additional runtime DLL directories for an external configurator")
     parser.add_argument("--configurator", type=Path)
-    parser.add_argument("--timezone-file", type=Path,
-                        help="optional named time zone import data; omitted by default")
     parser.add_argument("--output", type=Path, default=Path.cwd())
     options = parser.parse_args()
     if not re.fullmatch(r"\d+\.\d+\.\d+(?:\.\d+)?", options.version) or options.release < 0:
@@ -91,7 +89,7 @@ def main():
         work = Path(temporary)
         payload = work / "payload"
         package.stage(payload, options.artifacts.resolve(), None, "windows",
-                      options.version, str(options.release), timezone=options.timezone_file)
+                      options.version, str(options.release))
         configurator = options.configurator
         if configurator:
             package.copy(configurator, payload / "bin/seekdbConfigurator.exe", True)

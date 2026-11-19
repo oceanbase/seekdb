@@ -51,7 +51,7 @@ def normalize_permissions(root):
             path.chmod(0o755 if mode & 0o111 else 0o644)
 
 
-def stage(destination, artifacts, dependencies, layout, version, release, component="server", timezone=None,
+def stage(destination, artifacts, dependencies, layout, version, release, component="server",
           binary_package=None, seekdb_bin=None, obshell_bin=None, portable=False):
     if component == "libs":
         if binary_package:
@@ -78,14 +78,15 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
     directories = ("bin", "etc/seekdb", "share/seekdb", "libexec/seekdb") if portable else paths[layout]
     binary, config, share, helpers = [destination / path for path in directories]
     executable = "seekdb.exe" if layout == "windows" else "seekdb"
-    if timezone is None and os.environ.get("SEEKDB_TIMEZONE_FILE"):
-        timezone = Path(os.environ["SEEKDB_TIMEZONE_FILE"])
     if binary_package:
-        for source, target in (("bin", binary), ("etc/seekdb", config), ("share/seekdb", share),
-                               ("libexec/seekdb", helpers)):
-            # Time zone data remains opt-in when repackaging an older bundle.
-            ignore = shutil.ignore_patterns("timezone") if source == "share/seekdb" else None
-            shutil.copytree(binary_package / source, target, dirs_exist_ok=True, ignore=ignore)
+        for source, target in (("bin", binary), ("etc/seekdb", config),
+                               ("share/seekdb/admin", share / "admin"), ("share/seekdb/srs", share / "srs")):
+            shutil.copytree(binary_package / source, target, dirs_exist_ok=True)
+        if layout == "windows":
+            shutil.copytree(binary_package / "share/seekdb/dependencies", share / "dependencies",
+                            dirs_exist_ok=True)
+        else:
+            copy(binary_package / "libexec/seekdb/import_srs_data.py", helpers / "import_srs_data.py", True)
         if layout == "macos":
             shutil.copytree(binary_package / "lib", destination / "opt/seekdb/lib", dirs_exist_ok=True)
         elif layout == "android":
@@ -118,10 +119,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
         config.mkdir(parents=True, exist_ok=True)
         (config / "ob_system_variable_init.json").write_text(json.dumps(clear_links(variables), indent=2) + "\n")
         if layout != "windows":
-            for script in ("import_time_zone_info.py", "import_srs_data.py"):
-                copy(ROOT / "tools" / script, helpers / script, True)
-    if timezone is not None:
-        copy(timezone, share / "timezone/timezone_V1.log")
+            copy(ROOT / "tools/import_srs_data.py", helpers / "import_srs_data.py", True)
     if layout == "windows":
         if not binary_package:
             copy(ROOT / "package/msi/seekdb.cnf", config / "seekdb.cnf")
@@ -219,8 +217,6 @@ def main():
     parser.add_argument("--artifacts", type=Path, default=ROOT / "build/bin",
                         help="Bazel bin directory from a --config=package build on Linux")
     parser.add_argument("--dependencies", type=Path, default=ROOT / "deps/3rd")
-    parser.add_argument("--timezone-file", type=Path,
-                        help="optional named time zone import data; omitted by default")
     parser.add_argument("--layout", choices=("linux", "macos", "windows", "android"),
                         help="target layout; inferred from --binary-package, otherwise Linux (native OS for binary)")
     parser.add_argument("--component", choices=("server", "libs"), default="server")
@@ -305,8 +301,7 @@ def main():
             import binary_distribution
             binary_package = work / "binary"
             stage(binary_package, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
-                  options.version, options.release, timezone=options.timezone_file,
-                  seekdb_bin=options.seekdb_bin, portable=True)
+                  options.version, options.release, seekdb_bin=options.seekdb_bin, portable=True)
             original = options.seekdb_bin or options.artifacts / "src/observer" / (
                 "seekdb/seekdb.exe" if options.layout == "windows" else "seekdb")
             directories = [path.resolve() for path in options.runtime_lib_dir]
@@ -342,7 +337,7 @@ def main():
             release = package_release(release, options.distribution)
         payload = output if options.format == "stage" else work / "server"
         stage(payload, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
-              options.version, release, options.component, options.timezone_file,
+              options.version, release, options.component,
               binary_package=binary_package, obshell_bin=options.obshell_bin)
         if metadata and options.layout == "linux" and options.component == "server":
             if binary_distribution.architecture(payload / "usr/bin/obshell", "linux") != metadata["arch"]:
