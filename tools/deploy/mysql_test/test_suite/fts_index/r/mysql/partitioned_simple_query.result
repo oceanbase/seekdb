@@ -901,8 +901,7 @@ Outputs & filters:
   5 - output(nil), filter(nil), rowset=16
       access(nil), partitions(p[0-1])
       limit(1), offset(nil), is_index_back=false, is_global_index=false, 
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
-      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
+      calc_relevance=false, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
 select distinct 1 from t_ir_single_column where match (detail) against ("distributed database");
 +---+
 | 1 |
@@ -925,8 +924,7 @@ Outputs & filters:
   1 - output(nil), filter(nil), rowset=16
       access(nil), partitions(p[0-1])
       limit(1), offset(nil), is_index_back=false, is_global_index=false, 
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
-      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
+      calc_relevance=false, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
 select /*+ use_das(t_ir_single_column) */ distinct 1 from t_ir_single_column where match (detail) against ("distributed database");
 +---+
 | 1 |

@@ -113,6 +113,9 @@ private:
   int64_t token_doc_cnt_;
   double max_token_relevance_;
   ObDocIdExt advance_doc_id_;
+  common::ObObjMeta token_obj_meta_;
+  common::ObTableID inv_idx_table_id_;
+  bool token_range_tmpl_inited_;
   bool token_doc_cnt_calculated_;
   bool inv_idx_agg_cache_mode_;
   bool is_inited_;
