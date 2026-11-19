@@ -122,7 +122,6 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObIArrayType *src_arrs[expr.arg_cnt_ - 1];
   ObDatum *datum_val = NULL;
   ObSEArray<ObExpr *, 16> recompute_exprs;
-  bool needs_recompute = false;
   bool is_null_res = false;
   uint32_t arr_dim = 0;
 
@@ -134,12 +133,11 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   } else if (OB_FAIL(eval_src_arrays(expr, ctx, tmp_allocator, src_arrs, arr_dim, is_null_res))) {
   } else if (is_null_res) {
     res.set_null();
-  } else if (arr_dim > 0 && OB_FAIL(collect_lambda_recompute_exprs(
-                    *expr.args_[0], *info, recompute_exprs, needs_recompute))) {
+  } else if (arr_dim > 0 && OB_FAIL(collect_lambda_recompute_exprs(*expr.args_[0], recompute_exprs))) {
   } else {
     bool found_res = false;
-    // A stable predicate has the same result for all elements in this row.
-    for (uint32_t i = 0; OB_SUCC(ret) && i < arr_dim && !found_res && (i == 0 || needs_recompute); ++i) {
+    const bool reevaluate_predicate = info->param_num_ > 0 || !recompute_exprs.empty();
+    for (uint32_t i = 0; OB_SUCC(ret) && i < arr_dim && !found_res && (i == 0 || reevaluate_predicate); ++i) {
       if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, src_arrs, expr.arg_cnt_ - 1, i))) {
       } else if (OB_FAIL(eval_lambda_expr(*expr.args_[0], ctx, recompute_exprs, datum_val))) {
       } else if (datum_val->is_null()) {

@@ -654,7 +654,6 @@ public:
       uint64_t is_dynamic_const_:1; // is const during the subplan execution, including exec param
       uint64_t need_stack_check_:1; // the expression tree depth needs to check whether the stack overflows
       uint64_t nullable_:1;
-      uint64_t is_volatile_:1; // evaluation can change the value or have side effects with the same inputs
     };
     uint64_t flag_;
   };
