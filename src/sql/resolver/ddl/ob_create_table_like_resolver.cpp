@@ -62,6 +62,7 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
         }
       }
       if (OB_SUCC(ret) && is_temporary_table) {
+        session_info_->set_has_temp_table_flag();
         create_table_like_stmt->set_table_type(share::schema::TMP_TABLE);
       } else {
         create_table_like_stmt->set_table_type(share::schema::USER_TABLE);

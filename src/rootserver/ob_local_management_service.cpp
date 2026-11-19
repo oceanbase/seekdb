@@ -1209,7 +1209,8 @@ int ObLocalManagementService::drop_table(const obcall::ObDropTableArg &arg, obca
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (need_add_to_ddl_scheduler) {
-    // to decide wherther to add to ddl scheduler.
+    schema_guard.set_session_id(arg.session_id_);
+    // Decide whether to add to the DDL scheduler.
     // 1. do not add to scheduler if all tables do not exist.
     // 2. do not add to scheduler if all existed tables are temporary tables.
     need_add_to_ddl_scheduler = arg.tables_.count() == 0 ? false : true;

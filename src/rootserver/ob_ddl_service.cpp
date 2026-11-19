@@ -18061,7 +18061,8 @@ int ObDDLService::need_collect_current_temp_table(ObSchemaGetterGuard &schema_gu
   need_collect = false;
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (drop_table_arg.session_id_ == table_schema->get_session_id()) {
+  } else if (table_schema->is_mysql_tmp_table()
+             && drop_table_arg.session_id_ == table_schema->get_session_id()) {
     need_collect = true;
     //maybe it's alter system ...
   }
@@ -18104,6 +18105,7 @@ int ObDDLService::collect_temporary_tables_in_session(const ObDropTableArg &cons
           } else if (need_collect) {
             found = true; // Session ids are local to this runtime.
             database_schema = NULL;
+            table_item.table_id_ = table_schema->get_table_id();
             table_item.mode_ = table_schema->get_name_case_mode();
             if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), database_schema))) {
             } else if (OB_ISNULL(database_schema)) {

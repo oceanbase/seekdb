@@ -3361,8 +3361,8 @@ public :
   {
   }
   ObTableSchemaHashWrapper(const uint64_t database_id, const uint64_t session_id, const common::ObNameCaseMode mode,
-                           const common::ObString &table_name)
-      : database_id_(database_id), session_id_(session_id), name_case_mode_(mode), table_name_(table_name)
+                           const common::ObString &table_name, bool is_temporary = false)
+      : database_id_(database_id), session_id_(session_id), name_case_mode_(mode), is_temporary_(is_temporary), table_name_(table_name)
   {
   }
   ~ObTableSchemaHashWrapper() {}
@@ -3379,6 +3379,7 @@ private :
   uint64_t database_id_;
   uint64_t session_id_;
   common::ObNameCaseMode name_case_mode_;
+  bool is_temporary_ = false;
   common::ObString table_name_;
 };
 
@@ -3399,7 +3400,7 @@ inline bool ObTableSchemaHashWrapper::operator ==(const ObTableSchemaHashWrapper
   ObSchemaNameComparator name_cmp(name_case_mode_, database_id_);
   return (database_id_ == rv.database_id_)
       && (name_case_mode_ == rv.name_case_mode_)
-      && (session_id_ == rv.session_id_ || common::OB_INVALID_ID == rv.session_id_)
+      && (session_id_ == rv.session_id_ || (!is_temporary_ && common::OB_INVALID_ID == rv.session_id_))
       && (0 == name_cmp.compare(table_name_ ,rv.table_name_));
 }
 

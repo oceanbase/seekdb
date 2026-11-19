@@ -237,7 +237,8 @@ struct GetTableKeyV2<ObTableSchemaHashWrapper, ObSimpleTableSchemaV2 *>
           table_schema->get_database_id(),
           table_schema->get_session_id(),
           table_schema->get_name_case_mode(),
-          table_schema->get_table_name_str());
+          table_schema->get_table_name_str(),
+          table_schema->is_mysql_tmp_table());
       return table_schema_hash_wrapper;
     } else {
       ObTableSchemaHashWrapper null_wrap;

@@ -197,8 +197,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               if (create_table_node->children_[5] != NULL) { // Temporary table does not support partitioning
                 ret = OB_ERR_TEMPORARY_TABLE_WITH_PARTITION;
               } else {
-                ret = OB_NOT_SUPPORTED;
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "MySQL compatible temporary table");
+                is_temporary_table = true;
               }
               break;
             default:

@@ -471,6 +471,7 @@ int ObPLObjectValue::need_check_schema_version(ObPLCacheCtx &pc_ctx,
   } else {
     int64_t cached_runtime_schema_version = ATOMIC_LOAD(&runtime_schema_version_);
     need_check = ((new_schema_version != cached_runtime_schema_version)
+                  || pc_ctx.session_info_->get_has_temp_table_flag()
                   || contain_tmp_table_
                   || contain_sys_pl_object_
                   || contain_sys_name_table_);
@@ -613,7 +614,7 @@ int ObPLObjectValue::match_dep_schema(const ObPLCacheCtx &pc_ctx,
       if (OB_ISNULL(stored_schema_objs_.at(i))) {
         ret = OB_INVALID_ARGUMENT;
       } else {
-        // do nothing
+        is_same = stored_schema_objs_.at(i)->schema_id_ == schema_array.at(i).schema_id_;
       }
     }
   }

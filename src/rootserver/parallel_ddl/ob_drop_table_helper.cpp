@@ -574,8 +574,8 @@ int ObDropTableHelper::prefetch_table_schemas_()
         if (OB_FAIL(log_table_not_exist_msg_(table_items_.at(i)))) {
         }
       } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(database_id, session_id, table_name, table_id, table_type, schema_version))) {
-      } else if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
-        // skip
+      } else if (OB_INVALID_ID == table_id || (TMP_TABLE == arg_.table_type_ && TMP_TABLE != table_type)) {
+        // DROP TEMPORARY TABLE cannot fall back to a permanent table.
         if (OB_FAIL(log_table_not_exist_msg_(table_items_.at(i)))) {
         }
       } else if (ObTableType::SYSTEM_TABLE == table_type

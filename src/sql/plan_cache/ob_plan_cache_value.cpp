@@ -265,7 +265,7 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
       if (OB_SUCC(ret)) {
         if (is_contain_tmp_tbl()) {
           // Temporary-table plans must be matched against the user-created session.
-          sessid_ = pc_ctx.sql_ctx_.session_info_->get_sid();
+          sessid_ = pc_ctx.sql_ctx_.session_info_->get_sessid_for_table();
           sess_create_time_ = pc_ctx.sql_ctx_.session_info_->get_sess_create_time();
           // Get the table name of the temporary table
           pc_ctx.tmp_table_names_.reset();
@@ -1506,6 +1506,8 @@ int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < schema_array.count(); i++) {
       if (OB_ISNULL(stored_schema_objs_.at(i))) {
         ret = OB_INVALID_ARGUMENT;
+      } else if (stored_schema_objs_.at(i)->schema_id_ != schema_array.at(i).schema_id_) {
+        is_same = false;
       } else if (TMP_TABLE == schema_array.at(i).table_type_
                  && schema_array.at(i).is_tmp_table_) { // check for mysql tmp table
         // If it contains a temporary table
@@ -1591,6 +1593,7 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
         Therefore, if there is a temporary table, you need to recheck the schema .
      */
     need_check = ((new_schema_version != cached_runtime_schema_version)
+                  || pc_ctx.sql_ctx_.session_info_->get_has_temp_table_flag()
                   || is_contain_tmp_tbl()
                   || is_contain_sys_pl_object()
                   || contain_sys_name_table_);

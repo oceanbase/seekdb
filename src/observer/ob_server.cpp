@@ -1375,6 +1375,11 @@ int ObServer::start()
     if (OB_SUCC(ret) && !stop_ && OB_FAIL(startup_result_.finish())) {
       LOG_ERROR("background log allocation failed during startup", KR(ret));
     }
+    // Managed connection IDs restart at boot. Remove tables left behind by a
+    // stopped server before a new connection can acquire an old owner's ID.
+    if (FAILEDx(drop_orphaned_temporary_tables())) {
+      LOG_ERROR("failed to recover session temporary tables", KR(ret));
+    }
     if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -2777,6 +2782,46 @@ int ObServer::init_refresh_cpu_frequency()
   return ret;
 }
 
+int ObServer::drop_orphaned_temporary_tables()
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard guard;
+  ObArray<const ObSimpleTableSchemaV2 *> tables;
+  obcall::ObDropTableArg arg;
+  arg.table_type_ = TMP_TABLE;
+  arg.to_recyclebin_ = false;
+  arg.if_exist_ = true;
+  arg.is_add_to_scheduler_ = false;
+  if (OB_FAIL(schema_service_.get_runtime_schema_guard(guard))) {
+  } else if (OB_FAIL(guard.get_table_schemas_in_runtime(tables))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+      const ObSimpleTableSchemaV2 *table = tables.at(i);
+      const ObDatabaseSchema *database = nullptr;
+      if (OB_ISNULL(table)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (table->is_mysql_tmp_table()) {
+        obcall::ObTableItem item;
+        if (OB_FAIL(guard.get_database_schema(table->get_database_id(), database))) {
+        } else if (OB_ISNULL(database)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          item.database_name_ = database->get_database_name_str();
+          item.table_name_ = table->get_table_name_str();
+          item.table_id_ = table->get_table_id();
+          item.mode_ = table->get_name_case_mode();
+          OZ(arg.tables_.push_back(item));
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !arg.tables_.empty()) {
+    obcall::ObDDLRes res;
+    ret = rootserver::local_ddl_serial_call([&]{ return local_management_service_.drop_table(arg, res); });
+  }
+  return ret;
+}
+
 // @@Query cleanup rules for built tables and temporary tables:
 //1, Traverse all table_schema, if the session_id of table T <> 0 means that the table is being created or the previous creation failed or the temporary table is to be cleared, then enter 2#;
 //2, Create a table for the query: traverse the session, and determine whether T should be DROP according to the session_id and time of the session and table T;
@@ -2845,6 +2890,7 @@ int ObServer::clean_up_invalid_tables()
           drop_table_arg.table_type_ = table_schema->get_table_type();
           drop_table_arg.session_id_ = table_schema->get_session_id();
           drop_table_arg.to_recyclebin_ = false;
+          table_item.table_id_ = table_id;
           table_item.table_name_ = table_schema->get_table_name_str();
           table_item.mode_ = table_schema->get_name_case_mode();
           if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), database_schema))) {

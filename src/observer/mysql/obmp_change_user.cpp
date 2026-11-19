@@ -82,6 +82,7 @@ int ObMPChangeUser::process()
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     session->update_last_active_time();
     if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
+    } else if (OB_FAIL(session->drop_temp_tables(false, true))) {
     } else {
       session->clean_status();
       if (OB_FAIL(load_login_info(session))) {

@@ -1425,7 +1425,8 @@ int ObServer::obs_init_modules()
     session_mgr_.bind_lifecycle_services(
         *mods_ps_cache_,
         debug_sync_broadcaster_,
-        conn_res_mgr_);
+        conn_res_mgr_,
+        local_management_service_);
   }
   return ret;
 }

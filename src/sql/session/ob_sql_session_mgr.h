@@ -54,11 +54,14 @@ public:
   virtual ~ObSQLSessionMgr();
 
   int init();
+  query::ObIRootCommandService *get_root_command_service() const { return root_commands_; }
   void bind_lifecycle_services(
       ObPsCache &ps_cache,
       common::ObIDebugSyncBroadcaster &debug_sync_broadcaster,
-      ObConnectResourceMgr &connect_resource_manager)
+      ObConnectResourceMgr &connect_resource_manager,
+      query::ObIRootCommandService &root_commands)
   {
+    root_commands_ = &root_commands;
     ps_cache_ = &ps_cache;
     debug_sync_broadcaster_ = &debug_sync_broadcaster;
     connect_resource_manager_ = &connect_resource_manager;
@@ -209,6 +212,7 @@ private:
   // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.
   uint32_t next_sessid_ CACHE_ALIGNED;
   common::ObIDebugSyncBroadcaster *debug_sync_broadcaster_;
+  query::ObIRootCommandService *root_commands_ = nullptr;
   ObPsCache *ps_cache_;
   ObConnectResourceMgr *connect_resource_manager_;
   DISALLOW_COPY_AND_ASSIGN(ObSQLSessionMgr);

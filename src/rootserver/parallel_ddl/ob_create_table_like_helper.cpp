@@ -86,7 +86,8 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
     ret = OB_ERR_UNEXPECTED;
   } else if (orig_table_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-  } else if (!orig_table_schema->is_user_table() && !orig_table_schema->is_sys_table()) {
+  } else if (!orig_table_schema->is_user_table() && !orig_table_schema->is_mysql_tmp_table()
+             && !orig_table_schema->is_sys_table()) {
     ret = OB_ERR_WRONG_OBJECT;
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, helper.convert(arg_.origin_db_name_),
@@ -99,8 +100,11 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
                                         helper.convert(arg_.origin_table_name_),
                    "BASE TABLE");
   } else if (OB_FAIL(check_database_legitimacy_(arg_.new_db_name_, new_database_id))) {
-  } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(new_database_id, arg_.session_id_, arg_.new_table_name_, new_table_id, table_type, new_schema_version))) {
-  } else if (OB_INVALID_ID != new_table_id) {
+  } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(new_database_id,
+              TMP_TABLE == arg_.table_type_ ? arg_.session_id_ : 0,
+              arg_.new_table_name_, new_table_id, table_type, new_schema_version))) {
+  } else if (OB_INVALID_ID != new_table_id && (TMP_TABLE != arg_.table_type_
+             || is_inner_table(new_table_id) || TMP_TABLE == table_type)) {
     ret = OB_ERR_TABLE_EXIST;
     if (arg_.if_not_exist_) {
       res_.table_id_ = new_table_id;
@@ -173,10 +177,9 @@ int ObCreateTableLikeHelper::generate_table_schema_()
     } else if (orig_table_schema->is_sys_view()) {
       new_table_schema.set_table_type(USER_VIEW);
     }
-    if (new_table_schema.is_user_table()
-        && TMP_TABLE == arg_.table_type_) {
+    if (new_table_schema.is_user_table() || new_table_schema.is_mysql_tmp_table()) {
       new_table_schema.set_table_type(arg_.table_type_);
-      new_table_schema.set_session_id(arg_.session_id_);
+      new_table_schema.set_session_id(TMP_TABLE == arg_.table_type_ ? arg_.session_id_ : 0);
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(new_tables_.push_back(new_table_schema))) {

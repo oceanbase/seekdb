@@ -23,6 +23,7 @@
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "query/command/ob_root_command_service.h"
+#include "sql/session/ob_sql_session_mgr.h"
 #include "query/session/ob_session_access.h"
 #include "ob_sql_session_info.h"
 #include "share/object/ob_obj_cast.h"
@@ -636,56 +637,30 @@ void ObSQLSessionInfo::release_all_ps_session_info()
     ps_session_info_map_.reuse();
   }
 }
-// If the session created temporary tables in direct connection mode, drop them when
-// the session disconnects. Commit-time cleanup only clears transaction-level
-// temporary tables; disconnect cleanup handles both transaction-level and
-// session-level temporary tables. To avoid RS congestion, cleanup is executed by
-// SQL proxy for this session's temporary table data.
-// For distributed planning, unless ac=1 otherwise hand over to master session for cleanup, deserialized session does nothing
 int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
                                        const bool is_reset_connection)
 {
   int ret = OB_SUCCESS;
-  bool ac = false;
-  bool is_sess_disconn = is_disconn;
-  if (OB_FAIL(get_autocommit(ac))) {
-  } else if (!(is_inner() && !is_user_session())
-             && (get_has_temp_table_flag()
-                 || has_accessed_session_level_temp_table()
-                 || has_tx_level_temp_table())
-             && (!get_is_deserialized() || ac)) {
-    bool need_drop_temp_table = false;
-    // Cleanup is needed on direct connection disconnect or reset connection.
-    if (OB_SUCC(ret)) {
-      if (is_sess_disconn || is_reset_connection) {
-        need_drop_temp_table = true;
-      }
+  if ((is_disconn || is_reset_connection) && !get_is_deserialized()
+      && !(is_inner() && !is_user_session()) && get_has_temp_table_flag()) {
+    query::ObIRootCommandService *root_commands =
+        session_mgr_ == nullptr ? nullptr : session_mgr_->get_root_command_service();
+    obcall::ObDDLRes res;
+    obcall::ObDropTableArg arg;
+    arg.if_exist_ = true;
+    arg.to_recyclebin_ = false;
+    arg.table_type_ = share::schema::TMP_TABLE;
+    arg.session_id_ = get_sessid_for_table();
+    if (OB_ISNULL(root_commands)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands->drop_table(arg, res); }))) {
+      LOG_WARN("failed to drop session temporary tables", K(ret), K(arg.session_id_));
+    } else {
+      has_temp_table_flag_ = false;
     }
-    if (need_drop_temp_table) {
-      LOG_DEBUG("need_drop_temp_table",
-               K(get_current_query_string()),
-               K(1UL),
-               K(1UL),
-               K(lbt()));
-      obcall::ObDDLRes res;
-      obcall::ObDropTableArg drop_table_arg;
-      drop_table_arg.if_exist_ = true;
-      drop_table_arg.to_recyclebin_ = false;
-      drop_table_arg.table_type_ = share::schema::TMP_TABLE;
-      drop_table_arg.session_id_ = get_sessid_for_table();
-      
-      
-      
-        LOG_INFO("temporary tables dropped due to connection disconnected", K(is_sess_disconn), K(drop_table_arg));
-    }
-  }
-  if (OB_FAIL(ret)) {
   }
   return ret;
 }
-
-
-
 
 void ObSQLSessionInfo::set_show_warnings_buf(int error_code)
 {

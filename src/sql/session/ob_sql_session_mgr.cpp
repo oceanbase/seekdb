@@ -214,6 +214,7 @@ int ObSQLSessionMgr::init()
 void ObSQLSessionMgr::destroy()
 {
   sessinfo_map_.destroy();
+  root_commands_ = nullptr;
   ps_cache_ = nullptr;
   connect_resource_manager_ = nullptr;
 }

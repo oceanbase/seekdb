@@ -382,6 +382,7 @@ private:
   int start_log_mgr();
   int stop_log_mgr();
   int refresh_cpu_frequency();
+  int drop_orphaned_temporary_tables();
   int clean_up_invalid_tables();
   int init_ctas_clean_up_task(); //Regularly clean up the residuals related to querying and building tables and temporary tables
   int init_redef_heart_beat_task();
