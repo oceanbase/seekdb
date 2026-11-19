@@ -450,6 +450,16 @@ int ObPLPackageManager::load_sys_package_list(ObMySQLProxy &sql_proxy,
   return ret;
 }
 
+bool ObPLPackageManager::is_common_system_package(const ObString &name)
+{
+  for (int i = 0; i < mysql_syspack_file_list_length; ++i) {
+    if (0 == name.case_compare(mysql_syspack_file_list[i].package_name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int ObPLPackageManager::load_all_common_sys_package(
     ObMySQLProxy &sql_proxy, bool from_file) {
   int ret = OB_SUCCESS;

@@ -302,7 +302,7 @@ public:
 
   // Wait for sys package to be loaded if not ready yet
   // Returns OB_SCHEMA_EAGAIN if waiting succeeded and retry is needed, OB_SUCCESS if no waiting needed or already ready
-  static int wait_for_sys_package_ready(ObSQLSessionInfo &session_info);
+  static int check_builtin_package_body(share::schema::ObSchemaGetterGuard &guard, const common::ObString &name);
 
   static int resolve_external_symbol(common::ObIAllocator &allocator,
                                      sql::ObRawExprFactory &expr_factory,

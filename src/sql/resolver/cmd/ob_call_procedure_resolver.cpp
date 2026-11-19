@@ -341,8 +341,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                   ObLibCacheNameSpace::NS_CALLSTMT));
     OX (call_proc_info = static_cast<ObCallProcedureInfo*>(stmt->get_cacheobj_guard().get_cache_obj()));
     CK (OB_NOT_NULL(call_proc_info));
-    // Wait for sys package to be loaded if not ready yet
-    OZ (ObResolverUtils::wait_for_sys_package_ready(*session_info_));
     // Parsing process name
     if (OB_SUCC(ret)) {
       if (T_SP_ACCESS_NAME != name_node->type_) {
@@ -353,6 +351,16 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                             *name_node,
                                                             db_name, package_name, sp_name,
                                                             nullptr))) {
+          if (name_node->children_[0] == nullptr && name_node->children_[1] != nullptr && ret == OB_ERR_BAD_DATABASE) {
+            const ParseNode &qualifier = *name_node->children_[1];
+            const ObString name(qualifier.str_len_, qualifier.str_value_);
+            const int body_ret = ObResolverUtils::check_builtin_package_body(*schema_checker_->get_schema_guard(), name);
+            if (body_ret != OB_SUCCESS) {
+              ret = body_ret;
+            }
+          }
+        } else if (0 == db_name.case_compare(OB_SYS_DATABASE_NAME) && !package_name.empty()
+                   && OB_FAIL(ObResolverUtils::check_builtin_package_body(*schema_checker_->get_schema_guard(), package_name))) {
         } else if (db_name.empty() && session_info_->get_database_name().empty()) {
           ret = OB_ERR_NO_DB_SELECTED;
         } else {

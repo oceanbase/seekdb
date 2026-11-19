@@ -180,7 +180,11 @@ public:
 
   int bootstrap_primary() override
   {
-    return server_.ob_service_.bootstrap();
+    int ret = server_.ob_service_.bootstrap();
+    if (OB_SUCC(ret) && config::_enable_async_load_sys_package()) {
+      ret = server_.system_package_load_service()->start();
+    }
+    return ret;
   }
 
   int report_bootstrap_telemetry() override
@@ -1366,6 +1370,9 @@ int ObServer::start()
       FLOG_INFO("success to start runtime dependent local services");
     }
 
+    if (OB_SUCC(ret) && !need_commit_bootstrap && share::server_is_write_enabled()) {
+      ret = system_package_load_service()->start();
+    }
     if (FAILEDx(standby_module_->wait_metadata_ready())) {
       LOG_ERROR("fail to wait for server metadata readiness", KR(ret));
     } else {

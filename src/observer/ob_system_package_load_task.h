@@ -42,11 +42,11 @@ public:
   static int wait_system_package_ready(const common::ObTimeoutCtx &ctx);
 
 private:
-  int load_system_package_();
+  static int load_system_package_();
 
 private:
   bool inited_;
-  int64_t fail_count_;
+  common::ObTimer *timer_;
   static const int64_t SCHEDULE_INTERVAL_US = 3 * 1000 * 1000L; // 3s
 
 private:
