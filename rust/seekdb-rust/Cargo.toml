@@ -13,6 +13,7 @@ native-network = ["sql-nio/native-network"]
 native-http = ["dep:http-client"]
 
 [dependencies]
+palf = { path = "../palf" }
 mvt = { path = "../mvt" }
 file-io = { path = "../file-io", features = ["cxx"] }
 storage-io = { path = "../storage-io", features = ["cxx"] }
