@@ -71,13 +71,8 @@ public:
   inline lib::MemoryContext &get_mem_context() { return mem_context_; }
   inline bool added_lc() const { return added_to_lc_; }
   inline void set_added_lc(const bool added_to_lc) { added_to_lc_ = added_to_lc; }
-  inline int64_t get_logical_del_time() const { return log_del_time_; }
-  inline int64_t get_logical_del_wall_time() const { return ATOMIC_LOAD(&log_del_wall_time_); }
-  inline bool should_release(const int64_t safe_timestamp) const
-  {
-    // only free leaked cache object
-    return 0 != get_ref_count() && get_logical_del_time() < safe_timestamp;
-  }
+  inline int64_t get_logical_del_time() const { return ATOMIC_LOAD(&log_del_time_); }
+  bool should_release(const int64_t safe_monotonic_time) const;
   inline void set_obj_status(CacheObjStatus status) { obj_status_ = status; }
   inline CacheObjStatus get_obj_status() const { return obj_status_; }
   inline ObPlanCache *get_plan_cache() const { return plan_cache_; }
@@ -92,7 +87,7 @@ public:
   
   VIRTUAL_TO_STRING_KV(K_(ref_count),
                        K_(object_id),
-                       K_(log_del_time),
+                       "log_del_time", get_logical_del_time(),
                        K_(added_to_lc),
                        K_(ns));
                        
@@ -105,7 +100,6 @@ protected:
   volatile int64_t ref_count_;
   uint64_t object_id_;
   int64_t log_del_time_;
-  int64_t log_del_wall_time_;
   bool added_to_lc_;
   ObLibCacheNameSpace ns_;
   CacheObjStatus obj_status_;

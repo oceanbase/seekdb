@@ -25,13 +25,17 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+int64_t min_wall_clock_offset = INT64_MAX;
+} // namespace
+
 ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext &mem_context)
   : mem_context_(mem_context),
     allocator_(mem_context->get_safe_arena_allocator()),
     ref_count_(0),
     object_id_(OB_INVALID_ID),
     log_del_time_(INT64_MAX),
-    log_del_wall_time_(INT64_MAX),
     added_to_lc_(false),
     ns_(ns),
     obj_status_(ObILibCacheObject::ACTIVE),
@@ -44,8 +48,7 @@ void ObILibCacheObject::reset()
 {
   ref_count_ = 0;
   object_id_ = OB_INVALID_ID;
-  log_del_time_ = INT64_MAX;
-  log_del_wall_time_ = INT64_MAX;
+  ATOMIC_STORE(&log_del_time_, INT64_MAX);
   added_to_lc_ = false;
   ns_ = NS_INVALID;
   obj_status_ = ObILibCacheObject::ACTIVE;
@@ -55,9 +58,32 @@ void ObILibCacheObject::reset()
 
 void ObILibCacheObject::mark_logically_deleted()
 {
-  // ERASE_TIME is displayed as a SQL timestamp. Cache reclamation uses monotonic time.
-  ATOMIC_STORE(&log_del_wall_time_, ObTimeUtility::current_time());
-  log_del_time_ = ObTimeUtility::current_monotonic_time();
+  const int64_t wall_time = ObTimeUtility::current_time();
+  const int64_t monotonic_time = ObTimeUtility::current_monotonic_time();
+  int64_t offset = 0;
+  if (__builtin_sub_overflow(wall_time, monotonic_time, &offset)) {
+    offset = INT64_MIN;  // Disable forced cleanup if the bound cannot be represented.
+  }
+  // Keep a lower bound on wall time minus monotonic time for every recorded deletion.
+  int64_t previous = ATOMIC_LOAD(&min_wall_clock_offset);
+  while (offset < previous && !ATOMIC_BCAS(&min_wall_clock_offset, previous, offset)) {
+    previous = ATOMIC_LOAD(&min_wall_clock_offset);
+  }
+  // Publish ERASE_TIME only after the shared bound covers this deletion.
+  ATOMIC_STORE(&log_del_time_, wall_time);
+}
+
+bool ObILibCacheObject::should_release(const int64_t safe_monotonic_time) const
+{
+  const int64_t wall_time = get_logical_del_time();
+  const int64_t offset = ATOMIC_LOAD(&min_wall_clock_offset);
+  int64_t safe_wall_time = 0;
+  // wall_time < safe_monotonic_time + offset implies that the deletion
+  // is older than safe_monotonic_time. A smaller offset can defer cleanup.
+  return 0 != get_ref_count() && INT64_MAX != wall_time
+      && INT64_MIN != offset && INT64_MAX != offset
+      && !__builtin_add_overflow(safe_monotonic_time, offset, &safe_wall_time)
+      && wall_time < safe_wall_time;
 }
 
 void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true */) const
@@ -68,7 +94,7 @@ void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true 
                K(added_to_lc_),
                K(ns_),
                K(get_ref_count()),
-               K(log_del_time_),
+               "log_del_time_", get_logical_del_time(),
                K(this));
   } else {
     SQL_PC_LOG(INFO, "Dumping Cache Deleted Info",
@@ -76,7 +102,7 @@ void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true 
                K(added_to_lc_),
                K(ns_),
                K(get_ref_count()),
-               K(log_del_time_),
+               "log_del_time_", get_logical_del_time(),
                K(this));
   }
 }
