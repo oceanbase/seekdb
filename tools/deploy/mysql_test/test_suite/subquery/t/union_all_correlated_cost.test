@@ -1,0 +1,67 @@
+--disable_query_log
+SET ob_query_timeout = 10000000;
+SET ob_enable_plan_cache = false;
+SET _optimizer_cost_based_transformation = 1;
+--disable_warnings
+DROP TABLE IF EXISTS uca_parent, uca_inner, uca_probe;
+--enable_warnings
+CREATE TABLE uca_parent (id INT PRIMARY KEY, grp INT, value INT, KEY(value));
+CREATE TABLE uca_inner LIKE uca_parent;
+CREATE TABLE uca_probe LIKE uca_parent;
+INSERT INTO uca_parent VALUES (1,1,10),(2,1,20),(3,2,10),(4,2,30);
+INSERT INTO uca_inner SELECT * FROM uca_parent;
+INSERT INTO uca_probe SELECT * FROM uca_parent;
+
+# Stay below the 20-branch cutoff that disables cost-based transformations.
+let $branch = (SELECT a.id, SUM(a.value) OVER (PARTITION BY a.grp) AS win
+FROM uca_parent a
+WHERE a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 1
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 1))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 2
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 2))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 3
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 3))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 4
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 4)));
+let $query = $branch;
+let $remaining = 17;
+while ($remaining)
+{
+  let $query = $query UNION ALL $branch;
+  dec $remaining;
+}
+--sorted_result
+eval $query;
+
+# Global ordering/limits and duplicate elimination retain full-root costing.
+let $ordered = $branch UNION ALL $branch ORDER BY id, win LIMIT 5;
+--sorted_result
+eval $ordered;
+let $distinct = $branch UNION $branch;
+--sorted_result
+eval $distinct;
+
+# Preserve UNION result coercion when branches are costed independently.
+let $typed = (SELECT CONCAT('k', a.id) AS id, SUM(a.value) OVER (PARTITION BY a.grp) AS win
+FROM uca_parent a
+WHERE a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 1
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 1))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 2
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 2))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 3
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 3))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 4
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 4))) UNION ALL (SELECT a.id, SUM(a.value) OVER (PARTITION BY a.grp) AS win
+FROM uca_parent a
+WHERE a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 1
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 1))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 2
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 2))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 3
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 3))
+  AND a.value IN (SELECT b.value FROM uca_inner b WHERE b.value <> 4
+                 AND EXISTS (SELECT 1 FROM uca_probe c WHERE c.grp = a.grp AND c.value >= b.value - 4)));
+--sorted_result
+eval $typed;
+DROP TABLE uca_parent, uca_inner, uca_probe;
+--enable_query_log

@@ -54,6 +54,10 @@ protected:
   int is_expected_plan(ObLogPlan *plan, void *check_ctx, bool is_trans_plan, bool &is_valid) override;
 
 private:
+  int get_cost_eval_parents(const common::ObIArray<ObParentDMLStmt> &parents,
+                            common::ObIArray<ObParentDMLStmt> &eval_parents,
+                            bool &use_branch_cost);
+
   enum TransformFlag {TO_INNER = 1, TO_AGGR_INNER = 2, TO_INNER_GBY = 4};
   struct TransformParam {
     TransformParam() : transform_flag_(0), need_add_distinct_(false),
