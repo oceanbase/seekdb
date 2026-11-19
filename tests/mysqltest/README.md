@@ -39,15 +39,6 @@ not add ordinary collection DISTINCT support or replace the pre-existing
 planner strategy for UNION with more than two surviving branches; that
 strategy can still use UNION ALL plus ordinary DISTINCT.
 
-Run `array_avg_integer_bounds.test` with its matching result file to check
-integer ARRAY averages whose intermediate sum exceeds 64 bits. Its signed
-and unsigned columns contain extreme values, cancellation, NULL elements,
-and ordinary controls. Both stored-column evaluation and scalar subqueries
-must return the existing DOUBLE result without a spurious 1690. Exact
-cancellation checks retain low bits, including `[INT64_MIN, INT64_MAX]` and
-`[INT64_MAX, 1, -INT64_MAX]`. ARRAY SUM must still reject true signed and
-unsigned 64-bit overflow; the case does not broaden the result type of SUM.
-
 Run `collection_set_merge_capability.test` with its matching result file to
 verify that collection set keys retain hash-set execution when a merge-set
 candidate would require unsupported collection ordering. Real duplicate ARRAY,

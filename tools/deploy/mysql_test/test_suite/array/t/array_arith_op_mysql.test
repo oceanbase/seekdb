@@ -65,6 +65,320 @@ select @var1 := c2 from arr_t1;
 drop table arr_t1;
 drop table arr_t2;
 
+--echo # ARRAY_AVG integer boundaries
+# Integer AVG returns DOUBLE, so an overflowing 64-bit intermediate sum must
+# not reject an average that is representable. Real columns exercise execution.
+--disable_query_log
+
+--echo row_avg_at_integer_bounds
+SELECT AVG(s)=CAST('4611686018427387904' AS DECIMAL(20,0)) AS signed_ok,
+       AVG(u)=CAST('9223372036854775808' AS DECIMAL(20,0)) AS unsigned_ok
+FROM (
+  SELECT CAST('9223372036854775807' AS SIGNED) AS s,
+         CAST('18446744073709551615' AS UNSIGNED) AS u
+  UNION ALL SELECT CAST(1 AS SIGNED),CAST(1 AS UNSIGNED)
+) AS integer_rows;
+
+--disable_warnings
+DROP TABLE IF EXISTS array_avg_integer_bounds;
+--enable_warnings
+CREATE TABLE array_avg_integer_bounds(id INT PRIMARY KEY,s ARRAY(BIGINT),u ARRAY(BIGINT UNSIGNED),expected_s DOUBLE,expected_u DOUBLE);
+INSERT INTO array_avg_integer_bounds VALUES
+(1,[9223372036854775807,9223372036854775807],[CAST('18446744073709551615' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)],CAST('9223372036854775807' AS DOUBLE),CAST('18446744073709551615' AS DOUBLE)),
+(2,[-9223372036854775808,-9223372036854775808],[CAST('0' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)],CAST('-9223372036854775808' AS DOUBLE),CAST('18446744073709551615' AS DOUBLE)/2),
+(3,[-9223372036854775808,9223372036854775807],[CAST('18446744073709551615' AS UNSIGNED),CAST('0' AS UNSIGNED)],-0.5,CAST('18446744073709551615' AS DOUBLE)/2),
+(4,[9223372036854775807,-9223372036854775808],[CAST('18446744073709551615' AS UNSIGNED),CAST('1' AS UNSIGNED)],-0.5,CAST('9223372036854775808' AS DOUBLE)),
+(5,[9223372036854775807,1],[CAST('18446744073709551615' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED),CAST('0' AS UNSIGNED)],CAST('9223372036854775808' AS DOUBLE)/2,(CAST('18446744073709551615' AS DOUBLE)*2)/3),
+(6,[0,-1],[CAST('0' AS UNSIGNED),CAST('1' AS UNSIGNED)],-0.5,0.5),
+(7,[1,NULL],[CAST('1' AS UNSIGNED),NULL],0.5,0.5),
+(8,NULL,NULL,NULL,NULL),
+(9,[NULL,NULL],[NULL,NULL],0,0),
+(10,[1,2,3],[CAST('1' AS UNSIGNED),CAST('2' AS UNSIGNED),CAST('3' AS UNSIGNED)],2,2),
+(11,[9223372036854775807,9223372036854775807,-9223372036854775808,-9223372036854775808],[CAST('2' AS UNSIGNED),CAST('4' AS UNSIGNED)],-0.5,3),
+(12,[-9223372036854775808,-9223372036854775808,9223372036854775807,9223372036854775807],[CAST('4' AS UNSIGNED),CAST('2' AS UNSIGNED)],-0.5,3),
+(13,[9223372036854775807,1,-9223372036854775807],[CAST('1' AS UNSIGNED),CAST('2' AS UNSIGNED)],CAST(1 AS DOUBLE)/3,1.5),
+(14,[-9223372036854775807,9223372036854775807,1],[CAST('2' AS UNSIGNED),CAST('1' AS UNSIGNED)],CAST(1 AS DOUBLE)/3,1.5);
+
+--echo integer_column_averages
+SELECT id,array_avg(s)<=>expected_s AS signed_ok,array_avg(u)<=>expected_u AS unsigned_ok FROM array_avg_integer_bounds ORDER BY id;
+
+--echo scalar_subquery_average
+SELECT array_avg((SELECT s FROM array_avg_integer_bounds WHERE id=1))=CAST('9223372036854775807' AS DOUBLE) AS scalar_signed_ok,array_avg((SELECT u FROM array_avg_integer_bounds WHERE id=1))=CAST('18446744073709551615' AS DOUBLE) AS scalar_unsigned_ok;
+
+--echo cancellation_keeps_low_bits
+SELECT array_avg(s) AS average FROM array_avg_integer_bounds WHERE id IN (3,4) ORDER BY id;
+
+--echo existing_empty_null_semantics
+SELECT array_avg(array_filter((x)->false,s)) IS NULL AS empty_is_null,array_avg(NULL) IS NULL AS null_is_null FROM array_avg_integer_bounds WHERE id=1;
+
+--echo small_integer_and_float_controls
+SELECT array_avg([1,2,3])=2 AS small_ok,array_avg([1.5,2.5])=2 AS float_ok;
+
+--echo sum_still_rejects_signed_overflow
+--error 1690
+SELECT array_sum(s) FROM array_avg_integer_bounds WHERE id=1;
+--echo sum_still_rejects_unsigned_overflow
+--error 1690
+SELECT array_sum(u) FROM array_avg_integer_bounds WHERE id=1;
+DROP TABLE array_avg_integer_bounds;
+--enable_query_log
+
+--echo # ARRAY_DIFFERENCE integer boundaries
+# ARRAY_DIFFERENCE returns signed BIGINT even when its inputs are unsigned.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS array_difference_unsigned_bounds;
+DROP TABLE IF EXISTS array_difference_signed_bounds;
+--enable_warnings
+CREATE TABLE array_difference_unsigned_bounds(id INT PRIMARY KEY,a ARRAY(BIGINT UNSIGNED));
+INSERT INTO array_difference_unsigned_bounds VALUES(1,[CAST('18446744073709551614' AS UNSIGNED),CAST('1' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(2,[CAST('18446744073709551615' AS UNSIGNED),CAST('1' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(3,[CAST('0' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(4,[CAST('18446744073709551615' AS UNSIGNED),CAST('18446744073709551614' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(5,[CAST('18446744073709551614' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(6,[CAST('18446744073709551615' AS UNSIGNED),CAST('9223372036854775807' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(7,[CAST('9223372036854775808' AS UNSIGNED),CAST('0' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(8,[CAST('9223372036854775807' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(9,[CAST('0' AS UNSIGNED),CAST('9223372036854775807' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(10,[CAST('9223372036854775807' AS UNSIGNED),CAST('0' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(11,[CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(12,[CAST('18446744073709551615' AS UNSIGNED),CAST('18446744073709551615' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(13,NULL);
+INSERT INTO array_difference_unsigned_bounds VALUES(14,array_filter((x)->false,[CAST('1' AS UNSIGNED)]));
+INSERT INTO array_difference_unsigned_bounds VALUES(15,[CAST('0' AS UNSIGNED),CAST('1' AS UNSIGNED),CAST('2' AS UNSIGNED)]);
+INSERT INTO array_difference_unsigned_bounds VALUES(16,[CAST('1' AS UNSIGNED),NULL]);
+INSERT INTO array_difference_unsigned_bounds VALUES
+  (17,[CAST('9223372036854775807' AS UNSIGNED),
+       CAST('9223372036854775808' AS UNSIGNED),
+       CAST('9223372036854775807' AS UNSIGNED)]);
+--echo unsigned_differences_cross_signed_boundary
+SELECT array_difference(a) AS d FROM array_difference_unsigned_bounds WHERE id=17;
+--echo unsigned_out_of_range_1
+--error 1690
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=1;
+--echo unsigned_out_of_range_2
+--error 1690
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=2;
+--echo unsigned_out_of_range_3
+--error 1690
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=3;
+--echo unsigned_out_of_range_8
+--error 1690
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=8;
+--echo unsigned_representable_differences
+SELECT id,array_difference(a) AS d FROM array_difference_unsigned_bounds WHERE id IN (4,5,6,7,9,10,11,12,13,14,15) ORDER BY id;
+--echo unsigned_batch_two_rows
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,array_difference(a) AS d FROM array_difference_unsigned_bounds WHERE id IN (4,5,6,7,9,10,11,12,13,14,15) ORDER BY id;
+--echo unsigned_scalar_subquery
+SELECT array_difference((SELECT a FROM array_difference_unsigned_bounds WHERE id=6)) AS d;
+CREATE TABLE array_difference_signed_bounds(id INT PRIMARY KEY,a ARRAY(BIGINT));
+INSERT INTO array_difference_signed_bounds VALUES(1,[CAST('9223372036854775807' AS SIGNED),CAST('-1' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(2,[CAST('-9223372036854775808' AS SIGNED),CAST('-1' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(3,[CAST('-1' AS SIGNED),CAST('9223372036854775807' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(4,[CAST('-9223372036854775808' AS SIGNED),CAST('9223372036854775807' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(5,[CAST('9223372036854775807' AS SIGNED),CAST('-9223372036854775808' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(6,[CAST('-9223372036854775808' AS SIGNED),CAST('-9223372036854775808' AS SIGNED)]);
+INSERT INTO array_difference_signed_bounds VALUES(7,[CAST('1' AS SIGNED),CAST('2' AS SIGNED),CAST('3' AS SIGNED)]);
+--echo signed_representable_boundaries
+SELECT id,array_difference(a) AS d FROM array_difference_signed_bounds WHERE id IN (1,2,6,7) ORDER BY id;
+--echo signed_out_of_range_3
+--error 1690
+SELECT array_difference(a) FROM array_difference_signed_bounds WHERE id=3;
+--echo signed_out_of_range_4
+--error 1690
+SELECT array_difference(a) FROM array_difference_signed_bounds WHERE id=4;
+--echo signed_out_of_range_5
+--error 1690
+SELECT array_difference(a) FROM array_difference_signed_bounds WHERE id=5;
+--echo existing_null_element_rejection
+--disable_result_log
+--error 1235
+SELECT array_difference(a) FROM array_difference_unsigned_bounds WHERE id=16;
+--enable_result_log
+--echo small_integer_and_float_controls
+SELECT array_difference([1,2,3])=[0,1,1] AS small_ok,array_difference([1.5,2.5])=[0.0,1.0] AS float_ok;
+DROP TABLE array_difference_signed_bounds;
+DROP TABLE array_difference_unsigned_bounds;
+--enable_query_log
+
+--echo # Array lambda evaluation
+# Real columns and more than one nonempty row are required to expose SQL lambda invalidation.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS lambda_capture_int;
+DROP TABLE IF EXISTS lambda_capture_big;
+DROP TABLE IF EXISTS lambda_capture_rand;
+--enable_warnings
+CREATE TABLE lambda_capture_int(id INT PRIMARY KEY,a ARRAY(INT),n ARRAY(ARRAY(INT)));
+INSERT INTO lambda_capture_int VALUES(1,[1,2],[[1,2],[3]]),(2,[3,4],[[4],[5,6]]),(3,[5,6],[[7,8]]),(4,NULL,NULL),(5,array_filter((x)->(x IS NULL),[1]),NULL),(6,[NULL,7],[[NULL,1],[2]]),(7,[8],[[3]]),(8,[9,10,11],[[4,5]]);
+CREATE TABLE lambda_capture_big(id INT PRIMARY KEY,a ARRAY(BIGINT),n ARRAY(ARRAY(BIGINT)));
+INSERT INTO lambda_capture_big SELECT * FROM lambda_capture_int;
+CREATE TABLE lambda_capture_rand(id INT PRIMARY KEY,a ARRAY(INT));
+INSERT INTO lambda_capture_rand VALUES(1,[0,0,0]),(2,[0,0,0]),(3,[0,0,0]);
+
+--echo ordinary_array_lambdas
+SELECT id, array_map((x)->(x*2),a) AS m, array_map((x,y)->(x+10*y),a,a) AS zipped,
+       array_filter((x)->(x>2),a) AS f, array_sortby((x)->(-x),a) AS s
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo constant_lambda_without_bound_parameters
+SELECT id, array_map((x)->42,a) AS m
+FROM lambda_capture_int WHERE id IN (1,4,5,8) ORDER BY id;
+
+--echo ordinary_array_first
+SELECT id, array_first((x,y)->(10*x > 10*y),a,reverse(a)) AS first_match,
+       array_first((x)->(1=0),a) AS no_match
+FROM lambda_capture_int WHERE id IN (1,2,4,5,8) ORDER BY id;
+
+--echo shared_reverse_int
+SELECT id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
+
+--echo shared_reverse_bigint
+SELECT id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_big WHERE id<=3 ORDER BY id;
+
+--echo reverse_projection_order
+SELECT id,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m,reverse(a) AS r FROM lambda_capture_int WHERE id<=3 ORDER BY id;
+
+--echo shared_compact
+SELECT id,array_compact(a) AS r,array_map((x)->(x+cardinality(array_compact(a))),array_compact(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
+
+--echo rowsets_0_null_empty_varying
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */ id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int ORDER BY id;
+
+--echo rowsets_1_null_empty_varying
+SELECT /*+ OPT_PARAM('rowsets_max_rows',1) */ id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int ORDER BY id;
+
+--echo rowsets_2_null_empty_varying
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int ORDER BY id;
+
+--echo rowsets_3_null_empty_varying
+SELECT /*+ OPT_PARAM('rowsets_max_rows',3) */ id,reverse(a) AS r,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int ORDER BY id;
+
+--echo rowsets_2_bigint_reverse_order
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,array_map((x)->(x+cardinality(reverse(a))),reverse(a)) AS m,reverse(a) AS r FROM lambda_capture_big ORDER BY id;
+
+--echo captured_only_varying
+SELECT id,reverse(a) AS r,array_map((x)->cardinality(reverse(a)),reverse(a)) AS m FROM lambda_capture_int ORDER BY id;
+
+--echo two_bound_parameters
+SELECT id,reverse(a) AS r,array_map((x,y)->(x+y+cardinality(reverse(a))),reverse(a),a) AS m FROM lambda_capture_int WHERE id IN (1,2,3,7,8) ORDER BY id;
+
+--echo repeated_bound_parameter
+SELECT id,reverse(a) AS r,array_map((x)->(x+x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
+
+--echo shared_filter
+SELECT id,reverse(a) AS r,array_filter((x)->(x>array_min(reverse(a))),reverse(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
+
+--echo shared_sortby
+SELECT id,reverse(a) AS r,array_sortby((x)->(x+cardinality(reverse(a))),reverse(a)) AS m FROM lambda_capture_int WHERE id<=3 ORDER BY id;
+
+--echo shared_first_scalar
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */ id, reverse(a) AS r,
+       array_first((x)->(x < array_max(reverse(a))),reverse(a)) AS m
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo shared_first_batch
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id, reverse(a) AS r,
+       array_first((x)->(x < array_max(reverse(a))),reverse(a)) AS m
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo nested_row_capture
+SELECT id,reverse(a) AS r,array_map((x)->array_map((y)->(y+cardinality(reverse(a))),x),n) AS m FROM lambda_capture_int WHERE id IN (1,2,3,7,8) ORDER BY id;
+
+--echo nested_bigint_row_capture
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,reverse(a) AS r,array_map((x)->array_map((y)->(y+cardinality(reverse(a))),x),n) AS m FROM lambda_capture_big WHERE id IN (1,2,3,7,8) ORDER BY id;
+
+# Round the seeded sequence to integers for consistent output formatting.
+--echo random_seeded_scalar
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */ id,
+       array_map((x)->CAST(ROUND((x + RAND(42)) * 1000000) AS SIGNED),a) AS m
+FROM lambda_capture_rand ORDER BY id;
+
+--echo random_seeded_batch
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,
+       array_map((x)->CAST(ROUND((x + RAND(42)) * 1000000) AS SIGNED),a) AS m
+FROM lambda_capture_rand ORDER BY id;
+
+# Give each parameter its own subexpression so stale results from either one are visible.
+--echo random_seeded_two_parameters_scalar
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */ id,
+       array_map((x,y)->(10*x + 100*y + CAST(ROUND(RAND(42) * 1000000) AS SIGNED)),a,reverse(a)) AS m
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo random_seeded_two_parameters_batch
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,
+       array_map((x,y)->(10*x + 100*y + CAST(ROUND(RAND(42) * 1000000) AS SIGNED)),a,reverse(a)) AS m
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo random_seeded_without_bound_parameters
+SELECT id, array_map((x)->CAST(ROUND(RAND(42) * 1000000) AS SIGNED),a) AS m
+FROM lambda_capture_rand ORDER BY id;
+
+--echo random_seeded_first_filter_sortby
+SELECT /*+ OPT_PARAM('rowsets_max_rows',2) */ id,
+       array_first((x)->(RAND(42) < 0.5),a) AS first_match,
+       array_filter((x)->(x >= 0 AND RAND(42) < 0.5),a) AS filtered,
+       array_sortby((x)->RAND(42),a) AS sorted
+FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
+
+--echo first_stops_after_matching
+SET @lambda_first_counter = 0;
+SELECT array_first((x)->((@lambda_first_counter := @lambda_first_counter + 1) = 2),a) AS first_match
+FROM lambda_capture_int WHERE id = 8;
+SELECT @lambda_first_counter AS predicate_calls;
+SET @lambda_first_counter = NULL;
+
+--echo empty_lambda_parameter_list
+--disable_result_log
+--error 1064
+SELECT array_map(()->42,a) FROM lambda_capture_int WHERE id = 1;
+--enable_result_log
+
+--echo random_and_uuid_per_element
+SELECT id, cardinality(array_distinct(array_map((x)->RANDOM(42),a))) AS random_samples,
+       cardinality(array_distinct(array_map((x)->UUID(),a))) AS uuid_samples,
+       cardinality(array_distinct(array_map((x)->UUID_SHORT(),a))) AS short_uuid_samples
+FROM lambda_capture_rand ORDER BY id;
+
+--echo random_bytes_per_element
+SELECT id, cardinality(array_distinct(array_map((x)->HEX(RANDOM_BYTES(32)),a))) AS constant_length,
+       cardinality(array_distinct(array_map((x)->HEX(RANDOM_BYTES(id + 31)),a))) AS captured_length
+FROM lambda_capture_rand ORDER BY id;
+
+--echo random_bytes_across_rows
+SELECT LENGTH(RANDOM_BYTES(32)) AS byte_length;
+SELECT COUNT(DISTINCT HEX(RANDOM_BYTES(32))) AS distinct_values FROM lambda_capture_rand;
+
+--echo independent_random_calls
+SELECT id, RANDOM_BYTES(id + 31) = RANDOM_BYTES(id + 31) AS equal_bytes,
+       UUID() = UUID() AS equal_uuids, UUID_SHORT() = UUID_SHORT() AS equal_short_uuids
+FROM lambda_capture_rand ORDER BY id;
+
+--echo user_variable_per_element
+SET @lambda_capture_counter = 0;
+SELECT id, array_map((x)->(@lambda_capture_counter := @lambda_capture_counter + 1),a) AS m
+FROM lambda_capture_rand ORDER BY id;
+SELECT @lambda_capture_counter AS counter;
+SET @lambda_capture_counter = NULL;
+
+--echo statement_timestamp
+SET SESSION timestamp = 1700000000.123456;
+SELECT id, array_map((x)->(x + CAST(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(6)) * 1000000 AS SIGNED)),a) AS m
+FROM lambda_capture_int WHERE id <= 2 ORDER BY id;
+SET SESSION timestamp = DEFAULT;
+
+# Separate the clock reads and check their distinctness without recording wall-clock values.
+--echo per_element_sysdate
+SELECT /*+ OPT_PARAM('rowsets_max_rows',0) */
+       cardinality(array_distinct(array_map((x)->(x + SLEEP(0.05) +
+           CAST(UNIX_TIMESTAMP(SYSDATE(6)) * 1000000 AS SIGNED)),a))) AS distinct_timestamps
+FROM lambda_capture_rand WHERE id = 1;
+
+DROP TABLE lambda_capture_rand;
+DROP TABLE lambda_capture_big;
+DROP TABLE lambda_capture_int;
+--enable_query_log
+
 #########################################################################
 # test cmp (= != > < ), only = != supported
 #########################################################################

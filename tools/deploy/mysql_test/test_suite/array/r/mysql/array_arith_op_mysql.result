@@ -1651,6 +1651,315 @@ select @var1 := c2 from arr_t1;
 ERROR 0A000: Variable value set to collection type not supported
 drop table arr_t1;
 drop table arr_t2;
+# ARRAY_AVG integer boundaries
+row_avg_at_integer_bounds
+signed_ok	unsigned_ok
+1	1
+integer_column_averages
+id	signed_ok	unsigned_ok
+1	1	1
+2	1	1
+3	1	1
+4	1	1
+5	1	1
+6	1	1
+7	1	1
+8	1	1
+9	1	1
+10	1	1
+11	1	1
+12	1	1
+13	1	1
+14	1	1
+scalar_subquery_average
+scalar_signed_ok	scalar_unsigned_ok
+1	1
+cancellation_keeps_low_bits
+average
+-0.5
+-0.5
+existing_empty_null_semantics
+empty_is_null	null_is_null
+0	1
+small_integer_and_float_controls
+small_ok	float_ok
+1	1
+sum_still_rejects_signed_overflow
+ERROR 22003: Array value is out of range in 'BIGINT'
+sum_still_rejects_unsigned_overflow
+ERROR 22003: Array value is out of range in 'BIGINT UNSIGNED'
+# ARRAY_DIFFERENCE integer boundaries
+unsigned_differences_cross_signed_boundary
+d
+[0,1,-1]
+unsigned_out_of_range_1
+ERROR 22003: Array value is out of range in 'BIGINT'
+unsigned_out_of_range_2
+ERROR 22003: Array value is out of range in 'BIGINT'
+unsigned_out_of_range_3
+ERROR 22003: Array value is out of range in 'BIGINT'
+unsigned_out_of_range_8
+ERROR 22003: Array value is out of range in 'BIGINT'
+unsigned_representable_differences
+id	d
+4	[0,-1]
+5	[0,1]
+6	[0,-9223372036854775808]
+7	[0,-9223372036854775808]
+9	[0,9223372036854775807]
+10	[0,-9223372036854775807]
+11	[0]
+12	[0,0]
+13	NULL
+14	[]
+15	[0,1,1]
+unsigned_batch_two_rows
+id	d
+4	[0,-1]
+5	[0,1]
+6	[0,-9223372036854775808]
+7	[0,-9223372036854775808]
+9	[0,9223372036854775807]
+10	[0,-9223372036854775807]
+11	[0]
+12	[0,0]
+13	NULL
+14	[]
+15	[0,1,1]
+unsigned_scalar_subquery
+d
+[0,-9223372036854775808]
+signed_representable_boundaries
+id	d
+1	[0,-9223372036854775808]
+2	[0,9223372036854775807]
+6	[0,0]
+7	[0,1,1]
+signed_out_of_range_3
+ERROR 22003: Array value is out of range in 'BIGINT'
+signed_out_of_range_4
+ERROR 22003: Array value is out of range in 'BIGINT'
+signed_out_of_range_5
+ERROR 22003: Array value is out of range in 'BIGINT'
+existing_null_element_rejection
+small_integer_and_float_controls
+small_ok	float_ok
+1	1
+# Array lambda evaluation
+ordinary_array_lambdas
+id	m	zipped	f	s
+1	[2,4]	[11,22]	[]	[2,1]
+2	[6,8]	[33,44]	[3,4]	[4,3]
+8	[18,20,22]	[99,110,121]	[9,10,11]	[11,10,9]
+constant_lambda_without_bound_parameters
+id	m
+1	[42,42]
+4	NULL
+5	[]
+8	[42,42,42]
+ordinary_array_first
+id	first_match	no_match
+1	2	NULL
+2	4	NULL
+4	NULL	NULL
+5	NULL	NULL
+8	11	NULL
+shared_reverse_int
+id	r	m
+1	[2,1]	[4,3]
+2	[4,3]	[6,5]
+3	[6,5]	[8,7]
+shared_reverse_bigint
+id	r	m
+1	[2,1]	[4,3]
+2	[4,3]	[6,5]
+3	[6,5]	[8,7]
+reverse_projection_order
+id	m	r
+1	[4,3]	[2,1]
+2	[6,5]	[4,3]
+3	[8,7]	[6,5]
+shared_compact
+id	r	m
+1	[1,2]	[3,4]
+2	[3,4]	[5,6]
+3	[5,6]	[7,8]
+rowsets_0_null_empty_varying
+id	r	m
+1	[2,1]	[4,3]
+2	[4,3]	[6,5]
+3	[6,5]	[8,7]
+4	NULL	NULL
+5	[]	[]
+6	[7,NULL]	[9,NULL]
+7	[8]	[9]
+8	[11,10,9]	[14,13,12]
+rowsets_1_null_empty_varying
+id	r	m
+1	[2,1]	[4,3]
+2	[4,3]	[6,5]
+3	[6,5]	[8,7]
+4	NULL	NULL
+5	[]	[]
+6	[7,NULL]	[9,NULL]
+7	[8]	[9]
+8	[11,10,9]	[14,13,12]
+rowsets_2_null_empty_varying
+id	r	m
+1	[2,1]	[4,3]
+2	[4,3]	[6,5]
+3	[6,5]	[8,7]
+4	NULL	NULL
+5	[]	[]
+6	[7,NULL]	[9,NULL]
+7	[8]	[9]
+8	[11,10,9]	[14,13,12]
+rowsets_3_null_empty_varying
+id	r	m
+1	[2,1]	[4,3]
+2	[4,3]	[6,5]
+3	[6,5]	[8,7]
+4	NULL	NULL
+5	[]	[]
+6	[7,NULL]	[9,NULL]
+7	[8]	[9]
+8	[11,10,9]	[14,13,12]
+rowsets_2_bigint_reverse_order
+id	m	r
+1	[4,3]	[2,1]
+2	[6,5]	[4,3]
+3	[8,7]	[6,5]
+4	NULL	NULL
+5	[]	[]
+6	[9,NULL]	[7,NULL]
+7	[9]	[8]
+8	[14,13,12]	[11,10,9]
+captured_only_varying
+id	r	m
+1	[2,1]	[2,2]
+2	[4,3]	[2,2]
+3	[6,5]	[2,2]
+4	NULL	NULL
+5	[]	[]
+6	[7,NULL]	[2,2]
+7	[8]	[1]
+8	[11,10,9]	[3,3,3]
+two_bound_parameters
+id	r	m
+1	[2,1]	[5,5]
+2	[4,3]	[9,9]
+3	[6,5]	[13,13]
+7	[8]	[17]
+8	[11,10,9]	[23,23,23]
+repeated_bound_parameter
+id	r	m
+1	[2,1]	[6,4]
+2	[4,3]	[10,8]
+3	[6,5]	[14,12]
+shared_filter
+id	r	m
+1	[2,1]	[2]
+2	[4,3]	[4]
+3	[6,5]	[6]
+shared_sortby
+id	r	m
+1	[2,1]	[1,2]
+2	[4,3]	[3,4]
+3	[6,5]	[5,6]
+shared_first_scalar
+id	r	m
+1	[2,1]	1
+2	[4,3]	3
+8	[11,10,9]	10
+shared_first_batch
+id	r	m
+1	[2,1]	1
+2	[4,3]	3
+8	[11,10,9]	10
+nested_row_capture
+id	r	m
+1	[2,1]	[[3,4],[5]]
+2	[4,3]	[[6],[7,8]]
+3	[6,5]	[[9,10]]
+7	[8]	[[4]]
+8	[11,10,9]	[[7,8]]
+nested_bigint_row_capture
+id	r	m
+1	[2,1]	[[3,4],[5]]
+2	[4,3]	[[6],[7,8]]
+3	[6,5]	[[9,10]]
+7	[8]	[[4]]
+8	[11,10,9]	[[7,8]]
+random_seeded_scalar
+id	m
+1	[662911,151644,769488]
+2	[392506,654067,92816]
+3	[501880,230954,649127]
+random_seeded_batch
+id	m
+1	[662911,151644,769488]
+2	[392506,654067,92816]
+3	[501880,230954,649127]
+random_seeded_two_parameters_scalar
+id	m
+1	[663121,151764]
+2	[769918,392846]
+8	[655257,93916,502890]
+random_seeded_two_parameters_batch
+id	m
+1	[663121,151764]
+2	[769918,392846]
+8	[655257,93916,502890]
+random_seeded_without_bound_parameters
+id	m
+1	[662911,151644,769488]
+2	[392506,654067,92816]
+3	[501880,230954,649127]
+random_seeded_first_filter_sortby
+id	first_match	filtered	sorted
+1	2	[2]	[2,1]
+2	4	[4]	[4,3]
+8	10	[10]	[10,11,9]
+first_stops_after_matching
+first_match
+10
+predicate_calls
+2
+empty_lambda_parameter_list
+random_and_uuid_per_element
+id	random_samples	uuid_samples	short_uuid_samples
+1	3	3	3
+2	3	3	3
+3	3	3	3
+random_bytes_per_element
+id	constant_length	captured_length
+1	3	3
+2	3	3
+3	3	3
+random_bytes_across_rows
+byte_length
+32
+distinct_values
+3
+independent_random_calls
+id	equal_bytes	equal_uuids	equal_short_uuids
+1	0	0	0
+2	0	0	0
+3	0	0	0
+user_variable_per_element
+id	m
+1	[1,2,3]
+2	[4,5,6]
+3	[7,8,9]
+counter
+9
+statement_timestamp
+id	m
+1	[1700000000123457,1700000000123458]
+2	[1700000000123459,1700000000123460]
+per_element_sysdate
+distinct_timestamps
+3
 select [1,2] > [1,null];
 ERROR 22000: Invalid data type for the operation
 select [1,2] < [1,null];
