@@ -15,6 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def tool(name, layout):
+    if layout == "linux" and name in ("objcopy", "strip"):
+        # Older LLVM tools can misalign PT_LOAD segments rewritten by patchelf.
+        result = shutil.which(name)
+        if not result:
+            raise ValueError("Linux symbol packaging requires GNU binutils: " + name)
+        return result
     directories = []
     if layout == "android" and os.environ.get("ANDROID_NDK_HOME"):
         directories += sorted((Path(os.environ["ANDROID_NDK_HOME"]) / "toolchains/llvm/prebuilt").glob("*/bin"))
@@ -57,6 +63,17 @@ def elf_section_headers(path):
 
 def elf_sections(path):
     return set(elf_section_headers(path))
+
+
+def reject_split_dwarf(path, layout):
+    if not elf_sections(path) & {".debug_abbrev", ".zdebug_abbrev"}:
+        return
+    reader = tool("readelf", layout)
+    command = ([tool("dwarfdump", layout), "--debug-abbrev"] if Path(reader).name.startswith("llvm-") else
+               [reader, "--debug-dump=abbrev"])
+    abbreviations = subprocess.check_output([*command, str(path)], text=True)
+    if re.search(r"^\s*DW_AT_(?:GNU_)?dwo_name\b", abbreviations, re.MULTILINE):
+        raise ValueError("Split DWARF symbols are not supported: %s; rebuild without -gsplit-dwarf" % path)
 
 
 def verify_debuglink(path, symbol):
@@ -201,6 +218,7 @@ def separate(root, destination, layout, original, primary):
         symbol = None
         identity = None
         if kind == "elf" and has_debug(path, kind):
+            reject_split_dwarf(path, layout)
             symbol = destination / relative.with_name(path.name + ".debug")
             symbol.parent.mkdir(parents=True, exist_ok=True)
             subprocess.run([tool("objcopy", layout), "--only-keep-debug", "--keep-section=.gnu_debugdata",

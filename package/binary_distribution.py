@@ -17,6 +17,10 @@ from collections import deque
 
 LINUX_INTERPRETERS = {"x86_64": "/lib64/ld-linux-x86-64.so.2",
                       "aarch64": "/lib/ld-linux-aarch64.so.1"}
+GLIBC_SONAMES = {"libc.so.6", "libm.so.6", "libmvec.so.1", "libdl.so.2", "librt.so.1",
+                 "libpthread.so.0", "libresolv.so.2", "libutil.so.1", "libanl.so.1",
+                 "libthread_db.so.1", "libBrokenLocale.so.1",
+                 "libnss_compat.so.2", "libnss_dns.so.2", "libnss_files.so.2"}
 
 
 def digest(path):
@@ -52,13 +56,22 @@ def dynamic(binary):
     return subprocess.check_output(["readelf", "-dW", str(binary)], text=True)
 
 
+def dynamic_strings(metadata, tag):
+    return re.findall(r"^\s*0x[0-9a-fA-F]+\s+\(" + re.escape(tag) + r"\)[^\n]*?\[(.*?)\]",
+                      metadata, re.MULTILINE)
+
+
+def linux_system_libraries(arch):
+    return GLIBC_SONAMES | {Path(LINUX_INTERPRETERS[arch]).name}
+
+
 def linux_dynamic(binary):
     metadata = dynamic(binary)
     tags = re.findall(r"^\s*0x[0-9a-fA-F]+\s+\(([^)]+)\)\s*(.*)$", metadata, re.MULTILINE)
-    filters = sorted({tag for tag, _ in tags if tag in ("FILTER", "AUXILIARY")})
-    if filters:
-        raise ValueError("unsupported Linux ELF filter tags %s in %s; relink without ELF filters" %
-                         (", ".join("DT_" + tag for tag in filters), binary))
+    unsupported = sorted({tag for tag, _ in tags if tag in ("FILTER", "AUXILIARY", "AUDIT", "DEPAUDIT")})
+    if unsupported:
+        raise ValueError("unsupported Linux ELF dynamic tags %s in %s; relink without these tags" %
+                         (", ".join("DT_" + tag for tag in unsupported), binary))
     if any(tag == "FLAGS_1" and "NODEFLIB" in value.split() for tag, value in tags):
         raise ValueError("unsupported Linux ELF DF_1_NODEFLIB in %s; relink without -z nodefaultlib" % binary)
     return metadata
@@ -205,7 +218,6 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
     libraries = prefix / "lib/seekdb"
     libraries.mkdir(parents=True)
     executable = prefix / "bin/seekdb"
-    system = re.compile(r"^(ld-linux[^/]*|lib(c|m|mvec|dl|rt|pthread|resolv|util|anl|thread_db|BrokenLocale|nss_[^.]*)\.so)(\.|$)")
     loader_help = linux_loader_help()
     ldconfig = shutil.which("ldconfig") or "/sbin/ldconfig"
     cache = linux_cache(subprocess.check_output([ldconfig, "-p"], text=True,
@@ -215,6 +227,7 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
     identities = {}
     loaded = set()
     executable_arch = architecture(executable, "linux")
+    system = linux_system_libraries(executable_arch)
     libdir = None
     native_platform = None
     defaults = [Path(name) for name in re.findall(r"^\s+(/\S+) \(system search path\)$", loader_help, re.MULTILINE)]
@@ -250,7 +263,7 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
             return False
 
     def enqueue(source, name, inherited=()):
-        if system.match(name):
+        if name in system:
             raise ValueError("system runtime libraries must not be bundled: %s" % name)
         source = source.absolute()
         if linux_hwcaps_path(source):
@@ -271,7 +284,7 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
         identities[identity] = name
         origins[name] = canonical
         loaded.add(name)
-        loaded.update(re.findall(r"\(SONAME\).*?\[(.*?)\]", linux_dynamic(source)))
+        loaded.update(dynamic_strings(linux_dynamic(source), "SONAME"))
         target = libraries / name
         shutil.copyfile(source, target)
         target.chmod(0o755)
@@ -299,9 +312,9 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
         search.extend(paths.get("RUNPATH", ()))
         search.extend(directories)
         rpaths = [value for _, value in tags]
-        needed = re.findall(r"\(NEEDED\).*?\[(.*?)\]", metadata)
+        needed = dynamic_strings(metadata, "NEEDED")
         for name in needed:
-            if system.match(name) or name in loaded:
+            if name in system or name in loaded:
                 continue
             if Path(name).name != name:
                 raise ValueError("runtime dependency must use a library basename: %s" % name)
@@ -625,6 +638,15 @@ def load(source, destination, version=None):
         for path in binaries:
             if architecture(path, "linux") != metadata["arch"]:
                 raise ValueError("Linux runtime architecture mismatch: %s" % path)
+        records = [(path, linux_dynamic(path)) for path in binaries]
+        available = {path.name for path in binaries}
+        available.update(name for _, data in records for name in dynamic_strings(data, "SONAME"))
+        system = linux_system_libraries(metadata["arch"])
+        for path, data in records:
+            missing = set(dynamic_strings(data, "NEEDED")) - system - available
+            if missing:
+                raise ValueError("unbundled Linux dependencies in %s: %s; re-export the binary package" %
+                                 (path, ", ".join(sorted(missing))))
         required = glibc_requirement(binaries)
         if version_tuple(required) > version_tuple(metadata["glibc"]):
             raise ValueError("binary package requires GLIBC_%s, exceeding manifest baseline %s" %
