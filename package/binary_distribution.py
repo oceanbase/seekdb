@@ -49,6 +49,18 @@ def dynamic(binary):
     return subprocess.check_output(["readelf", "-dW", str(binary)], text=True)
 
 
+def linux_dynamic(binary):
+    metadata = dynamic(binary)
+    tags = re.findall(r"^\s*0x[0-9a-fA-F]+\s+\(([^)]+)\)\s*(.*)$", metadata, re.MULTILINE)
+    filters = sorted({tag for tag, _ in tags if tag in ("FILTER", "AUXILIARY")})
+    if filters:
+        raise ValueError("unsupported Linux ELF filter tags %s in %s; relink without ELF filters" %
+                         (", ".join("DT_" + tag for tag in filters), binary))
+    if any(tag == "FLAGS_1" and "NODEFLIB" in value.split() for tag, value in tags):
+        raise ValueError("unsupported Linux ELF DF_1_NODEFLIB in %s; relink without -z nodefaultlib" % binary)
+    return metadata
+
+
 def elf_relocation_page_size(binary):
     with binary.open("rb") as stream:
         header = stream.read(64)
@@ -71,6 +83,8 @@ def elf_relocation_page_size(binary):
 def glibc_requirement(binaries):
     versions = set()
     for binary in binaries:
+        # Reused bundles and raw system packages need the same loader constraints.
+        linux_dynamic(binary)
         output = subprocess.check_output(["readelf", "--version-info", "-W", str(binary)], text=True)
         special = re.findall(r"\bName: (GLIBC_[A-Za-z][A-Za-z0-9_]*)\b", output)
         if special:
@@ -231,13 +245,13 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
         identities[identity] = name
         origins[name] = canonical
         loaded.add(name)
-        loaded.update(re.findall(r"\(SONAME\).*?\[(.*?)\]", dynamic(source)))
+        loaded.update(re.findall(r"\(SONAME\).*?\[(.*?)\]", linux_dynamic(source)))
         target = libraries / name
         shutil.copyfile(source, target)
         target.chmod(0o755)
         pending.append((source, target, inherited))
 
-    root_paths = dict(re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", dynamic(original)))
+    root_paths = dict(re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", linux_dynamic(original)))
     root_inherited = () if "RUNPATH" in root_paths else search_paths(root_paths.get("RPATH", ""), original)
     environment = search_paths(os.environ.get("LD_LIBRARY_PATH", ""), original, environment=True)
     extras = deque(extra_libraries)
@@ -249,7 +263,7 @@ def linux_libraries(prefix, original, directories, extra_libraries, fallback_dir
             if not pending:
                 continue
         source, target, inherited = pending.popleft()
-        metadata = dynamic(source)
+        metadata = linux_dynamic(source)
         tags = re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", metadata)
         paths = {kind: search_paths(value, source) for kind, value in tags}
         if "RUNPATH" not in paths:
