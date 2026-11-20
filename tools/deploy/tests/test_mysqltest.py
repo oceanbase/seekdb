@@ -157,7 +157,9 @@ class MysqltestTest(unittest.TestCase):
         self.assertEqual(exc.exception.code, 2)
 
     def test_client_environment_adds_packaged_libraries_and_preserves_existing_paths(self):
-        client = self.root / "client/bin/obclient"
+        # client_environment resolves the client path, so expect the canonical
+        # form too; macOS temp directories live under the /var symlink.
+        client = (self.root / "client/bin/obclient").resolve()
         (client.parent.parent / "lib").mkdir(parents=True)
         (client.parent.parent / "lib64").mkdir()
         inherited = {"PATH": "/existing/bin", "LD_LIBRARY_PATH": "/existing/lib"}
@@ -171,7 +173,7 @@ class MysqltestTest(unittest.TestCase):
         ]))
 
     def test_client_environment_uses_darwin_loader_path(self):
-        client = self.root / "client/bin/obclient"
+        client = (self.root / "client/bin/obclient").resolve()
         (client.parent.parent / "lib").mkdir(parents=True)
         with mock.patch.dict(runner.sdb.os.environ, {"PATH": "/existing/bin"}, clear=True), \
                 mock.patch.object(runner.sdb.sys, "platform", "darwin"):
