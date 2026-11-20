@@ -1,0 +1,96 @@
+DROP TABLE IF EXISTS vector_absorption_t;
+CREATE TABLE vector_absorption_t (
+id INT PRIMARY KEY,
+embedding VECTOR(3),
+category INT,
+parity VARCHAR(8),
+INDEX idx_category(category),
+VECTOR INDEX idx_vec(embedding)
+WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO vector_absorption_t VALUES
+(1, '[1,0,0]', 1, 'odd'),
+(2, '[2,0,0]', 2, 'even'),
+(3, '[3,0,0]', 1, 'even'),
+(4, '[4,0,0]', 2, 'odd'),
+(5, '[5,0,0]', NULL, 'even'),
+(6, '[6,0,0]', 1, NULL),
+(7, '[7,0,0]', NULL, NULL),
+(8, '[8,0,0]', NULL, 'odd');
+# P AND (P OR Q) reduces to P and keeps the vector index access path.
+EXPLAIN BASIC SELECT /*+ INDEX(t idx_category) */ id FROM vector_absorption_t t
+WHERE category = 1 AND (category = 1 OR parity = 'even')
+ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10;
+Query Plan
+============================================================
+|ID|OPERATOR                               |NAME           |
+------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t(idx_category)|
+============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.category = 1]),rowset=N
+      access([t.__pk_increment],[t.category],[t.id]),partitions(p0)
+      is_index_back=true,is_global_index=false,filter_before_indexback[true],
+      range_key([t.category],[t.__pk_increment]),range(1,MIN ; 1,MAX)
+SELECT id FROM vector_absorption_t
+WHERE category = 1 AND (category = 1 OR parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+3
+6
+# P OR (P AND Q) also preserves SQL NULL semantics.
+SELECT id FROM vector_absorption_t
+WHERE category = 1 OR (category = 1 AND parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+3
+6
+# A balanced tree of 1024 OR branches must produce the same small plan.
+Query Plan
+============================================================
+|ID|OPERATOR                               |NAME           |
+------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t(idx_category)|
+============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.category = 1]),rowset=N
+      access([t.__pk_increment],[t.category],[t.id]),partitions(p0)
+      is_index_back=true,is_global_index=false,filter_before_indexback[true],
+      range_key([t.category],[t.__pk_increment]),range(1,MIN ; 1,MAX)
+id
+1
+3
+6
+# Different predicates must not be absorbed.
+SELECT id FROM vector_absorption_t
+WHERE category = 1 AND (category = 2 OR parity = 'even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10;
+id
+3
+# Reused prepared statements must respect parameter equality constraints.
+PREPARE absorption_stmt FROM
+'SELECT id FROM vector_absorption_t WHERE category = ? AND (category = ? OR parity = ?) ORDER BY l2_distance(embedding, ''[0,0,0]'') APPROXIMATE LIMIT 10';
+SET @p = 1, @other = 1, @q = 'even';
+EXECUTE absorption_stmt USING @p, @other, @q;
+id
+1
+3
+6
+SET @other = 2;
+EXECUTE absorption_stmt USING @p, @other, @q;
+id
+3
+SET @p = 2;
+EXECUTE absorption_stmt USING @p, @other, @q;
+id
+2
+4
+SET @p = NULL, @other = NULL;
+EXECUTE absorption_stmt USING @p, @other, @q;
+id
+DEALLOCATE PREPARE absorption_stmt;
+DROP TABLE vector_absorption_t;
