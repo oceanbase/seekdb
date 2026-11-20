@@ -31,6 +31,15 @@ void assign_scn(SCN &scn, const uint64_t value)
 {
   scn = from_rust_scn(value);
 }
+
+palf_rs::DiskPolicy to_rust_disk_policy(const PalfDiskOptions &options)
+{
+  return palf_rs::DiskPolicy {
+      static_cast<uint64_t>(options.log_disk_usage_limit_size_),
+      static_cast<uint8_t>(options.log_disk_utilization_limit_threshold_),
+      static_cast<uint8_t>(options.log_disk_throttling_percentage_),
+      static_cast<uint64_t>(options.log_disk_throttling_maximum_duration_)};
+}
 }
 
 PalfHandleImpl::PalfHandleImpl()
@@ -54,13 +63,13 @@ PalfHandleImpl::~PalfHandleImpl()
 
 int PalfHandleImpl::init(const AccessMode &access_mode,
     const PalfBaseInfo &palf_base_info, const char *log_dir,
-    const int64_t disk_limit, const common::ObAddr &self, const int64_t palf_epoch)
+    const PalfDiskOptions &disk_options, const common::ObAddr &self, const int64_t palf_epoch)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (!is_valid_access_mode(access_mode) || !palf_base_info.is_valid()
-             || OB_ISNULL(log_dir) || disk_limit < 0 || !self.is_valid() || palf_epoch < 0) {
+             || OB_ISNULL(log_dir) || !disk_options.is_valid() || !self.is_valid() || palf_epoch < 0) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     palf_rs::BaseInfo base {
@@ -70,7 +79,7 @@ int PalfHandleImpl::init(const AccessMode &access_mode,
         palf_base_info.prev_log_info_.log_id_,
         static_cast<uint64_t>(palf_base_info.prev_log_info_.accum_checksum_)};
     stream_.emplace(palf_rs::create_stream(
-        ::rust::Str(log_dir), base, 0, static_cast<uint64_t>(disk_limit)));
+        ::rust::Str(log_dir), base, 0, to_rust_disk_policy(disk_options)));
     ret = from_rust_code(palf_rs::status_ffi(**stream_));
     if (OB_SUCC(ret)) {
       access_mode_ = access_mode;
@@ -84,17 +93,17 @@ int PalfHandleImpl::init(const AccessMode &access_mode,
   return ret;
 }
 
-int PalfHandleImpl::load(const char *log_dir, const int64_t disk_limit,
+int PalfHandleImpl::load(const char *log_dir, const PalfDiskOptions &disk_options,
     const common::ObAddr &self, const int64_t palf_epoch, bool &is_integrity)
 {
   int ret = OB_SUCCESS;
   is_integrity = false;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(log_dir) || disk_limit < 0 || !self.is_valid() || palf_epoch < 0) {
+  } else if (OB_ISNULL(log_dir) || !disk_options.is_valid() || !self.is_valid() || palf_epoch < 0) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    stream_.emplace(palf_rs::open_stream(::rust::Str(log_dir), static_cast<uint64_t>(disk_limit)));
+    stream_.emplace(palf_rs::open_stream(::rust::Str(log_dir), to_rust_disk_policy(disk_options)));
     ret = from_rust_code(palf_rs::status_ffi(**stream_));
     if (OB_SUCC(ret)) {
       is_integrity = palf_rs::integrity_ffi(**stream_);
@@ -126,14 +135,14 @@ void PalfHandleImpl::destroy()
   }
 }
 
-int PalfHandleImpl::set_disk_limit(const int64_t disk_limit)
+int PalfHandleImpl::set_disk_options(const PalfDiskOptions &disk_options)
 {
   RLockGuard guard(lock_);
   int ret = OB_SUCCESS;
-  if (!is_inited_ || disk_limit < 0) {
+  if (!is_inited_ || !disk_options.is_valid()) {
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
   } else {
-    ret = from_rust_code(palf_rs::set_disk_limit_ffi(**stream_, static_cast<uint64_t>(disk_limit)));
+    ret = from_rust_code(palf_rs::set_disk_policy_ffi(**stream_, to_rust_disk_policy(disk_options)));
   }
   return ret;
 }

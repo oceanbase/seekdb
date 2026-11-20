@@ -23,11 +23,59 @@ use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::time::Duration;
 
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
 const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN2";
+const THROTTLE_CHECK_INTERVAL: Duration = Duration::from_millis(30);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DiskPolicy {
+    pub capacity: u64,
+    pub stop_percentage: u8,
+    pub throttle_percentage: u8,
+    pub max_throttle_duration_us: u64,
+}
+
+impl DiskPolicy {
+    pub const fn with_capacity(capacity: u64) -> Self {
+        Self {
+            capacity,
+            stop_percentage: 100,
+            throttle_percentage: 100,
+            max_throttle_duration_us: 0,
+        }
+    }
+
+    fn validate(self) -> Result<()> {
+        if self.stop_percentage == 0
+            || self.throttle_percentage < 40
+            || (self.throttle_percentage < 100 && self.max_throttle_duration_us == 0)
+        {
+            Err(Error::Invalid)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn hard_limit(self) -> u64 {
+        self.capacity.saturating_mul(self.stop_percentage as u64) / 100
+    }
+
+    fn throttle_limit(self) -> Option<u64> {
+        if self.throttle_percentage < self.stop_percentage && self.capacity > 0 {
+            Some(
+                self.capacity
+                    .saturating_mul(self.throttle_percentage as u64)
+                    / 100,
+            )
+        } else {
+            None
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct BaseInfo {
@@ -97,7 +145,7 @@ struct State {
     end_scn: u64,
     next_log_id: i64,
     accumulated_checksum: u64,
-    disk_limit: u64,
+    disk_policy: DiskPolicy,
     integrity: bool,
     closed: bool,
     failed: Option<Error>,
@@ -105,6 +153,7 @@ struct State {
 
 struct StreamInner {
     state: Mutex<State>,
+    changed: Condvar,
 }
 
 pub struct Stream {
@@ -156,7 +205,7 @@ impl Stream {
             end_scn: 0,
             next_log_id: 1,
             accumulated_checksum: 0,
-            disk_limit: 0,
+            disk_policy: DiskPolicy::with_capacity(0),
             integrity: false,
             closed: false,
             failed: Some(error),
@@ -164,20 +213,62 @@ impl Stream {
         Self {
             inner: Arc::new(StreamInner {
                 state: Mutex::new(state),
+                changed: Condvar::new(),
             }),
         }
     }
 
     pub fn create(path: &str, base: BaseInfo, ref_scn: u64, disk_limit: u64) -> Self {
-        Self::from_result(create_state(Path::new(path), base, ref_scn, disk_limit))
+        Self::create_with_policy(path, base, ref_scn, DiskPolicy::with_capacity(disk_limit))
+    }
+
+    pub fn create_with_policy(
+        path: &str,
+        base: BaseInfo,
+        ref_scn: u64,
+        disk_policy: DiskPolicy,
+    ) -> Self {
+        Self::from_result(create_state(Path::new(path), base, ref_scn, disk_policy))
     }
 
     pub fn open(path: &str, disk_limit: u64) -> Self {
-        Self::from_result(open_state(Path::new(path), disk_limit))
+        Self::open_with_policy(path, DiskPolicy::with_capacity(disk_limit))
+    }
+
+    pub fn open_with_policy(path: &str, disk_policy: DiskPolicy) -> Self {
+        Self::from_result(open_state(Path::new(path), disk_policy))
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, State>> {
         self.inner.state.lock().map_err(|_| Error::Io)
+    }
+
+    fn lock_for_write(&self, write_size: u64) -> Result<MutexGuard<'_, State>> {
+        let mut state = self.lock()?;
+        loop {
+            state.check_writable()?;
+            let Some(mut remaining) = state.throttle_delay(write_size) else {
+                return Ok(state);
+            };
+            loop {
+                let wait = remaining.min(THROTTLE_CHECK_INTERVAL);
+                let (next, timeout) = self
+                    .inner
+                    .changed
+                    .wait_timeout(state, wait)
+                    .map_err(|_| Error::Io)?;
+                state = next;
+                state.check_writable()?;
+                if timeout.timed_out() {
+                    remaining = remaining.saturating_sub(wait);
+                    if remaining.is_zero() {
+                        return Ok(state);
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     pub fn status(&self) -> Result<bool> {
@@ -190,8 +281,7 @@ impl Stream {
         if payload.is_empty() || payload.len() > MAX_LOG_BODY_SIZE || ref_scn == u64::MAX {
             return Err(Error::Invalid);
         }
-        let mut state = self.lock()?;
-        state.check_writable()?;
+        let mut state = self.lock_for_write(payload.len() as u64)?;
         let scn = ref_scn.max(state.end_scn.saturating_add(1));
         let entry = encode_entry(payload, scn, false);
         let group_len = GROUP_HEADER_SIZE + entry.len();
@@ -241,8 +331,7 @@ impl Stream {
         source_scn: u64,
         bytes: &[u8],
     ) -> Result<AppendResult> {
-        let mut state = self.lock()?;
-        state.check_writable()?;
+        let mut state = self.lock_for_write(bytes.len() as u64)?;
         if source_lsn < state.end_lsn {
             return Err(Error::Duplicate);
         }
@@ -293,12 +382,7 @@ impl Stream {
             .next()
             .map(|(_, record)| record.header.max_scn)
             .unwrap_or(state.manifest.previous.prev_scn);
-        let current_block = block_id(state.end_lsn);
-        let unrecyclable_disk = state
-            .segment_lengths
-            .get(&current_block)
-            .copied()
-            .unwrap_or(0);
+        let unrecyclable_disk = state.end_lsn.saturating_sub(state.manifest.base_lsn);
         Ok(Progress {
             begin_lsn,
             begin_scn,
@@ -360,13 +444,20 @@ impl Stream {
         sync_directory(&state.directory)?;
         state.records = state.records.split_off(&lsn);
         drop(state);
+        self.inner.changed.notify_all();
         self.progress()
     }
 
     pub fn set_disk_limit(&self, disk_limit: u64) -> Result<()> {
+        self.set_disk_policy(DiskPolicy::with_capacity(disk_limit))
+    }
+
+    pub fn set_disk_policy(&self, disk_policy: DiskPolicy) -> Result<()> {
+        disk_policy.validate()?;
         let mut state = self.lock()?;
         state.check_open()?;
-        state.disk_limit = disk_limit;
+        state.disk_policy = disk_policy;
+        self.inner.changed.notify_all();
         Ok(())
     }
 
@@ -419,6 +510,7 @@ impl Stream {
     pub fn close(&self) -> Result<()> {
         let mut state = self.lock()?;
         state.closed = true;
+        self.inner.changed.notify_all();
         Ok(())
     }
 
@@ -635,7 +727,8 @@ impl State {
     }
 
     fn ensure_capacity(&self, additional: u64) -> Result<()> {
-        if self.disk_limit == 0 {
+        let hard_limit = self.disk_policy.hard_limit();
+        if hard_limit == 0 {
             return Ok(());
         }
         let used: u64 = self.segment_lengths.values().sum();
@@ -647,11 +740,32 @@ impl State {
             } else {
                 SEGMENT_HEADER_SIZE
             };
-        if used.saturating_add(required) > self.disk_limit {
+        if used.saturating_add(required) > hard_limit {
             Err(Error::NoSpace)
         } else {
             Ok(())
         }
+    }
+
+    fn throttle_delay(&self, write_size: u64) -> Option<Duration> {
+        let trigger = self.disk_policy.throttle_limit()?;
+        let current = self.end_lsn.saturating_sub(self.manifest.base_lsn);
+        if current <= trigger {
+            return None;
+        }
+        let available = self.disk_policy.hard_limit().saturating_sub(trigger);
+        if available == 0 {
+            return None;
+        }
+        let after = current
+            .saturating_sub(trigger)
+            .saturating_add(write_size)
+            .min(available);
+        let delay_us = (self.disk_policy.max_throttle_duration_us as u128)
+            .saturating_mul(write_size as u128)
+            .saturating_mul(after as u128)
+            / (available as u128 * available as u128);
+        Some(Duration::from_micros(delay_us.min(u64::MAX as u128) as u64))
     }
 
     fn write_padding(&mut self, lsn: u64, remaining: u64, scn: u64) -> Result<()> {
@@ -765,10 +879,16 @@ impl State {
     }
 }
 
-fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64, disk_limit: u64) -> Result<State> {
+fn create_state(
+    directory: &Path,
+    base: BaseInfo,
+    ref_scn: u64,
+    disk_policy: DiskPolicy,
+) -> Result<State> {
     if base.curr_lsn < base.prev_lsn || ref_scn == u64::MAX {
         return Err(Error::Invalid);
     }
+    disk_policy.validate()?;
     fs::create_dir_all(directory)?;
     let manifest = Manifest {
         base_lsn: base.curr_lsn,
@@ -792,14 +912,15 @@ fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64, disk_limit: u64)
         manifest,
         records: BTreeMap::new(),
         segment_lengths: BTreeMap::new(),
-        disk_limit,
+        disk_policy,
         integrity: true,
         closed: false,
         failed: None,
     })
 }
 
-fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
+fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
+    disk_policy.validate()?;
     let manifest = read_manifest(directory)?;
     let committed = manifest.committed;
     if committed.end_lsn < manifest.base_lsn {
@@ -954,7 +1075,7 @@ fn open_state(directory: &Path, disk_limit: u64) -> Result<State> {
         end_scn,
         next_log_id,
         accumulated_checksum,
-        disk_limit,
+        disk_policy,
         integrity: true,
         closed: false,
         failed: None,
@@ -1185,13 +1306,36 @@ mod tests {
         for index in 0..70 {
             stream.append(&large, index + 1).unwrap();
         }
+        assert_eq!(
+            stream.progress().unwrap().unrecyclable_disk,
+            stream.progress().unwrap().end_lsn
+        );
         let checkpoint = BLOCK_SIZE;
-        stream.set_base_lsn(checkpoint).unwrap();
+        let progress = stream.set_base_lsn(checkpoint).unwrap();
+        assert_eq!(progress.unrecyclable_disk, progress.end_lsn - checkpoint);
         assert!(!segment_path(&directory.0, 0).exists());
         drop(stream);
         let reopened = Stream::open(&path, 0);
         assert_eq!(reopened.progress().unwrap().base_lsn, checkpoint);
         assert_eq!(reopened.base_info(checkpoint).unwrap().curr_lsn, checkpoint);
+    }
+
+    #[test]
+    fn cursor_owns_current_bytes_but_does_not_pin_old_segments() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let large = vec![7; 1024 * 1024];
+        for index in 0..70 {
+            stream.append(&large, index + 1).unwrap();
+        }
+        let mut cursor = stream.cursor(0, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), large);
+        stream.set_base_lsn(BLOCK_SIZE).unwrap();
+        assert!(!segment_path(&directory.0, 0).exists());
+        assert_eq!(cursor.payload(), large);
+        assert_eq!(cursor.next(u64::MAX), Err(Error::OutLower));
     }
 
     #[test]
@@ -1207,8 +1351,59 @@ mod tests {
         let target_path = target_directory.0.to_string_lossy().into_owned();
         let target = Stream::create(&target_path, base(), 0, 0);
         assert_eq!(target.append_imported(1, 10, &bytes), Err(Error::Invalid));
+        assert_eq!(target.append_imported(0, 11, &bytes), Err(Error::Invalid));
+        let mut corrupted = bytes.clone();
+        let last = corrupted.len() - 1;
+        corrupted[last] ^= 1;
+        assert_eq!(
+            target.append_imported(0, 10, &corrupted),
+            Err(Error::Corrupt)
+        );
         target.append_imported(0, 10, &bytes).unwrap();
         assert_eq!(target.append_imported(0, 10, &bytes), Err(Error::Duplicate));
+        let header = validate_group(&bytes, 0).unwrap();
+        let next_lsn = bytes.len() as u64;
+        let entry = encode_entry(b"two", 11, false);
+        let wrong_id = encode_group(
+            &entry,
+            next_lsn,
+            11,
+            header.log_id + 2,
+            header.accumulated_checksum,
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            target.append_imported(next_lsn, 11, &wrong_id),
+            Err(Error::Invalid)
+        );
+        let next = encode_group(
+            &entry,
+            next_lsn,
+            11,
+            header.log_id + 1,
+            header.accumulated_checksum,
+            false,
+        )
+        .unwrap();
+        target.append_imported(next_lsn, 11, &next).unwrap();
+    }
+
+    #[test]
+    fn product_log_body_limit_is_enforced() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let largest = vec![7; MAX_LOG_BODY_SIZE];
+        let accepted = stream.append(&largest, 10).unwrap();
+        assert_eq!(
+            stream.append(&vec![8; MAX_LOG_BODY_SIZE + 1], 11),
+            Err(Error::Invalid)
+        );
+        assert_eq!(stream.progress().unwrap().end_lsn, accepted.end_lsn);
+        let mut cursor = stream.cursor(0, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), largest);
     }
 
     #[test]
@@ -1304,6 +1499,59 @@ mod tests {
         stream.append(b"one", 10).unwrap();
         stream.set_disk_limit(1).unwrap();
         assert_eq!(stream.append(b"two", 11), Err(Error::NoSpace));
+    }
+
+    #[test]
+    fn stop_threshold_bounds_writes_and_can_be_raised() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        stream
+            .set_disk_policy(DiskPolicy {
+                capacity: 16_384,
+                stop_percentage: 50,
+                throttle_percentage: 100,
+                max_throttle_duration_us: 0,
+            })
+            .unwrap();
+        stream.append(&vec![0; 3000], 10).unwrap();
+        assert_eq!(stream.append(&vec![0; 3000], 11), Err(Error::NoSpace));
+        assert!(stream.progress().unwrap().used_disk <= 8192);
+        stream.set_disk_limit(16_384).unwrap();
+        stream.append(&vec![0; 3000], 11).unwrap();
+    }
+
+    #[test]
+    fn close_interrupts_throttled_write_before_io() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Arc::new(Stream::create(&path, base(), 0, 0));
+        stream.append(&vec![0; 400], 10).unwrap();
+        stream
+            .set_disk_policy(DiskPolicy {
+                capacity: 1024,
+                stop_percentage: 100,
+                throttle_percentage: 40,
+                max_throttle_duration_us: 5_000_000,
+            })
+            .unwrap();
+        let writer = Arc::clone(&stream);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            sender.send(writer.append(&vec![0; 400], 11)).unwrap();
+        });
+        std::thread::sleep(Duration::from_millis(30));
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
+        ));
+        stream.close().unwrap();
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_secs(1)),
+            Ok(Err(Error::Closed))
+        );
+        thread.join().unwrap();
+        assert!(matches!(stream.progress(), Err(Error::Closed)));
     }
 
     #[test]
