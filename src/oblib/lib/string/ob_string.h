@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <ctype.h>
 #include <cstring>
+#include <limits>
 #include <ostream>
 #include "lib/ob_define.h"
 #include "lib/utility/alloc_assist.h"
@@ -953,6 +954,52 @@ int ob_sub_str(AllocatorT &allocator, const ObString &src, int32_t start_index, 
   return ret;
 }
 
+template <typename AllocatorT>
+int ob_escape_sql_identifier(
+    AllocatorT &allocator,
+    const ObString &src,
+    ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const ObString::obstr_size_t src_len = src.length();
+  const char escape_character = '`';
+
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
+    dst.assign(NULL, 0);
+  } else if (NULL == src.find(escape_character)) {
+    dst = src;
+  } else {
+    int64_t escaped_len = src_len;
+    for (int64_t i = 0; i < src_len; ++i) {
+      if (escape_character == src[i]) {
+        ++escaped_len;
+      }
+    }
+
+    void *ptr = NULL;
+    if (OB_UNLIKELY(escaped_len > (std::numeric_limits<int32_t>::max)())) {
+      dst.assign(NULL, 0);
+      ret = OB_SIZE_OVERFLOW;
+      LIB_LOG(ERROR, "escaped identifier is too long", K(ret), K(escaped_len));
+    } else if (NULL == (ptr = allocator.alloc(escaped_len + 1))) {
+      dst.assign(NULL, 0);
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LIB_LOG(ERROR, "allocate memory failed", K(ret), K(escaped_len));
+    } else {
+      char *dst_ptr = static_cast<char *>(ptr);
+      int64_t dst_pos = 0;
+      for (int64_t i = 0; i < src_len; ++i) {
+        if (escape_character == src[i]) {
+          dst_ptr[dst_pos++] = escape_character;
+        }
+        dst_ptr[dst_pos++] = src[i];
+      }
+      dst_ptr[dst_pos] = '\0';
+      dst.assign_ptr(dst_ptr, static_cast<ObString::obstr_size_t>(dst_pos));
+    }
+  }
+  return ret;
+}
 template <typename AllocatorT>
 int ob_dup_cstring(AllocatorT &allocator, const ObString &src, char* &dst)
 {
