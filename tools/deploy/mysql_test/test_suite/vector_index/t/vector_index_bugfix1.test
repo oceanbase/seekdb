@@ -662,4 +662,85 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1538: zero addition must retain the column's range selectivity for ANN
+--disable_warnings
+drop table if exists t_issue1538_zero_add;
+--enable_warnings
+create table t_issue1538_zero_add(
+  id bigint primary key,
+  age int,
+  embedding vector(3) not null,
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+--disable_query_log
+--let $row = 1
+while ($row <= 100)
+{
+  eval insert into t_issue1538_zero_add values ($row, $row, '[$row,0,0]');
+  --inc $row
+}
+--enable_query_log
+insert into t_issue1538_zero_add values (101, null, '[101,0,0]');
+--disable_result_log
+analyze table t_issue1538_zero_add;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1538_ZERO_ADD', numrows=>200000);
+--enable_result_log
+
+select count(*) as differing_rows from t_issue1538_zero_add
+where not ((age > 10) <=> (((age + 0) + 0) > 10));
+select count(*) as reversed_zero_differences from t_issue1538_zero_add
+where not ((age > 10) <=> (((0 + age) + 0) > 10));
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1538_zero_add where age > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_zero_add where ((age + 0) + 0) > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_zero_add where ((age + 0) + 1) > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator, count(*) as plan_count
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1538_zero_add') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+group by p.operator
+order by p.operator;
+
+prepare issue1538_param from
+  'select count(*) as eligible_rows from t_issue1538_zero_add where ((age + ?) + 0) > 10';
+set @issue1538_offset = 0;
+execute issue1538_param using @issue1538_offset;
+set @issue1538_offset = 1;
+execute issue1538_param using @issue1538_offset;
+deallocate prepare issue1538_param;
+
+drop table t_issue1538_zero_add;
+
+# These checks cover SQL result semantics. Noninteger expressions are not eligible
+# for the signed-integer zero-add statistics path.
+--disable_warnings
+drop table if exists t_issue1538_types;
+--enable_warnings
+create table t_issue1538_types(
+  id int primary key,
+  signed_edge bigint,
+  unsigned_val bigint unsigned,
+  decimal_val decimal(10,2),
+  double_val double,
+  text_val varchar(8));
+insert into t_issue1538_types values
+  (1, 9223372036854775807, 18446744073709551615, 10.50, 10.5, '20'),
+  (2, -9223372036854775808, 0, 9.50, 9.5, '2');
+select
+  sum(not ((signed_edge > 0) <=> (((signed_edge + 0) + 0) > 0))) as bigint_differences,
+  sum(not ((unsigned_val > 10) <=> ((unsigned_val + 0) > 10))) as unsigned_differences,
+  sum(not ((decimal_val > 10) <=> ((decimal_val + 0) > 10))) as decimal_differences,
+  sum(not ((double_val > 10) <=> ((double_val + 0) > 10))) as double_differences,
+  sum(not ((text_val > '100') <=> ((text_val + 0) > 100))) as text_conversion_differences
+from t_issue1538_types;
+drop table t_issue1538_types;
+
 alter system set vector_memory_limit = 0;
