@@ -25,10 +25,13 @@ Examples run only when selected from the **Examples** menu.
 Keep the server running; press Ctrl+C in its terminal to stop it.
 
 The launcher copies `seekdb_wasm_database.mjs`, `seekdb_wasm_database.wasm`, and
-`engine-version.mjs` into this checkout's ignored `build_wasm_shell/`
-directory. It serves the shell and JavaScript API from this checkout, so reloading
-the page picks up source edits. The server binds to `127.0.0.1` and serves an
-explicit list of assets. It does not expose the repository or execute SQL.
+`engine-version.mjs` into a separate temporary directory under the checkout's
+ignored `build_wasm_shell/` directory for each server. Launching another server
+with a different build does not replace these files. The launcher removes its
+temporary copies on normal shutdown. It serves the shell and JavaScript API
+from this checkout, so reloading the page picks up source edits. The server
+binds to `127.0.0.1` and serves an explicit list of assets. It does not expose
+the repository or execute SQL.
 Reusing another build is appropriate when its engine source and toolchain match;
 rebuild after changing C++, Rust, or the runtime ABI. Builds from
 `feature/webassembly` predate the storage argument and the WasmFS link, so they
