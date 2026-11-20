@@ -1,0 +1,41 @@
+# Shared DDL must quote names without depending on SQL-layer utilities.
+connection default;
+--disable_warnings
+drop database if exists ddl_identifier_quoting;
+--enable_warnings
+create database ddl_identifier_quoting;
+use ddl_identifier_quoting;
+
+# ENUM/SET need a cast in the generated index-build SELECT. Nullable unique
+# keys also exercise the generated shadow-column alias.
+create table enum_names(id int primary key, `e``n` enum('a','b'));
+insert into enum_names values (1,'a'),(2,'b'),(3,null),(4,null);
+create unique index uq on enum_names(`e``n`);
+select id from enum_names force index(uq) where `e``n` is not null order by id;
+--error 1062
+insert into enum_names values (5,'a');
+select count(*) from enum_names;
+
+create table set_names(id int primary key, ```集合````名``` set('a','b'));
+insert into set_names values (1,'a'),(2,'a,b'),(3,null),(4,null);
+create unique index uq on set_names(```集合````名```);
+select id from set_names force index(uq) where ```集合````名``` is not null order by id;
+--error 1062
+update set_names set ```集合````名``` = 'a' where id = 2;
+select id, ```集合````名``` from set_names order by id;
+
+# Ordinary names, keywords, and names without ENUM/SET casts stay valid.
+create table ordinary_names(id int primary key, value enum('a','b'), `select` int, `v``c` varchar(20));
+insert into ordinary_names values (1,'a',10,'first'),(2,'b',20,'second'),(3,null,null,null),(4,null,null,null);
+create unique index uq_value on ordinary_names(value);
+create unique index uq_keyword on ordinary_names(`select`);
+create unique index uq_quoted on ordinary_names(`v``c`);
+select id from ordinary_names force index(uq_value) where value is not null order by id;
+select id from ordinary_names force index(uq_keyword) where `select` is not null order by id;
+select id from ordinary_names force index(uq_quoted) where `v``c` is not null order by id;
+--error 1062
+insert into ordinary_names values (5,null,null,'first');
+select count(*) from ordinary_names;
+
+use test;
+drop database ddl_identifier_quoting;
