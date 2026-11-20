@@ -77,10 +77,12 @@ int ObShareUtil::set_default_timeout_ctx(ObTimeoutCtx &ctx, const int64_t defaul
 int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  int64_t DEFAULT_TIMEOUT_US = config::rpc_timeout(); // default is 2s
-#ifdef __APPLE__
-  // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
-  // Increase the default timeout to 10s to avoid bootstrap failure.
+       int64_t DEFAULT_TIMEOUT_US = config::rpc_timeout(); // default is 2s
+#if defined(__APPLE__) || defined(_WIN32)
+  // On Mac and Windows, the system is significantly slower due to lack of O_DIRECT
+  // and software CRC.  On Windows every file create/fsync additionally goes through
+  // the file-system filter drivers (Defender / realtime AV).  Increase the default
+  // timeout to 10s to avoid bootstrap failure.
   DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL);
 #endif
 
