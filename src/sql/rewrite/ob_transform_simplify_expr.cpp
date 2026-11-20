@@ -51,6 +51,114 @@ int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
   return ret;
 }
 
+// Compare two constant expressions by their values. ObRawExpr::same_as() is
+// too strict here: after literal parametrization two copies of the same
+// literal (e.g. the constant 1000 in "p OR (a > 1000) OR ... OR (a > 1000)")
+// may carry different internal param slots, so same_as() considers them
+// different even though they always evaluate to the same value. For value
+// deduplication of deterministic operands, value equality is what matters.
+bool dedup_const_equal(const ObRawExpr *a, const ObRawExpr *b)
+{
+  bool bret = false;
+  const ObConstRawExpr *ca = static_cast<const ObConstRawExpr *>(a);
+  const ObConstRawExpr *cb = static_cast<const ObConstRawExpr *>(b);
+  if (ca->get_value().is_equal(cb->get_value(), CS_TYPE_BINARY)) {
+    bret = true;
+  } else if (T_QUESTIONMARK == a->get_expr_type()
+             && T_QUESTIONMARK == b->get_expr_type()
+             && ca->get_result_type() == cb->get_result_type()) {
+    // static placeholders of identical literals with identical result types
+    bret = true;
+  }
+  return bret;
+}
+
+// Structural equality for deterministic AND/OR operand deduplication.
+// Conservative by design: unknown expression kinds compare unequal, so the
+// transform simply keeps them as-is.
+bool dedup_expr_equal(const ObRawExpr *a, const ObRawExpr *b)
+{
+  bool bret = false;
+  if (OB_ISNULL(a) || OB_ISNULL(b)) {
+    // unreachable for rewrite-layer expressions
+  } else if (a->get_expr_type() != b->get_expr_type()
+             || a->get_param_count() != b->get_param_count()
+             || a->get_result_type() != b->get_result_type()) {
+    // not equal
+  } else if (a->is_const_raw_expr()) {
+    bret = dedup_const_equal(a, b);
+  } else if (a->is_column_ref_expr()) {
+    const ObColumnRefRawExpr *ca = static_cast<const ObColumnRefRawExpr *>(a);
+    const ObColumnRefRawExpr *cb = static_cast<const ObColumnRefRawExpr *>(b);
+    bret = ca->get_table_id() == cb->get_table_id()
+           && ca->get_column_id() == cb->get_column_id();
+  } else if (a->is_sys_func_expr()) {
+    const ObSysFunRawExpr *fa = static_cast<const ObSysFunRawExpr *>(a);
+    const ObSysFunRawExpr *fb = static_cast<const ObSysFunRawExpr *>(b);
+    bret = 0 == fa->get_func_name().compare(fb->get_func_name());
+    for (int64_t i = 0; bret && i < a->get_param_count(); ++i) {
+      bret = dedup_expr_equal(a->get_param_expr(i), b->get_param_expr(i));
+    }
+  } else if (a->is_query_ref_expr()
+             || a->is_set_op_expr() || a->is_aggr_expr() || a->is_win_func_expr()) {
+    // keep it simple and safe: do not dedup these
+  } else {
+    bret = true;
+    for (int64_t i = 0; bret && i < a->get_param_count(); ++i) {
+      bret = dedup_expr_equal(a->get_param_expr(i), b->get_param_expr(i));
+    }
+  }
+  return bret;
+}
+
+// Deduplicate structurally identical operands of an n-ary AND/OR expression.
+// Duplicate operands are idempotent (A AND A == A, A OR A == A), but keeping
+// them, e.g. a filter "F OR p OR ... OR p" containing many copies of the same
+// predicate, makes an equivalent filter far more expensive to evaluate than
+// its original form. Operands that are not deterministic (e.g. RAND()) may
+// return different results on each evaluation, so expressions containing such
+// operands are left untouched.
+int dedup_and_or_params(ObOpRawExpr *expr, bool &is_deduped)
+{
+  int ret = OB_SUCCESS;
+  is_deduped = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null expr", K(ret));
+  } else {
+    ObSEArray<ObRawExpr *, 8> unique_params;
+    bool has_nondeterministic = false;
+    for (int64_t i = 0; OB_SUCC(ret) && !has_nondeterministic
+                        && i < expr->get_param_count(); ++i) {
+      ObRawExpr *param = expr->get_param_expr(i);
+      if (OB_ISNULL(param)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("null expr", K(ret));
+      } else if (!param->is_deterministic()) {
+        has_nondeterministic = true;
+      } else {
+        bool is_dup = false;
+        for (int64_t j = 0; !is_dup && j < unique_params.count(); ++j) {
+          is_dup = dedup_expr_equal(param, unique_params.at(j));
+        }
+        if (!is_dup && OB_FAIL(unique_params.push_back(param))) {
+          LOG_WARN("push back param failed", K(ret));
+        }
+      }
+    }
+    if (OB_SUCC(ret) && !has_nondeterministic
+        && unique_params.count() > 0
+        && unique_params.count() < expr->get_param_count()) {
+      if (OB_FAIL(expr->set_param_exprs(unique_params))) {
+        LOG_WARN("set param exprs failed", K(ret));
+      } else {
+        is_deduped = true;
+      }
+    }
+  }
+  return ret;
+}
+
 }
 
 int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
@@ -816,6 +924,7 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(is_valid_transform_type(expr, is_valid_type))) {
   } else if (!is_valid_type) {
+    /* do nothing */
   } else {
     // remove dummy filter for children exprs first
     ObOpRawExpr *op_expr = static_cast<ObOpRawExpr*>(expr);
@@ -832,7 +941,21 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
         op_expr->get_param_expr(i) = temp;
       }
     }
+    bool is_deduped = false;
+    LOG_INFO("DEBUG1489: visit and/or", "etype", op_expr->get_expr_type(),
+             "params", op_expr->get_param_count(), K(is_valid_type), K(ret));
     if (OB_FAIL(ret)) {
+    } else if (T_OP_AND != op_expr->get_expr_type()
+               && T_OP_OR != op_expr->get_expr_type()) {
+      /* do nothing */
+    } else if (OB_FAIL(dedup_and_or_params(op_expr, is_deduped))) {
+      LOG_WARN("deduplicate and or params failed", K(ret));
+    }
+    if (OB_FAIL(ret)) {
+    } else if (is_deduped && 1 == op_expr->get_param_count()) {
+      // All duplicate operands collapsed into a single one: replace the
+      // AND/OR expression with its only remaining operand.
+      expr = op_expr->get_param_expr(0);
     } else if (OB_UNLIKELY(op_expr->get_param_count() <= 1)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (op_expr->get_param_count() > 1) {
