@@ -440,6 +440,74 @@ Python 开发者可通过 SQLAlchemy 或任何 MySQL 驱动来访问。
 
 </details>
 
+<details>
+<summary><b>⚖️ SQL — 混合搜索的归一化与加权</b></summary>
+
+上面的写法用全文匹配做过滤，再用向量距离给命中的文档排序。如果希望某篇文档只在其中一路信号上表现好也能被召回，就需要两路都打分再融合。原始分值不能直接相加：`MATCH ... AGAINST` 返回的相关性分数越大越好，而 `l2_distance` 返回的是距离，越小越好。做法是在候选集内对两路信号分别做 min-max 归一化，把距离翻转成相似度，再加权求和：
+
+```sql
+-- 1) 候选集：两路各取 top-k，UNION 去重
+-- 2) 为每个候选打两路分
+-- 3) min-max 归一化：距离翻转，统一成越大越好
+-- 4) 加权求和；w_fts / w_vec 按业务取舍，这里取 0.3 / 0.7
+WITH candidates AS (
+  SELECT id FROM (
+    SELECT id FROM articles
+    ORDER BY l2_distance(embedding, '[0.12, 0.34, ...]') APPROXIMATE
+    LIMIT 20
+  ) AS vec_hits
+  UNION
+  SELECT id FROM (
+    SELECT id FROM articles
+    WHERE MATCH(content) AGAINST('quarterly report')
+    LIMIT 20
+  ) AS fts_hits
+),
+scored AS (
+  SELECT a.id,
+         a.title,
+         MATCH(a.content) AGAINST('quarterly report') AS fts_score,
+         l2_distance(a.embedding, '[0.12, 0.34, ...]') AS vec_distance
+  FROM articles AS a
+  JOIN candidates AS c ON c.id = a.id
+),
+normalized AS (
+  SELECT id, title,
+         COALESCE((fts_score - MIN(fts_score) OVER ())
+                  / NULLIF(MAX(fts_score) OVER () - MIN(fts_score) OVER (), 0), 0) AS fts_norm,
+         COALESCE((MAX(vec_distance) OVER () - vec_distance)
+                  / NULLIF(MAX(vec_distance) OVER () - MIN(vec_distance) OVER (), 0), 0) AS vec_norm
+  FROM scored
+)
+SELECT id, title,
+       ROUND(fts_norm, 3) AS fts_norm,
+       ROUND(vec_norm, 3) AS vec_norm,
+       ROUND(0.3 * fts_norm + 0.7 * vec_norm, 3) AS score
+FROM normalized
+ORDER BY score DESC
+LIMIT 5;
+```
+
+在一个五行的小表上，两路都强的文档排第一，只有语义命中的排第二，只有关键词命中的排第三：
+
+```text
+id  fts_norm  vec_norm  score   title
+1   0.911     0.809     0.839   Quarterly report 2026Q2
+2   0.0       1.0       0.7     Hybrid search explained
+5   1.0       0.005     0.303   Quarterly report archive
+3   0.0       0.1       0.07    Vector index deep dive
+4   0.0       0.0       0.0     Bison parser notes
+```
+
+三点提醒：
+
+- 每路的 `LIMIT` 既决定候选集大小，也决定归一化窗口。更看重召回时把它调大。
+- `NULLIF` 用于候选集只有一行、或某一路分值恒定的情况；`COALESCE` 再把这种信号记作 `0` 而不是 `NULL`。
+- 权重之所以能直接比较，是因为归一化已经把两路都压到 `[0, 1]`。如果更偏好按名次融合，可以改用每路 `1 / (k + rank)` 求和（RRF，`k = 60`），完全不需要分数归一化。
+
+</details>
+
+
 
 ## 📚 使用场景
 
