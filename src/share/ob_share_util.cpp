@@ -78,10 +78,18 @@ int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;
   int64_t DEFAULT_TIMEOUT_US = config::rpc_timeout(); // default is 2s
-#ifdef __APPLE__
-  // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
-  // Increase the default timeout to 10s to avoid bootstrap failure.
-  DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL);
+#if defined(__APPLE__) || defined(_WIN32)
+  // On platforms without O_DIRECT support the storage layer is significantly slower:
+  // reads are served through the buffered cache and block checksums are computed in
+  // software. Bootstrap issues its inner SQL through this helper, and a single statement
+  // covering a whole core table can take several seconds there, so the 2s default
+  // expires in the middle of the transaction and bootstrap aborts with -4012
+  // (OB_TIMEOUT). Raise the floor to 10s, which is what macOS already uses, so that a
+  // slow Windows bootstrap no longer fails for a reason unrelated to the request.
+  constexpr int64_t MIN_RS_DEFAULT_TIMEOUT_US = 10LL * 1000LL * 1000LL;
+  if (DEFAULT_TIMEOUT_US < MIN_RS_DEFAULT_TIMEOUT_US) {
+    DEFAULT_TIMEOUT_US = MIN_RS_DEFAULT_TIMEOUT_US;
+  }
 #endif
 
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) {
