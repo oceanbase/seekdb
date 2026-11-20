@@ -339,3 +339,11 @@ cc_library(
     includes = ["api"],
     visibility = ["//src/sql/parser:__pkg__"],
 )
+
+cc_library(
+    name = "vector_index_test_headers",
+    testonly = True,
+    deps = [":vector_index_interface"],
+    tags = ["manual"],
+    visibility = ["//unittest/query:__pkg__"],
+)
