@@ -279,6 +279,9 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  const int64_t column_cnt = T_OP_ROW == left_expr.get_expr_type()
+                                 ? left_expr.get_param_count()
+                                 : 1;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -306,9 +309,8 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       }
     }
     if (OB_SUCC(ret)) {
-      if (in_list.num_child_ < threshold) {
-      } else {
-        is_enable = true;
+      if (OB_FAIL(check_inlist_rewrite_threshold(in_list, column_cnt, is_prepare_stmt,
+                                                   threshold, is_enable))) {
       }
     }
   }
@@ -316,8 +318,6 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
   //    and whether parameter indexes correspond to what a values table expected
   if (OB_SUCC(ret) && is_enable) {
     const int64_t row_cnt = in_list.num_child_;
-    const int64_t column_cnt = T_OP_ROW == left_expr.get_expr_type() ? left_expr.get_param_count() :
-                                                                       1;
     ObSEArray<DistinctObjMeta, 4> param_types;
     ObCollationType connect_collation = CS_TYPE_INVALID;
     ObCollationType nchar_collation = session_info->get_nls_collation_nation();
