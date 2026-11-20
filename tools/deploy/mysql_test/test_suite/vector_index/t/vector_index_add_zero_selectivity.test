@@ -1,0 +1,140 @@
+# Regression: integral additions of zero must retain column range statistics
+# when choosing between ANN pre-filter and post-iterative-filter scans.
+--disable_query_log
+--disable_warnings
+drop table if exists t_vec_add_zero;
+drop table if exists t_vec_add_zero_bounds;
+--enable_warnings
+set @saved_ef_search = @@ob_hnsw_ef_search;
+set ob_hnsw_ef_search = 16;
+create table t_vec_add_zero(
+  id bigint primary key,
+  age int not null,
+  embedding vector(3),
+  key idx_age(age),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16,
+          ef_construction=128, sync_mode=immediate)) organization heap;
+--let $row = 1
+while ($row <= 1000)
+{
+  eval insert into t_vec_add_zero values ($row, $row, '[$row,0,0]');
+  --inc $row
+}
+--disable_result_log
+analyze table t_vec_add_zero;
+# Exercise the ANN path comparison without loading a large vector dataset.
+call dbms_stats.set_table_stats('TEST', 'T_VEC_ADD_ZERO', numrows=>200000);
+--enable_result_log
+
+--echo # Broad equivalent filters must have identical post-filter estimates
+alter system flush plan cache;
+--disable_result_log
+select id as base_id from t_vec_add_zero where age > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as nested_id from t_vec_add_zero where ((age + 0) + 0) > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as reversed_id from t_vec_add_zero where 10 < (0 + (age + 0))
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+select count(*) = 3 as plans_found,
+       count(distinct p.cardinality) = 1 as same_estimate,
+       min(p.operator = 'VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)') as post_filter
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_vec_add_zero') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+--echo # Narrow equivalent filters must retain the pre-filter choice
+alter system flush plan cache;
+--disable_result_log
+select id as base_id from t_vec_add_zero where age > 990
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as nested_id from t_vec_add_zero where ((age + 0) + 0) > 990
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as reversed_id from t_vec_add_zero where 990 < (0 + (age + 0))
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+select count(*) = 3 as plans_found,
+       count(distinct p.cardinality) = 1 as same_estimate,
+       min(p.operator = 'VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)') as pre_filter
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_vec_add_zero') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+--echo # BETWEEN must also reuse the column range estimate
+alter system flush plan cache;
+--disable_result_log
+select id as base_id from t_vec_add_zero where age between 11 and 1000
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as nested_id from t_vec_add_zero where ((age + 0) + 0) between 11 and 1000
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+select count(*) = 2 as plans_found,
+       count(distinct p.cardinality) = 1 as same_estimate,
+       min(p.operator = 'VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)') as post_filter
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_vec_add_zero') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+--echo # Overlapping OR ranges must be combined before estimating selectivity
+alter system flush plan cache;
+--disable_result_log
+select id as base_id from t_vec_add_zero where age > 800 or age > 900
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as nested_id from t_vec_add_zero
+where ((age + 0) + 0) > 800 or ((age + 0) + 0) > 900
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+select count(*) = 2 as plans_found,
+       count(distinct p.cardinality) = 1 as same_estimate,
+       min(p.operator = 'VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)') as pre_filter
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_vec_add_zero') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+--echo # Nested AND and OR ranges must retain the same estimate
+alter system flush plan cache;
+--disable_result_log
+select id as base_id from t_vec_add_zero
+where (age > 800 or age < 100) and age > 50
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id as nested_id from t_vec_add_zero
+where (((age + 0) + 0) > 800 or ((age + 0) + 0) < 100) and ((age + 0) + 0) > 50
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+select count(*) = 2 as plans_found,
+       count(distinct p.cardinality) = 1 as same_estimate,
+       min(p.operator = 'VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)') as pre_filter
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_vec_add_zero') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+--echo # Parameter reuse must preserve executable additions and NULL semantics
+prepare add_zero_stmt from 'select count(*) as eligible from t_vec_add_zero where ((age + ?) + ?) > 10';
+set @first_offset = 0, @second_offset = 0;
+execute add_zero_stmt using @first_offset, @second_offset;
+set @first_offset = 1000;
+execute add_zero_stmt using @first_offset, @second_offset;
+set @first_offset = NULL;
+execute add_zero_stmt using @first_offset, @second_offset;
+deallocate prepare add_zero_stmt;
+
+--echo # Nullable and boundary integer values remain equivalent
+create table t_vec_add_zero_bounds(age bigint, unsigned_age bigint unsigned);
+insert into t_vec_add_zero_bounds values
+  (NULL, NULL), (-9223372036854775808, 0), (10, 10), (11, 11),
+  (9223372036854775807, 18446744073709551615);
+select count(*) as signed_eligible from t_vec_add_zero_bounds where ((age + 0) + 0) > 10;
+select count(*) as unsigned_eligible from t_vec_add_zero_bounds where ((unsigned_age + 0) + 0) > 10;
+select count(*) as mismatches from t_vec_add_zero_bounds
+where not ((age > 10) <=> (((age + 0) + 0) > 10))
+   or not ((unsigned_age > 10) <=> (((unsigned_age + 0) + 0) > 10));
+drop table t_vec_add_zero_bounds;
+drop table t_vec_add_zero;
+set ob_hnsw_ef_search = @saved_ef_search;
+--enable_query_log
