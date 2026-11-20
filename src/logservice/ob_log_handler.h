@@ -127,10 +127,7 @@ public:
              palf::LSN &lsn,
              share::SCN &scn) override final;
   
-  int append_imported_group(const palf::LSN &source_lsn,
-                            const share::SCN &source_scn,
-                            const void *buffer,
-                            const int64_t nbytes);
+  int append_imported_groups(const palf::ImportedGroups &groups);
   void set_local_append_enabled(const bool enabled)
   {
     local_append_enabled_.store(enabled, std::memory_order_release);

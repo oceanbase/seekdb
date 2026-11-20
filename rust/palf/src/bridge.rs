@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::format::{Error, Result};
+use crate::format::{copied_bytes, Error, Result};
 use crate::stream::{self, Cursor, DiskPolicy as NativeDiskPolicy, Stream};
 
 #[cxx::bridge(namespace = "oceanbase::palf::palf_rs")]
@@ -58,6 +58,17 @@ mod ffi {
         end_scn: u64,
     }
 
+    struct ImportedGroup {
+        source_lsn: u64,
+        source_scn: u64,
+        bytes: Vec<u8>,
+    }
+
+    struct ImportedGroupResult {
+        code: Code,
+        group: ImportedGroup,
+    }
+
     struct Progress {
         code: Code,
         begin_lsn: u64,
@@ -90,12 +101,9 @@ mod ffi {
         fn status_ffi(stream: &Stream) -> Code;
         fn integrity_ffi(stream: &Stream) -> bool;
         fn append_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult;
-        fn append_imported_ffi(
-            stream: &Stream,
-            source_lsn: u64,
-            source_scn: u64,
-            bytes: &[u8],
-        ) -> AppendResult;
+        fn copy_imported_group(source_lsn: u64, source_scn: u64, bytes: &[u8])
+            -> ImportedGroupResult;
+        fn append_imported_ffi(stream: &Stream, groups: &[ImportedGroup]) -> AppendResult;
         fn progress_ffi(stream: &Stream) -> Progress;
         fn base_info_ffi(stream: &Stream, lsn: u64) -> BaseInfoResult;
         fn set_base_lsn_ffi(stream: &Stream, lsn: u64) -> Progress;
@@ -122,7 +130,10 @@ mod ffi {
     }
 }
 
-pub use ffi::{AppendResult, BaseInfo, BaseInfoResult, Code, DiskPolicy, PositionResult, Progress};
+pub use ffi::{
+    AppendResult, BaseInfo, BaseInfoResult, Code, DiskPolicy, ImportedGroup, ImportedGroupResult,
+    PositionResult, Progress,
+};
 
 impl From<DiskPolicy> for NativeDiskPolicy {
     fn from(policy: DiskPolicy) -> Self {
@@ -229,13 +240,39 @@ fn append_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult {
     }
 }
 
-fn append_imported_ffi(
-    stream: &Stream,
-    source_lsn: u64,
-    source_scn: u64,
-    bytes: &[u8],
-) -> AppendResult {
-    match stream.append_imported(source_lsn, source_scn, bytes) {
+fn copy_imported_group(source_lsn: u64, source_scn: u64, bytes: &[u8]) -> ImportedGroupResult {
+    match copied_bytes(bytes) {
+        Ok(bytes) => ImportedGroupResult {
+            code: Code::Ok,
+            group: ImportedGroup {
+                source_lsn,
+                source_scn,
+                bytes,
+            },
+        },
+        Err(error) => ImportedGroupResult {
+            code: error.into(),
+            group: ImportedGroup {
+                source_lsn: 0,
+                source_scn: 0,
+                bytes: Vec::new(),
+            },
+        },
+    }
+}
+
+fn append_imported_ffi(stream: &Stream, groups: &[ImportedGroup]) -> AppendResult {
+    let result = (|| {
+        let mut native = Vec::new();
+        native.try_reserve(groups.len()).map_err(|_| Error::NoMemory)?;
+        native.extend(groups.iter().map(|group| stream::ImportedGroup {
+            source_lsn: group.source_lsn,
+            source_scn: group.source_scn,
+            bytes: &group.bytes,
+        }));
+        stream.append_imported(&native)
+    })();
+    match result {
         Ok(result) => AppendResult {
             code: Code::Ok,
             lsn: result.lsn,

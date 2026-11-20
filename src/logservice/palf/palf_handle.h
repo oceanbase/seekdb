@@ -55,10 +55,7 @@ public:
              const share::SCN &ref_scn,
              LSN &lsn,
              share::SCN &scn);
-  int append_imported_group(const LSN &source_lsn,
-                            const share::SCN &source_scn,
-                            const void *buffer,
-                            const int64_t nbytes);
+  int append_imported_groups(const ImportedGroups &groups);
 
   // iter->next returns the value written by the append call, and will not carry the header information added by Palf in the returned buf
   //           The returned value does not include unconfirmed logs

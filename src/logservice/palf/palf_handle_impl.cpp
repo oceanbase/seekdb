@@ -174,25 +174,33 @@ int PalfHandleImpl::submit_log(const PalfAppendOptions &opts, const char *buf,
   return ret;
 }
 
-int PalfHandleImpl::submit_imported_group(const LSN &source_lsn,
-    const SCN &source_scn, const char *buf, const int64_t buf_len)
+int PalfHandleImpl::submit_imported_groups(const ImportedGroups &groups)
 {
   int ret = OB_SUCCESS;
   LSN end_lsn;
   SCN end_scn;
   RLockGuard guard(lock_);
-  if (!is_inited_ || !source_lsn.is_valid() || !source_scn.is_valid()
-      || OB_ISNULL(buf) || buf_len <= 0 || buf_len > MAX_LOG_BUFFER_SIZE) {
+  if (!is_inited_ || groups.empty()) {
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
   } else {
     IoScope io_scope(*this);
-    const auto result = palf_rs::append_imported_ffi(**stream_, source_lsn.val_,
-        source_scn.get_val_for_logservice(),
-        ::rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buf), buf_len));
-    ret = from_rust_code(result.code);
+    for (const auto &group : groups) {
+      const LSN source_lsn(static_cast<int64_t>(group.source_lsn));
+      SCN source_scn;
+      assign_scn(source_scn, group.source_scn);
+      if (!source_lsn.is_valid() || !source_scn.is_valid()
+          || group.bytes.empty() || group.bytes.size() > MAX_LOG_BUFFER_SIZE) {
+        ret = OB_INVALID_ARGUMENT;
+        break;
+      }
+    }
     if (OB_SUCC(ret)) {
-      end_lsn = LSN(result.end_lsn);
-      assign_scn(end_scn, result.end_scn);
+      const auto result = palf_rs::append_imported_ffi(**stream_, {groups.data(), groups.size()});
+      ret = from_rust_code(result.code);
+      if (OB_SUCC(ret)) {
+        end_lsn = LSN(result.end_lsn);
+        assign_scn(end_scn, result.end_scn);
+      }
     }
   }
   if (OB_SUCC(ret)) {

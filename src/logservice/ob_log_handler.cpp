@@ -164,31 +164,18 @@ int ObLogHandler::append(const void *buffer,
   return ret;
 }
 
-int ObLogHandler::append_imported_group(const palf::LSN &source_lsn,
-                                        const SCN &source_scn,
-                                        const void *buffer,
-                                        const int64_t nbytes)
+int ObLogHandler::append_imported_groups(const palf::ImportedGroups &groups)
 {
   int ret = OB_SUCCESS;
-  if (!source_lsn.is_valid() || !source_scn.is_valid()
-      || OB_ISNULL(buffer) || nbytes <= 0
-      || nbytes > palf::MAX_LOG_BUFFER_SIZE) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid imported group", K(ret), K(source_lsn), K(source_scn),
-        KP(buffer), K(nbytes));
-  } else {
-    RLockGuard guard(lock_);
-    CriticalGuard(ls_qs_);
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-    } else if (is_in_stop_state_ || is_offline_) {
-      ret = OB_NOT_RUNNING;
-    } else if (OB_FAIL(palf_handle_.append_imported_group(
-        source_lsn, source_scn, buffer, nbytes))) {
-      if (OB_EAGAIN != ret) {
-        CLOG_LOG(WARN, "appending imported group failed", K(ret), K(source_lsn),
-            K(source_scn), K(nbytes));
-      }
+  RLockGuard guard(lock_);
+  CriticalGuard(ls_qs_);
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (is_in_stop_state_ || is_offline_) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(palf_handle_.append_imported_groups(groups))) {
+    if (OB_EAGAIN != ret) {
+      CLOG_LOG(WARN, "appending imported groups failed", K(ret), K(groups.size()));
     }
   }
   return ret;
