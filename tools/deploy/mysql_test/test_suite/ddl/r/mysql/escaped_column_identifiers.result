@@ -1,0 +1,16 @@
+select `row``key` as id from ddl_escaped_columns force index(escaped_enum_idx)
+  where `state``code` = 'beta';
+id
+2
+select `row``key` as id from ddl_escaped_columns force index(escaped_set_idx)
+  where `set``flags` = 'red';
+id
+1
+select `row``key` as id from ddl_escaped_columns force index(escaped_utf8_idx)
+  where `中``文` = 'second';
+id
+2
+select `row``key` as id from ddl_escaped_columns force index(escaped_edges_idx)
+  where ```start` = 11 and `end``` = 12 and `two````ticks` = 13;
+id
+1
