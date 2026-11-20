@@ -19305,35 +19305,45 @@ int ObDDLService::create_user(ObUserInfo &user_info,
                               uint64_t &user_id)
 {
   int ret = OB_SUCCESS;
-  ObSchemaService *schema_service_impl = NULL;
-  
+  UNUSED(creator_id);
+  ObDDLSQLTransaction trans(schema_service_);
   ObSchemaGetterGuard schema_guard;
+  ObSqlString ddl_stmt_str;
+  bool name_exists = false;
+  bool id_exists = false;
+  const uint64_t requested_user_id = user_info.get_user_id();
   if (OB_FAIL(check_inner_stat())) {
-  } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
+  } else if (OB_FAIL(trans.start_with_runtime_schema(sql_proxy_, schema_guard))) {
+  } else if (OB_FAIL(schema_guard.check_user_exist(
+      user_info.get_user_name_str(), user_info.get_host_name_str(), name_exists))) {
+  } else if (!name_exists && OB_INVALID_ID != requested_user_id
+             && OB_FAIL(schema_guard.check_user_exist(requested_user_id, id_exists))) {
+  } else if (name_exists || id_exists) {
+    ret = OB_ERR_USER_EXIST;
+  } else if (OB_FAIL(ObDDLSqlGenerator::gen_create_user_sql(
+      ObAccountArg(user_info.get_user_name_str(), user_info.get_host_name_str(), user_info.is_role()),
+      user_info.get_passwd_str(), ddl_stmt_str))) {
+  } else if (OB_FAIL(ObDDLSqlGenerator::append_ssl_info_sql(user_info.get_ssl_type(),
+      user_info.get_ssl_cipher_str(), user_info.get_x509_issuer_str(),
+      user_info.get_x509_subject_str(), ddl_stmt_str))) {
   } else {
-    schema_service_impl = schema_service_->get_schema_service();
-    if (OB_ISNULL(schema_service_impl)) {
-      ret = OB_ERR_SYS;
-      LOG_ERROR("schema_service_impl must not be null", K(schema_service_impl), K(ret));
-    } else if (OB_FAIL(check_user_exist(user_info))) {
-      if (OB_ERR_USER_EXIST == ret) {
-      } else {
-      }
+    const ObString ddl_sql = ddl_stmt_str.string();
+    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
+    if (OB_FAIL(ddl_operator.create_user(user_info, &ddl_sql, trans))) {
     }
   }
 
+  if (trans.is_started()) {
+    int tmp_ret = trans.end(OB_SUCC(ret));
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_ERROR("create user transaction end failed", "commit", OB_SUCC(ret), K(tmp_ret));
+      ret = OB_SUCC(ret) ? tmp_ret : ret;
+    }
+  }
   if (OB_SUCC(ret)) {
-    // if user_id is valid, don't fetch new table id, in case of create user with user_id
-    uint64_t new_user_id = user_info.get_user_id();
-    if (OB_FAIL(schema_service_impl->fetch_new_user_id(new_user_id))) {
-    } else {
-      user_info.set_user_id(new_user_id);
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(create_user_in_trans(user_info, creator_id, user_id, schema_guard))) {
-      }
-    }
-  } else if (OB_ERR_USER_EXIST == ret) {
+    user_id = user_info.get_user_id();
+    LOG_INFO("Succeed in inserting user in user table", K(user_id),
+             "user_name", user_info.get_user_name_str());
   }
   // publish schema
   if (OB_SUCC(ret)) {
@@ -21801,50 +21811,6 @@ int ObDDLService::create_mysql_roles_in_trans(const bool if_not_exist,
   return ret;
 }
 
-int ObDDLService::create_user_in_trans(share::schema::ObUserInfo &user_info,
-                                       uint64_t creator_id,
-                                       uint64_t &user_id,
-                                       share::schema::ObSchemaGetterGuard &schema_guard)
-{
-  int ret = OB_SUCCESS;
-  ObDDLSQLTransaction trans(schema_service_);
-  
-  if (OB_FAIL(check_inner_stat())) {
-  } else {
-    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-    ObSqlString ddl_stmt_str;
-    ObString ddl_sql;
-    const bool is_role = user_info.is_role();
-    int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-    } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
-    } else if (OB_FAIL(ObDDLSqlGenerator::gen_create_user_sql(
-        ObAccountArg(user_info.get_user_name_str(), user_info.get_host_name_str(), is_role),
-        user_info.get_passwd_str(),
-        ddl_stmt_str))) {
-    } else if (OB_FAIL(ObDDLSqlGenerator::append_ssl_info_sql(user_info.get_ssl_type(),
-        user_info.get_ssl_cipher_str(), user_info.get_x509_issuer_str(),
-        user_info.get_x509_subject_str(), ddl_stmt_str))) {
-    } else if (FALSE_IT(ddl_sql = ddl_stmt_str.string())) {
-    } else if (OB_FAIL(ddl_operator.create_user(user_info, &ddl_sql, trans))) {
-    } else {
-      LOG_INFO("Succeed in inserting user in user table",
-               "user_id", user_info.get_user_id(),
-               "user_name", user_info.get_user_name_str(),
-               K(user_info));
-      user_id = user_info.get_user_id();
-    }
-  }
-
-  if (trans.is_started()) {
-    int temp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_ERROR("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
-      ret = (OB_SUCC(ret)) ? temp_ret : ret;
-    }
-  }
-  return ret;
-}
 //----End of functions for managing privileges----
 
 
@@ -21923,41 +21889,51 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
                                bool with_snapshot /*= false*/)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(proxy)
-      || OB_UNLIKELY(OB_INVALID_VERSION == runtime_refreshed_schema_version)) {
+  if (OB_INVALID_VERSION == runtime_refreshed_schema_version) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(start_transaction_(proxy, with_snapshot, 0 != runtime_refreshed_schema_version))) {
+  } else if (0 != runtime_refreshed_schema_version
+             && enable_check_newest_schema_ && !enable_ddl_parallel_) {
+    // Validate metadata selected before taking the DDL lock.
+    ObRefreshSchemaStatus schema_status;
+    int64_t version_in_inner_table = 0;
+    if (OB_FAIL(schema_service_->get_schema_version_in_inner_table(
+        *proxy, schema_status, version_in_inner_table))) {
+    } else if (runtime_refreshed_schema_version != version_in_inner_table) {
+      ret = OB_EAGAIN;
+    }
+  }
+  return ret;
+}
+
+int ObDDLSQLTransaction::start_with_runtime_schema(
+    ObISQLClient *proxy, ObSchemaGetterGuard &schema_guard)
+{
+  int ret = OB_SUCCESS;
+  if (enable_ddl_parallel_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(start_transaction_(proxy, false /* with_snapshot */, true /* lock_ddl */))) {
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
+    // A prior DDL can already have committed while its cache publication is pending.
+  }
+  return ret;
+}
+
+int ObDDLSQLTransaction::start_transaction_(
+    ObISQLClient *proxy, bool with_snapshot, bool lock_ddl)
+{
+  int ret = OB_SUCCESS;
+  auto *tsi_oper = GET_TSI(share::schema::TSILastOper);
+  if (OB_ISNULL(proxy)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(schema_service_)
-      || OB_ISNULL(schema_service_->get_schema_service())) {
+             || OB_ISNULL(schema_service_->get_schema_service())
+             || OB_ISNULL(tsi_oper)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    
-    auto *tsi_oper = GET_TSI(share::schema::TSILastOper);
-    if (OB_ISNULL(tsi_oper)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      start_operation_schema_version_ = tsi_oper->last_operation_schema_version_;
-      
-    }
-
-    if (enable_ddl_parallel_) {
-      enable_check_newest_schema_ = false;
-    }
-
-    if (FAILEDx(common::ObMySQLTransaction::start(proxy, with_snapshot))) {
-    } else if (0 == runtime_refreshed_schema_version) {
-      //maybe in bootstrap or second transaction of create runtime
-      LOG_INFO("no need to lock and check schema is newest", KR(ret),
-               K(runtime_refreshed_schema_version));
-    } else if (OB_FAIL(lock_all_ddl_operation(*this, enable_ddl_parallel_))) {
-    } else if (enable_check_newest_schema_) {
-      //double check, after lock success, check schema_version is newest before lock
-      ObRefreshSchemaStatus schema_status;
-      
-      int64_t version_in_inner_table = 0;
-      if (OB_FAIL(schema_service_->get_schema_version_in_inner_table(*proxy, schema_status, version_in_inner_table))) {
-      } else if (runtime_refreshed_schema_version != version_in_inner_table) {
-        ret = OB_EAGAIN;
-      }
+    start_operation_schema_version_ = tsi_oper->last_operation_schema_version_;
+    if (OB_FAIL(common::ObMySQLTransaction::start(proxy, with_snapshot))) {
+    } else if (lock_ddl && OB_FAIL(lock_all_ddl_operation(*this, enable_ddl_parallel_))) {
     }
   }
   return ret;

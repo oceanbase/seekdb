@@ -1722,11 +1722,6 @@ private:
   int create_user(share::schema::ObUserInfo &user_info,
                   uint64_t creator_id,
                   uint64_t &user_id);
-  int create_user_in_trans(share::schema::ObUserInfo &user_info,
-                           uint64_t creator_id,
-                           uint64_t &user_id,
-                           share::schema::ObSchemaGetterGuard &schema_guard);
-
   int create_mysql_roles_in_trans(const bool if_not_exist,
                                   common::ObIArray<share::schema::ObUserInfo> &user_infos);
   int set_passwd_in_trans(const uint64_t user_id,
@@ -2086,6 +2081,9 @@ public:
   virtual int start(ObISQLClient *proxy,
                     bool with_snapshot = false,
                     const int32_t group_id = 0) override;
+  // Load the committed runtime schema after acquiring the exclusive DDL lock.
+  int start_with_runtime_schema(ObISQLClient *proxy,
+                               share::schema::ObSchemaGetterGuard &schema_guard);
   // use table_lock support ddl exclusive
   int lock_all_ddl_operation(
       common::ObMySQLTransaction &trans,
@@ -2096,6 +2094,7 @@ public:
   int register_ddl_trans_signal();
   bool is_enable_parallel() {return enable_ddl_parallel_;}
 private:
+  int start_transaction_(ObISQLClient *proxy, bool with_snapshot, bool lock_ddl);
   int lock_ddl_epoch_(common::ObMySQLTransaction &trans);
 
 private:
