@@ -125,7 +125,6 @@ static ObLogRuntimeConfig current_log_runtime_config()
       config::log_disk_throttling_percentage(),
       config::log_disk_throttling_maximum_duration(),
       config::log_storage_warning_tolerance_time(),
-      config::_enable_log_cache(),
   };
 }
 

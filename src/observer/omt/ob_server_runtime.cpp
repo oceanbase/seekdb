@@ -373,7 +373,6 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
     ctx->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
     ctx->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
     ctx->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
-    ctx->palf_options_.enable_log_cache_ = config::_enable_log_cache();
     LOG_INFO("construct_module_init_ctx success", "palf_options", ctx->palf_options_.disk_options_
              );
   }

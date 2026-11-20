@@ -558,7 +558,6 @@ int ObLogService::update_palf_options_except_disk_usage_limit_size(
           runtime_config.log_disk_throttling_percentage_;
       palf_opts.disk_options_.log_disk_throttling_maximum_duration_ =
           runtime_config.log_disk_throttling_maximum_duration_;
-      palf_opts.enable_log_cache_ = runtime_config.enable_log_cache_;
       if (OB_FAIL(palf_env_->update_options(palf_opts))) {
       } else {
         runtime_config_ = runtime_config;

@@ -104,7 +104,7 @@ PalfEnvImpl::PalfEnvImpl()
     : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK), store_(nullptr), monitor_(NULL),
       disk_options_wrapper_(),
       disk_not_enough_print_interval_in_loop_thread_(OB_INVALID_TIMESTAMP), self_(),
-      palf_handle_(nullptr), enable_log_cache_(false),
+      palf_handle_(nullptr),
       diskspace_enough_(true), is_inited_(false), is_running_(false)
 {
   log_dir_[0] = '\0';
@@ -139,7 +139,6 @@ int PalfEnvImpl::init(const PalfOptions &options, share::LocalStore &store,
     self_ = self;
     is_inited_ = true;
     is_running_ = true;
-    enable_log_cache_ = options.enable_log_cache_;
     PALF_LOG(INFO, "PalfEnvImpl init success", K(ret), K(self_), KPC(this));
   }
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
@@ -194,7 +193,6 @@ void PalfEnvImpl::destroy()
   log_dir_[0] = '\0';
   tmp_log_dir_[0] = '\0';
   disk_options_wrapper_.reset();
-  enable_log_cache_ = false;
 }
 
 int PalfEnvImpl::create_palf_handle_impl(const AccessMode &access_mode,
@@ -389,7 +387,6 @@ int PalfEnvImpl::update_options(const PalfOptions &options)
   } else if (NULL != palf_handle_ && OB_FAIL(palf_handle_->set_disk_options(
       disk_options_wrapper_.get_disk_opts_for_stopping_writing()))) {
   } else {
-    enable_log_cache_ = options.enable_log_cache_;
     refresh_disk_state_();
   }
   return ret;
@@ -402,7 +399,6 @@ int PalfEnvImpl::get_options(PalfOptions &options)
     ret = OB_NOT_INIT;
   } else {
     options.disk_options_ = disk_options_wrapper_.get_disk_opts_for_recycling_blocks();
-    options.enable_log_cache_ = enable_log_cache_;
   }
   return ret;
 }

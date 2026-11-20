@@ -772,13 +772,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "time to tolerate log disk io delay, after that, the disk status will be set warning. Range: [1s,300s]"
 
-- name: _enable_log_cache
-  type: BOOL
-  default: "True"
-  section: LOGSERVICE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "specifies whether allow to fill log kv cache. Value:  True:turned on  False: turned off"
-
 - name: _lcl_op_interval
   type: TIME
   default: "5s"

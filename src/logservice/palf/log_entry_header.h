@@ -31,9 +31,6 @@ public:
   LogEntryHeader();
   ~LogEntryHeader();
 public:
-  int generate_header(const char *log_data,
-                      const int64_t data_len,
-                      const share::SCN &scn);
   LogEntryHeader& operator=(const LogEntryHeader &header);
   void reset();
   bool is_valid() const;
@@ -43,17 +40,6 @@ public:
   int64_t get_data_checksum() const { return data_checksum_; }
   bool check_header_integrity() const;
 
-  // @brief: generate padding log entry
-  // @param[in]: padding_data_len, the data len of padding entry(the group_size_ in LogGroupEntry
-  //             - sizeof(LogEntryHeader))
-  // @param[in]: scn, the SCN of padding log entry
-  // @param[in&out]: out_buf, out_buf just only include LogEntryHeader and ObLogBaseHeader
-  // @param[in]: padding_valid_data_len, the valid data len of padding LogEntry(just only include
-  //             LogEntryHeader and ObLogBaseHeader).
-  static int generate_padding_log_buf(const int64_t padding_data_len,
-                                      const share::SCN &scn,
-                                      char *out_buf,
-                                      const int64_t padding_valid_data_len);
   NEED_SERIALIZE_AND_DESERIALIZE;
   TO_STRING_KV("magic", magic_,
                "version", version_,
@@ -64,17 +50,10 @@ public:
 public:
   static const int16_t MAGIC;  // 'LH' means LOG ENTRY HEADER
   static const int64_t HEADER_SER_SIZE;
-  static const int64_t PADDING_LOG_ENTRY_SIZE;
 private:
   uint16_t calculate_header_checksum_() const;
-  void update_header_checksum_();
   bool check_header_checksum_() const;
   bool is_padding_log_() const;
-
-  int generate_padding_header_(const char *log_data,
-                               const int64_t base_header_len,
-                               const int64_t padding_data_len,
-                               const share::SCN &scn);
 private:
   static const int16_t LOG_ENTRY_HEADER_VERSION;
   static const int64_t PADDING_TYPE_MASK;

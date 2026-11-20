@@ -58,7 +58,6 @@ struct ObLogRuntimeConfig
   int64_t log_disk_throttling_percentage_;
   int64_t log_disk_throttling_maximum_duration_;
   int64_t log_storage_warning_tolerance_time_;
-  bool enable_log_cache_;
 };
 
 class ObLogService
