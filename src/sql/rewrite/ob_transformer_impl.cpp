@@ -536,8 +536,19 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // An approximate vector scan owns its top-k order by and limit, so the
+      // plan-shaping rules stay disabled for it.  Expression simplification only
+      // rewrites the filter itself: it flattens nested AND/OR trees, folds
+      // constant predicates and drops duplicates, and never changes the access
+      // path of the vector index scan.  Leaving it out kept an unreduced filter,
+      // which the vector index then evaluated for every candidate it visited
+      // during the pre-filter scan (see #1489).
+      uint64_t ann_enable_list = 0;
+      ObTransformRule::add_trans_type(ann_enable_list, SIMPLIFY_EXPR);
+      disable_list |= (~ann_enable_list);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
