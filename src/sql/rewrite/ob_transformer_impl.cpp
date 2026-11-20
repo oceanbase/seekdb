@@ -538,6 +538,19 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else {
     if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+      if (func.contain_vec_index_approx_ && !func.contain_geometry_values_ && !func.contain_fulltext_search_) {
+        // ANN queries keep the vector distance expression in ORDER BY untouched for
+        // vector index matching, but disabling every rewrite rule also leaves the
+        // WHERE filters uncanonicalized: NOT (c IN (1,2,3,4)) keeps its raw form and
+        // cannot be extracted into a query range, so the filter falls into the
+        // whole-table pre-filter path instead of the same strategy used by the
+        // equivalent negated-equality conjunction (issue #1511). SIMPLIFY_EXPR only
+        // rewrites predicates (WHERE/HAVING/JOIN ON conditions), so whitelist it for
+        // approximate vector queries.
+        uint64_t vec_approx_enable_list = 0;
+        ObTransformRule::add_trans_type(vec_approx_enable_list, SIMPLIFY_EXPR);
+        disable_list |= (~vec_approx_enable_list);
+      }
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
