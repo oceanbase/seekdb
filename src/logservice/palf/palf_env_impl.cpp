@@ -104,7 +104,7 @@ PalfEnvImpl::PalfEnvImpl()
     : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK), store_(nullptr), monitor_(NULL),
       disk_options_wrapper_(),
       disk_not_enough_print_interval_in_loop_thread_(OB_INVALID_TIMESTAMP), self_(),
-      palf_handle_(nullptr), last_palf_epoch_(0), enable_log_cache_(false),
+      palf_handle_(nullptr), enable_log_cache_(false),
       diskspace_enough_(true), is_inited_(false), is_running_(false)
 {
   log_dir_[0] = '\0';
@@ -215,7 +215,6 @@ int PalfEnvImpl::create_palf_handle_impl_(const AccessMode &access_mode,
   int pret = 0;
   char base_dir[MAX_PATH_SIZE] = {'\0'};
   PalfHandleImpl *handle = NULL;
-  const int64_t palf_epoch = ATOMIC_AAF(&last_palf_epoch_, 1);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (!is_running_) {
@@ -231,8 +230,7 @@ int PalfEnvImpl::create_palf_handle_impl_(const AccessMode &access_mode,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(create_directory(base_dir))) {
   } else if (OB_FAIL(handle->init(access_mode, palf_base_info, base_dir,
-      disk_options_wrapper_.get_disk_opts_for_stopping_writing(),
-      self_, palf_epoch))) {
+      disk_options_wrapper_.get_disk_opts_for_stopping_writing(), self_))) {
   } else {
     palf_handle_ = handle;
     (void)handle->set_monitor_cb(monitor_);
@@ -417,7 +415,6 @@ int PalfEnvImpl::reload_palf_handle_impl_()
   char base_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   bool is_integrity = true;
   bool dir_exist = false;
-  const int64_t palf_epoch = ATOMIC_AAF(&last_palf_epoch_, 1);
   if (0 > (pret = snprintf(base_dir, MAX_PATH_SIZE, "%s/log_stream", log_dir_))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(FileDirectoryUtils::is_exists(base_dir, dir_exist))) {
@@ -436,8 +433,7 @@ int PalfEnvImpl::reload_palf_handle_impl_()
   } else if (NULL == (handle = SERVER_NEW(PalfHandleImpl, "palf_env"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(handle->load(base_dir,
-      disk_options_wrapper_.get_disk_opts_for_stopping_writing(),
-      self_, palf_epoch, is_integrity))) {
+      disk_options_wrapper_.get_disk_opts_for_stopping_writing(), self_, is_integrity))) {
   } else {
     palf_handle_ = handle;
     (void)handle->set_monitor_cb(monitor_);

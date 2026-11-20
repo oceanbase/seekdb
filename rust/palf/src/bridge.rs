@@ -81,11 +81,6 @@ mod ffi {
         scn: u64,
     }
 
-    struct ReadResult {
-        code: Code,
-        bytes: Vec<u8>,
-    }
-
     extern "Rust" {
         type Stream;
         fn create_stream(path: &str, base: BaseInfo, ref_scn: u64, disk: DiskPolicy)
@@ -106,7 +101,6 @@ mod ffi {
         fn set_disk_policy_ffi(stream: &Stream, disk: DiskPolicy) -> Code;
         fn locate_by_scn_ffi(stream: &Stream, scn: u64) -> PositionResult;
         fn locate_by_lsn_ffi(stream: &Stream, lsn: u64) -> PositionResult;
-        fn raw_read_ffi(stream: &Stream, lsn: u64, length: usize) -> ReadResult;
         fn close_ffi(stream: &Stream) -> Code;
         fn cursor_ffi(stream: &Stream, lsn: u64, group_mode: bool) -> Box<Cursor>;
 
@@ -128,7 +122,7 @@ mod ffi {
 }
 
 pub use ffi::{
-    AppendResult, BaseInfo, BaseInfoResult, Code, DiskPolicy, PositionResult, Progress, ReadResult,
+    AppendResult, BaseInfo, BaseInfoResult, Code, DiskPolicy, PositionResult, Progress,
 };
 
 impl From<DiskPolicy> for NativeDiskPolicy {
@@ -355,19 +349,6 @@ fn locate_by_lsn_ffi(stream: &Stream, lsn: u64) -> PositionResult {
             code: error.into(),
             lsn: 0,
             scn: 0,
-        },
-    }
-}
-
-fn raw_read_ffi(stream: &Stream, lsn: u64, length: usize) -> ReadResult {
-    match stream.raw_read(lsn, length) {
-        Ok(bytes) => ReadResult {
-            code: Code::Ok,
-            bytes,
-        },
-        Err(error) => ReadResult {
-            code: error.into(),
-            bytes: Vec::new(),
         },
     }
 }

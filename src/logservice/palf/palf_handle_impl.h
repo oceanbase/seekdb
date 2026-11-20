@@ -69,10 +69,9 @@ public:
   PalfHandleImpl();
   ~PalfHandleImpl();
   int init(const AccessMode &access_mode, const PalfBaseInfo &palf_base_info,
-      const char *log_dir, const PalfDiskOptions &disk_options, const common::ObAddr &self,
-      const int64_t palf_epoch);
+      const char *log_dir, const PalfDiskOptions &disk_options, const common::ObAddr &self);
   int load(const char *log_dir, const PalfDiskOptions &disk_options, const common::ObAddr &self,
-      const int64_t palf_epoch, bool &is_integrity);
+      bool &is_integrity);
   bool check_can_be_used() const;
   void destroy();
   int set_disk_options(const PalfDiskOptions &disk_options);
@@ -83,8 +82,6 @@ public:
   int set_base_lsn(const LSN &lsn);
   int locate_by_scn_coarsely(const share::SCN &scn, LSN &result_lsn);
   int locate_by_lsn_coarsely(const LSN &lsn, share::SCN &result_scn);
-  int raw_read(const palf::LSN &lsn, char *buffer, const int64_t nbytes,
-      int64_t &read_size, LogIOContext &io_ctx);
   int get_access_mode_ref_scn(AccessMode &access_mode, SCN &ref_scn) const;
   int alloc_palf_buffer_iterator(const LSN &offset, PalfBufferIterator &iterator);
   int alloc_palf_buffer_iterator(const SCN &scn, PalfBufferIterator &iterator);
@@ -97,18 +94,15 @@ public:
   int set_monitor_cb(PalfMonitorCb *monitor_cb);
   int reset_monitor_cb();
   int get_begin_lsn(LSN &lsn) const;
-  int get_begin_scn(share::SCN &scn);
   int get_base_lsn(LSN &lsn) const;
   int get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info);
   const LSN get_end_lsn() const;
   LSN get_max_lsn() const { return get_end_lsn(); }
   const share::SCN get_max_scn() const { return get_end_scn(); }
   const share::SCN get_end_scn() const;
-  const LSN get_readable_end_lsn() const { return get_end_lsn(); }
   int get_total_used_disk_space(int64_t &total_used_disk_space,
       int64_t &unrecyclable_disk_space) const;
   int stat(PalfStat &palf_stat);
-  int get_palf_epoch(int64_t &palf_epoch) const;
   int diagnose(PalfDiagnoseInfo &diagnose_info) const;
   int get_io_start_time(int64_t &io_start_time) const;
   TO_STRING_KV(K_(self));
@@ -127,8 +121,6 @@ private:
   };
   template<typename IteratorType>
   int alloc_iterator_from_scn_(const SCN &scn, IteratorType &iterator);
-  int read_data_from_buffer(const LSN &read_begin_lsn, const int64_t in_read_size,
-      char *buf, int64_t &out_read_size) const;
   void begin_io_();
   void end_io_();
 
@@ -139,7 +131,6 @@ private:
   AccessMode access_mode_;
   palf::PalfFSCbWrapper fs_cb_wrapper_;
   LogPlugins plugins_;
-  int64_t palf_epoch_;
   mutable common::ObSpinLock io_lock_;
   int64_t active_io_count_;
   int64_t io_start_time_;

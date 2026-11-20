@@ -488,25 +488,6 @@ impl Stream {
         Ok(record.header.max_scn)
     }
 
-    pub fn raw_read(&self, lsn: u64, length: usize) -> Result<Vec<u8>> {
-        let state = self.lock()?;
-        state.check_open()?;
-        if lsn < state.manifest.base_lsn
-            || length == 0
-            || lsn.saturating_add(length as u64) > state.end_lsn
-        {
-            return Err(Error::Invalid);
-        }
-        if block_id(lsn) != block_id(lsn + length as u64 - 1) {
-            return Err(Error::Invalid);
-        }
-        let mut file = File::open(segment_path(&state.directory, block_id(lsn)))?;
-        file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-        let mut bytes = vec![0; length];
-        file.read_exact(&mut bytes)?;
-        Ok(bytes)
-    }
-
     pub fn close(&self) -> Result<()> {
         let mut state = self.lock()?;
         state.closed = true;
