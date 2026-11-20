@@ -1,0 +1,35 @@
+DROP TABLE IF EXISTS ddl_quoted_columns;
+DROP TABLE IF EXISTS ddl_plain_columns;
+CREATE TABLE ddl_quoted_columns (
+id INT PRIMARY KEY,
+`e``n` ENUM('red', 'blue'),
+`s``t` SET('a', 'b'),
+```leading` ENUM('red', 'blue'),
+`trailing``` SET('a', 'b')
+);
+INSERT INTO ddl_quoted_columns VALUES (1, 'red', 'a', 'red', 'a'), (2, 'blue', 'b', 'blue', 'b');
+CREATE UNIQUE INDEX idx_enum ON ddl_quoted_columns (`e``n`);
+CREATE UNIQUE INDEX idx_set ON ddl_quoted_columns (`s``t`);
+CREATE UNIQUE INDEX idx_leading ON ddl_quoted_columns (```leading`);
+CREATE UNIQUE INDEX idx_trailing ON ddl_quoted_columns (`trailing```);
+SELECT id, `e``n` AS enum_value, `s``t` AS set_value,
+```leading` AS leading_value, `trailing``` AS trailing_value
+FROM ddl_quoted_columns ORDER BY id;
+id	enum_value	set_value	leading_value	trailing_value
+1	red	a	red	a
+2	blue	b	blue	b
+SELECT id FROM ddl_quoted_columns WHERE `e``n` = 'blue';
+id
+2
+SELECT id FROM ddl_quoted_columns WHERE `s``t` = 'a';
+id
+1
+CREATE TABLE ddl_plain_columns (id INT PRIMARY KEY, e ENUM('red', 'blue'));
+INSERT INTO ddl_plain_columns VALUES (1, 'red'), (2, 'blue');
+CREATE UNIQUE INDEX idx_plain ON ddl_plain_columns (e);
+SELECT id, e FROM ddl_plain_columns ORDER BY id;
+id	e
+1	red
+2	blue
+DROP TABLE ddl_quoted_columns;
+DROP TABLE ddl_plain_columns;
