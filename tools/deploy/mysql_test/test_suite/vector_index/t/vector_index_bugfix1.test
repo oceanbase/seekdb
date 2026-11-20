@@ -662,4 +662,55 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1440: collapse equivalent equality OR predicates before vector filtering
+--disable_warnings
+drop table if exists t_issue1440_or_to_in;
+--enable_warnings
+create table t_issue1440_or_to_in(
+  id int primary key,
+  age int,
+  embedding vector(3),
+  vector index idx_embedding(embedding) with (distance=l2, type=hnsw));
+insert into t_issue1440_or_to_in values
+  (1, 1, '[1,0,0]'),
+  (2, 2, '[2,0,0]'),
+  (3, 3, '[3,0,0]'),
+  (4, 4, '[4,0,0]'),
+  (5, 5, '[5,0,0]'),
+  (6, null, '[6,0,0]');
+
+select group_concat(id order by id) as ids
+from t_issue1440_or_to_in
+where age = 1 or age = 2 or age = 3 or age = 4 or age = 5;
+--replace_regex /, $/,/
+explain select id
+from t_issue1440_or_to_in
+where age = 1 or age = 2 or age = 3 or age = 4 or age = 5
+order by l2_distance(embedding, '[0,0,0]') approximate limit 3;
+
+# Keep the regression above the old 100-expression simplification cutoff.
+--let $or_filter = (age = 1)
+--let $or_value = 2
+while ($or_value <= 300)
+{
+  --let $or_filter = $or_filter OR age = $or_value
+  --inc $or_value
+}
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+eval select id from t_issue1440_or_to_in
+where $or_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 3;
+--enable_result_log
+--enable_query_log
+select instr(p.filter_predicates, ' IN ') > 0
+       and instr(p.filter_predicates, 'T_OP_OR') = 0 as collapsed_to_in
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1440_or_to_in') > 0
+  and p.filter_predicates <> '';
+
+drop table t_issue1440_or_to_in;
+
 alter system set vector_memory_limit = 0;

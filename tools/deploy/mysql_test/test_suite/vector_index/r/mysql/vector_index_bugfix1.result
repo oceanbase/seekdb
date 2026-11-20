@@ -752,4 +752,48 @@ operator	cardinality	hit_count
 VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
+drop table if exists t_issue1440_or_to_in;
+create table t_issue1440_or_to_in(
+id int primary key,
+age int,
+embedding vector(3),
+vector index idx_embedding(embedding) with (distance=l2, type=hnsw));
+insert into t_issue1440_or_to_in values
+(1, 1, '[1,0,0]'),
+(2, 2, '[2,0,0]'),
+(3, 3, '[3,0,0]'),
+(4, 4, '[4,0,0]'),
+(5, 5, '[5,0,0]'),
+(6, null, '[6,0,0]');
+select group_concat(id order by id) as ids
+from t_issue1440_or_to_in
+where age = 1 or age = 2 or age = 3 or age = 4 or age = 5;
+ids
+1,2,3,4,5
+explain select id
+from t_issue1440_or_to_in
+where age = 1 or age = 2 or age = 3 or age = 4 or age = 5
+order by l2_distance(embedding, '[0,0,0]') approximate limit 3;
+Query Plan
+=======================================================================================
+|ID|OPERATOR                               |NAME                |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_issue1440_or_to_in|5       |3           |
+=======================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1440_or_to_in.id]), filter([t_issue1440_or_to_in.age IN (1, 2, 3, 4, 5)]), rowset=16
+      access([t_issue1440_or_to_in.id], [t_issue1440_or_to_in.age]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t_issue1440_or_to_in.id]), range(MIN ; MAX)always true
+alter system flush plan cache;
+select instr(p.filter_predicates, ' IN ') > 0
+and instr(p.filter_predicates, 'T_OP_OR') = 0 as collapsed_to_in
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1440_or_to_in') > 0
+and p.filter_predicates <> '';
+collapsed_to_in
+1
+drop table t_issue1440_or_to_in;
 alter system set vector_memory_limit = 0;

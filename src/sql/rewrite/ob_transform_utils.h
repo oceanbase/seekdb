@@ -432,6 +432,9 @@ public:
                           common::ObIArray<ObRawExpr*> &flattened_exprs);
   static int flatten_and_or_xor(ObTransformerCtx *ctx, ObIArray<ObRawExpr*> &conditions, bool *trans_happened = NULL);
   static int flatten_and_or_xor(ObRawExpr* expr, bool *trans_happened = NULL);
+  static int convert_equal_or_to_in(ObTransformerCtx *ctx,
+                                    ObIArray<ObRawExpr *> &conditions,
+                                    bool &trans_happened);
   static int find_not_null_expr(const ObDMLStmt &stmt,
                                 ObRawExpr *&not_null_expr,
                                 bool &is_valid,
