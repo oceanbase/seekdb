@@ -2683,6 +2683,7 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
   new_expr = &expr;
   bool need_cast = false;
   bool ignore_dup_cast_error = false;
+  ObRawExpr *real_expr = &expr;
   const ObRawExprResType &src_type = expr.get_result_type();
   CK(OB_NOT_NULL(session) && OB_NOT_NULL(expr_factory));
   OZ(ObRawExprUtils::check_need_cast_expr(src_type, dst_type, need_cast, ignore_dup_cast_error));
@@ -2692,7 +2693,8 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
         && !ignore_dup_cast_error
         && !((src_type.is_collection_sql_type()
                   && (dst_type.is_character_type() || dst_type.is_null()))
-            || (src_type.is_character_type() && dst_type.is_character_type())))
+            || (src_type.is_character_type() && dst_type.is_character_type())
+			|| (src_type.is_numeric_type() && dst_type.is_numeric_type()))))
       {
       ret = OB_ERR_UNEXPECTED;
 #ifdef DEBUG
@@ -2705,6 +2707,12 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
                 K(session->get_current_query_string()));
 #endif
     } else {
+		      if (T_FUN_SYS_CAST == expr.get_expr_type()
+        && expr.has_flag(IS_OP_OPERAND_IMPLICIT_CAST)
+        && expr.get_param_count() > 0
+        && OB_NOT_NULL(expr.get_param_expr(0))) {
+      real_expr = expr.get_param_expr(0);
+    }
       //setup implicit cast charset convert ignore error
       ObCastMode cm_zf = cm;
       if ((cm_zf & CM_COLUMN_CONVERT) != 0) {
@@ -2715,14 +2723,14 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
       // setup zerofill cm
       // eg: select concat(cast(c_zf as char(10)), cast(col_no_zf as char(10))) from t1;
       if (dst_type.is_string_type() &&
-          expr.get_result_type().has_result_flag(ZEROFILL_FLAG)) {
+          real_expr->get_result_type().has_result_flag(ZEROFILL_FLAG)) {
         cm_zf |= CM_ZERO_FILL;
       }
       if (dst_type.get_cast_mode() != 0) {
         cm_zf |= dst_type.get_cast_mode();
       }
       ObSysFunRawExpr *cast_expr = NULL;
-      OZ(ObRawExprUtils::create_cast_expr(*expr_factory, &expr, dst_type, cast_expr,
+      OZ(ObRawExprUtils::create_cast_expr(*expr_factory, real_expr, dst_type, cast_expr,
                                           session, false, cm_zf, local_vars, local_var_id));
       CK(OB_NOT_NULL(new_expr = dynamic_cast<ObRawExpr*>(cast_expr)));
     }

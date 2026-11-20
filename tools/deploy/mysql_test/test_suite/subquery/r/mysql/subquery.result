@@ -1988,3 +1988,27 @@ FROM table0_hash_pk_parts_1_bigint)));
 drop table s;
 drop table table0_hash_pk_parts_1_bigint;
 drop table ff;
+# Issue #1477: IFNULL with a boolean scalar subquery and double-negated LIKE
+drop table if exists t_issue_1477;
+# minimal reproducer
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(!(1 LIKE "x")));
+1
+# control case 1: single negation
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(1 LIKE "x"));
+1
+# control case 2: literal boolean with double negation
+SELECT 1 FROM dual WHERE IFNULL(FALSE, !(!(1 LIKE "x")));
+1
+create table t_issue_1477(c1 int, c2 varchar(20));
+insert into t_issue_1477 values (1, "hello"), (2, "world");
+# Non-NULL false subquery evaluates to FALSE (0) and filters out all rows
+SELECT c1 FROM t_issue_1477 WHERE IFNULL((SELECT FALSE), !(c2 LIKE "x%"));
+SELECT c1 FROM t_issue_1477 WHERE IFNULL((SELECT c1 > 10 FROM t_issue_1477 LIMIT 1), !(c2 LIKE "x%"));
+# NULL subqueries evaluate the fallback double-negated LIKE expression
+SELECT c1 FROM t_issue_1477 WHERE IFNULL((SELECT NULL), !(!(c2 LIKE "x%")));
+1
+2
+SELECT c1 FROM t_issue_1477 WHERE IFNULL((SELECT c1 FROM t_issue_1477 WHERE c1 > 10), !(!(c2 LIKE "x%")));
+1
+2
+drop table t_issue_1477;
