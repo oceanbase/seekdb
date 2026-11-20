@@ -22,6 +22,7 @@
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_sel_estimator.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -2589,6 +2590,127 @@ int ObOptSelectivity::get_range_pred_sel(const OptSelectivityCtx &ctx,
   return ret;
 }
 
+// `c1 + 0`, `0 + c1`, `c1 - 0`, `c1 * 1`, `1 * c1` and `c1 / 1` return the value of
+// `c1` itself (as long as the arithmetic does not change the type of `c1`, which is
+// required here). The range extractor, however, is only able to build a range when
+// one side of the comparison is a plain column (or a lossless cast above it), so a
+// predicate like `(c1 + 0) > 10` yields the whole range. The whole range then makes
+// the estimator fall back to the default inequality selectivity (1/3) instead of the
+// selectivity derived from the column statistics. That difference changes the
+// estimated cardinality of semantically identical predicates, which in turn can
+// change the plan (for example, a vector index scan switches from a
+// post-iterative-filter scan to a pre-filter scan) and the execution time.
+// Strip those identity operations when the range for the selectivity estimation is
+// built, so that equivalent predicates are estimated in the same way.
+static bool is_identity_arith_const(const ObRawExpr *expr, const ObItemType op_type)
+{
+  bool bret = false;
+  int64_t int_value = 0;
+  if (NULL != expr && expr->is_const_raw_expr() &&
+      OB_SUCCESS == static_cast<const ObConstRawExpr *>(expr)->get_value().get_int(int_value)) {
+    bret = (T_OP_MUL == op_type || T_OP_DIV == op_type) ? (1 == int_value) : (0 == int_value);
+  }
+  return bret;
+}
+
+int ObOptSelectivity::strip_identity_arith_expr(const ObRawExpr *expr,
+                                                const ObRawExpr *&stripped_expr,
+                                                bool &changed)
+{
+  int ret = OB_SUCCESS;
+  stripped_expr = expr;
+  changed = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null expr", K(ret));
+  } else {
+    const ObItemType op_type = expr->get_expr_type();
+    if ((T_OP_ADD != op_type && T_OP_SUB != op_type &&
+         T_OP_MUL != op_type && T_OP_DIV != op_type) ||
+        2 != expr->get_param_count()) {
+      // not an arithmetic expression that can be an identity operation
+    } else {
+      const ObRawExpr *l_expr = expr->get_param_expr(0);
+      const ObRawExpr *r_expr = expr->get_param_expr(1);
+      const ObRawExpr *identity_operand = NULL;
+      if (OB_ISNULL(l_expr) || OB_ISNULL(r_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null param expr", K(ret));
+      } else if (is_identity_arith_const(r_expr, op_type)) {
+        // c1 + 0, c1 - 0, c1 * 1, c1 / 1
+        identity_operand = l_expr;
+      } else if (T_OP_SUB != op_type && T_OP_DIV != op_type &&
+                 is_identity_arith_const(l_expr, op_type)) {
+        // 0 + c1, 1 * c1
+        identity_operand = r_expr;
+      }
+      if (OB_SUCC(ret) && NULL != identity_operand) {
+        // The identity operation is only equivalent to its operand if the arithmetic
+        // operation does not change the result type, otherwise the operand would have
+        // to be casted for the expression that is above the identity operation.
+        if (identity_operand->get_result_type() == expr->get_result_type()) {
+          const ObRawExpr *inner_expr = NULL;
+          bool inner_changed = false;
+          if (OB_FAIL(SMART_CALL(strip_identity_arith_expr(identity_operand, inner_expr, inner_changed)))) {
+          } else if (OB_ISNULL(inner_expr)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get unexpected null expr", K(ret));
+          } else {
+            stripped_expr = inner_expr;
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// Replace every qual whose operand contains identity arithmetic operations with an
+// equivalent qual that compares the range column directly.
+int ObOptSelectivity::strip_identity_arith_quals(const OptSelectivityCtx &ctx,
+                                                 common::ObIArray<ObRawExpr *> &quals)
+{
+  int ret = OB_SUCCESS;
+  ObRawExprFactory &expr_factory = ctx.get_opt_ctx().get_expr_factory();
+  for (int64_t i = 0; OB_SUCC(ret) && i < quals.count(); ++i) {
+    ObRawExpr *qual = quals.at(i);
+    const ObRawExpr *l_expr = NULL;
+    const ObRawExpr *r_expr = NULL;
+    const ObRawExpr *new_l_expr = NULL;
+    const ObRawExpr *new_r_expr = NULL;
+    ObRawExpr *new_qual = NULL;
+    bool l_changed = false;
+    bool r_changed = false;
+    if (OB_ISNULL(qual)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null qual", K(ret));
+    } else if (!IS_BASIC_CMP_OP(qual->get_expr_type()) || 2 != qual->get_param_count()) {
+      // do nothing
+    } else if (OB_ISNULL(l_expr = qual->get_param_expr(0)) ||
+               OB_ISNULL(r_expr = qual->get_param_expr(1))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null param expr", K(ret));
+    } else if (OB_FAIL(strip_identity_arith_expr(l_expr, new_l_expr, l_changed))) {
+    } else if (OB_FAIL(strip_identity_arith_expr(r_expr, new_r_expr, r_changed))) {
+    } else if (!l_changed && !r_changed) {
+      // do nothing
+    } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(expr_factory,
+                                                             ctx.get_session_info(),
+                                                             qual->get_expr_type(),
+                                                             new_qual,
+                                                             new_l_expr,
+                                                             new_r_expr))) {
+    } else if (OB_ISNULL(new_qual)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null qual", K(ret));
+    } else {
+      quals.at(i) = new_qual;
+    }
+  }
+  return ret;
+}
+
 int ObOptSelectivity::get_column_query_range(const OptSelectivityCtx &ctx,
                                              const uint64_t table_id,
                                              const uint64_t column_id,
@@ -2606,12 +2728,15 @@ int ObOptSelectivity::get_column_query_range(const OptSelectivityCtx &ctx,
   const ColumnItem* column_item = NULL;
   bool dummy_all_single_value_ranges = true;
   ObPreRangeGraph pre_range_graph(alloc);
+  ObSEArray<ObRawExpr *, 4> normalized_quals;
   if (OB_ISNULL(log_plan) || OB_ISNULL(exec_ctx) || OB_ISNULL(session_info) ||
       OB_ISNULL(column_item = log_plan->get_column_item_by_id(table_id, column_id)) ||
       OB_ISNULL(ctx.get_stmt()) || OB_ISNULL(ctx.get_stmt()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(column_items.push_back(*column_item))) {
-  } else if (OB_FAIL(pre_range_graph.preliminary_extract_query_range(column_items, quals, exec_ctx,
+  } else if (OB_FAIL(normalized_quals.assign(quals))) {
+  } else if (OB_FAIL(strip_identity_arith_quals(ctx, normalized_quals))) {
+  } else if (OB_FAIL(pre_range_graph.preliminary_extract_query_range(column_items, normalized_quals, exec_ctx,
                                                                      NULL, params, true))) {
   } else if (OB_FAIL(pre_range_graph.get_tablet_ranges(alloc, *exec_ctx, ranges,
                                                        dummy_all_single_value_ranges,
