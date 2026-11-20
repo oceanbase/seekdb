@@ -717,7 +717,9 @@ int ObTabletScheduler::schedule_tablet_minor_merge(
     const ObTabletID &tablet_id = tablet_handle.get_obj()->get_tablet_meta().tablet_id_;
     const int64_t schedule_type_cnt = tablet_id.is_special_merge_tablet() ? TX_TABLE_NO_MAJOR_MERGE_TYPE_CNT : NO_MAJOR_MERGE_TYPE_CNT;
     for (int i = 0; OB_SUCC(ret) && i < schedule_type_cnt; ++i) {
-      if (OB_FAIL(schedule_tablet_minor_merge<T>(MERGE_TYPES[i], ls, tablet_handle))) {
+      ret = schedule_tablet_minor_merge<T>(MERGE_TYPES[i], ls, tablet_handle);
+      if (OB_NO_NEED_MERGE == ret) {
+        ret = OB_SUCCESS;
       }
     }
   }
