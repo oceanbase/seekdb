@@ -1,0 +1,11 @@
+# Equivalent predicates return the same rows
+id
+5
+id
+5
+id
+5
+# Equivalent predicates choose the same vector scan path
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)",
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)",
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)",
