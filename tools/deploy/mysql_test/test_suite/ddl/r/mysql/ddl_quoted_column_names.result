@@ -1,0 +1,50 @@
+DROP DATABASE IF EXISTS ddl_quoted_column_names;
+CREATE DATABASE ddl_quoted_column_names;
+USE ddl_quoted_column_names;
+CREATE TABLE quoted_enum_set (
+`key````id` INT PRIMARY KEY,
+`plain``value` INT,
+`enum````kind` ENUM('red', 'green', 'blue'),
+`set````flags` SET('x', 'y'));
+INSERT INTO quoted_enum_set VALUES
+(1, 10, 'red', 'x'), (2, 20, 'green', 'x,y'), (3, 30, 'blue', 'y'),
+(4, 40, NULL, NULL), (5, 50, NULL, NULL);
+CREATE UNIQUE INDEX uq_enum_set ON quoted_enum_set (`enum````kind`, `set````flags`);
+SELECT `key````id` AS id, `plain``value` AS plain_value,
+`enum````kind` AS enum_value, CAST(`enum````kind` AS UNSIGNED) AS enum_number,
+`set````flags` AS set_value, CAST(`set````flags` AS UNSIGNED) AS set_number
+FROM quoted_enum_set FORCE INDEX (uq_enum_set) ORDER BY `key````id`;
+id	plain_value	enum_value	enum_number	set_value	set_number
+1	10	red	1	x	1
+2	20	green	2	x,y	3
+3	30	blue	3	y	2
+4	40	NULL	NULL	NULL	NULL
+5	50	NULL	NULL	NULL	NULL
+CREATE TABLE quoted_vectors (
+`key````id` INT PRIMARY KEY,
+`plain``value` INT,
+embedding VECTOR(3),
+VECTOR INDEX v_idx(embedding) WITH (distance=l2, type=hnsw, lib=vsag));
+INSERT INTO quoted_vectors VALUES
+(1, 10, '[1,0,0]'), (2, 20, '[0,1,0]'), (3, 30, '[0,0,1]');
+SELECT /*+ INDEX(quoted_vectors v_idx) */ `key````id` AS nearest_id
+FROM quoted_vectors ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+nearest_id
+1
+CALL DBMS_VECTOR.REBUILD_INDEX('v_idx', 'quoted_vectors', 'embedding', 0.0);
+SELECT `key````id` AS id, `plain``value` AS plain_value
+FROM quoted_vectors ORDER BY `key````id`;
+id	plain_value
+1	10
+2	20
+3	30
+SHOW INDEX FROM quoted_vectors;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+quoted_vectors	0	PRIMARY	1	key``id	A	#	NULL	NULL		BTREE	available		YES	NULL
+quoted_vectors	1	v_idx	1	embedding	A	#	NULL	NULL	YES	VECTOR	available		YES	NULL
+SELECT /*+ INDEX(quoted_vectors v_idx) */ `key````id` AS nearest_id
+FROM quoted_vectors ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+nearest_id
+1
+DROP DATABASE ddl_quoted_column_names;
+USE test;
