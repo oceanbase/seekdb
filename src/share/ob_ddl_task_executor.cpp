@@ -350,7 +350,14 @@ int ObDDLLocalBuilder::push_task(ObAsyncTask &task)
 
 int64_t ObDDLLocalBuilder::get_thread_cnt_() const
 {
-  return lib::is_mini_mode() ? 1 : 16;
+  // A single worker serializes the independent local build tasks of one DDL
+  // (e.g. the domain index and the _fts_doc_word auxiliary index of a
+  // fulltext index). Scale the mini mode pool with the memory budget the
+  // same way ObKVCacheMap scales its buckets, so the smallest deployments
+  // keep one thread while larger ones overlap local builds.
+  return lib::is_mini_mode()
+      ? MAX(1L, static_cast<int64_t>(16 * lib::mini_mode_resource_ratio()))
+      : 16;
 }
 
 }  // end namespace share
