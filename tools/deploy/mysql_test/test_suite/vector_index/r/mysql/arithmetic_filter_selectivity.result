@@ -1,0 +1,547 @@
+DROP TABLE IF EXISTS arithmetic_filter_sel;
+DROP TABLE IF EXISTS arithmetic_filter_digits;
+DROP TABLE IF EXISTS arithmetic_filter_edges;
+DROP TABLE IF EXISTS arithmetic_filter_dates;
+CREATE TABLE arithmetic_filter_digits (n INT PRIMARY KEY);
+INSERT INTO arithmetic_filter_digits VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE arithmetic_filter_sel (
+id INT PRIMARY KEY, age INT NOT NULL, nullable_age INT, embedding VECTOR(3),
+KEY idx_age (age)
+) ORGANIZATION HEAP;
+INSERT INTO arithmetic_filter_sel
+SELECT a.n + 10*b.n + 100*c.n + 1,
+a.n + 10*b.n + 100*c.n + 1,
+CASE WHEN a.n = 9 THEN NULL ELSE a.n + 10*b.n + 100*c.n + 1 END,
+'[1,0,0]'
+FROM arithmetic_filter_digits a, arithmetic_filter_digits b, arithmetic_filter_digits c;
+CREATE VECTOR INDEX arithmetic_filter_hnsw ON arithmetic_filter_sel(embedding)
+WITH (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
+CALL dbms_stats.gather_table_stats('test', 'arithmetic_filter_sel',
+estimate_percent=>100, method_opt=>'for all columns size 1');
+# SQL results, including decreasing expressions and NULL propagation.
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age > 10;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE ((age + 0) + 0) > 10;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE ((age * 1) * 1) > 10;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age + 2 > 10 + 2;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age - 2 > 8;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age * 2 > 20;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age / 2.0 > 5.0;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE 1001 - age < 991;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age * (-2) < -20;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE nullable_age + 0 > 10;
+COUNT(*)
+891
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE (nullable_age + 0) IS NULL;
+COUNT(*)
+100
+# Numeric types and overflowing statistics endpoints must remain safe.
+CREATE TABLE arithmetic_filter_edges (
+id INT PRIMARY KEY, signed_value BIGINT, unsigned_value BIGINT UNSIGNED,
+decimal_value DECIMAL(20,2), float_value DOUBLE
+);
+INSERT INTO arithmetic_filter_edges VALUES
+(1,-9223372036854775808,0,-1234.50,-1234.50),
+(2,0,1,0.00,0.00),
+(3,9223372036854775807,18446744073709551615,1234.50,1234.50),
+(4,NULL,NULL,NULL,NULL);
+CALL dbms_stats.gather_table_stats('test', 'arithmetic_filter_edges',
+estimate_percent=>100, method_opt=>'for all columns size 1');
+SELECT id FROM arithmetic_filter_edges WHERE signed_value + 0 > 0 ORDER BY id;
+id
+3
+SELECT id FROM arithmetic_filter_edges WHERE unsigned_value + 0 > 0 ORDER BY id;
+id
+2
+3
+SELECT id FROM arithmetic_filter_edges WHERE decimal_value * 1.0 > 0 ORDER BY id;
+id
+3
+SELECT id FROM arithmetic_filter_edges WHERE float_value / 2.0 > 0 ORDER BY id;
+id
+3
+EXPLAIN SELECT /*+ NO_REWRITE */ id FROM arithmetic_filter_edges WHERE signed_value + 1 > 0;
+Query Plan
+==================================================================
+|ID|OPERATOR       |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TABLE FULL SCAN|arithmetic_filter_edges|2       |TIME|
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_filter_edges.id]),filter([arithmetic_filter_edges.signed_value + 1 > 0]),rowset=16
+      access([arithmetic_filter_edges.id],[arithmetic_filter_edges.signed_value]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([arithmetic_filter_edges.id]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE */ id FROM arithmetic_filter_edges WHERE unsigned_value - 1 > 0;
+Query Plan
+==================================================================
+|ID|OPERATOR       |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TABLE FULL SCAN|arithmetic_filter_edges|2       |TIME|
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_filter_edges.id]),filter([arithmetic_filter_edges.unsigned_value + -1 > 0]),rowset=16
+      access([arithmetic_filter_edges.id],[arithmetic_filter_edges.unsigned_value]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([arithmetic_filter_edges.id]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE */ id FROM arithmetic_filter_edges WHERE decimal_value + 0.0 > 0;
+Query Plan
+==================================================================
+|ID|OPERATOR       |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TABLE FULL SCAN|arithmetic_filter_edges|2       |TIME|
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_filter_edges.id]),filter([arithmetic_filter_edges.decimal_value + cast(0.0,DECIMAL_INT(21,2)) > cast(0,DECIMAL_INT(21,2))]),rowset=16
+      access([arithmetic_filter_edges.id],[arithmetic_filter_edges.decimal_value]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([arithmetic_filter_edges.id]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE */ id FROM arithmetic_filter_edges WHERE float_value * (-2.0) < 0;
+Query Plan
+==================================================================
+|ID|OPERATOR       |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TABLE FULL SCAN|arithmetic_filter_edges|3       |TIME|
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_filter_edges.id]),filter([arithmetic_filter_edges.float_value * cast(-2.0,DOUBLE(2,1)) < cast(0,DOUBLE(-1,-1))]),rowset=16
+      access([arithmetic_filter_edges.id],[arithmetic_filter_edges.float_value]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([arithmetic_filter_edges.id]),range(MIN ; MAX)always true
+DROP TABLE arithmetic_filter_edges;
+# Keep estimated row counts visible; normalize only the cost column.
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age > 10;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age > 10]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE ((age + 0) + 0) > 10;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age + 0 + 0 > 10]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE ((age * 1) * 1) > 10;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age * 1 * 1 > 10]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age + 2 > 12;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age + 2 > 12]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age - 2 > 8;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age + -2 > 8]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age * 2 > 20;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age * 2 > 20]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age / 2.0 > 5.0;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([cast(t.age,DECIMAL_INT(25,14)) / 2.0 > cast(5.0,DECIMAL(2,1))]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE 1001 - age < 991;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([1001 - t.age < 991]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age * (-2) < -20;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |991     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age * -2 < -20]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE nullable_age + 0 > 10;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |909     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.nullable_age + 0 > 10]),rowset=256
+      access([t.nullable_age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+# The same estimates must reach approximate vector planning.
+EXPLAIN SELECT id FROM arithmetic_filter_sel WHERE age > 10
+ORDER BY l2_distance(embedding,'[1,0,0]') APPROXIMATE LIMIT 10;
+Query Plan
+=================================================================================================
+|ID|OPERATOR                               |NAME                          |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|arithmetic_filter_sel(idx_age)|990     |TIME|
+=================================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_filter_sel.id]),filter([arithmetic_filter_sel.age > 10]),rowset=256
+      access([arithmetic_filter_sel.__pk_increment],[arithmetic_filter_sel.age],[arithmetic_filter_sel.id]),partitions(p0)
+      is_index_back=true,is_global_index=false,filter_before_indexback[true],
+      range_key([arithmetic_filter_sel.age],[arithmetic_filter_sel.__pk_increment]),range(10,MAX ; MAX,MAX)
+EXPLAIN SELECT id FROM arithmetic_filter_sel WHERE ((age + 0) + 0) > 10
+ORDER BY l2_distance(embedding,'[1,0,0]') APPROXIMATE LIMIT 10;
+Query Plan
+========================================================================================
+|ID|OPERATOR                               |NAME                 |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|arithmetic_filter_sel|991     |TIME|
+========================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_filter_sel.id]),filter([arithmetic_filter_sel.age + 0 + 0 > 10]),rowset=256
+      access([arithmetic_filter_sel.__pk_increment],[arithmetic_filter_sel.age],[arithmetic_filter_sel.id]),partitions(p0)
+      is_index_back=true,is_global_index=false,filter_before_indexback[false],
+      range_key([arithmetic_filter_sel.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT id FROM arithmetic_filter_sel WHERE age / 2.0 > 5.0
+ORDER BY l2_distance(embedding,'[1,0,0]') APPROXIMATE LIMIT 10;
+Query Plan
+========================================================================================
+|ID|OPERATOR                               |NAME                 |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|arithmetic_filter_sel|991     |TIME|
+========================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_filter_sel.id]),filter([cast(arithmetic_filter_sel.age,DECIMAL_INT(25,14)) / 2.0 > cast(5.0,DECIMAL(2,1))]),rowset=256
+      access([arithmetic_filter_sel.__pk_increment],[arithmetic_filter_sel.age],[arithmetic_filter_sel.id]),partitions(p0)
+      is_index_back=true,is_global_index=false,filter_before_indexback[false],
+      range_key([arithmetic_filter_sel.__pk_increment]),range(MIN ; MAX)always true
+# Non-monotonic and undefined expressions retain their existing behavior.
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age * age > 100;
+COUNT(*)
+990
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE 1000 / age > 2;
+COUNT(*)
+499
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age / 0 > 1;
+COUNT(*)
+0
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age + NULL > 10;
+COUNT(*)
+0
+# Prepared constants can change without changing the executed expression.
+PREPARE arithmetic_filter_stmt FROM 'SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age + ? > ?';
+SET @shift = 0, @bound = 10;
+EXECUTE arithmetic_filter_stmt USING @shift, @bound;
+COUNT(*)
+990
+SET @shift = 2, @bound = 12;
+EXECUTE arithmetic_filter_stmt USING @shift, @bound;
+COUNT(*)
+990
+SET @shift = -2, @bound = 8;
+EXECUTE arithmetic_filter_stmt USING @shift, @bound;
+COUNT(*)
+990
+SET @shift = NULL;
+EXECUTE arithmetic_filter_stmt USING @shift, @bound;
+COUNT(*)
+0
+DEALLOCATE PREPARE arithmetic_filter_stmt;
+# A zero multiplier has one value, including strict and inclusive bounds.
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age * 0 >= 0;
+COUNT(*)
+1000
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age * 0 > 0;
+COUNT(*)
+0
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age * 0 <= 0;
+COUNT(*)
+1000
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age * 0 < 0;
+COUNT(*)
+0
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE 0 * age >= 0;
+COUNT(*)
+1000
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE CAST(age * 0 AS DECIMAL(20,0)) >= 0;
+COUNT(*)
+1000
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age * 0 >= 0;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |1000    |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age * 0 >= 0]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age * 0 > 0;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |0       |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age * 0 > 0]),rowset=16
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age * 0 <= 0;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |1000    |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age * 0 <= 0]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE age * 0 < 0;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |0       |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.age * 0 < 0]),rowset=16
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE 0 * age >= 0;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |1000    |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([0 * t.age >= 0]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE CAST(age * 0 AS DECIMAL(20,0)) >= 0;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |1000    |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([cast(t.age * 0,DECIMAL(20,0)) >= cast(0,DECIMAL_INT(20,0))]),rowset=256
+      access([t.age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+# Numeric wrappers retain the source column's non-NULL fraction.
+UPDATE arithmetic_filter_sel SET nullable_age = CASE WHEN id % 10 = 1 THEN age ELSE NULL END;
+CALL dbms_stats.gather_table_stats('test', 'arithmetic_filter_sel',
+estimate_percent=>100, method_opt=>'for all columns size 1');
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE nullable_age > 10;
+COUNT(*)
+99
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE CAST(nullable_age + 0 AS DECIMAL(20,0)) > 10;
+COUNT(*)
+99
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE CAST(CAST(nullable_age + 0 AS DECIMAL(20,0)) AS DECIMAL(22,0)) > 10;
+COUNT(*)
+99
+SELECT COUNT(*) FROM arithmetic_filter_sel WHERE CAST(nullable_age * 0 AS DECIMAL(20,0)) >= 0;
+COUNT(*)
+100
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE nullable_age + 0 > 10;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |103     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([t.nullable_age + 0 > 10]),rowset=256
+      access([t.nullable_age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE CAST(nullable_age + 0 AS DECIMAL(20,0)) > 10;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |103     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([cast(t.nullable_age + 0,DECIMAL(20,0)) > cast(10,DECIMAL_INT(20,0))]),rowset=256
+      access([t.nullable_age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE CAST(CAST(nullable_age + 0 AS DECIMAL(20,0)) AS DECIMAL(22,0)) > 10;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |103     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([cast(cast(t.nullable_age + 0,DECIMAL(20,0)),DECIMAL(22,0)) > cast(10,DECIMAL_INT(22,0))]),rowset=256
+      access([t.nullable_age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+EXPLAIN SELECT /*+ NO_REWRITE FULL(t) */ id FROM arithmetic_filter_sel t WHERE CAST(nullable_age * 0 AS DECIMAL(20,0)) >= 0;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t   |103     |TIME|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]),filter([cast(t.nullable_age * 0,DECIMAL(20,0)) >= cast(0,DECIMAL_INT(20,0))]),rowset=256
+      access([t.nullable_age],[t.id]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([t.__pk_increment]),range(MIN ; MAX)always true
+# Existing date bounds keep NULL propagation inside arithmetic too.
+CREATE TABLE arithmetic_filter_dates (id INT PRIMARY KEY, d DATE);
+INSERT INTO arithmetic_filter_dates
+SELECT id, CASE WHEN nullable_age IS NULL THEN NULL ELSE '2025-01-01' END FROM arithmetic_filter_sel;
+CALL dbms_stats.gather_table_stats('test', 'arithmetic_filter_dates',
+estimate_percent=>100, method_opt=>'for all columns size 1');
+SELECT COUNT(*) FROM arithmetic_filter_dates WHERE YEAR(d) + 0 >= 2025;
+COUNT(*)
+100
+EXPLAIN SELECT /*+ NO_REWRITE */ id FROM arithmetic_filter_dates WHERE YEAR(d) + 0 >= 2025;
+Query Plan
+==================================================================
+|ID|OPERATOR       |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TABLE FULL SCAN|arithmetic_filter_dates|100     |TIME|
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([arithmetic_filter_dates.id]),filter([year(arithmetic_filter_dates.d) + 0 >= 2025]),rowset=256
+      access([arithmetic_filter_dates.id],[arithmetic_filter_dates.d]),partitions(p0)
+      is_index_back=false,is_global_index=false,filter_before_indexback[false],
+      range_key([arithmetic_filter_dates.id]),range(MIN ; MAX)always true
+DROP TABLE arithmetic_filter_dates;
+# Zero, nonzero and NULL multipliers do not change prepared execution semantics.
+PREPARE arithmetic_zero_stmt FROM 'SELECT COUNT(*) FROM arithmetic_filter_sel WHERE age * ? >= 0';
+SET @multiplier = 0;
+EXECUTE arithmetic_zero_stmt USING @multiplier;
+COUNT(*)
+1000
+SET @multiplier = 1;
+EXECUTE arithmetic_zero_stmt USING @multiplier;
+COUNT(*)
+1000
+SET @multiplier = -1;
+EXECUTE arithmetic_zero_stmt USING @multiplier;
+COUNT(*)
+0
+SET @multiplier = NULL;
+EXECUTE arithmetic_zero_stmt USING @multiplier;
+COUNT(*)
+0
+DEALLOCATE PREPARE arithmetic_zero_stmt;
+DROP TABLE arithmetic_filter_sel;
+DROP TABLE arithmetic_filter_digits;
