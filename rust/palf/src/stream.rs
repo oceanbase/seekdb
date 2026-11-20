@@ -373,13 +373,14 @@ impl Stream {
     pub fn locate_by_scn(&self, scn: u64) -> Result<u64> {
         let state = self.lock()?;
         state.check_open()?;
-        state
+        let lsn = state
             .records
             .iter()
             .filter(|(_, record)| record.header.max_scn <= scn)
             .next_back()
             .map(|(lsn, _)| *lsn)
-            .ok_or(Error::End)
+            .ok_or(Error::OutLower)?;
+        Ok((block_id(lsn) * BLOCK_SIZE).max(state.manifest.base_lsn))
     }
 
     pub fn locate_by_lsn(&self, lsn: u64) -> Result<u64> {
@@ -1208,6 +1209,19 @@ mod tests {
         assert_eq!(target.append_imported(1, 10, &bytes), Err(Error::Invalid));
         target.append_imported(0, 10, &bytes).unwrap();
         assert_eq!(target.append_imported(0, 10, &bytes), Err(Error::Duplicate));
+    }
+
+    #[test]
+    fn scn_lookup_returns_a_readable_segment_boundary() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        stream.append(b"one", 10).unwrap();
+        stream.append(b"two", 20).unwrap();
+
+        assert_eq!(stream.locate_by_scn(0), Err(Error::OutLower));
+        assert_eq!(stream.locate_by_scn(10), Ok(0));
+        assert_eq!(stream.locate_by_scn(20), Ok(0));
     }
 
     #[test]
