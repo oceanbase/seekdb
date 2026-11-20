@@ -89,6 +89,22 @@ though the transaction leaves no committed index-id insert or tombstone. This
 document calls that VID an **orphan membership entry**. Repeating visibility
 catch-up cannot manufacture a committed record for it.
 
+Absence from the index-id replay is not, by itself, proof of orphanhood. Until
+`ObVectorIndexRefresher::do_refresh()` runs, a committed delta-buffer row exists
+only in the delta-buffer table: `do_refresh()` copies its `ora_rowscn` into the
+index-id table (`src/sql/engine/cmd/ob_vector_index_refresh.cpp:327-356`) and
+skips that transfer entirely while
+`domain_table_row_cnt < refresh_threshold_` (`:305-306`). The delta-buffer query
+path has already put such a VID into the incremental graph and its membership
+before that transfer happens: `check_delta_buffer_table_readnext_status()`
+(`ob_plugin_vector_index_adaptor.cpp:2065`), `complete_delta_buffer_table_data()`
+(`:2194`) and `write_into_delta_mem()` (`:2160`, `:2173`, `:2181`). A VID can
+therefore be committed, materialized and queryable while the index-id table says
+nothing about it. An **orphan membership entry** is a VID with no committed
+record in *any* durable source (index-id table or delta-buffer table) at or
+below the claimed boundary — never merely a VID missing from the index-id
+replay.
+
 Two locking consequences matter, and neither is visible from the insert path alone:
 
 - `insert_rows()` never takes `incr_data_->mem_data_rwlock_`. A checkpoint that
@@ -201,27 +217,40 @@ them:
 existing critical section advances both views. The capture protocol therefore
 *establishes* the boundary instead of inheriting it:
 
-1. Run the background catch-up in "Write path" when visibility or graph
-   materialization is behind, then capture both views under the
-   mutation-exclusion scheme described in "Checkpoint snapshot contract". Read
-   `vbitmap_data_->scn_` and `incr_data_->last_dml_scn_` inside the same critical
-   section.
+1. Run the background catch-up in "Write path" when delta-buffer reconciliation,
+   visibility, or graph materialization is behind, then capture both views under
+   the mutation-exclusion scheme described in "Checkpoint snapshot contract".
+   Read `vbitmap_data_->scn_` and `incr_data_->last_dml_scn_` inside the same
+   critical section.
 2. Set `coverage_scn = vbitmap_data_->scn_`. The visibility baseline is what was
    actually replayed, so it is the boundary the payload can honestly claim.
 3. Under the same gate, distinguish the raw adapter set from the committed set
    that will be persisted:
    - `adapter_membership = incr_data_->bitmap_->insert_bitmap_`;
    - `resolved = visibility.insert ∪ visibility.delete`;
-   - `orphan_membership = adapter_membership − resolved`;
+   - `live = visibility.insert − visibility.delete`;
    - `checkpoint_membership = adapter_membership ∩ resolved`.
 
    Require `incr_data_->last_dml_scn_ <= coverage_scn`,
-   `visibility.insert ⊆ checkpoint_membership`, and
+   `live ⊆ checkpoint_membership`, and
    `checkpoint_membership ⊆ resolved`. The latter is true by construction but is
    still checked against the staged copy before publication. The live-visibility
    relation rejects every committed live VID whose vector has not been
    materialized. Empty checkpoint membership is valid whenever live visibility
    is empty; resolved tombstones do not require membership bits.
+
+   `live` must be computed; the raw `visibility.insert` is not the live set. A
+   VID that was replayed and later deleted keeps its bit in
+   `visibility.insert`: the delete removes the membership bit
+   (`insert_rows()` `:1539`), while `complete_index_mem_data_incremental()`
+   publishes by OR-ing the copied sets into the shared ones (`:2947-2948`), so
+   the removal of `d_vids` from the copied insert set (`:2927-2928`) cannot
+   clear a bit the shared bitmap already holds. Such a VID is in
+   `visibility.insert` and in `visibility.delete` but not in
+   `adapter_membership`. A containment check against the raw insert set demands
+   a membership bit the delete path removed on purpose: capture and shutdown
+   flush would then keep deferring forever after an ordinary delete even though
+   every live vector is materialized.
 
    Adapter membership is added only after graph insertion (`:1512` then `:1533`),
    so under the mutation gate the live-visibility relation proves that no live
@@ -229,9 +258,37 @@ existing critical section advances both views. The capture protocol therefore
    need no membership bit. A separate graph-completion watermark could provide
    the same proof, but phase 1 uses these containment checks and adds no second
    watermark.
-4. Orphan membership is reconciled, not retried forever. Once catch-up has
-   established the committed visibility view at `coverage_scn`, phase 1 excludes
-   `orphan_membership` from the checkpoint copy and persists only
+4. Orphan membership is reconciled, not retried forever, and it is classified
+   only after every committed durable record has been made visible to catch-up.
+   Before `orphan_membership = adapter_membership − resolved` is computed,
+   catch-up must reconcile the committed delta-buffer rows through a target SCN:
+   run the refresh transfer that copies `ora_rowscn` into the index-id table
+   (`ObVectorIndexRefresher::do_refresh()`,
+   `ob_vector_index_refresh.cpp:327-356`) even when
+   `domain_table_row_cnt < refresh_threshold_` would skip the user-facing
+   refresh (`:305-306`). The same transfer deletes the copied delta-buffer rows
+   (`:360-375`), and the subsequent index-id replay publishes them into the
+   `vbitmap_data_` baseline that capture serializes. The `coverage_scn` read in
+   step 2 must not exceed this reconciled target. If it does, or if any committed
+   delta-buffer row at or below `coverage_scn` remains unreconciled, repeat the
+   bounded catch-up or defer; never prune against the incomplete view.
+
+   Updating only a temporary `resolved` set is not an equivalent reconcile. The
+   same operations must reach the persisted visibility baseline; otherwise
+   capture could retain a membership bit that is absent from the serialized
+   `visibility.insert ∪ visibility.delete`, contradicting the restore checks.
+   Only after the refresh transfer and index-id replay complete does
+   `adapter_membership − resolved` mean "no committed record anywhere". A VID
+   whose membership bit came from `write_into_delta_mem()` (`:2181`) while its
+   index-id row was still waiting for the threshold transfer is *not* an orphan:
+   stripping it would persist the graph vertex without its membership bit, and
+   after restart the delta-buffer scan would rediscover the row and schedule
+   foreground vector lookup through `prepare_delta_mem_data()` (`:3042`) while
+   the load log reports `tail_rows=0`. If the reconcile cannot complete in
+   bounded cycles, defer the capture.
+
+   Once catch-up has established the committed visibility view at `coverage_scn`,
+   phase 1 excludes `orphan_membership` from the checkpoint copy and persists only
    `checkpoint_membership`. It need not mutate the serving adapter's raw bitmap
    or physically delete an orphan vertex from the serialized graph: the graph
    may be a physical superset, but an orphan bit must never be restored into
@@ -255,7 +312,7 @@ also skips the delta check that would otherwise repair a missing vertex. A
 checkpoint may therefore only claim a boundary at which the existing replay would
 itself skip the prefix; claiming a larger boundary would assert coverage the
 replay code does not consider covered. The additional
-`visibility.insert ⊆ membership` relation closes the separate inter-stage window
+`live ⊆ membership` relation closes the separate inter-stage window
 that this watermark comparison cannot see. Consequently, when there are no rows
 above `coverage_scn`, restore may report `tail_rows=0` only because the claimed
 prefix is already query-ready, not because its first ANN query still owes graph
@@ -358,16 +415,38 @@ An already-loaded immediate-mode index can advance membership and
 `last_dml_scn_` for a small committed batch while `vbitmap_data_` remains at its
 last replay. Without an ANN query, age-based capture and shutdown flush would
 otherwise retry the same failed coverage checks forever. Every capture therefore
-starts by checking for stale visibility or incomplete graph materialization and,
-when needed, runs a bounded background catch-up to a target at least as recent as
-the observed `last_dml_scn_`.
+starts by checking for stale visibility, incomplete graph materialization, or
+committed delta-buffer rows whose `ora_rowscn` has not reached the index-id table
+yet and, when needed, runs a bounded background catch-up to a target at least as
+recent as the observed `last_dml_scn_`.
 
-Catch-up must drive both sides of the existing query pipeline: index-id replay to
-resolve and publish visibility, and the `QUERY_ROWKEY_VEC` /
-`complete_delta_buffer_table_data()` work that materializes every live vector and
-its membership bit. `refresh_bitmap_background()` currently discards the synthetic
+Catch-up uses one target SCN for its durable reads. An explicit flush uses its
+requested flush boundary; a scheduled attempt uses a target at least as recent as
+the observed `last_dml_scn_`. The eventual `coverage_scn` may be lower than that
+target, but never higher. Catch-up must drive three stages of the existing
+pipeline, in this order:
+
+1. **Delta-buffer reconcile.** Run the refresh transfer for every committed
+   delta-buffer row at or below the target SCN, so that the index-id view sees
+   rows whose `ora_rowscn` has not been copied yet. The user-facing refresh skips
+   that copy while `domain_table_row_cnt < refresh_threshold_`
+   (`ObVectorIndexRefresher::do_refresh()`, `ob_vector_index_refresh.cpp:305-306`,
+   transfer at `:327-356`); checkpoint catch-up must not inherit that skip for
+   rows at or below its target. The transfer also removes the copied rows from
+   the delta-buffer table (`:360-375`). No orphan classification may run before
+   this reconcile completes (see "Coverage boundary", step 4).
+2. **Index-id replay** through `complete_index_mem_data_incremental()` at the
+   same target, publishing both visibility bitmaps and their SCN into the actual
+   `vbitmap_data_` baseline that will be serialized, not just a temporary
+   `resolved` copy.
+3. **Vector materialization** — the `QUERY_ROWKEY_VEC` /
+   `complete_delta_buffer_table_data()` work that materializes every live vector
+   and its membership bit.
+
+`refresh_bitmap_background()` currently discards the synthetic
 query context after advancing `vbitmap_data_`, and `try_sync_vbitmap_memdata()`
-also leaves vector synchronization undone. Neither helper alone is checkpoint
+also leaves vector synchronization undone; neither helper performs the
+delta-buffer reconcile. None of them alone is checkpoint
 catch-up. The implementation must retain and drain the materialization context,
 without requiring an ANN query to do so.
 
@@ -381,19 +460,27 @@ cycle may weaken the containment checks just to make progress.
 Under the Option 1 contract the complete sequence is:
 
 1. Admit the attempt against its memory and stall budgets. Without holding the
-   mutation gate for write, run the catch-up above when stale, and also after any
-   previous deferral for stale visibility or incomplete membership.
+   mutation gate for write, run the catch-up above — including the delta-buffer
+   reconcile — when stale, and also after any previous deferral for stale
+   visibility, incomplete membership, or incomplete delta-buffer transfer.
 2. Take the mutation gate for write, then `incr_data_->bitmap_rwlock_` for write,
    then `vbitmap_data_`'s lock pair.
 3. Under those locks, re-read `incr_data_->last_dml_scn_` and
-   `vbitmap_data_->scn_`, derive `checkpoint_membership`, and run all boundary
-   checks in "Coverage boundary". Orphan bits are excluded from that derived
-   view rather than treated as a permanent stale-coverage failure. If any other
-   check fails, release, record a deferred attempt with its reason, and publish
-   nothing. The next retry starts with catch-up, not another immediate capture.
+   `vbitmap_data_->scn_`, derive
+   `checkpoint_membership = adapter_membership ∩ resolved`, use
+   `live = visibility.insert − visibility.delete` for containment, and run all
+   boundary checks in "Coverage boundary". Require `coverage_scn` not to exceed
+   the reconciled catch-up target. Orphan bits are excluded from that derived
+   view only when the delta-buffer reconcile of step 1 has made every committed
+   durable record at or below `coverage_scn` visible to the serialized
+   `resolved`; if it has not, the attempt is stale and is deferred, never pruned
+   against the incomplete view. If any other check fails, release, record a
+   deferred attempt with its reason, and publish nothing. The next retry starts
+   with catch-up, not another immediate capture.
 4. Still under the gate, copy the raw adapter membership bitmap and both
    visibility bitmaps with `roaring64_bitmap_copy()`, then remove every orphan
-   bit from the membership copy to materialize `checkpoint_membership`. Copies
+   bit — classified only after the step-1 delta-buffer reconcile —
+   from the membership copy to materialize `checkpoint_membership`. Copies
    are required: the handles are not a snapshot, and the bitmaps keep mutating.
 5. Still under the gate, serialize `incr_data_->index_` into the staging buffer,
    then append `vid_bound_` and the watermarks. A physical orphan vertex may be
@@ -491,6 +578,17 @@ not invoke delta completion for the claimed prefix. A payload that cannot prove
 this with the restore checks below is rejected and rebuilt through full replay;
 it is never restored with deferred prefix work hidden by an empty tail.
 
+Delta-buffer rows above `coverage_scn` are outside the claimed prefix: they are
+consumed by the normal delta-buffer scan on the first query and materialized
+through `prepare_delta_mem_data()` (`:3042`), and they are not part of
+`tail_rows`. A row at or below `coverage_scn` was copied into the index-id table
+and deleted from the delta-buffer table by the capture-time refresh transfer
+(`ob_vector_index_refresh.cpp:327-375`), so the normal delta-buffer scan cannot
+rediscover it and index-id tail replay starts strictly above its covered SCN. If
+such a row remains unreconciled at capture, capture must defer rather than
+publish. Restored checkpoint watermarks alone do not suppress the delta-buffer
+scan and are not a substitute for this reconcile.
+
 ### Why the visibility baseline is not optional
 
 The incremental graph does not carry visibility. `init_mem_data(VIRT_INC)` leaves
@@ -530,7 +628,7 @@ reads the index-id table:
 | `header.coverage_scn == visibility.scn` | the payload mixes two captures |
 | `coverage_scn >= header.graph_dml_scn` | the graph watermark ran past the visibility baseline |
 | `membership ⊆ visibility.insert ∪ visibility.delete` | the graph claims a VID the visibility view never resolved |
-| `visibility.insert ⊆ membership` | a live VID in the claimed prefix still lacks graph membership and materialization |
+| `visibility.insert − visibility.delete ⊆ membership` | a live VID in the claimed prefix still lacks graph membership and materialization |
 
 The two subset tests protect opposite directions, and they apply to the persisted
 committed membership view, not to the raw adapter bitmap. Raw adapter membership
@@ -538,10 +636,20 @@ is only advanced after `obvectorutil::add_index()` (`insert_rows()` `:1512` then
 `:1533`), so the first test detects committed graph membership that is not
 resolved by the baseline. The second detects a baseline that ran ahead of graph
 materialization, including the interval before `QUERY_ROWKEY_VEC`; an empty
-membership bitmap cannot validate a non-empty live visibility set. Both are
+membership bitmap cannot validate a non-empty live visibility set. The live set
+is `visibility.insert − visibility.delete`, never the raw insert set: publish
+ORs the replayed copies into the shared bitmaps (`:2947-2948`) while a delete
+removes the membership bit (`:1539`), so a tombstoned VID legitimately stays in
+`visibility.insert` and would otherwise fail this check forever. Both tests are
 mandatory at capture and restore. An orphan physical graph vertex does not fail
 these checks because its orphan membership bit was excluded before publication;
 restoring that bit is invalid.
+
+Restore does not read the index-id table or the delta-buffer table, so it cannot
+re-derive orphanhood. The guarantee that no committed delta-buffer row was
+stripped of its membership bit is established at capture, by the reconcile in
+"Coverage boundary", step 4; the below-refresh-threshold fixture in "Validation
+plan" is what holds that guarantee accountable end to end.
 
 On failure nothing is partially applied: the graph, the membership bitmap and both
 visibility bitmaps are all discarded, and replay runs from the snapshot SCN. The
@@ -586,8 +694,9 @@ therefore populates `vbitmap_data_`; by its own comment it does not yet sync the
 vectors into `incr_data_`. A catch-up that fills the graph but skips the baseline
 produces the silent-invisible-rows case described in "Why the visibility baseline is
 not optional". A visibility-only catch-up can instead advance the baseline past an
-incomplete graph. The switch therefore uses the same full materialization catch-up
-and `visibility.insert ⊆ membership` check as checkpoint capture.
+incomplete graph. The switch therefore uses the same full materialization catch-up,
+the same delta-buffer reconcile, and the same live-set containment check
+(`visibility.insert − visibility.delete ⊆ membership`) as checkpoint capture.
 
 **Option B — generation handoff.** Freeze the current incremental generation at the
 rebuild boundary, write later inserts into a new generation, and let the new adapter
@@ -636,9 +745,9 @@ catch-up before the next capture; catch-up may advance `vbitmap_data_->scn_`, bu
 that alone never publishes a checkpoint.
 
 An explicit flush is exposed for planned shutdowns. It waits for an in-progress
-checkpoint to finish, runs the same background visibility and vector
-materialization catch-up outside the exclusive hold, and then requests capture if
-the pending set is non-empty. It reports whether the requested coverage was
+checkpoint to finish, runs the same background delta-buffer reconcile, visibility
+and vector materialization catch-up outside the exclusive hold, and then requests
+capture if the pending set is non-empty. It reports whether the requested coverage was
 reached. It is a best-effort operation: a shutdown that times out must still exit,
 and the next start must fall back to replay. Flush must make progress for an
 ingest-only immediate-mode workload without manufacturing an ANN query.
@@ -757,7 +866,7 @@ one-to-one:
    `complete_index_mem_data_incremental()` publishes a non-empty live visibility
    baseline and watermark but before `QUERY_ROWKEY_VEC` materializes its vectors,
    with at least one live VID still absent from membership. Capture must not
-   publish while `visibility.insert ⊄ membership`; it must defer
+   publish while `visibility.insert − visibility.delete ⊄ membership`; it must defer
    and use full catch-up before retrying. Resume materialization, capture, and
    restart with no tail rows: restore must pass both subset checks and the first
    query must not rebuild the claimed prefix.
@@ -797,6 +906,45 @@ one-to-one:
     after restart; 3.81 s and 2.80 s replacement stalls) are the baseline to beat.
     The blocked-writer figure decides whether Option 1 is acceptable or Option 2 has
     to be built.
+13. **Replayed VID deleted between two checkpoints, background catch-up only.**
+    On an already-loaded immediate-mode index, run **insert → checkpoint →
+    DELETE → checkpoint** with no intervening ANN query, letting background
+    catch-up drive both captures. The second capture must publish instead of
+    deferring forever: the deleted VID stays in `visibility.insert` because
+    publish ORs into the shared bitmap (`:2947-2948`), while its membership bit
+    was removed by `insert_rows()` (`:1539`), so the live-set check
+    `visibility.insert − visibility.delete ⊆ membership` must pass while the raw
+    insert-set check would not. Assert that capture and restore validation use
+    the live set rather than the raw `visibility.insert`, that after restart the
+    deleted VID is invisible and the surviving row is returned, and that results
+    match a full-replay control. Repeat with the delete committed while the
+    index is below the mem-sync and optimization thresholds.
+14. **Below-refresh-threshold delta-buffer commit.** Run two fixtures on an
+    already-loaded immediate-mode index whose delta-buffer table holds fewer
+    committed rows than `refresh_threshold_`:
+    - *Pre-materialized orphan-classification race.* Commit a row, then use one
+      preparatory ANN query to drive
+      `check_delta_buffer_table_readnext_status()` →
+      `complete_delta_buffer_table_data()` → `write_into_delta_mem()`. Before
+      flush, assert that the VID is in graph membership, its committed row is
+      still in the delta-buffer table, and no corresponding index-id row exists
+      because `ObVectorIndexRefresher::do_refresh()` skipped the transfer
+      (`ob_vector_index_refresh.cpp:305-306`). Then run **flush → restart with no
+      further ANN query**. This preparatory query is setup for the pre-refresh
+      state; it is not hidden work between flush and restart.
+    - *Ingest-only flush.* Repeat from the same below-threshold initial state as
+      **insert → flush → restart with no ANN query at all**. Flush itself must
+      perform the reconcile, index-id replay, and vector materialization.
+
+    In both fixtures, catch-up must run the refresh transfer despite the
+    threshold and replay it into the serialized visibility baseline before any
+    orphan classification, so the VID's membership bit is persisted together
+    with its graph vertex. After restart the load log reports `tail_rows=0`, the
+    normal delta-buffer scan does not rediscover the transferred row, the first
+    query performs no foreground `prepare_delta_mem_data()` vector lookup for a
+    covered VID, and results match a full-replay control. When the reconcile
+    cannot complete, assert the attempt is deferred with a reason rather than
+    published with the membership bit stripped.
 
 Correctness must hold for runs where the checkpoint is interrupted at every stage:
 before publish, after publish but before the reader observes it, and after the reader
@@ -810,13 +958,16 @@ observes it but before the previous generation is retired.
    rollback orphans cannot block capture, and gate both restore-time bypasses behind
    the one-shot initial durable tail scan. Add the mutation gate to every writer,
    including the complete asynchronous `write_to_vsag_()` sequence, and add
-   background catch-up through vector materialization. Checkpointing stays off by
-   default; the only behaviour change is that a valid checkpoint is restored when
-   present. Phase 1 is not shippable without every piece: the gate makes capture
+   background catch-up through delta-buffer reconcile, index-id replay, and
+   vector materialization. Checkpointing stays off by default; the only
+   behaviour change is that a valid checkpoint is restored when present.
+   Phase 1 is not shippable without every piece: the gate makes capture
    atomic, the committed-membership and live-set proofs make the claimed prefix
    complete, catch-up lets an ingest-only workload reach that state without a
-   query, orphan reconciliation makes capture terminate after rollback, and the
-   forced initial scan makes post-checkpoint durable rows visible after restart.
+   query, the delta-buffer reconcile keeps below-threshold committed rows out of
+   the orphan classification, orphan reconciliation makes capture terminate after
+   rollback, and the forced initial scan makes post-checkpoint durable rows
+   visible after restart.
 2. Scheduling on size and age, plus the observability surface and the flush entry
    point, all using the phase-1 catch-up before capture and stale retry.
 3. Replacement catch-up (Option A), gated behind its own switch, carrying the
@@ -864,7 +1015,8 @@ mutation-gate hold justifies building the immutable-generation option.
     plan.
   - Added `visibility.insert ⊆ membership` at capture and restore so a visibility
     baseline published before `QUERY_ROWKEY_VEC` cannot validate an incomplete
-    graph or hide prefix rebuild behind `tail_rows=0`.
+    graph or hide prefix rebuild behind `tail_rows=0`. (Revision 5 supersedes the
+    raw insert set with the live set `visibility.insert − visibility.delete`.)
   - Required background visibility and vector-materialization catch-up outside
     the exclusive serialization hold before capture and every stale retry, with
     age-triggered and insert → flush → restart tests that use no intervening ANN
@@ -878,3 +1030,22 @@ mutation-gate hold justifies building the immutable-generation option.
   - Replaced raw adapter membership persistence with a committed checkpoint
     membership view that reconciles rollback orphans instead of deferring
     forever, and added rollback → committed insert → flush acceptance coverage.
+- Revision 5:
+  - Normalized the capture and restore containment checks to the live visibility
+    set `visibility.insert − visibility.delete`. Publish ORs the replayed copies
+    into the shared bitmaps (`complete_index_mem_data_incremental()` `:2947-2948`)
+    while `insert_rows()` `:1539` removes the membership bit on delete, so a
+    tombstoned VID legitimately remains in `visibility.insert`; checking the raw
+    insert set would demand the removed bit and defer capture and shutdown flush
+    forever after an ordinary delete. Added insert → checkpoint → delete →
+    checkpoint acceptance coverage driven by background catch-up with no ANN
+    query.
+  - Required committed delta-buffer rows to be reconciled before orphan
+    membership is classified: checkpoint catch-up runs the refresh transfer past
+    the `refresh_threshold_` skip (`ObVectorIndexRefresher::do_refresh()`,
+    `ob_vector_index_refresh.cpp:305-306`, `:327-375`) and then replays the
+    transferred rows into the serialized visibility baseline. The capture
+    boundary cannot exceed the reconciled target, a temporary `resolved`-only
+    merge is insufficient, and incomplete reconcile defers capture. Added
+    below-refresh-threshold acceptance fixtures for both a pre-materialized
+    orphan-classification race and an ingest-only, no-query flush/restart.
