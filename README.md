@@ -454,6 +454,11 @@ LIMIT 10;
 
 Python developers can access this via SQLAlchemy or any MySQL driver.
 
+For a vector index configured with `DISTANCE=inner_product`, use
+`ORDER BY inner_product(embedding, '[...]') DESC APPROXIMATE LIMIT 10` to search
+by highest inner product. The projected `inner_product` value retains the dot
+product's sign; `negative_inner_product(...) ASC APPROXIMATE` gives the same ranking.
+
 </details>
 
 
