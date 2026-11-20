@@ -42,8 +42,6 @@ public:
   int init();
   void reset();
   int create_tablet(ObTabletHandle &tablet_handle);
-  /* ATTENTION: below functions should be called without any ls_tablet or t3m locks */
-  int throttle_tablet_creation();
   void free_tablet(ObTablet *tablet);
   OB_INLINE int64_t total() const {
       return tiny_allocator_.total() + (nullptr == mstx_mem_ctx_ ? 0 : mstx_mem_ctx_->hold()); }
@@ -57,7 +55,6 @@ private:
 private:
   bool is_inited_;
   common::ObFIFOAllocator tiny_allocator_;
-  int64_t wait_create_tablets_cnt_; // tablets waiting to be created
   int64_t created_tablets_cnt_; // tablets has been created
   lib::MemoryContext mstx_mem_ctx_;
   DISALLOW_COPY_AND_ASSIGN(ObFullTabletCreator);

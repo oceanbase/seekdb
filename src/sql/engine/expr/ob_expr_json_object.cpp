@@ -18,6 +18,7 @@
 #include "ob_expr_json_object.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "common/json_type/json_builder.h"
+#include "common/json_type/ob_json_bin.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -113,14 +114,29 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       ObString key = json_datum->get_string();
       bool is_null = false;
       bool input_error = false;
+      ObJsonBuffer key_text(&temp_allocator);
       if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(arg, ctx, temp_allocator, key, is_null))) {
-      } else if (OB_FAIL(ObJsonExprHelper::append_json_value(expr, ctx, temp_allocator,
-          i+1, builder, key, input_error))) {
-        if (input_error) {
-          ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-          LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
-        } else if (ret == OB_ERR_JSON_DOCUMENT_NULL_KEY) {
-          LOG_USER_ERROR(OB_ERR_JSON_DOCUMENT_NULL_KEY);
+      } else {
+        // JSON arguments retain their binary type during expression deduction.
+        // Object member names need the JSON text, not the internal binary bytes.
+        if (arg->datum_meta_.type_ == ObJsonType) {
+          ObJsonBin json_key(key.ptr(), key.length(), &temp_allocator);
+          if (OB_FAIL(json_key.reset_iter())) {
+            LOG_WARN("fail to read JSON object key", K(ret));
+          } else if (OB_FAIL(json_key.print(key_text, true))) {
+            LOG_WARN("fail to format JSON object key", K(ret));
+          } else {
+            key.assign_ptr(key_text.ptr(), key_text.length());
+          }
+        }
+        if (OB_SUCC(ret) && OB_FAIL(ObJsonExprHelper::append_json_value(expr, ctx, temp_allocator,
+            i+1, builder, key, input_error))) {
+          if (input_error) {
+            ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+            LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+          } else if (ret == OB_ERR_JSON_DOCUMENT_NULL_KEY) {
+            LOG_USER_ERROR(OB_ERR_JSON_DOCUMENT_NULL_KEY);
+          }
         }
       }
     }

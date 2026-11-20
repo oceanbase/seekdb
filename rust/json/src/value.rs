@@ -373,7 +373,7 @@ impl Value {
         let first_identity = self
             .document
             .next_identity
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
                 next.checked_add(values.len() as u64)
             })
             .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, 0))?;

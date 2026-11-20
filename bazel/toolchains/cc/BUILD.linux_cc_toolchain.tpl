@@ -11,6 +11,7 @@ filegroup(
         "devtools/lib/clang/**/include/**",
         "devtools/lib/clang/**/share/**",
         "devtools/lib/gcc/**",
+        "sysroot/**",
     ], allow_empty = True) + [
         "builtin_include_directory_paths",
         "module.modulemap",
@@ -93,6 +94,7 @@ cc_toolchain_config(
     name = "local_compile_config",
     abi_libc_version = "glibc",
     abi_version = "@HOST_CPU@",
+    builtin_sysroot = @BUILTIN_SYSROOT@,
     compile_flags = [
         "-Wall",
         "-Wthread-safety",

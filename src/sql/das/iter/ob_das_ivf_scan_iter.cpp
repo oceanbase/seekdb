@@ -2181,6 +2181,9 @@ int ObDASIvfBaseScanIter::get_rowkey_brute_post(bool is_vectorized, IvfRowkeyHea
             float distance = 0.0f;
             ObRowkey main_rowkey;
             if (OB_FAIL(calc_vec_dis<float>(reinterpret_cast<float *>(c_vec.ptr()), search_vec, dim_, distance, raw_dis_type))) {
+              if (OB_ERR_NULL_VALUE == ret) {
+                ret = OB_SUCCESS;
+              }
             } else if (OB_FAIL(get_main_rowkey_brute(mem_context_->get_arena_allocator(), brute_ctdef, main_rowkey_cnt, main_rowkey))) {
             } else if (OB_FAIL(nearest_rowkey_heap.push_center(main_rowkey, distance))) {
             }
@@ -2211,6 +2214,9 @@ int ObDASIvfBaseScanIter::get_rowkey_brute_post(bool is_vectorized, IvfRowkeyHea
             float distance = 0.0f;
             ObRowkey main_rowkey;
             if (OB_FAIL(calc_vec_dis<float>(reinterpret_cast<float *>(c_vec.ptr()), search_vec, dim_, distance, raw_dis_type))) {
+              if (OB_ERR_NULL_VALUE == ret) {
+                ret = OB_SUCCESS;
+              }
             } else if (OB_FAIL(get_main_rowkey_brute(mem_context_->get_arena_allocator(), brute_ctdef, main_rowkey_cnt, main_rowkey))) {
             } else if (OB_FAIL(nearest_rowkey_heap.push_center(main_rowkey, distance))) {
             }

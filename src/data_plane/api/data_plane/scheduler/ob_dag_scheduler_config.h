@@ -49,7 +49,7 @@ DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_MDS_MINI_MERGE, ObDagPrio::DAG_PRIO_COMPACTI
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_VERIFY_CKM, ObDagPrio::DAG_PRIO_COMPACTION_LOW, ObSysTaskType::SSTABLE_MAJOR_MERGE_TASK, "VERIFY_CKM", "COMPACTION",
     false, 1, {"tablet_count"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BATCH_FREEZE_TABLETS, ObDagPrio::DAG_PRIO_COMPACTION_LOW, ObSysTaskType::BATCH_FREEZE_TABLET_TASK, "BATCH_FREEZE", "COMPACTION",
-    false, 2, {"ls_id", "tablet_count"})
+    false, 1, {"tablet_count"})
 /*
  * NOTICE: if you add/delete a compaction dag type here, remember to alter function is_compaction_dag and get_diagnose_tablet_type in ob_dag_scheduler.h
  * AND update check_ls_compaction_dag_exist_with_cancel
@@ -73,7 +73,7 @@ DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FINISH_BACKFILL_TX, ObDagPrio::DAG_PRIO_STOR
     true, 1, {"ls_id"})
 
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_VECTOR_INDEX, ObDagPrio::DAG_PRIO_VECTOR_INDEX, ObSysTaskType::VECTOR_INDEX_TASK, "VECTOR_INDEX_DAG", "VECTOR_INDEX",
-    false, 3, {"ls_id", "table_id", "tablet_id"})
+    false, 2, {"table_id", "tablet_id"})
 
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_MAX, ObDagPrio::DAG_PRIO_MAX, ObSysTaskType::MAX_SYS_TASK_TYPE, "DAG_TYPE_MAX", "INVALID", false, 0, {})
 #endif

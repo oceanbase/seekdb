@@ -101,10 +101,9 @@ int ObSignalHandle::add_signums_to_set(sigset_t &sig_set)
     LOG_ERROR("Empty signal set error", K(ret));
   } else {
     int rc = 0;
+    // Keep this list in sync with the handled signals in deal_signals().
     int signals[] = {SIGPIPE, SIGTERM, SIGUSR1,
-                     40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
-                     50, 51, 52, 53, 55, 56, 57, 59, 60,
-                     63, 64};
+                     40, 41, 42, 49, 53, 59, 63};
     for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(signals); ++i) {
       if (0 != (rc = sigaddset(&sig_set, signals[i]))) {
         ret = OB_ERR_UNEXPECTED;
@@ -123,6 +122,7 @@ int ObSignalHandle::deal_signals(int signum)
   switch (signum)
   {
     case SIGPIPE: {
+      // Ignore broken pipes.
       break;
     }
     case SIGTERM: {
@@ -157,25 +157,10 @@ int ObSignalHandle::deal_signals(int signum)
       LOG_WARN("Signal 42 up ObLogger level", "current level", OB_LOGGER.get_level());
       break;
     }
-    case 43: {
-      break;
-    }
-    case 45: {
-      break;
-    }
-    case 46: {
-      break;
-    }
     case 49: {
       ob_print_mod_memory_usage();
       ObMemoryPrinter::get_instance().print_memory_usage();
       switch_check_io_hang_errsim();
-      break;
-    }
-    case 50: {
-      break;
-    }
-    case 51: {
       break;
     }
     case 53: {
@@ -185,16 +170,9 @@ int ObSignalHandle::deal_signals(int signum)
       }
       break;
     }
-    case 57: {
-      // clog::ObBatchSubmitMockTest::handle_signal();
-      break;
-    }
     case 59: {               // similar to 49, verbose mode
       ob_print_mod_memory_usage(false, true);
       sql::print_sql_stat();
-      break;
-    }
-    case 60: {
       break;
     }
     case 63: {

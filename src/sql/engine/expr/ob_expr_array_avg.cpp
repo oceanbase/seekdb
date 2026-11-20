@@ -29,6 +29,35 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+template <typename T>
+int calc_wide_integer_average(const uint32_t len, const uint8_t *null_bitmaps,
+                             const char *data, const uint32_t data_len, double &average)
+{
+  int ret = OB_SUCCESS;
+  if (data_len / sizeof(T) != len) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected integer array length", K(ret), K(len), K(data_len));
+  } else {
+    // A uint32 length of 64-bit elements needs at most 96 signed sum bits.
+    // Sum exactly before converting: converting each element to double loses
+    // cancellation such as [INT64_MIN, INT64_MAX], whose average is -0.5.
+    __int128 sum = 0;
+    for (uint32_t i = 0; i < len; ++i) {
+      if (null_bitmaps == nullptr || null_bitmaps[i] == 0) {
+        T value;
+        MEMCPY(&value, data + static_cast<uint64_t>(i) * sizeof(T), sizeof(T));
+        sum += static_cast<__int128>(value);
+      }
+    }
+    // Preserve the existing denominator and empty-array behavior.
+    average = static_cast<double>(sum) / len;
+  }
+  return ret;
+}
+}
+
 ObExprArrayAvg::ObExprArrayAvg(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUNC_SYS_ARRAY_AVG, N_ARRAY_AVG, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
@@ -112,7 +141,16 @@ int ObExprArrayAvg::eval_array_avg(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
                                             data_len))) {
     } else if (ob_is_integer_type(arr_type->get_basic_meta(depth).get_obj_type())) {
       depth = 0;
-      if (ob_is_unsigned_type(arr_type->get_basic_meta(depth).get_obj_type())) {
+      const ObObjType element_type = arr_type->get_basic_meta(depth).get_obj_type();
+      if (element_type == ObIntType || element_type == ObUInt64Type) {
+        double average = 0;
+        ret = element_type == ObIntType
+            ? calc_wide_integer_average<int64_t>(len, null_bitmaps, data, data_len, average)
+            : calc_wide_integer_average<uint64_t>(len, null_bitmaps, data, data_len, average);
+        if (OB_SUCC(ret)) {
+          res.set_double(average);
+        }
+      } else if (ob_is_unsigned_type(element_type)) {
         uint64_t res_sum = 0;
         if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
         } else {
@@ -181,7 +219,16 @@ int ObExprArrayAvg::eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                                 data_len))) {
         } else if (ob_is_integer_type(arr_type->get_basic_meta(depth).get_obj_type())) {
           depth = 0;
-          if (ob_is_unsigned_type(arr_type->get_basic_meta(depth).get_obj_type())) {
+          const ObObjType element_type = arr_type->get_basic_meta(depth).get_obj_type();
+          if (element_type == ObIntType || element_type == ObUInt64Type) {
+            double average = 0;
+            ret = element_type == ObIntType
+                ? calc_wide_integer_average<int64_t>(len, null_bitmaps, data, data_len, average)
+                : calc_wide_integer_average<uint64_t>(len, null_bitmaps, data, data_len, average);
+            if (OB_SUCC(ret)) {
+              res_datum.at(j)->set_double(average);
+            }
+          } else if (ob_is_unsigned_type(element_type)) {
             uint64_t res_sum = 0;
             if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
             } else {

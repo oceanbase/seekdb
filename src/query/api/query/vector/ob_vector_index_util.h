@@ -642,6 +642,15 @@ public:
     uint64_t &snapshot_tid,
     uint64_t &emdedded_tid,
     bool is_hybrid);
+  static int get_latest_avaliable_index_tids_for_ivf(
+    share::schema::ObSchemaGetterGuard *schema_guard,
+    const schema::ObTableSchema &data_table_schema,
+    const int64_t col_id,
+    const ObVectorIndexAlgorithmType type,
+    uint64_t &centroid_tid,
+    uint64_t &cid_rowkey_tid,
+    uint64_t &rowkey_cid_tid,
+    uint64_t &extra_tid);
   static int get_vector_index_tid_with_index_prefix(
     share::schema::ObSchemaGetterGuard *schema_guard,
     const schema::ObTableSchema &data_table_schema,

@@ -282,7 +282,7 @@ int ObAllVirtualTabletSSTableMacroInfo::get_macro_info(
         info.occupy_size_ = macro_header.fixed_header_.occupy_size_;
         info.micro_block_count_ = macro_header.fixed_header_.micro_block_count_;
         info.data_checksum_ = macro_header.fixed_header_.data_checksum_;
-        info.compressor_type_ = macro_header.fixed_header_.compressor_type_;
+        info.compressor_type_ = macro_header.get_compressor_type();
         info.row_store_type_ = static_cast<ObRowStoreType>(macro_header.fixed_header_.row_store_type_);
       }
     }

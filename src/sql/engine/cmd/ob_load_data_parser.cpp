@@ -68,7 +68,9 @@ int ObCSVGeneralParser::init(const ObDataInFileStruct &format,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(format_.init_format(format, file_column_nums, file_cs_type))) {
-  } else if (OB_FAIL(init_opt_variables())) {
+  } else {
+    format_.ignore_last_empty_col_ = false;
+    ret = init_opt_variables();
   }
 
   return ret;

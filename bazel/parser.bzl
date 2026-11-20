@@ -59,12 +59,15 @@ def _parser_impl(ctx):
     lexer = ctx.outputs.lexer
     if ctx.attr.lexer_patch:
         lexer = ctx.actions.declare_file(ctx.label.name + "/" + lexer.basename)
+    # Run Flex through the codegen wrapper on every host. The wrapper gives each
+    # action a private temporary directory: the Windows SDK Flex shares fixed
+    # temporary names across processes, which breaks concurrent Bazel actions.
     ctx.actions.run(
-        executable = ctx.file._flex,
-        inputs = [ctx.file.lexer_source],
-        tools = ctx.files._runtime,
+        executable = ctx.file._python,
+        inputs = [ctx.file.lexer_source, ctx.file._codegen],
+        tools = ctx.files._runtime + [ctx.file._flex],
         outputs = [lexer, ctx.outputs.lexer_header],
-        arguments = ctx.attr.flex_options + [
+        arguments = [ctx.file._codegen.path, "flex", ctx.file._flex.path] + ctx.attr.flex_options + [
             "--header-file=" + ctx.outputs.lexer_header.path,
             "--outfile=" + lexer.path,
             ctx.file.lexer_source.path,

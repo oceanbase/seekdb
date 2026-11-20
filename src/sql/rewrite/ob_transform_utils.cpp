@@ -10541,7 +10541,8 @@ int ObTransformUtils::check_expr_valid_for_stmt_merge(ObIArray<ObRawExpr*> &sele
     } else if (expr->has_flag(IS_CONST) ||
                expr->has_generalized_column()) {
       // do nothing
-    } else if (expr->has_flag(CNT_STATE_FUNC) ||
+    } else if (!expr->is_const_expr() ||
+               expr->has_flag(CNT_STATE_FUNC) ||
                expr->has_flag(CNT_DYNAMIC_USER_VARIABLE) ||
                expr->has_flag(CNT_ALIAS) ||
                expr->has_flag(CNT_VALUES) ||

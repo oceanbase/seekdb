@@ -1,0 +1,6 @@
+GRANT ALL ON * TO ''@'localhost%';
+ERROR HY000: Operation GRANT failed for localhost%
+ALTER USER ''@localhost ACCOUNT LOCK;
+ERROR HY000: Operation ALTER USER failed for localhost
+GRANT ALL PRIVILEGES ON test.* TO ''@'localhost';
+ERROR HY000: Operation GRANT failed for localhost

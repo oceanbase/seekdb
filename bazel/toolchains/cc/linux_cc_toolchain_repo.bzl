@@ -2,7 +2,7 @@
 
 load(":repository_utils.bzl", "builtin_include_directories", "host_substitutions")
 
-def _discover_builtin_include_directories(repository_ctx, compiler):
+def _discover_builtin_include_directories(repository_ctx, compiler, flags):
     resource_result = repository_ctx.execute(
         [compiler, "-print-resource-dir"],
         environment = {"LC_ALL": "C"},
@@ -23,7 +23,7 @@ def _discover_builtin_include_directories(repository_ctx, compiler):
 
     directories = []
     repository_root = str(repository_ctx.path(""))
-    for value in builtin_include_directories(repository_ctx, compiler):
+    for value in builtin_include_directories(repository_ctx, compiler, flags):
         if value == resource_directory or value.startswith(resource_directory + "/"):
             value = "%crosstool_top%/devtools/lib/clang/" + resource_version + value[len(resource_directory):]
         elif value.startswith(repository_root + "/"):
@@ -48,7 +48,7 @@ def _write_builtin_module_map(repository_ctx, builtin_include_directories):
         if path.exists and str(path) not in roots:
             roots.append(str(path))
     result = repository_ctx.execute(
-        [find] + roots + ["-type", "f", "-print"],
+        [find, "-H"] + roots + ["-type", "f", "-print"],
         environment = {"LC_ALL": "C"},
         quiet = True,
     )
@@ -69,6 +69,23 @@ def _write_builtin_module_map(repository_ctx, builtin_include_directories):
     lines.extend(["  textual header %s" % json.encode(path) for path in headers])
     lines.append("}")
     repository_ctx.file("module.modulemap", "\n".join(lines) + "\n")
+
+def _stage_sysroot(repository_ctx, source):
+    # Keep empty lib/usr/lib directories in sandbox inputs without writing to
+    # the caller's sysroot. Clang searches through lib/../lib64.
+    for entry in source.readdir():
+        if entry.basename not in ["lib", "usr"]:
+            repository_ctx.symlink(entry, "sysroot/" + entry.basename)
+    for entry in source.get_child("usr").readdir():
+        if entry.basename != "lib":
+            repository_ctx.symlink(entry, "sysroot/usr/" + entry.basename)
+    for name in ["lib", "usr/lib"]:
+        directory = source.get_child(name)
+        if directory.exists:
+            for entry in directory.readdir():
+                if entry.basename != ".layout":
+                    repository_ctx.symlink(entry, "sysroot/" + name + "/" + entry.basename)
+        repository_ctx.file("sysroot/" + name + "/.layout", "")
 
 def _linux_cc_toolchain_repository_impl(repository_ctx):
     if repository_ctx.os.name != "linux":
@@ -95,6 +112,13 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
             fail("bundled tool is missing: %s" % tool)
 
     repository_ctx.symlink(devtools, "devtools")
+    sysroot = repository_ctx.getenv("SEEKDB_SYSROOT")
+    flags = []
+    if sysroot:
+        if not repository_ctx.path(sysroot).get_child("usr/include/stdlib.h").exists:
+            fail("SEEKDB_SYSROOT is missing usr/include/stdlib.h: %s" % sysroot)
+        _stage_sysroot(repository_ctx, repository_ctx.path(sysroot))
+        flags = ["--sysroot=" + str(repository_ctx.path("sysroot"))]
 
     repository_ctx.template(
         "validate_static_library.sh",
@@ -110,6 +134,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
     builtin_include_directories = _discover_builtin_include_directories(
         repository_ctx,
         str(repository_ctx.path("devtools/bin/clang")),
+        flags,
     )
     repository_ctx.template(
         "BUILD.bazel",
@@ -118,6 +143,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
             "@CXX_BUILTIN_INCLUDE_DIRECTORIES@": repr(builtin_include_directories),
             "@HOST_CPU@": architecture,
             "@BAZEL_CPU@": "aarch64" if architecture == "aarch64" else "k8",
+            "@BUILTIN_SYSROOT@": repr("external/" + repository_ctx.name + "/sysroot" if sysroot else None),
         },
         executable = False,
     )

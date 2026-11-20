@@ -16,6 +16,10 @@
 
 - Use `#pragma once` in new C++ header files instead of macro-based `#ifndef`/`#define` include guards.
 
+## Rust Toolchain
+
+- Write Rust code for the version pinned in `rust-toolchain.toml`. Prefer language features and standard library APIs stabilized in that version or earlier when they simplify the implementation. Compatibility with older compilers is not required. Do not rewrite existing code solely to adopt newer features.
+
 ## Rust–C++ Interoperability
 
 - Before designing, implementing, or reviewing a Rust migration or refactor, read and follow [Rust refactoring guidelines](docs/developer-guide/en/rust-refactoring.md). This includes changes to C++ callers, CXX bridges, and build integration within that task.
@@ -30,9 +34,14 @@
 
 - For pull request or diff review tasks, read and follow `.agents/skills/code-review/SKILL.md`.
 
+## Pull Request Submission
+
+- For pull request preparation, description, submission, and description-update tasks, read and follow `.agents/skills/submit-pull-request/SKILL.md`.
+
 ## Testing
 
-- Prefer adding regression and correctness coverage to the repository's established test suites and test directories.
+- Add unit tests only for the internal Rust implementation of the seekdb product.
+- Do not add unit tests for any other component, including C++ code and Rust FFI or CXX bridge layers exposed to C++, even when those layers live in a product Rust crate.
+- Validate other components through integration tests, mysqltest cases, or actual execution instead of adding unit tests. Use the repository's established test suites and test directories where applicable.
 - Keep test-only and benchmark-only files out of `tools/`.
-- Do not add tests for developer tools or scripts, including build, code-generation, packaging, and dependency-preparation tools, regardless of where the tests would live.
 - Validate tool and script changes by running the relevant commands and inspecting their outputs or generated artifacts.

@@ -40,6 +40,8 @@
 .cursor/
 .codegraph/
 /.obdev
+/.ci-cache/
+/dist/
 /.settings/
 BROWSE
 Build (GNU)
@@ -210,6 +212,7 @@ src/oblib/grpc/*.pb.cpp
 !src/oblib/grpc/standbyservice.grpc.pb.h
 !src/oblib/grpc/standbyservice.grpc.pb.cc
 deps/3rd
+/deps/prebuilt/
 deps/ios/
 deps/3rd_party
 deps/usr

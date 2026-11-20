@@ -898,6 +898,7 @@ int ObRawExpr::is_const_inherit_expr(bool &is_const_inherit,
   is_const_inherit = true;
   if (T_FUN_SYS_RAND == type_
       || T_FUN_SYS_RANDOM == type_
+      || T_FUN_SYS_RANDOM_BYTES == type_
       || T_FUN_SYS_GENERATOR == type_
       || T_FUN_SYS_UUID == type_
       || T_FUN_SYS_UUID_SHORT == type_
@@ -3868,6 +3869,7 @@ bool ObSysFunRawExpr::inner_same_as(
   } else if (T_FUN_SYS_RAND == get_expr_type() ||
              T_FUN_SYS_RANDOM == get_expr_type() ||
              T_FUN_SYS_GUID == get_expr_type() ||
+             has_flag(IS_RAND_FUNC) ||
              T_OP_GET_USER_VAR == get_expr_type() ||
              T_OP_GET_SYS_VAR == get_expr_type() ||
              (has_flag(IS_STATE_FUNC) && (NULL == check_context ||

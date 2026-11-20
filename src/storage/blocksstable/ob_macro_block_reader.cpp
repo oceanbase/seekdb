@@ -154,7 +154,7 @@ int ObMacroBlockReader::decompress_data(
         K(ret), KP(buf), K(size), K(block_header));
   } else {
     ObMicroBlockDesMeta deserialize_meta(
-        block_header.fixed_header_.compressor_type_,
+        block_header.get_compressor_type(),
         static_cast<common::ObRowStoreType>(block_header.fixed_header_.row_store_type_));
     if (OB_FAIL(decompress_data(deserialize_meta, buf, size, uncomp_buf, uncomp_size,
         is_compressed, need_deep_copy, nullptr/*ext_allocator*/))) {

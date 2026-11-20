@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "common/ob_timeout_ctx.h"
 #include "query/command/ob_local_command_service.h"
 #include "share/ob_server_struct.h"
 #include "query/command/ob_root_command_service.h"
@@ -34,6 +35,16 @@ using namespace share;
 using namespace share::schema;
 namespace sql
 {
+int ObDDLExecutorUtil::check_ddl_status()
+{
+  int ret = OB_SUCCESS;
+  if (THIS_WORKER.is_timeout() || ObTimeoutCtx::get_ctx().is_timeouted()) {
+    ret = OB_TIMEOUT;
+  } else if (OB_FAIL(THIS_WORKER.check_status())) {
+  }
+  return ret;
+}
+
 int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
@@ -89,7 +100,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
           int64_t start_time = ObTimeUtility::current_time();
           if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
           } else if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
-                      ctx, session, error_message.published_schema_version_))) {
+                      session, error_message.published_schema_version_))) {
           } else {
             int64_t refresh_time = ObTimeUtility::current_time() - start_time;
             LOG_INFO("parallel ddl wait schema", KR(ret), K(refresh_time),
@@ -290,13 +301,11 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session,
 {
   int ret = OB_SUCCESS;
   const int64_t start_time = ObTimeUtility::current_time();
-  ObTimeoutCtx ctx;
-  if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
-  } else if (OB_FAIL(root_commands.parallel_create_table(arg, res))) {
+  if (OB_FAIL(root_commands.parallel_create_table(arg, res))) {
   } else {
     int64_t refresh_time = ObTimeUtility::current_time();
     if (!res.do_nothing_ && OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
-        ctx, my_session, res.schema_version_))) {
+        my_session, res.schema_version_))) {
     }
     int64_t end_time = ObTimeUtility::current_time();
     LOG_INFO(parallel_ddl_type, KR(ret),
@@ -321,7 +330,6 @@ namespace oceanbase
 namespace sql
 {
 int ObDDLExecutorUtil::wait_local_schema_visible(
-    const ObTimeoutCtx &ctx,
     sql::ObSQLSessionInfo *session,
     const int64_t schema_version)
 {
@@ -333,9 +341,10 @@ int ObDDLExecutorUtil::wait_local_schema_visible(
   } else if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
   }
-  while (OB_SUCC(ret) && ctx.get_timeout() > 0 && !schema_visible) {
+  while (OB_SUCC(ret) && !schema_visible) {
     int64_t refreshed_schema_version = OB_INVALID_VERSION;
-    if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(*session))) {
+    if (OB_FAIL(check_ddl_status())) {
+    } else if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(*session))) {
     } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(refreshed_schema_version))) {
     } else if (refreshed_schema_version >= schema_version) {
       schema_visible = true;

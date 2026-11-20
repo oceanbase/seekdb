@@ -482,6 +482,10 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                 if (user_name.length() > OB_MAX_USER_NAME_LENGTH) {
                   ret = OB_WRONG_USER_NAME_LENGTH;
                   LOG_USER_ERROR(OB_WRONG_USER_NAME_LENGTH, user_name.length(), user_name.ptr());
+                } else if (user_name.empty()) {
+                  ret = OB_CANNOT_USER;
+                  const ObString operation = ObString::make_string("GRANT");
+                  LOG_USER_ERROR(OB_CANNOT_USER, operation.length(), operation.ptr(), host_name.length(), host_name.ptr());
                 } else if (OB_FAIL(check_dcl_on_inner_user(node->type_,
                                                            session_info_->get_priv_user_id(),
                                                            user_name,

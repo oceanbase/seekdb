@@ -111,6 +111,14 @@ set @json_invalid_mutation_value = null;
 select json_set('{"a":[1,2]}', '$.a[0]', 9, '$.a[1]', 8);
 select json_schema_valid(json_object('enum',json_array(time '12:00:00.000001')),json_extract(json_array(time '12:00:00.000002'),'$[0]'));
 select json_schema_valid('{"uniqueItems":true}',json_array(time '12:00:00.000001',time '12:00:00.000002'));
+--echo # Negative SQL TIME values retain their sign and microseconds in JSON
+select json_array(time '-12:00:00.000001', time '-12:00:00.000002') as negative_time_array;
+select json_type(json_extract(json_array(time '-12:00:00.000001'), '$[0]')) as element_type;
+select cast(json_extract(json_array(time '-12:00:00.000002'), '$[0]') as time(6)) as round_trip;
+select json_schema_valid(json_object('enum', json_array(time '-12:00:00.000001')),
+  json_extract(json_array(time '-12:00:00.000002'), '$[0]')) as enum_valid;
+select json_schema_valid('{"uniqueItems":true}',
+  json_array(time '-12:00:00.000001', time '-12:00:00.000002')) as unique_items_valid;
 prepare json_table_nested_scan from 'select * from json_table(?, ''$[*]'' columns(nested path ''$.a[*]'' columns(nested path ''$.b[*]'' columns(v int path ''$'')))) jt';
 set @json_nested_document = '[{"a":[{"b":[1,2]}]},{"a":[{"b":[3]}]}]';
 execute json_table_nested_scan using @json_nested_document;
@@ -121,3 +129,32 @@ set @json_nested_document = null;
 select json_contains('[[2],1]', '1') as nested_scalar, json_contains('[{"a":2},1]', '[1]') as candidate_array, json_contains('[[3],1,2]', '[1,2]') as multiple_candidates, json_contains('{"b":{}}', '{"b":{"x":2}}') as empty_first, json_contains('{"a":1,"b":{}}', '{"a":1,"b":{"x":2}}') as empty_after_match;
 select json_extract(json_array(repeat('x',300),-1),'$[1]') as constructed_negative, json_extract(cast(concat('["',repeat('x',300),'",-1]') as json),'$[1]') as parsed_negative;
 select json_search('{"a":"leaf","nested":{"a":"leaf"}}','all','leaf',null,'$**.a') as recursive_locations;
+# JSON_TYPE length must be valid for CASE and cover its longest type name.
+SELECT CASE WHEN 0 THEN JSON_TYPE(CAST('9223372036854775808' AS JSON)) ELSE JSON_TYPE(CAST('9223372036854775808' AS JSON)) END AS type_name;
+
+# JSON-valued member names must use text, including quotes on JSON strings.
+set names utf8mb4;
+select json_object(cast('{"c1":1}' as json),1) = json_object(cast(cast('{"c1":1}' as json) as char),1) as object_key, json_object(cast('[1,2]' as json),1) = json_object(cast(cast('[1,2]' as json) as char),1) as array_key, json_object(cast('1' as json),1) = json_object(cast(cast('1' as json) as char),1) as number_key, json_object(cast('"key"' as json),1) = json_object(cast(cast('"key"' as json) as char),1) as string_key, json_object(cast('null' as json),1) = json_object(cast(cast('null' as json) as char),1) as json_null_key, json_object(cast('true' as json),1) = json_object(cast(cast('true' as json) as char),1) as boolean_key, json_object(cast('"中文😀"' as json),1) = json_object(cast(cast('"中文😀"' as json) as char),1) as unicode_key;
+create table json_object_key_regression(id int primary key, doc json);
+insert into json_object_key_regression values (1,'{"c1":1}'),(2,'[1,2]'),(3,'1'),(4,'"key"'),(5,'null'),(6,'true'),(7,'"中文😀"'),(8,concat('{"c1":"',repeat('x',12000),'"}'));
+select id, json_object(cast(doc as json),1) = json_object(cast(doc as char),1) as cast_column_key from json_object_key_regression order by id;
+select id, json_object(doc,1) = json_object(cast(doc as char),1) as plain_column_key from json_object_key_regression order by id;
+select json_object(cast('1' as json),1,cast('2' as json),2) = cast('{"1":1,"2":2}' as json) as distinct_keys, json_object(cast('1' as json),1,cast('1' as json),2) = cast('{"1":2}' as json) as duplicate_key, json_object('key',1) = cast('{"key":1}' as json) as plain_string_key, json_object(cast('1' as json),null) = cast('{"1":null}' as json) as null_value;
+prepare json_object_key_regression_stmt from 'select json_object(cast(? as json),1) = json_object(cast(cast(? as json) as char),1) as prepared_key';
+set @json_object_key_document = '{"c1":1}';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+set @json_object_key_document = '[1,2]';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+set @json_object_key_document = '"中文😀"';
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+set @json_object_key_document = concat('{"c1":"',repeat('x',12000),'"}');
+execute json_object_key_regression_stmt using @json_object_key_document,@json_object_key_document;
+deallocate prepare json_object_key_regression_stmt;
+set @json_object_key_document = null;
+--error 3158
+select json_object(null,1);
+--error 3144
+select json_object(_binary'x',1);
+--error 1582
+select json_object('key');
+drop table json_object_key_regression;

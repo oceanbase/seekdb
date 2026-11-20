@@ -173,6 +173,7 @@ int ObTxBufferNodeWrapper::pre_alloc(int64_t tx_id, const ObTxBufferNode &node, 
   int64_t buf_len = node.get_data_size();
   char *ptr = NULL;
   node_.register_no_ = node.register_no_;
+  node_.seq_no_ = node.seq_no_;
   node_.type_ = node.type_;
 
   if (OB_ISNULL(ptr = (char*)allocator.alloc(buf_len))) {
@@ -207,6 +208,7 @@ int ObTxBufferNodeWrapper::assign(int64_t tx_id,
   char *ptr = NULL;
   tx_id_ = tx_id;
   node_.register_no_ = node.register_no_;
+  node_.seq_no_ = node.seq_no_;
   node_.has_submitted_ = node.has_submitted_;
   node_.has_synced_ = node.has_synced_;
   node_.mds_base_scn_ = node.mds_base_scn_;

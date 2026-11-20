@@ -1,0 +1,5 @@
+# Resource limits for the installed-package smoke check.
+cpu_count=2
+memory_budget=2G
+datafile_size=1G
+log_disk_size=2G

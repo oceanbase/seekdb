@@ -317,6 +317,7 @@ _OBSERVER_MAIN_OBJECT_TARGETS = [
 cc_library(
     name = "windows_service",
     srcs = ["ob_win_service.cpp", "ob_win_service.h"],
+    deps = ["//src/oblib:oblib_foundation"],
     target_compatible_with = ["@platforms//os:windows"],
 )
 
@@ -520,7 +521,6 @@ cc_library(
         "//src/oblib:oblib_base",
         "//src/oblib:oblib_io_primitives",
         "//src/oblib:oblib_rpc",
-        "//deps/external:jemalloc_headers",
         "//rust:in_process_headers",
         "//rust:logger_headers",
     ],

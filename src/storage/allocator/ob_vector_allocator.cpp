@@ -49,7 +49,7 @@ void *ObVectorAllocator::alloc(const int64_t size, const ObMemAttr &attr)
 }
 
 
-void *ObVsagMemContext::Allocate(uint64_t size)
+void *ObVsagMemContext::Allocate(vsag::AllocatorSize size)
 {
   void *ret_ptr = nullptr;
   int ret = OB_SUCCESS;
@@ -78,7 +78,7 @@ void ObVsagMemContext::Deallocate(void* p)
   }
 }
 
-void *ObVsagMemContext::Reallocate(void* p, uint64_t size)
+void *ObVsagMemContext::Reallocate(void* p, vsag::AllocatorSize size)
 {
   void *new_ptr = nullptr;
   if (size == 0) {

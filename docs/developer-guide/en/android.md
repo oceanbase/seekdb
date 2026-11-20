@@ -6,7 +6,7 @@ Cross-compile seekdb for Android arm64-v8a on macOS, then deploy it to an emulat
 
 - macOS host
 - Android NDK 27.x, with `ANDROID_NDK_HOME` set to its installation directory
-- An arm64-v8a device or emulator running API 28 or later
+- An arm64-v8a device or emulator running API 26 (Android 8.0) or later
 - `adb` and a MySQL-compatible client on `PATH`
 
 ## Build
@@ -29,7 +29,14 @@ The binary is generated at:
 build/bin/src/observer/seekdb
 ```
 
-This configuration produces an API 28 ARM64 PIE with 16 KiB page alignment and a statically linked C++ runtime. Validate affected unit tests on a supported Linux host by following [Write and run unit tests](unittest.md).
+This configuration targets API 26, matching the `android-arm64-v8a-api26`
+profile in [seekdb-deps](https://github.com/oceanbase/seekdb-deps/pull/12).
+The NDK compiler target controls both compilation and linking, and unguarded
+use of newer Android APIs is a compilation error. The output is an ARM64 PIE
+with 16 KiB page alignment and a statically linked C++ runtime. Rebuild any
+precompiled dependency that needs a newer API level before distributing it
+with this target. Validate affected unit tests on a supported Linux host by
+following [Write and run unit tests](unittest.md).
 
 ## Allocator
 

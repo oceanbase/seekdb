@@ -2,10 +2,16 @@
 
 load(":repository_utils.bzl", "host_substitutions")
 
-_ANDROID_API_LEVEL = 28
+# Keep the compiler/linker target aligned with seekdb-deps' API 26 profile.
+_ANDROID_API_LEVEL = 26
 _ANDROID_TARGET = "aarch64-linux-android{}".format(_ANDROID_API_LEVEL)
 
 def _android_cc_toolchain_repository_impl(ctx):
+    # Native Windows runners may have an NDK installed, but this toolchain
+    # uses Unix compiler paths and only supports Linux/macOS build hosts.
+    if ctx.os.name not in ["linux", "mac os x"]:
+        ctx.file("BUILD.bazel", "# Android cross-compilation requires a Linux or macOS host.\n")
+        return
     ndk = ctx.getenv("ANDROID_NDK_HOME")
     if not ndk:
         ctx.file("BUILD.bazel", "# Set ANDROID_NDK_HOME to enable Android builds.\n")

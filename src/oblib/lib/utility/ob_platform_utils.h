@@ -331,6 +331,9 @@ inline int64_t ob_get_total_memory()
 // Note: On macOS this function requires mach APIs, implemented in ob_platform_utils.cpp
 int64_t ob_get_available_memory();
 
+// Sleep for at least the requested duration, subject to platform scheduling granularity.
+void ob_usleep(uint32_t usec);
+
 // ============================================================================
 // Section 7: Thread Priority / QoS
 // ============================================================================

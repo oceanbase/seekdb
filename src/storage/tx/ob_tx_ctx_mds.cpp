@@ -236,6 +236,7 @@ int ObTxMDSCache::rollback_last_mds_node()
   ObTxBufferNode buf_node = mds_list_.get_last();
   if (OB_FAIL(mds_list_.pop_back())) {
   } else {
+    unsubmitted_size_ -= buf_node.get_serialize_size();
     TRANS_LOG(INFO, "rollback the last mds node", K(ret), K(buf_node), KPC(this));
     free_mds_node(buf_node.data_, buf_node.get_register_no());
     buf_node.get_buffer_ctx_node().destroy_ctx();

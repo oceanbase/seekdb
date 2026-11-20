@@ -87,11 +87,11 @@ public:
   std::string Name() override {
     return "ObVsagAlloc";
   }
-  void* Allocate(uint64_t size) override;
+  void* Allocate(vsag::AllocatorSize size) override;
 
   void Deallocate(void* p) override;
 
-  void* Reallocate(void* p, uint64_t size) override;
+  void* Reallocate(void* p, vsag::AllocatorSize size) override;
 
   int64_t hold() {
     int res = 0;

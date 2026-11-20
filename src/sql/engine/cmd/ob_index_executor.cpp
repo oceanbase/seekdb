@@ -94,17 +94,14 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
       refresh_time = ObTimeUtility::current_time();
       ddl_task_time = refresh_time;
     } else {
-      ObTimeoutCtx timeout_ctx;
       start_time = ObTimeUtility::current_time();
       create_index_arg.is_parallel_ = true;
-      const int64_t rpc_timeout = THIS_WORKER.get_timeout_remain();
-      if (OB_FAIL(timeout_ctx.set_timeout(rpc_timeout))) {
-      } else if (OB_FAIL(ctx.root_command_service().parallel_create_index(
+      if (OB_FAIL(ctx.root_command_service().parallel_create_index(
           create_index_arg, res))) {
       } else {
         refresh_time = ObTimeUtility::current_time();
         if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
-            timeout_ctx, my_session, res.schema_version_))) {
+            my_session, res.schema_version_))) {
         }
         ddl_task_time = ObTimeUtility::current_time();
       }
