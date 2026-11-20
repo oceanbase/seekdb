@@ -1,0 +1,38 @@
+DROP TABLE IF EXISTS ddl_identifier_escape;
+CREATE TABLE ddl_identifier_escape (
+`id``key` INT PRIMARY KEY,
+`a``b` INT,
+```lead` INT,
+`trail``` INT,
+`two````ticks` INT,
+`e``n` ENUM('x', 'y'),
+`s``t` SET('a', 'b'),
+plain INT
+);
+INSERT INTO ddl_identifier_escape VALUES
+(1, 7, 11, 13, 17, 'x', 'a', 19),
+(2, NULL, 23, 29, 31, 'y', 'a,b', 37);
+CREATE INDEX idx_quoted ON ddl_identifier_escape
+(`a``b`, ```lead`, `trail```, `two````ticks`);
+SELECT `id``key` AS id, `a``b`, ```lead`, `trail```, `two````ticks`
+  FROM ddl_identifier_escape FORCE INDEX (idx_quoted)
+WHERE `a``b` = 7;
+id	a`b	`lead	trail`	two``ticks
+1	7	11	13	17
+CREATE INDEX idx_enum ON ddl_identifier_escape (`e``n`, `s``t`);
+SELECT `id``key` AS id, `e``n`, `s``t`
+  FROM ddl_identifier_escape FORCE INDEX (idx_enum)
+WHERE `e``n` = 1;
+id	e`n	s`t
+1	x	a
+CREATE UNIQUE INDEX idx_unique ON ddl_identifier_escape (`a``b`);
+SELECT `id``key` AS id, `a``b` FROM ddl_identifier_escape FORCE INDEX (idx_unique)
+WHERE `a``b` IS NULL;
+id	a`b
+2	NULL
+CREATE INDEX idx_plain ON ddl_identifier_escape (plain);
+SELECT `id``key` AS id, plain FROM ddl_identifier_escape FORCE INDEX (idx_plain)
+WHERE plain = 19;
+id	plain
+1	19
+DROP TABLE ddl_identifier_escape;
