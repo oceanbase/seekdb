@@ -1,0 +1,31 @@
+# Regression for shared DDL identifier quoting (2026-competition #1469).
+# Index builds exercise original names, aliases, enum/set casts and shadow keys.
+connect (ddl_quote,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+connection ddl_quote;
+set ob_query_timeout = 10000000;
+--disable_warnings
+drop table if exists ddl_identifier_quoting;
+--enable_warnings
+create table ddl_identifier_quoting (
+  `pk``id` int primary key,
+  `enum``value` enum('alpha', 'beta') not null,
+  `set``value` set('alpha', 'beta') not null,
+  `列``名` varchar(16)
+);
+insert into ddl_identifier_quoting values
+  (1, 'alpha', 'alpha', 'first'), (2, 'beta', 'beta', 'second');
+create unique index uq_quoted_enum on ddl_identifier_quoting (`enum``value`);
+create unique index uq_quoted_set on ddl_identifier_quoting (`set``value`);
+create index idx_quoted_text on ddl_identifier_quoting (`列``名`);
+select `pk``id` as id, `enum``value` as enum_value
+  from ddl_identifier_quoting force index(uq_quoted_enum)
+  where `enum``value` = 'beta';
+select `pk``id` as id, `set``value` as set_value
+  from ddl_identifier_quoting force index(uq_quoted_set)
+  where `set``value` = 'alpha';
+select `pk``id` as id, `列``名` as text_value
+  from ddl_identifier_quoting force index(idx_quoted_text)
+  where `列``名` = 'first';
+drop table ddl_identifier_quoting;
+disconnect ddl_quote;
+connection default;
