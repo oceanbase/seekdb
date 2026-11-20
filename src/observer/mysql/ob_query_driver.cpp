@@ -25,6 +25,7 @@
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "sql/engine/expr/pl_composite_client_output.h"
 #include "sql/engine/expr/ob_lob_result_materializer.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 
@@ -178,7 +179,10 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row->get_count(); i++) {
       ObObj& value = row->get_cell(i);
-      if (result.is_ps_protocol() && !is_packed) {
+      const bool composite_text = PlCompositeClientOutput::needs_conversion(value.get_meta());
+      if (!is_packed && OB_FAIL(PlCompositeClientOutput::convert(value, result))) {
+      }
+      if (OB_SUCC(ret) && result.is_ps_protocol() && !is_packed && !composite_text) {
         if (value.get_type() != fields->at(i).type_.get_type()) {
           ObCastCtx cast_ctx(&result.get_mem_pool(), NULL, CM_WARN_ON_FAIL, 
             fields->at(i).type_.get_collation_type());
