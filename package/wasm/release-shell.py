@@ -62,12 +62,12 @@ def package(build_dir, output, brotli=False):
         release = output / "releases" / build_id
         release.parent.mkdir()
         copied.rename(release)
-        html = (release / "shell.html").read_text()
+        html = (release / "shell.html").read_text(encoding="utf-8")
         if len(re.findall(r"<head\s*>", html, re.I)) != 1 or re.search(r"<base\b", html, re.I):
             raise ValueError("shell.html must contain one <head> and no <base> element")
         html = re.sub(r"<head\s*>", f'<head>\n  <base href="./releases/{build_id}/">', html, count=1, flags=re.I)
         for name in ("index.html", "shell.html"):
-            (output / name).write_text(html)
+            (output / name).write_text(html, encoding="utf-8")
         records = {}
         for path in [output / "index.html", output / "shell.html", *(release / name for name in ASSETS)]:
             identity = file_record(path, output)
