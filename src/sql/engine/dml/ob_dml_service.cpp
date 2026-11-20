@@ -884,7 +884,8 @@ int ObDMLService::insert_row(const ObDASInsCtDef &ins_ctdef,
                              const DASRuntimeTabletAccess *tablet_access,
                              ObDMLRtCtx &dml_rtctx,
                              const ExprFixedArray &new_row,
-                             ObChunkDatumStore::StoredRow *&stored_row)
+                             ObChunkDatumStore::StoredRow *&stored_row,
+                             bool force_text_embedding)
 {
   int ret = OB_SUCCESS;
   ret = write_row_to_das_op<DAS_OP_TABLE_INSERT>(ins_ctdef,
@@ -893,7 +894,8 @@ int ObDMLService::insert_row(const ObDASInsCtDef &ins_ctdef,
                                                  dml_rtctx,
                                                  new_row,
                                                  nullptr,
-                                                 stored_row);
+                                                 stored_row,
+                                                 force_text_embedding);
   return ret;
 }
 
@@ -1731,7 +1733,8 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
                                       ObDMLRtCtx &dml_rtctx,
                                       const ExprFixedArray &row,
                                       ObExpr *trans_info_expr,
-                                      ObChunkDatumStore::StoredRow *&stored_row)
+                                      ObChunkDatumStore::StoredRow *&stored_row,
+                                      bool force_text_embedding)
 {
   int ret = OB_SUCCESS;
   bool need_retry = false;
@@ -1749,7 +1752,7 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
   // One upsert batch can carry both statement text and vectors fetched from
   // storage. They need different projectors, so they cannot share one task.
   DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT;
-  if (N == DAS_OP_TABLE_INSERT) {
+  if (N == DAS_OP_TABLE_INSERT && !force_text_embedding) {
     bool uses_stored_embedding = ctdef.is_embedded_vec_from_old_row_;
     if (OB_NOT_NULL(rtdef.related_ctdefs_)) {
       for (int64_t i = 0; !uses_stored_embedding && i < rtdef.related_ctdefs_->count(); ++i) {
