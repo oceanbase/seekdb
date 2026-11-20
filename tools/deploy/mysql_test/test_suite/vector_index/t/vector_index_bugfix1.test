@@ -662,4 +662,95 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# Scalar IN filters must be evaluated before the ANN candidate limit.
+# The closest four rows deliberately do not satisfy the membership predicate.
+create table t_issue1512_ann_filter(
+  id bigint primary key,
+  category int not null,
+  embedding vector(3),
+  vector key idx_embedding(embedding) with
+    (distance=l2, type=hnsw, lib=vsag, m=10,
+     ef_construction=100, ef_search=100, sync_mode=immediate));
+insert into t_issue1512_ann_filter values
+  (1,9,'[0.01,0,0]'), (2,9,'[0.02,0,0]'),
+  (3,9,'[0.03,0,0]'), (4,9,'[0.04,0,0]'),
+  (5,2,'[0.05,0,0]'), (6,4,'[0.06,0,0]'),
+  (7,6,'[0.07,0,0]'), (8,2,'[0.08,0,0]'),
+  (9,4,'[0.09,0,0]'), (10,6,'[0.10,0,0]');
+
+alter system flush plan cache;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category in (2,4,6)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category in (2,4,6,2,4,6)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+# Reuse the three-parameter shape with a different membership pattern, then back.
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category in (9,9,9)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category in (2,4,6)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category in (2,4,6,8)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category not in (9,9,9)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category in (2,null,4,6)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category not in (9,null,9)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category in (2,4,6)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2 offset 1;
+
+--let $issue1512_values = 2,4,6
+--let $issue1512_loop = 0
+while ($issue1512_loop < 10)
+{
+  --let $issue1512_values = $issue1512_values,$issue1512_values
+  --inc $issue1512_loop
+}
+--disable_query_log
+eval select id from t_issue1512_ann_filter
+where category in ($issue1512_values)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+--enable_query_log
+
+# Verify a cached ANN plan exists and no membership filter was lifted out.
+select count(distinct s.plan_id) > 0 as cached_ann_plan,
+       sum(p.operator = 'SUBPLAN FILTER') as outer_filter_ops,
+       sum(p.operator = 'VALUES TABLE ACCESS') as values_table_ops
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1512_ann_filter') > 0
+  and instr(lower(s.statement), 'approximate') > 0
+  and instr(lower(s.statement), 'v$ob_plan_cache_plan_stat') = 0;
+
+# Exact queries keep their existing rewrite decision and results.
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id
+from t_issue1512_ann_filter where category in (2,4,6,2,4,6)
+order by l2_distance(embedding, '[0,0,0]') limit 2;
+prepare issue1512_stmt from
+  'select /*+ opt_param(''inlist_rewrite_threshold'', 3) */ id from t_issue1512_ann_filter where category in (?,?,?) order by l2_distance(embedding, ''[0,0,0]'') approximate limit 2';
+set @issue1512_a=2, @issue1512_b=4, @issue1512_c=6;
+execute issue1512_stmt using @issue1512_a, @issue1512_b, @issue1512_c;
+set @issue1512_a=9, @issue1512_b=9, @issue1512_c=9;
+execute issue1512_stmt using @issue1512_a, @issue1512_b, @issue1512_c;
+deallocate prepare issue1512_stmt;
+# Cover scalar hash membership results in projections as well as filters.
+select id, category in (2,4,6,2,null) as in_result,
+       category not in (2,4,6,2,null) as not_in_result
+from t_issue1512_ann_filter order by id;
+select id, cast(category as char) in ('2','4','6','2') as string_result,
+       cast(category as decimal(10,2)) in (2.00,4.00,6.00) as decimal_result
+from t_issue1512_ann_filter order by id;
+select id from t_issue1512_ann_filter
+where (category,id) in ((2,5),(4,6),(6,7),(9,1),(9,2)) order by id;
+drop table t_issue1512_ann_filter;
+
 alter system set vector_memory_limit = 0;
