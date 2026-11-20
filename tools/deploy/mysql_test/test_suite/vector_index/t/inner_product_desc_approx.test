@@ -1,0 +1,124 @@
+# Regression for #1470: positive inner product DESC must use the IP ANN path.
+--disable_warnings
+drop table if exists t_ip_desc_ann;
+drop table if exists t_ip_desc_exact;
+drop table if exists t_ip_desc_l2;
+drop table if exists t_ip_desc_part;
+--enable_warnings
+
+create table t_ip_desc_ann (
+  id int primary key,
+  v vector(3),
+  vector index idx_v(v) with (
+    distance=inner_product, type=hnsw, lib=vsag, m=8,
+    ef_construction=32, sync_mode=immediate)
+);
+insert into t_ip_desc_ann values
+  (1, '[1,0,0]'), (2, '[2,0,0]'), (3, '[-1,0,0]'),
+  (4, '[0,1,0]'), (5, '[-2,0,0]');
+
+# Checking rows alone would also pass on the old exact-scan implementation.
+--let $sql = explain format=json select id from t_ip_desc_ann order by inner_product(v, '[1,0,0]') desc approximate limit 3
+--let $scan_operator = query_get_value("$sql", Query Plan, 3)
+--echo $scan_operator
+
+select id from t_ip_desc_ann
+order by inner_product(v, [1,0,0]) desc approximate limit 3;
+
+# Positive, zero and negative scores must retain their sign. Aliases and
+# ordinal ORDER BY items share the SELECT expression before the rewrite.
+--let $sql = explain format=json select id, inner_product(v, '[1,0,0]') as score from t_ip_desc_ann order by score desc approximate limit 3
+--let $scan_operator = query_get_value("$sql", Query Plan, 3)
+--echo $scan_operator
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by score desc approximate limit 5;
+--let $sql = explain format=json select id, inner_product(v, '[1,0,0]') as score from t_ip_desc_ann order by 2 desc approximate limit 3
+--let $scan_operator = query_get_value("$sql", Query Plan, 3)
+--echo $scan_operator
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by 2 desc approx limit 5;
+select id, inner_product(v, '[1,0,0]') as score,
+       negative_inner_product(v, '[1,0,0]') as negative_score
+from t_ip_desc_ann
+order by inner_product(v, '[1,0,0]') desc approximate limit 3 offset 1;
+
+# The pre-existing negative-IP ANN spelling keeps the same ranking.
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann
+order by negative_inner_product(v, '[1,0,0]') approximate limit 5;
+
+# A filter exercises recomputation of the ordering key above the index scan.
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann where id <> 2
+order by score desc approximate limit 3;
+
+# Bind a new vector to the same prepared statement and reverse the ranking.
+prepare ip_desc_stmt from
+  'select id, inner_product(v, ?) as score from t_ip_desc_ann order by score desc approximate limit 3';
+set @ip_query = '[1,0,0]';
+execute ip_desc_stmt using @ip_query;
+set @ip_query = '[-1,0,0]';
+execute ip_desc_stmt using @ip_query;
+deallocate prepare ip_desc_stmt;
+
+# Swapping the column and constant operands is also a valid inner product.
+select id, inner_product('[1,0,0]', v) as score
+from t_ip_desc_ann order by score desc approximate limit 3;
+
+# Nullable vectors retain the established ANN behavior (NULL is not indexed).
+insert into t_ip_desc_ann values (6, NULL);
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by score desc approximate limit 6;
+
+# Exact DESC and minimum-inner-product ASC retain their existing behavior.
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by score desc limit 6;
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by score asc approximate limit 6;
+
+# Queries without a compatible vector index continue to use exact evaluation.
+create table t_ip_desc_exact (id int primary key, v vector(3));
+insert into t_ip_desc_exact select * from t_ip_desc_ann;
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_exact order by score desc approximate limit 6;
+create table t_ip_desc_l2 (
+  id int primary key, v vector(3),
+  vector index idx_v(v) with (distance=l2, type=hnsw)
+);
+insert into t_ip_desc_l2 select * from t_ip_desc_ann;
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_l2 order by score desc approximate limit 6;
+
+# Keep the existing validation for IP-specific query parameters.
+--error 1235
+select id from t_ip_desc_ann
+order by inner_product(v, '[1,0,0]') desc approximate limit 3 parameters (similarity=0.7);
+
+drop table t_ip_desc_ann;
+drop table t_ip_desc_exact;
+drop table t_ip_desc_l2;
+
+# Partitioned HNSW and IVF also consume the normalized ordering key.
+create table t_ip_desc_part (
+  id int primary key, v vector(3),
+  vector index idx_v(v) with (distance=inner_product, type=hnsw)
+) partition by hash(id) partitions 2;
+insert into t_ip_desc_part values
+  (1, '[1,0,0]'), (2, '[2,0,0]'), (3, '[-1,0,0]'),
+  (4, '[0,1,0]'), (5, '[-2,0,0]');
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_part order by score desc approximate limit 5;
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_part order by score desc approximate limit 3 offset 1;
+drop table t_ip_desc_part;
+
+create table t_ip_desc_part (
+  id int primary key, v vector(3),
+  vector index idx_v(v) with (distance=inner_product, type=ivf_flat)
+) partition by hash(id) partitions 2;
+insert into t_ip_desc_part values
+  (1, '[1,0,0]'), (2, '[2,0,0]'), (3, '[-1,0,0]'),
+  (4, '[0,1,0]'), (5, '[-2,0,0]');
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_part order by score desc approximate limit 5;
+drop table t_ip_desc_part;
