@@ -325,3 +325,14 @@ id	v
 2	[0,1,0]
 3	[0,0,1]
 USE `seekdb_identifier_quoting`;
+CREATE TABLE c1_shared_backtick (`id` INT PRIMARY KEY, `key``id` INT,
+`enum``value` ENUM('a','b'), `set``value` SET('x','y'), payload INT);
+INSERT INTO c1_shared_backtick VALUES (1,10,'a','x',100),(2,20,'b','x,y',200);
+CREATE UNIQUE INDEX uq_shared_backtick ON c1_shared_backtick (`key``id`);
+ALTER TABLE c1_shared_backtick MODIFY COLUMN payload BIGINT;
+SELECT `id`, `key``id`, `enum``value`, `set``value`, payload
+FROM c1_shared_backtick ORDER BY `id`;
+id	key`id	enum`value	set`value	payload
+1	10	a	x	100
+2	20	b	x,y	200
+DROP TABLE c1_shared_backtick;

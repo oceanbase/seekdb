@@ -221,3 +221,15 @@ CALL dbms_vector.rebuild_index('idx','c1_database','v');
 CALL dbms_vector.rebuild_index('idx','c1_database','v',0);
 SELECT `id` AS id,v FROM `c1_database` ORDER BY `id`;
 USE `seekdb_identifier_quoting`;
+
+# Shared DDL column formatting must escape backticks without depending on SQL utilities.
+# A unique index exercises origin and shadow column aliases; an offline type
+# change also preserves ENUM/SET values while rebuilding the table.
+CREATE TABLE c1_shared_backtick (`id` INT PRIMARY KEY, `key``id` INT,
+  `enum``value` ENUM('a','b'), `set``value` SET('x','y'), payload INT);
+INSERT INTO c1_shared_backtick VALUES (1,10,'a','x',100),(2,20,'b','x,y',200);
+CREATE UNIQUE INDEX uq_shared_backtick ON c1_shared_backtick (`key``id`);
+ALTER TABLE c1_shared_backtick MODIFY COLUMN payload BIGINT;
+SELECT `id`, `key``id`, `enum``value`, `set``value`, payload
+  FROM c1_shared_backtick ORDER BY `id`;
+DROP TABLE c1_shared_backtick;
