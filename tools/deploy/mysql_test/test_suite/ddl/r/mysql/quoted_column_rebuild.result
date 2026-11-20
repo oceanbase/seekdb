@@ -1,0 +1,25 @@
+CREATE TABLE ddl_quoted_column_rebuild (
+id INT PRIMARY KEY,
+`a``b` INT,
+`e``n` ENUM('red', 'blue'),
+`s``t` SET('red', 'blue'),
+UNIQUE KEY uq (`a``b`)
+);
+INSERT INTO ddl_quoted_column_rebuild VALUES
+(1, 10, 'red', 'red,blue'), (2, NULL, 'blue', 'blue');
+ALTER TABLE ddl_quoted_column_rebuild MODIFY COLUMN `a``b` VARCHAR(20);
+SELECT id, `a``b` AS value, `e``n` AS enum_value, `s``t` AS set_value,
+`e``n` + 0 AS enum_number, `s``t` + 0 AS set_number
+FROM ddl_quoted_column_rebuild ORDER BY id;
+id	value	enum_value	set_value	enum_number	set_number
+1	10	red	red,blue	1	3
+2	NULL	blue	blue	2	2
+INSERT INTO ddl_quoted_column_rebuild VALUES (3, '10', 'red', '');
+ERROR 23000: Duplicate entry '10' for key 'uq'
+INSERT INTO ddl_quoted_column_rebuild VALUES (3, '30', 'red', '');
+SELECT id, `a``b` AS value FROM ddl_quoted_column_rebuild ORDER BY id;
+id	value
+1	10
+2	NULL
+3	30
+DROP TABLE ddl_quoted_column_rebuild;
