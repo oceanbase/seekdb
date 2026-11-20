@@ -183,6 +183,15 @@ public:
   { return nullptr != header_ && header_->has_lob_out_row(); }
 
 protected:
+  struct RustFlatBatch;
+  int try_get_rows_rust(
+      const int32_t *row_ids,
+      const int64_t row_cap,
+      RustFlatBatch &batch);
+  int read_rust_row(
+      const RustFlatBatch &batch,
+      const int64_t row_idx,
+      ObDatumRow &row_buf);
   virtual int find_bound(
       const ObDatumRange &range,
       const int64_t begin_idx,

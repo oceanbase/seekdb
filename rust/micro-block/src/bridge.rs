@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crate::{
-    Block, BlockWriter, Cell, ColumnSpec, Error, OwnedDatum, Result, RowRange, WriterConfig,
+    Block, BlockWriter, Cell, ColumnSpec, Error, FlatBlock, OwnedDatum, Result, RowRange,
+    WriterConfig,
 };
 
 #[cxx::bridge(namespace = "oceanbase::blocksstable::micro_block")]
@@ -91,6 +92,10 @@ mod ffi {
         /// Output offsets are relative to `block`, whose allocation and cache
         /// pin must remain valid while C++ uses the returned descriptors.
         fn project_pax_block(block: &[u8], rows: &[u32], columns: &[u32]) -> BatchResult;
+
+        /// Missing physical columns are returned as NOP. All byte cells borrow
+        /// the pinned block and remain valid only for the caller's batch use.
+        fn project_flat_block(block: &[u8], rows: &[u32], columns: &[u32]) -> BatchResult;
 
         fn filter_project_uint(
             block: &[u8],
@@ -296,6 +301,15 @@ fn describe_cells(block: &[u8], projection: crate::Projection<'_>) -> Vec<ffi::C
 fn project_pax_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::BatchResult {
     batch_result((|| {
         let parsed = Block::new(block)?;
+        let projection = parsed.project(rows, columns)?;
+        let cells = describe_cells(block, projection);
+        Ok((rows.to_vec(), cells))
+    })())
+}
+
+fn project_flat_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::BatchResult {
+    batch_result((|| {
+        let parsed = FlatBlock::new(block)?;
         let projection = parsed.project(rows, columns)?;
         let cells = describe_cells(block, projection);
         Ok((rows.to_vec(), cells))

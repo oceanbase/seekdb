@@ -21,6 +21,7 @@ pub(crate) const FIXED_HEADER_SIZE: usize = 64;
 pub(crate) const COLUMN_HEADER_SIZE: usize = 16;
 pub(crate) const ENCODING_ROW_STORE: u8 = 1;
 pub(crate) const SELECTIVE_ENCODING_ROW_STORE: u8 = 2;
+pub(crate) const FLAT_ROW_STORE: u8 = 0;
 pub(crate) const HAS_COLUMN_CHECKSUM: u16 = 1;
 pub(crate) const ALL_LOB_IN_ROW: u16 = 1 << 2;
 pub(crate) const COLUMN_FIX_LENGTH: u8 = 1;
@@ -143,7 +144,7 @@ pub(crate) fn write_u64(bytes: &mut [u8], offset: usize, value: u64) -> Result<(
     Ok(())
 }
 
-pub(crate) fn parse_header(bytes: &[u8]) -> Result<Header> {
+fn decode_header(bytes: &[u8]) -> Result<Header> {
     if bytes.len() < FIXED_HEADER_SIZE
         || u16_at(bytes, 0)? != MICRO_BLOCK_MAGIC
         || u16_at(bytes, 2)? != MICRO_BLOCK_VERSION
@@ -166,6 +167,10 @@ pub(crate) fn parse_header(bytes: &[u8]) -> Result<Header> {
         data_zlength: u32_at(bytes, 44)? as usize,
         data_checksum: u64_at(bytes, 48)?,
     };
+    Ok(header)
+}
+
+fn validate_common_header(bytes: &[u8], header: &Header) -> Result<()> {
     let expected_header = FIXED_HEADER_SIZE
         .checked_add(if header.has_column_checksum() {
             header
@@ -178,15 +183,44 @@ pub(crate) fn parse_header(bytes: &[u8]) -> Result<Header> {
         .ok_or(Error::SizeOverflow)?;
     if header.header_size != expected_header
         || header.column_count < header.rowkey_column_count
-        || !matches!(
-            header.row_store_type,
-            ENCODING_ROW_STORE | SELECTIVE_ENCODING_ROW_STORE
-        )
-        || header.row_data_offset < header.header_size
-        || header.row_data_offset > bytes.len()
         || header.row_count == 0
         || header.original_length < 0
         || header.header_size.checked_add(header.data_length) != Some(bytes.len())
+    {
+        return Err(Error::InvalidData);
+    }
+    Ok(())
+}
+
+pub(crate) fn parse_header(bytes: &[u8]) -> Result<Header> {
+    let header = decode_header(bytes)?;
+    validate_common_header(bytes, &header)?;
+    if !matches!(
+        header.row_store_type,
+        ENCODING_ROW_STORE | SELECTIVE_ENCODING_ROW_STORE
+    ) || header.row_data_offset < header.header_size
+        || header.row_data_offset > bytes.len()
+    {
+        return Err(Error::InvalidData);
+    }
+    Ok(header)
+}
+
+pub(crate) fn parse_flat_header(bytes: &[u8]) -> Result<Header> {
+    let header = decode_header(bytes)?;
+    validate_common_header(bytes, &header)?;
+    let index_length = header
+        .row_count
+        .checked_add(1)
+        .and_then(|count| count.checked_mul(core::mem::size_of::<i32>()))
+        .ok_or(Error::SizeOverflow)?;
+    if header.row_store_type != FLAT_ROW_STORE
+        || header.row_data_offset < header.header_size
+        || header
+            .row_data_offset
+            .checked_add(index_length)
+            .ok_or(Error::SizeOverflow)?
+            != bytes.len()
     {
         return Err(Error::InvalidData);
     }
@@ -252,4 +286,14 @@ pub(crate) fn stored_header_checksum(bytes: &[u8]) -> Result<u16> {
 pub(crate) fn checked_slice(bytes: &[u8], offset: usize, length: usize) -> Result<&[u8]> {
     let end = offset.checked_add(length).ok_or(Error::SizeOverflow)?;
     bytes.get(offset..end).ok_or(Error::InvalidData)
+}
+
+pub(crate) fn read_uint(bytes: &[u8], offset: usize, width: usize) -> Result<usize> {
+    if width > 8 {
+        return Err(Error::InvalidData);
+    }
+    let raw = checked_slice(bytes, offset, width)?;
+    let mut value = [0u8; 8];
+    value[..width].copy_from_slice(raw);
+    usize::try_from(u64::from_le_bytes(value)).map_err(|_| Error::SizeOverflow)
 }

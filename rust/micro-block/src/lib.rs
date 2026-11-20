@@ -17,11 +17,13 @@
 
 mod bridge;
 mod checksum;
+mod flat;
 mod format;
 mod read;
 mod rowkey;
 mod write;
 
+pub use flat::{FlatBlock, FlatRowInfo};
 pub use read::{Block, Cell, Projection, RowRange, RowkeyBound};
 pub use rowkey::{compare_unicode_ci, RowkeyKind, RowkeyValue, UcaTable};
 pub use write::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig};

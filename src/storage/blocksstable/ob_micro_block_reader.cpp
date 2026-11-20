@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_micro_block_reader.h"
+#include "rust/micro_block.h"
+#include <optional>
 #include "storage/access/ob_aggregated_store.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_table_access_param.h"
@@ -823,6 +825,13 @@ int ObMicroBlockReader::filter_truncate_evaluator(
   return ret;
 }
 
+struct ObMicroBlockReader::RustFlatBatch
+{
+  std::vector<uint32_t> rows;
+  std::vector<uint32_t> columns;
+  std::optional<micro_block::BatchResult> result;
+};
+
 int ObMicroBlockReader::get_rows(
     const common::ObIArray<int32_t> &cols_projector,
     const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
@@ -846,13 +855,22 @@ int ObMicroBlockReader::get_rows(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(row_buf.reserve(read_info_->get_request_count()))) {
   } else {
+    bool read_by_rust = false;
+    RustFlatBatch rust_batch;
     const int64_t trans_col_idx = header_->rowkey_column_count_ > 0 ? read_info_->get_schema_rowkey_count() : INT32_MIN;
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
+    ret = try_get_rows_rust(row_ids, row_cap, rust_batch);
+    if (OB_NOT_SUPPORTED == ret) {
+      ret = OB_SUCCESS;
+    } else if (OB_SUCC(ret)) {
+      read_by_rust = true;
+    }
     for (int64_t idx = 0; OB_SUCC(ret) && idx < row_cap; ++idx) {
       row_idx = row_ids[idx];
       if (OB_UNLIKELY(row_idx < 0 || row_idx >= header_->row_count_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(flat_row_reader_.read_row(
+      } else if (read_by_rust && OB_FAIL(read_rust_row(rust_batch, idx, row_buf))) {
+      } else if (!read_by_rust && OB_FAIL(flat_row_reader_.read_row(
           data_begin_ + index_data_[row_idx],
           index_data_[row_idx + 1] - index_data_[row_idx],
           read_info_,
@@ -902,6 +920,99 @@ int ObMicroBlockReader::get_rows(
         }
       }
     }
+  }
+  return ret;
+}
+
+int ObMicroBlockReader::try_get_rows_rust(
+    const int32_t *row_ids,
+    const int64_t row_cap,
+    RustFlatBatch &batch)
+{
+  int ret = OB_NOT_SUPPORTED;
+  if ((nullptr == row_ids && row_cap > 0) || row_cap < 0 || row_cap > UINT32_MAX
+      || row_cap > header_->row_count_ || header_->data_length_ < 0) {
+    return OB_INVALID_ARGUMENT;
+  }
+  if (0 == row_cap) {
+    return OB_SUCCESS;
+  }
+  const int64_t block_size = header_->header_size_ + header_->data_length_;
+  const int64_t request_count = read_info_->get_request_count();
+  batch.rows.reserve(row_cap);
+  batch.columns.reserve(request_count);
+  for (int64_t i = 0; i < row_cap; ++i) {
+    if (row_ids[i] < 0 || row_ids[i] >= header_->row_count_) {
+      return OB_ERR_UNEXPECTED;
+    }
+    batch.rows.push_back(static_cast<uint32_t>(row_ids[i]));
+  }
+  const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
+  for (int64_t i = 0; i < request_count; ++i) {
+    batch.columns.push_back(static_cast<uint32_t>(cols_index.at(i)));
+  }
+  const rust::Slice<const uint8_t> block(
+      reinterpret_cast<const uint8_t *>(header_), static_cast<std::size_t>(block_size));
+  const rust::Slice<const uint32_t> rows(batch.rows.data(), batch.rows.size());
+  const rust::Slice<const uint32_t> columns(batch.columns.data(), batch.columns.size());
+  batch.result.emplace(micro_block::project_flat_block(block, rows, columns));
+  switch (batch.result->code) {
+    case micro_block::Code::Ok:
+      ret = OB_SUCCESS;
+      break;
+    case micro_block::Code::Unsupported:
+      return OB_NOT_SUPPORTED;
+    case micro_block::Code::InvalidArgument:
+      return OB_INVALID_ARGUMENT;
+    case micro_block::Code::InvalidData:
+      return OB_INVALID_DATA;
+    case micro_block::Code::ChecksumMismatch:
+      return OB_CHECKSUM_ERROR;
+    case micro_block::Code::OutputTooSmall:
+      return OB_BUF_NOT_ENOUGH;
+    case micro_block::Code::SizeOverflow:
+      return OB_SIZE_OVERFLOW;
+    default:
+      return OB_ERR_UNEXPECTED;
+  }
+  if (batch.result->rows.size() != batch.rows.size()
+      || batch.result->cells.size() != batch.rows.size() * batch.columns.size()) {
+    return OB_INVALID_DATA;
+  }
+  return ret;
+}
+
+int ObMicroBlockReader::read_rust_row(
+    const RustFlatBatch &batch,
+    const int64_t row_idx,
+    ObDatumRow &row_buf)
+{
+  int ret = OB_SUCCESS;
+  if (!batch.result.has_value() || row_idx < 0 || row_idx >= batch.rows.size()
+      || batch.result->rows[row_idx] != batch.rows[row_idx]) {
+    return OB_INVALID_DATA;
+  }
+  const int64_t block_size = header_->header_size_ + header_->data_length_;
+  const int64_t request_count = batch.columns.size();
+  for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < request_count; ++col_idx) {
+    const micro_block::CellDesc &cell = batch.result->cells[row_idx * request_count + col_idx];
+    ObStorageDatum &datum = row_buf.storage_datums_[col_idx];
+    datum.reuse();
+    if (1 == cell.kind) {
+      datum.set_null();
+    } else if (2 == cell.kind) {
+      datum.set_nop();
+    } else if (3 == cell.kind) {
+      datum.set_uint(cell.value);
+    } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size)
+               || cell.length > static_cast<uint64_t>(block_size) - cell.offset) {
+      ret = OB_INVALID_DATA;
+    } else if (OB_FAIL(datum.from_buf_enhance(
+        reinterpret_cast<const char *>(header_) + cell.offset, cell.length))) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    row_buf.count_ = request_count;
   }
   return ret;
 }

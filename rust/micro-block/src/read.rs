@@ -14,8 +14,8 @@
 
 use crate::checksum::crc32c;
 use crate::format::{
-    checked_slice, header_checksum, parse_column_header, parse_header, stored_header_checksum,
-    ColumnHeader, Header, COLUMN_HEADER_SIZE,
+    checked_slice, header_checksum, parse_column_header, parse_header, read_uint,
+    stored_header_checksum, ColumnHeader, Header, COLUMN_HEADER_SIZE,
 };
 use crate::{Error, Result};
 
@@ -98,6 +98,14 @@ pub struct Projection<'a> {
 }
 
 impl<'a> Projection<'a> {
+    pub(crate) fn new(row_count: usize, column_count: usize, cells: Vec<Cell<'a>>) -> Self {
+        Self {
+            row_count,
+            column_count,
+            cells,
+        }
+    }
+
     pub fn row_count(&self) -> usize {
         self.row_count
     }
@@ -597,13 +605,6 @@ impl<'a> Block<'a> {
             Ok(())
         }
     }
-}
-
-fn read_uint(bytes: &[u8], offset: usize, width: usize) -> Result<usize> {
-    let raw = checked_slice(bytes, offset, width)?;
-    let mut value = [0u8; 8];
-    value[..width].copy_from_slice(raw);
-    usize::try_from(u64::from_le_bytes(value)).map_err(|_| Error::SizeOverflow)
 }
 
 fn read_bits(bytes: &[u8], bit_offset: usize, width: usize) -> Result<u64> {
