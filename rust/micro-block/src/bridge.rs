@@ -67,6 +67,12 @@ mod ffi {
         row: u32,
     }
 
+    struct UcaTableDesc {
+        max_char: u64,
+        lengths: usize,
+        weights: usize,
+    }
+
     extern "Rust" {
         /// Every non-null pointer references `length` readable bytes for the
         /// duration of this call. Cells are row-major and owned by Rust for
@@ -93,9 +99,14 @@ mod ffi {
             columns: &[u32],
         ) -> BatchResult;
 
-        fn locate_uint(block: &[u8], column: u32, value: u64) -> LocateResult;
-
-        fn locate_int(block: &[u8], column: u32, value: i64) -> LocateResult;
+        /// Key bytes and UCA pages remain valid for this call. The UCA arrays
+        /// contain 256 entries and are immutable process-lifetime tables.
+        unsafe fn locate_rowkey(
+            block: &[u8],
+            keys: Vec<InputCell>,
+            key_kinds: Vec<u8>,
+            uca: UcaTableDesc,
+        ) -> LocateResult;
     }
 }
 
@@ -320,10 +331,77 @@ fn locate_result(result: Result<Option<u32>>) -> ffi::LocateResult {
     }
 }
 
-fn locate_uint(block: &[u8], column: u32, value: u64) -> ffi::LocateResult {
-    locate_result(Block::new(block).and_then(|block| block.find_uint(column as usize, value)))
+struct CppUcaTable {
+    desc: ffi::UcaTableDesc,
 }
 
-fn locate_int(block: &[u8], column: u32, value: i64) -> ffi::LocateResult {
-    locate_result(Block::new(block).and_then(|block| block.find_int(column as usize, value)))
+impl crate::UcaTable for CppUcaTable {
+    fn max_char(&self) -> u32 {
+        self.desc.max_char as u32
+    }
+
+    fn page_length(&self, page: usize) -> Option<usize> {
+        if page < 256 && self.desc.lengths != 0 {
+            Some(unsafe { *(self.desc.lengths as *const u8).add(page) } as usize)
+        } else {
+            None
+        }
+    }
+
+    fn page(&self, page: usize) -> Option<&[u16]> {
+        if page >= 256 || self.desc.weights == 0 {
+            return None;
+        }
+        let address = unsafe { *(self.desc.weights as *const usize).add(page) };
+        let length = self.page_length(page)?.checked_mul(256)?;
+        if address == 0 || length == 0 {
+            None
+        } else {
+            Some(unsafe { core::slice::from_raw_parts(address as *const u16, length) })
+        }
+    }
+}
+
+fn locate_rowkey(
+    block: &[u8],
+    keys: Vec<ffi::InputCell>,
+    key_kinds: Vec<u8>,
+    desc: ffi::UcaTableDesc,
+) -> ffi::LocateResult {
+    locate_result((|| {
+        if keys.len() != key_kinds.len() {
+            return Err(Error::InvalidArgument);
+        }
+        let mut values = Vec::new();
+        let mut kinds = Vec::new();
+        values
+            .try_reserve_exact(keys.len())
+            .map_err(|_| Error::SizeOverflow)?;
+        kinds
+            .try_reserve_exact(key_kinds.len())
+            .map_err(|_| Error::SizeOverflow)?;
+        for (cell, kind) in keys.iter().zip(key_kinds) {
+            let value = match kind {
+                0 => {
+                    if cell.kind != 0 || cell.pointer == 0 {
+                        return Err(Error::InvalidArgument);
+                    }
+                    crate::RowkeyValue::Bytes(unsafe {
+                        core::slice::from_raw_parts(cell.pointer as *const u8, cell.length as usize)
+                    })
+                }
+                1 => crate::RowkeyValue::Int(cell.value as i64),
+                2 => crate::RowkeyValue::UInt(cell.value),
+                _ => return Err(Error::Unsupported),
+            };
+            values.push(value);
+            kinds.push(match kind {
+                0 => crate::RowkeyKind::UnicodeCi,
+                1 => crate::RowkeyKind::Int,
+                2 => crate::RowkeyKind::UInt,
+                _ => unreachable!(),
+            });
+        }
+        Block::new(block)?.find_rowkey(&values, &kinds, &CppUcaTable { desc })
+    })())
 }

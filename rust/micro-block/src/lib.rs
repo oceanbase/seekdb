@@ -19,9 +19,11 @@ mod bridge;
 mod checksum;
 mod format;
 mod read;
+mod rowkey;
 mod write;
 
 pub use read::{Block, Cell, Projection, RowRange};
+pub use rowkey::{compare_unicode_ci, RowkeyKind, RowkeyValue, UcaTable};
 pub use write::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, WriterConfig};
 
 /// Errors produced while validating or transforming one micro-block.

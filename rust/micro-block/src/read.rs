@@ -527,6 +527,36 @@ impl<'a> Block<'a> {
         }
     }
 
+    pub fn find_rowkey(
+        &self,
+        keys: &[crate::RowkeyValue<'_>],
+        kinds: &[crate::RowkeyKind],
+        uca: &dyn crate::UcaTable,
+    ) -> Result<Option<u32>> {
+        if keys.is_empty() || keys.len() != kinds.len() || keys.len() > self.column_count() {
+            return Err(Error::InvalidArgument);
+        }
+        let mut low = 0usize;
+        let mut high = self.row_count();
+        while low < high {
+            let middle = low + (high - low) / 2;
+            let mut ordering = core::cmp::Ordering::Equal;
+            for (index, (&query, &kind)) in keys.iter().zip(kinds).enumerate() {
+                ordering =
+                    crate::rowkey::compare_cell(query, self.cell(middle, index)?, kind, uca)?;
+                if ordering != core::cmp::Ordering::Equal {
+                    break;
+                }
+            }
+            match ordering {
+                core::cmp::Ordering::Less => high = middle,
+                core::cmp::Ordering::Greater => low = middle + 1,
+                core::cmp::Ordering::Equal => return Ok(Some(middle as u32)),
+            }
+        }
+        Ok(None)
+    }
+
     fn check_range(&self, range: RowRange) -> Result<()> {
         if range.start > range.end || range.end > self.row_count() {
             Err(Error::InvalidArgument)

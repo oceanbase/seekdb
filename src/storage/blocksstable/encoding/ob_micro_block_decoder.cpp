@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_micro_block_decoder.h"
 
+#include "lib/charset/ob_ctype.h"
+#include "lib/charset/str_uca_type.h"
 #include "rust/micro_block.h"
 #include "storage/access/ob_pushdown_aggregate.h"
 #include "storage/access/ob_table_access_context.h"
@@ -612,19 +614,56 @@ int ObEncodeBlockGetReader::locate_row(
     const int64_t rowkey_cnt = rowkey.get_datum_cnt();
     const ObStorageDatum *datums = rowkey.datums_;
     bool located_by_rust = false;
-    if (1 == rowkey_cnt && 1 == read_info.get_schema_rowkey_count()
-        && read_info.get_columns_desc().at(0).col_order_ == common::ASC
-        && read_info.get_columns_desc().at(0).col_type_.is_integer_type()
-        && !datums[0].is_null_or_nop() && sizeof(int64_t) == datums[0].len_
-        && header_->column_count_ > 0
-        && (ObColumnHeader::RAW == col_header_[0].type_
-            || ObColumnHeader::CONST == col_header_[0].type_)) {
+    bool rust_eligible = rowkey_cnt > 0 && rowkey_cnt == read_info.get_schema_rowkey_count()
+        && header_->column_count_ >= rowkey_cnt;
+    rust::Vec<micro_block::InputCell> rust_keys;
+    rust::Vec<uint8_t> rust_key_kinds;
+    if (rust_eligible) {
+      rust_keys.reserve(rowkey_cnt);
+      rust_key_kinds.reserve(rowkey_cnt);
+    }
+    for (int64_t i = 0; rust_eligible && i < rowkey_cnt; ++i) {
+      const share::schema::ObColDesc &desc = read_info.get_columns_desc().at(i);
+      if (desc.col_order_ != common::ASC || datums[i].is_null_or_nop()
+          || (ObColumnHeader::RAW != col_header_[i].type_
+              && ObColumnHeader::CONST != col_header_[i].type_)) {
+        rust_eligible = false;
+        break;
+      }
+      micro_block::InputCell key = {0, 0, 0, 0};
+      if (desc.col_type_.is_integer_type() && sizeof(int64_t) == datums[i].len_) {
+        key.kind = 3;
+        if (desc.col_type_.is_unsigned_integer()) {
+          key.value = datums[i].get_uint64();
+          rust_key_kinds.push_back(2);
+        } else {
+          key.value = static_cast<uint64_t>(datums[i].get_int());
+          rust_key_kinds.push_back(1);
+        }
+      } else if (ObStringTC == ob_obj_type_class(desc.col_type_.get_type())
+                 && CS_TYPE_UTF8MB4_UNICODE_CI == desc.col_type_.get_collation_type()
+                 && datums[i].len_ >= 0
+                 && (0 == datums[i].len_ || nullptr != datums[i].ptr_)) {
+        key.pointer = 0 == datums[i].len_
+            ? reinterpret_cast<size_t>(block_data_)
+            : reinterpret_cast<size_t>(datums[i].ptr_);
+        key.length = datums[i].len_;
+        rust_key_kinds.push_back(0);
+      } else {
+        rust_eligible = false;
+        break;
+      }
+      rust_keys.push_back(key);
+    }
+    if (rust_eligible) {
       const rust::Slice<const uint8_t> block(
           reinterpret_cast<const uint8_t *>(block_data_), static_cast<std::size_t>(block_size_));
-      const micro_block::LocateResult result =
-          read_info.get_columns_desc().at(0).col_type_.is_unsigned_integer()
-              ? micro_block::locate_uint(block, 0, datums[0].get_uint64())
-              : micro_block::locate_int(block, 0, datums[0].get_int());
+      const micro_block::UcaTableDesc uca = {
+          static_cast<uint64_t>(ob_uca_v400.maxchar),
+          reinterpret_cast<size_t>(ob_uca_v400.lengths),
+          reinterpret_cast<size_t>(ob_uca_v400.weights)};
+      const micro_block::LocateResult result = micro_block::locate_rowkey(
+          block, std::move(rust_keys), std::move(rust_key_kinds), uca);
       switch (result.code) {
         case micro_block::Code::Ok:
           located_by_rust = true;
