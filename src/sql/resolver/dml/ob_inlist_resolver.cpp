@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -28,6 +29,64 @@ using namespace common;
 
 namespace sql
 {
+namespace
+{
+// Only choose a cheaper representation; keep every original IN operand. In
+// particular, parameter values may change on a plan-cache hit, so dropping a
+// duplicate parameter here would require additional plan-cache constraints.
+bool has_small_integer_membership(const ParseNode &in_list,
+                                  const ParamStore *param_store,
+                                  const int64_t threshold)
+{
+  bool is_small = false;
+  if (threshold > 1 && in_list.num_child_ >= threshold
+      && NULL != in_list.children_) {
+    hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> distinct_values;
+    int ret = distinct_values.create(threshold, ObMemAttr("InListDistinct"));
+    if (OB_SUCC(ret)) {
+      bool supported = true;
+      for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_; ++i) {
+        const ParseNode *node = in_list.children_[i];
+        int64_t value = 0;
+        if (NULL == node) {
+          supported = false;
+        } else if (T_INT == node->type_) {
+          value = node->value_;
+        } else if (T_QUESTIONMARK == node->type_
+                   && NULL != param_store
+                   && node->value_ >= 0
+                   && node->value_ < param_store->count()
+                   && ObIntType == param_store->at(node->value_).get_type()) {
+          value = param_store->at(node->value_).get_int();
+        } else {
+          // Preserve the existing path for NULL, unsigned/mixed types, rows,
+          // expressions and parameters whose values are not yet available.
+          supported = false;
+        }
+        if (supported) {
+          ret = distinct_values.set_refactored(value, 0);
+          if (OB_HASH_EXIST == ret) {
+            ret = OB_SUCCESS;
+          }
+          if (OB_SUCC(ret) && distinct_values.size() >= threshold) {
+            // A genuinely large membership set still needs the original rewrite.
+            supported = false;
+          }
+        }
+      }
+      is_small = OB_SUCC(ret) && supported;
+      distinct_values.destroy();
+    }
+    if (OB_SUCCESS != ret) {
+      // This is optional costing work. Keep the existing resolver path if the
+      // temporary set cannot be created or populated.
+      LOG_DEBUG("skip integer inlist membership check", K(ret), K(threshold));
+    }
+  }
+  return is_small;
+}
+} // namespace
+
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -350,6 +409,10 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt
+          && has_small_integer_membership(in_list, param_store, threshold)) {
+        is_enable = false;
+      }
     }
   }
   return ret;
