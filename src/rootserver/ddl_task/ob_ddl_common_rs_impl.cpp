@@ -1105,7 +1105,7 @@ int ObDDLTaskUtil::check_table_empty(
       } else if (OB_FAIL(session_param.ddl_info_.init(ddl_info, table_schema.get_session_id()))) {
       } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, config::internal_sql_execute_timeout()))) {
       } else if (OB_FAIL(connection->set_ddl_info(&session_param.ddl_info_))) {
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(table_name, table_schema.get_schema_version(), ddl_schema_hint_str))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(new_table_name, table_schema.get_schema_version(), ddl_schema_hint_str))) {
       } else if (OB_FAIL(sql_string.assign_fmt(
                          format_str,
                          static_cast<int>(ddl_schema_hint_str.length()), ddl_schema_hint_str.ptr(),

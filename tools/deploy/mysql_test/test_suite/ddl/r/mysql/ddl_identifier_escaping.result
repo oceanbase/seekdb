@@ -1,0 +1,111 @@
+result_format: 4
+
+drop database if exists ddl_ident;
+drop database if exists `ddl``bt`;
+create database ddl_ident;
+use ddl_ident;
+
+create table t_plain (id int primary key, v int);
+insert into t_plain values (1, 10);
+alter table t_plain add constraint ck_plain check (v > 0);
+show create table t_plain;
+Table	Create Table
+t_plain	CREATE TABLE `t_plain` (
+  `id` int(11) NOT NULL,
+  `v` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `ck_plain` CHECK ((`v` > 0))
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t_plain values (2, 20);
+select id, v from t_plain order by id;
++----+------+
+| id | v    |
++----+------+
+|  1 |   10 |
+|  2 |   20 |
++----+------+
+
+create table `t``ck` (id int primary key, v int);
+insert into `t``ck` values (1, 5);
+alter table `t``ck` add constraint ck_bt check (v > 0);
+show create table `t``ck`;
+Table	Create Table
+t`ck	CREATE TABLE `t``ck` (
+  `id` int(11) NOT NULL,
+  `v` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `ck_bt` CHECK ((`v` > 0))
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+insert into `t``ck` values (2, 6);
+update `t``ck` set v = 7 where id = 2;
+select id, v from `t``ck` order by id;
++----+------+
+| id | v    |
++----+------+
+|  1 |    5 |
+|  2 |    7 |
++----+------+
+
+create table `p``k` (id int primary key);
+create table `c``k` (id int primary key, pid int);
+insert into `p``k` values (1);
+insert into `c``k` values (10, 1);
+alter table `c``k` add constraint fk_bt foreign key (pid) references `p``k`(id);
+show create table `c``k`;
+Table	Create Table
+c`k	CREATE TABLE `c``k` (
+  `id` int(11) NOT NULL,
+  `pid` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_bt` FOREIGN KEY (`pid`) REFERENCES `ddl_ident`.`p``k`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT 
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+insert into `c``k` values (11, 1);
+select id, pid from `c``k` order by id;
++----+------+
+| id | pid  |
++----+------+
+| 10 |    1 |
+| 11 |    1 |
++----+------+
+
+create database `ddl``bt`;
+create table `ddl``bt`.`t``db` (id int primary key, v int);
+insert into `ddl``bt`.`t``db` values (1, 1);
+alter table `ddl``bt`.`t``db` add constraint ck_db check (v > 0);
+show create table `ddl``bt`.`t``db`;
+Table	Create Table
+t`db	CREATE TABLE `t``db` (
+  `id` int(11) NOT NULL,
+  `v` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `ck_db` CHECK ((`v` > 0))
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+insert into `ddl``bt`.`t``db` values (2, 2);
+select id, v from `ddl``bt`.`t``db` order by id;
++----+------+
+| id | v    |
++----+------+
+|  1 |    1 |
+|  2 |    2 |
++----+------+
+
+select table_name, constraint_name, constraint_type
+  from information_schema.table_constraints
+ where table_schema in ('ddl_ident', 'ddl`bt')
+ order by table_schema, table_name, constraint_name;
++------------+-----------------+-----------------+
+| table_name | constraint_name | constraint_type |
++------------+-----------------+-----------------+
+| c`k        | fk_bt           | FOREIGN KEY     |
+| c`k        | PRIMARY         | PRIMARY KEY     |
+| p`k        | PRIMARY         | PRIMARY KEY     |
+| t_plain    | ck_plain        | CHECK           |
+| t_plain    | PRIMARY         | PRIMARY KEY     |
+| t`ck       | ck_bt           | CHECK           |
+| t`ck       | PRIMARY         | PRIMARY KEY     |
+| t`db       | ck_db           | CHECK           |
+| t`db       | PRIMARY         | PRIMARY KEY     |
++------------+-----------------+-----------------+
+
+drop database ddl_ident;
+drop database `ddl``bt`;
