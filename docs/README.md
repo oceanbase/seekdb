@@ -11,7 +11,7 @@ Install the documentation dependencies and run MkDocs from this directory:
 
 ```bash
 python3 -m pip install -r requirements.txt
-mkdocs build --strict
+python3 -m mkdocs build --strict
 ```
 
 The generated site is written to `site/` and is published separately from the product documentation site.
