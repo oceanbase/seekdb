@@ -78,10 +78,6 @@ private:
       const common::ObAddr &source_addr,
       StandbyPromotionBoundary &boundary);
   int sync_once_(const common::ObAddr &source_addr, bool &made_progress);
-  int append_log_group_(const char *buf,
-                        const int64_t size,
-                        const palf::LSN &source_lsn,
-                        const share::SCN &source_scn);
   int wait_local_replay_(const int64_t deadline_us);
   int get_fatal_error_() const;
   void record_fatal_error_(const int error);

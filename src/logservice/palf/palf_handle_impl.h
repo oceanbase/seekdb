@@ -18,6 +18,7 @@
 #define OCEANBASE_PALF_LOG_SERVICE_
 
 #include <optional>
+#include <vector>
 #include "common/ob_role.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_tc_rwlock.h"
@@ -32,6 +33,7 @@ namespace oceanbase
 namespace palf
 {
 using share::SCN;
+using ImportedGroups = std::vector<palf_rs::ImportedGroup>;
 
 struct PalfStat
 {
@@ -77,8 +79,7 @@ public:
   int set_disk_options(const PalfDiskOptions &disk_options);
   int submit_log(const PalfAppendOptions &opts, const char *buf, const int64_t buf_len,
       const share::SCN &ref_scn, LSN &lsn, share::SCN &scn);
-  int submit_imported_group(const LSN &source_lsn, const share::SCN &source_scn,
-      const char *buf, const int64_t buf_len);
+  int submit_imported_groups(const ImportedGroups &groups);
   int set_base_lsn(const LSN &lsn);
   int locate_by_scn_coarsely(const share::SCN &scn, LSN &result_lsn);
   int locate_by_lsn_coarsely(const LSN &lsn, share::SCN &result_scn);

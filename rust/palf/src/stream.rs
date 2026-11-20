@@ -43,6 +43,12 @@ pub struct DiskPolicy {
     pub max_throttle_duration_us: u64,
 }
 
+pub struct ImportedGroup<'a> {
+    pub source_lsn: u64,
+    pub source_scn: u64,
+    pub bytes: &'a [u8],
+}
+
 impl DiskPolicy {
     pub const fn with_capacity(capacity: u64) -> Self {
         Self {
@@ -393,48 +399,26 @@ impl Stream {
         }
     }
 
-    pub fn append_imported(
-        &self,
-        source_lsn: u64,
-        source_scn: u64,
-        bytes: &[u8],
-    ) -> Result<AppendResult> {
-        let mut state = self.lock_for_write(bytes.len() as u64)?;
-        if source_lsn < state.end_lsn {
-            return Err(Error::Duplicate);
-        }
-        if source_lsn != state.end_lsn {
+    pub fn append_imported(&self, groups: &[ImportedGroup]) -> Result<AppendResult> {
+        if groups.is_empty() {
             return Err(Error::Invalid);
         }
-        let header = validate_group(bytes, source_lsn)?;
-        if header.max_scn != source_scn
-            || header.committed_end_lsn != source_lsn
-            || header.log_id != state.next_log_id
-            || header.accumulated_checksum
-                != crc64_with_seed(
-                    state.accumulated_checksum,
-                    &header.data_checksum.to_le_bytes(),
-                )
-        {
-            return Err(Error::Invalid);
+        let write_size = groups.iter().try_fold(0u64, |total, group| {
+            total.checked_add(group.bytes.len() as u64).ok_or(Error::Invalid)
+        })?;
+        let mut state = self.lock_for_write(write_size)?;
+        let mut plan = AppendBatch::new(&state);
+        for group in groups {
+            plan.push_imported(&state, group)?;
         }
-        state.ensure_capacity(bytes.len() as u64)?;
-        if let Err(error) = state.write_record(source_lsn, bytes) {
-            state.failed = Some(error);
-            return Err(error);
-        }
-        let meta = RecordMeta {
-            lsn: source_lsn,
-            len: bytes.len() as u64,
-            header: header.clone(),
-        };
-        if let Err(error) = state.commit_record(meta) {
+        let last = groups.last().ok_or(Error::Invalid)?;
+        if let Err(error) = state.persist_append_batch(&plan) {
             state.failed = Some(error);
             return Err(error);
         }
         Ok(AppendResult {
-            lsn: source_lsn,
-            scn: source_scn,
+            lsn: last.source_lsn,
+            scn: last.source_scn,
             end_lsn: state.end_lsn,
             end_scn: state.end_scn,
         })
@@ -893,6 +877,43 @@ impl AppendBatch {
         self.next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
         Ok(())
     }
+
+    fn push_imported(&mut self, state: &State, group: &ImportedGroup) -> Result<()> {
+        if group.source_lsn < self.end_lsn {
+            return Err(Error::Duplicate);
+        }
+        if group.source_lsn != self.end_lsn || group.source_scn == u64::MAX {
+            return Err(Error::Invalid);
+        }
+        let header = validate_group(group.bytes, group.source_lsn)?;
+        if header.max_scn != group.source_scn
+            || header.committed_end_lsn != group.source_lsn
+            || header.log_id != self.next_log_id
+            || header.accumulated_checksum
+                != crc64_with_seed(
+                    self.accumulated_checksum,
+                    &header.data_checksum.to_le_bytes(),
+                )
+        {
+            return Err(Error::Invalid);
+        }
+        self.ensure_capacity(state, group.bytes.len() as u64)?;
+        self.note_write(group.source_lsn, group.bytes.len());
+        self.records.push(PlannedRecord {
+            lsn: group.source_lsn,
+            bytes: copied_bytes(group.bytes)?,
+            meta: Some(RecordMeta {
+                lsn: group.source_lsn,
+                len: group.bytes.len() as u64,
+                header: header.clone(),
+            }),
+        });
+        self.end_lsn = group.source_lsn + group.bytes.len() as u64;
+        self.end_scn = group.source_scn;
+        self.next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
+        self.accumulated_checksum = header.accumulated_checksum;
+        Ok(())
+    }
 }
 
 impl State {
@@ -1057,10 +1078,6 @@ impl State {
         Ok(())
     }
 
-    fn ensure_capacity(&self, additional: u64) -> Result<()> {
-        self.ensure_capacity_at(&self.segment_lengths, self.end_lsn, additional)
-    }
-
     fn ensure_capacity_at(
         &self,
         segment_lengths: &BTreeMap<u64, u64>,
@@ -1106,49 +1123,6 @@ impl State {
             .saturating_mul(after as u128)
             / (available as u128 * available as u128);
         Some(Duration::from_micros(delay_us.min(u64::MAX as u128) as u64))
-    }
-
-    fn write_record(&mut self, lsn: u64, bytes: &[u8]) -> Result<()> {
-        let id = block_id(lsn);
-        let path = segment_path(&self.directory, id);
-        let new_segment = !self.segment_lengths.contains_key(&id);
-        let mut file = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(&path)?;
-        if new_segment {
-            file.write_all(&encode_segment_header(id)?)?;
-        }
-        file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-        file.write_all(bytes)?;
-        file.sync_data()?;
-        if new_segment {
-            sync_directory(&self.directory)?;
-        }
-        let length = file.metadata()?.len();
-        self.segment_lengths.insert(id, length);
-        Ok(())
-    }
-
-    fn commit_record(&mut self, meta: RecordMeta) -> Result<()> {
-        let next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
-        let mut manifest = self.manifest.clone();
-        manifest.committed = CommittedTail {
-            end_lsn: meta.end_lsn(),
-            end_scn: meta.header.max_scn,
-            log_id: meta.header.log_id,
-            accumulated_checksum: meta.header.accumulated_checksum,
-        };
-        write_manifest(&self.directory, &manifest)?;
-        self.manifest = manifest;
-        self.end_lsn = meta.end_lsn();
-        self.end_scn = meta.header.max_scn;
-        self.next_log_id = next_log_id;
-        self.accumulated_checksum = meta.header.accumulated_checksum;
-        self.records.insert(meta.lsn, meta);
-        Ok(())
     }
 
     fn read_record(&self, lsn: u64) -> Result<Vec<u8>> {
@@ -1499,6 +1473,14 @@ mod tests {
         }
     }
 
+    fn import(stream: &Stream, lsn: u64, scn: u64, bytes: &[u8]) -> Result<AppendResult> {
+        stream.append_imported(&[ImportedGroup {
+            source_lsn: lsn,
+            source_scn: scn,
+            bytes,
+        }])
+    }
+
     #[test]
     fn acknowledged_records_survive_reopen_and_torn_tail_is_removed() {
         let directory = Directory::new();
@@ -1549,7 +1531,15 @@ mod tests {
                 false,
             )
             .unwrap();
-            state.write_record(lsn, &group).unwrap();
+            let mut file = OpenOptions::new()
+                .write(true)
+                .open(segment_path(&state.directory, block_id(lsn)))
+                .unwrap();
+            file.seek(SeekFrom::Start(physical_offset(lsn))).unwrap();
+            file.write_all(&group).unwrap();
+            file.sync_data().unwrap();
+            let length = file.metadata().unwrap().len();
+            state.segment_lengths.insert(block_id(lsn), length);
         }
         drop(stream);
 
@@ -1599,7 +1589,7 @@ mod tests {
         let payload_len = BLOCK_SIZE as usize - GROUP_HEADER_SIZE - ENTRY_HEADER_SIZE - 32;
         let entry = encode_entry(&vec![7; payload_len], 10, false).unwrap();
         let group = encode_group(&entry, 0, 10, 1, 0, false).unwrap();
-        stream.append_imported(0, 10, &group).unwrap();
+        import(&stream, 0, 10, &group).unwrap();
         let appended = stream.append(b"next", 11).unwrap();
         assert_eq!(block_id(appended.lsn), 1);
         let mut cursor = stream.cursor(0, false);
@@ -1700,17 +1690,17 @@ mod tests {
         let target_directory = Directory::new();
         let target_path = target_directory.0.to_string_lossy().into_owned();
         let target = Stream::create(&target_path, base(), 0, 0);
-        assert_eq!(target.append_imported(1, 10, &bytes), Err(Error::Invalid));
-        assert_eq!(target.append_imported(0, 11, &bytes), Err(Error::Invalid));
+        assert_eq!(import(&target, 1, 10, &bytes), Err(Error::Invalid));
+        assert_eq!(import(&target, 0, 11, &bytes), Err(Error::Invalid));
         let mut corrupted = bytes.clone();
         let last = corrupted.len() - 1;
         corrupted[last] ^= 1;
         assert_eq!(
-            target.append_imported(0, 10, &corrupted),
+            import(&target, 0, 10, &corrupted),
             Err(Error::Corrupt)
         );
-        target.append_imported(0, 10, &bytes).unwrap();
-        assert_eq!(target.append_imported(0, 10, &bytes), Err(Error::Duplicate));
+        import(&target, 0, 10, &bytes).unwrap();
+        assert_eq!(import(&target, 0, 10, &bytes), Err(Error::Duplicate));
         let header = validate_group(&bytes, 0).unwrap();
         let next_lsn = bytes.len() as u64;
         let entry = encode_entry(b"two", 11, false).unwrap();
@@ -1724,7 +1714,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            target.append_imported(next_lsn, 11, &wrong_id),
+            import(&target, next_lsn, 11, &wrong_id),
             Err(Error::Invalid)
         );
         let next = encode_group(
@@ -1736,7 +1726,66 @@ mod tests {
             false,
         )
         .unwrap();
-        target.append_imported(next_lsn, 11, &next).unwrap();
+        import(&target, next_lsn, 11, &next).unwrap();
+    }
+
+    #[test]
+    fn imported_batches_publish_together() {
+        let source_directory = Directory::new();
+        let source_path = source_directory.0.to_string_lossy().into_owned();
+        let source = Stream::create(&source_path, base(), 0, 0);
+        source.append(b"one", 10).unwrap();
+        source.append(b"two", 11).unwrap();
+        source.append(b"three", 12).unwrap();
+        let mut cursor = source.cursor(0, true);
+        let mut records = Vec::new();
+        while cursor.next(u64::MAX).is_ok() {
+            records.push((cursor.lsn(), cursor.scn(), cursor.bytes().to_vec()));
+        }
+        let groups: Vec<_> = records
+            .iter()
+            .map(|(lsn, scn, bytes)| ImportedGroup {
+                source_lsn: *lsn,
+                source_scn: *scn,
+                bytes,
+            })
+            .collect();
+
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let target = Stream::create(&path, base(), 0, 0);
+        let result = target.append_imported(&groups).unwrap();
+        assert_eq!(result.end_lsn, source.progress().unwrap().end_lsn);
+        drop(target);
+        let target = Stream::open(&path, 0);
+        let mut cursor = target.cursor(0, false);
+        for payload in [b"one".as_slice(), b"two", b"three"] {
+            cursor.next(u64::MAX).unwrap();
+            assert_eq!(cursor.payload(), payload);
+        }
+
+        let rejected_directory = Directory::new();
+        let rejected_path = rejected_directory.0.to_string_lossy().into_owned();
+        let rejected = Stream::create(&rejected_path, base(), 0, 0);
+        let mut corrupted = records[1].2.clone();
+        let last = corrupted.len() - 1;
+        corrupted[last] ^= 1;
+        assert_eq!(
+            rejected.append_imported(&[
+                ImportedGroup {
+                    source_lsn: records[0].0,
+                    source_scn: records[0].1,
+                    bytes: &records[0].2,
+                },
+                ImportedGroup {
+                    source_lsn: records[1].0,
+                    source_scn: records[1].1,
+                    bytes: &corrupted,
+                },
+            ]),
+            Err(Error::Corrupt)
+        );
+        assert_eq!(rejected.progress().unwrap().end_lsn, 0);
     }
 
     #[test]
@@ -1815,9 +1864,7 @@ mod tests {
             groups.next(u64::MAX).unwrap();
             assert_eq!(groups.lsn() + GROUP_HEADER_SIZE as u64, *lsn);
             assert_eq!(groups.scn(), *scn);
-            target
-                .append_imported(groups.lsn(), *scn, groups.bytes())
-                .unwrap();
+            import(&target, groups.lsn(), *scn, groups.bytes()).unwrap();
         }
         assert_eq!(groups.next(u64::MAX), Err(Error::End));
         drop(target);
@@ -1849,7 +1896,7 @@ mod tests {
         payload.extend(encode_entry(b"two", 10, false).unwrap());
         payload.extend(encode_entry(b"three", 11, false).unwrap());
         let group = encode_group(&payload, 0, 11, 1, 0, false).unwrap();
-        stream.append_imported(0, 11, &group).unwrap();
+        import(&stream, 0, 11, &group).unwrap();
 
         let mut cursor = stream.cursor(GROUP_HEADER_SIZE as u64, false);
         cursor.next(u64::MAX).unwrap();
@@ -1872,7 +1919,7 @@ mod tests {
         payload.extend(encode_entry(b"two", 11, false).unwrap());
         payload.extend(encode_entry(b"three", 12, false).unwrap());
         let group = encode_group(&payload, 0, 12, 1, 0, false).unwrap();
-        stream.append_imported(0, 12, &group).unwrap();
+        import(&stream, 0, 12, &group).unwrap();
 
         let mut cursor = stream.cursor(GROUP_HEADER_SIZE as u64, false);
         cursor.next(10).unwrap();
@@ -1894,7 +1941,7 @@ mod tests {
         let stream = Stream::create(&path, base(), 0, 0);
         let entry = encode_entry(&[0; 8], 10, true).unwrap();
         let group = encode_group(&entry, 0, 10, 1, 0, true).unwrap();
-        stream.append_imported(0, 10, &group).unwrap();
+        import(&stream, 0, 10, &group).unwrap();
         stream.append(b"visible", 11).unwrap();
 
         let mut entries = stream.cursor(0, false);
