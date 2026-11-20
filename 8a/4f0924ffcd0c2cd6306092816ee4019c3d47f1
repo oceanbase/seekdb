@@ -1,0 +1,19 @@
+tests/mysqltest/README.md
+  s_1450aec9a62cfa::t_e16b0c41331878 18-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8a4f0924ffcd0c2cd6306092816ee4019c3d47f1",
+  "prompts": {},
+  "sessions": {
+    "s_1450aec9a62cfa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e8a1-2018-73d3-957b-6e23cb3716ec",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

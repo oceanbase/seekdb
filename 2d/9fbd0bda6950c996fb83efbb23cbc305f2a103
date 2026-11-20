@@ -1,0 +1,22 @@
+src/oblib/lib/thread/ob_thread_name.cpp
+  s_99bd9318300c1c::t_970fadd18f5182 51-61
+package/binary.py
+  s_99bd9318300c1c::t_970fadd18f5182 154,161-165,171-185,188-192,194-201,230-231,352-353,376-377
+  s_99bd9318300c1c::t_f10004760ea5c5 7,186-187,193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2d9fbd0bda6950c996fb83efbb23cbc305f2a103",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

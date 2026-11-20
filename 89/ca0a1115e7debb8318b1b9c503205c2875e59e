@@ -1,0 +1,60 @@
+.gitignore
+  h_8be1126d7af6a7 15-16
+MODULE.bazel
+  h_8be1126d7af6a7 15-20,94-98,103-114,121-122,126-157
+MODULE.bazel.lock
+  h_8be1126d7af6a7 619,3109,3120-3126,3134
+bazel/BUILD.bazel
+  h_8be1126d7af6a7 4
+bazel/platforms.bzl
+  h_8be1126d7af6a7 49,57-60
+bazel/rules-rust-windows-build-script-path.diff
+  h_8be1126d7af6a7 1-18
+build.py
+  h_8be1126d7af6a7 107,244-246
+deps/external/BUILD.bazel
+  h_8be1126d7af6a7 19-24
+deps/external/bazel/jemalloc.bzl
+  h_8be1126d7af6a7 20,23-26,32-33,35,49,63-64,92
+deps/external/jemalloc-windows-background.patch
+  h_8be1126d7af6a7 1-433
+deps/external/jemalloc-windows-build.patch
+  h_8be1126d7af6a7 1-27
+docs/developer-guide/en/android.md
+  h_8be1126d7af6a7 34-57
+docs/developer-guide/en/toolchain.md
+  h_8be1126d7af6a7 72-74,77-80,87-93
+docs/developer-guide/en/unittest.md
+  h_8be1126d7af6a7 3,28-42
+src/oblib/BUILD.bazel
+  h_8be1126d7af6a7 1147-1148,1152,1256-1257
+src/oblib/lib/alloc/malloc_hook.cpp
+  h_8be1126d7af6a7 27-28
+src/oblib/lib/alloc/malloc_hook_extended.cpp
+  h_8be1126d7af6a7 17-18
+src/oblib/lib/alloc/ob_malloc_allocator.h
+  h_8be1126d7af6a7 30
+src/oblib/lib/allocator/ob_jemalloc.h
+  h_8be1126d7af6a7 91,122-129
+src/oblib/lib/allocator/ob_malloc.cpp
+  h_8be1126d7af6a7 39-44,123-124
+src/observer/BUILD.bazel
+  h_8be1126d7af6a7 407-408
+src/observer/ob_server.cpp
+  h_8be1126d7af6a7 35,738-743
+unittest/oblib/BUILD.bazel
+  h_8be1126d7af6a7 3,26-54
+unittest/oblib/test_jemalloc_backend.cpp
+  h_8be1126d7af6a7 1-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "89ca0a1115e7debb8318b1b9c503205c2875e59e",
+  "prompts": {},
+  "humans": {
+    "h_8be1126d7af6a7": {
+      "author": "wangyunlai <hnwyllmm@126.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+src/sql/engine/cmd/ob_table_executor.cpp
+  s_bfbce7ea66b68b::t_d62f1c557ffcd1 19,1566-1568,1570-1572
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "704945e7faaf244fe721b0789cdfbcea0bd1ebe7",
+  "prompts": {},
+  "sessions": {
+    "s_bfbce7ea66b68b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a143fc-2c61-7ef0-a136-c10b98d3f0af",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

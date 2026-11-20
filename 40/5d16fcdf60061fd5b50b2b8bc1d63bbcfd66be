@@ -1,0 +1,22 @@
+MODULE.bazel
+  s_99bd9318300c1c::t_9afa8f1b721216 127-128,139-148
+  s_99bd9318300c1c::t_2230bf67728552 149
+MODULE.bazel.lock
+  s_99bd9318300c1c::t_d0add3bd23a82b 625,4284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "405d16fcdf60061fd5b50b2b8bc1d63bbcfd66be",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+src/observer/omt/ob_server_runtime_controller.cpp
+  s_1450aec9a62cfa::t_3272f5b3f987f7 864-872
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f5a22620d85810ddf49a632b40a5f9d3dfaff5bf",
+  "prompts": {},
+  "sessions": {
+    "s_1450aec9a62cfa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e8a1-2018-73d3-957b-6e23cb3716ec",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

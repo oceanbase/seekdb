@@ -1,0 +1,26 @@
+.bazelrc
+  s_99bd9318300c1c::t_f9ad1731ea2259 49
+  s_99bd9318300c1c::t_c2b9630cbc044b 32
+bazel/rust_toolchain.bzl
+  s_99bd9318300c1c::t_c2b9630cbc044b 57-59,93
+deps/init/prepare.py
+  s_99bd9318300c1c::t_c2b9630cbc044b 55-56
+package/binary.py
+  s_99bd9318300c1c::t_c2b9630cbc044b 82-83,156-175,241,368-371,396-397
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c992c7f8f22ea31c081d6dd183ef4d882fdb76ac",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

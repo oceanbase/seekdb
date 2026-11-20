@@ -1,0 +1,22 @@
+tests/mysqltest/r/lambda_capture_eval.result
+  s_1450aec9a62cfa::t_f38b19509b783d 6-11,138-148,153
+tests/mysqltest/t/lambda_capture_eval.test
+  s_1450aec9a62cfa::t_f38b19509b783d 21-24,84-95,99-103
+  s_1450aec9a62cfa::t_bb513f2195157e 104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "627466879b3356ae1ef3b08c820a214a003c1e4d",
+  "prompts": {},
+  "sessions": {
+    "s_1450aec9a62cfa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e8a1-2018-73d3-957b-6e23cb3716ec",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}
