@@ -1606,7 +1606,12 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
 
             OX (session->get_pl_sqlcode_info()->set_sqlcode(OB_SUCCESS));
 
-            if (OB_SUCC(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)) {
+            // A SELECT does not start a new diagnostics area in a stored
+            // program. In particular, a later SELECT must not erase a warning
+            // that the CALL containing it has to propagate to its caller.
+            if (OB_SUCC(ret)
+                && !ObStmt::is_diagnostic_stmt(stmt_type)
+                && !ObStmt::is_select_stmt(stmt_type)) {
               ob_reset_tsi_warning_buffer();
             }
 
