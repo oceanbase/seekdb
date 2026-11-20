@@ -1,0 +1,92 @@
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_model_completion');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_model_embedding');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_model_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_model_ollama');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_endpoint_openai');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_endpoint_ollama');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_model_completion', '{"type": "completion", "model_name": "gpt-4"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_model_embedding', '{"type": "dense_embedding", "model_name": "text-embedding-v1"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_model_rerank', '{"type": "rerank", "model_name": "Qwen/Qwen3-Reranker-0.6B"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_model_ollama', '{"type": "completion", "model_name": "llama3"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_endpoint_openai', '{
+  "ai_model_name": "enh_model_completion",
+  "url": "http://127.0.0.1:8000/v1/",
+  "access_key": "sk-mock-key",
+  "request_model_name": "gpt-4",
+  "provider": "openai"
+}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_endpoint_ollama', '{
+  "ai_model_name": "enh_model_ollama",
+  "url": "http://127.0.0.1:8000/",
+  "access_key": "",
+  "request_model_name": "llama3",
+  "provider": "ollama"
+}');
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enh_endpoint_openai', '{"ai_model_name": "enh_model_embedding"}');
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('enh_endpoint_openai', '{"ai_model_name": "enh_model_rerank"}');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_endpoint_embed');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_endpoint_embed', '{
+  "ai_model_name": "enh_model_embedding",
+  "url": "http://127.0.0.1:8000/v1/",
+  "access_key": "sk-mock-key",
+  "request_model_name": "text-embedding-v1",
+  "provider": "openai"
+}');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_endpoint_rerank');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_endpoint_rerank', '{
+  "ai_model_name": "enh_model_rerank",
+  "url": "http://127.0.0.1:8000/v1/",
+  "access_key": "sk-mock-key",
+  "request_model_name": "Qwen/Qwen3-Reranker-0.6B",
+  "provider": "openai"
+}');
+select ai_prompt('Task: {0}, Data: {1}', 'analyze', json_array(1, 2, 3)) as prompt_json;
+prompt_json
+{"args": ["analyze", [1, 2, 3]], "template": "Task: {0}, Data: {1}"}
+select ai_prompt('Nested: {0}', ai_prompt('Inner: {0}', 'val')) as nested_prompt;
+nested_prompt
+{"args": [{"args": ["val"], "template": "Inner: {0}"}], "template": "Nested: {0}"}
+select ai_prompt('Repeat: {0} and {0}', 'test') as repeat_prompt;
+repeat_prompt
+{"args": ["test"], "template": "Repeat: {0} and {0}"}
+select ai_complete('enh_model_completion', ai_prompt('Hello, how are you?')) as completion;
+completion
+Mocked OpenAI chat completion response.
+select ai_complete('enh_model_ollama', ai_prompt('Hello from Ollama')) as ollama_completion;
+ollama_completion
+Mocked Ollama response.
+select ai_embed('enh_model_embedding', 'Hello world') as single_embedding;
+single_embedding
+[0.1, 0.2, 0.3, 0.4, 0.5]
+create table ai_test_table (id int primary key, content text);
+insert into ai_test_table values (1, 'row 1'), (2, NULL), (3, 'row 3'), (4, 'row 4'), (5, 'row 5');
+select id, ai_embed('enh_model_embedding', content) as embedding 
+from ai_test_table 
+where id > 1 
+order by id 
+limit 3;
+id	embedding
+2	NULL
+3	[0.1, 0.2, 0.3, 0.4, 0.5]
+4	[0.11, 0.2, 0.3, 0.4, 0.5]
+select ai_rerank('enh_model_rerank', 'What is OceanBase?', json_array('Database', 'Fruit', 'OceanBase is a DB')) as rerank_strings;
+rerank_strings
+[{"index": 0, "relevance_score": 0.9}, {"index": 1, "relevance_score": 0.8}, {"index": 2, "relevance_score": 0.7}]
+select ai_rerank('enh_model_rerank', 'Query', json_array(
+  json_object('text', 'Result 1', 'id', 101),
+  json_object('text', 'Result 2', 'id', 102)
+), '$.text') as rerank_objects;
+rerank_objects
+[{"index": 0, "relevance_score": 0.9}, {"index": 1, "relevance_score": 0.8}]
+select ai_rerank('enh_model_rerank', 'Tie Test', json_array('A', 'B', 'C')) as tie_test;
+tie_test
+[{"index": 0, "relevance_score": 0.9}, {"index": 1, "relevance_score": 0.8}, {"index": 2, "relevance_score": 0.7}]
+drop table ai_test_table;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_endpoint_openai');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_endpoint_ollama');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_endpoint_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_endpoint_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_model_completion');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_model_embedding');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_model_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_model_ollama');

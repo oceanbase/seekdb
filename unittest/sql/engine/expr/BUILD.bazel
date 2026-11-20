@@ -1,0 +1,54 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "ob_expr_ai_prompt_test_cases",
+    srcs = ["ob_expr_ai_prompt_test.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_lib",
+        "//bazel/third_party:gtest",
+    ],
+    target_compatible_with = select({
+        "//bazel:sanity_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+cc_test(
+    name = "ob_expr_ai_prompt_test",
+    linkstatic = True,
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [
+        ":ob_expr_ai_prompt_test_cases",
+        "//src/observer:liboceanbase",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+cc_library(
+    name = "test_ob_openai_utils_cases",
+    srcs = ["test_ob_openai_utils.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_lib",
+        "//bazel/third_party:gtest",
+    ],
+    target_compatible_with = select({
+        "//bazel:sanity_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+cc_test(
+    name = "test_ob_openai_utils",
+    linkstatic = True,
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [
+        ":test_ob_openai_utils_cases",
+        "//src/observer:liboceanbase",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)
