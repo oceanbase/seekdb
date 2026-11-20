@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -263,6 +264,53 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+int ObInListResolver::has_fewer_distinct_params(const ParseNode &in_list,
+                                                const int64_t distinct_limit,
+                                                const ParamStore &param_store,
+                                                bool &has_fewer)
+{
+  int ret = OB_SUCCESS;
+  has_fewer = false;
+  hash::ObHashSet<ObObj, hash::NoPthreadDefendMode> distinct_values;
+  if (OB_UNLIKELY(distinct_limit <= 0 || in_list.num_child_ <= 0) ||
+      OB_ISNULL(in_list.children_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(distinct_values.create(MIN(in_list.num_child_, distinct_limit),
+                                            "InlistDistinct", "InlistDistinct"))) {
+    LOG_WARN("failed to create hash set for inlist parameter values", K(ret), K(distinct_limit));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && distinct_values.size() < distinct_limit &&
+                      i < in_list.num_child_; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    int hash_ret = OB_SUCCESS;
+    if (OB_ISNULL(node) || T_QUESTIONMARK != node->type_ || node->value_ < 0 ||
+        node->value_ >= param_store.count()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid inlist parameter", K(ret), K(i), KP(node));
+    } else {
+      const ObObj &value = param_store.at(node->value_);
+      if (OB_HASH_EXIST == (hash_ret = distinct_values.exist_refactored(value))) {
+        // Duplicate parameters remain in the expression for plan-cache safety.
+      } else if (OB_HASH_NOT_EXIST != hash_ret) {
+        ret = hash_ret;
+        LOG_WARN("failed to check inlist parameter value", K(ret), K(i));
+      } else if (OB_FAIL(distinct_values.set_refactored(value))) {
+        LOG_WARN("failed to remember inlist parameter value", K(ret), K(i));
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    has_fewer = distinct_values.size() < distinct_limit;
+  }
+  if (distinct_values.created()) {
+    int tmp_ret = distinct_values.destroy();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to destroy hash set for inlist parameter values", K(tmp_ret));
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +398,86 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && threshold > 0 && 1 == column_cnt && is_question_mark &&
+          NULL != param_store && param_store->count() > 0) {
+        bool has_fewer = false;
+        if (OB_FAIL(has_fewer_distinct_params(in_list, threshold, *param_store, has_fewer))) {
+        } else if (has_fewer) {
+          // Keep every parameter in the scalar IN expression. Cached executions may
+          // bind different values, so only the current rewrite decision is reduced.
+          is_enable = false;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObInListResolver::deduplicate_inlist_constants(const ParseNode &in_list,
+                                                   ObIAllocator &alloc,
+                                                   const ParseNode *&deduplicated_in_list)
+{
+  int ret = OB_SUCCESS;
+  const int64_t row_cnt = in_list.num_child_;
+  deduplicated_in_list = &in_list;
+  if (T_EXPR_LIST != in_list.type_ || row_cnt <= 1) {
+    // A subquery or a single-element list cannot benefit from deduplication.
+  } else if (OB_ISNULL(in_list.children_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    bool all_constants = true;
+    for (int64_t i = 0; all_constants && i < row_cnt; ++i) {
+      if (OB_ISNULL(in_list.children_[i])) {
+        ret = OB_ERR_UNEXPECTED;
+        all_constants = false;
+      } else if (!IS_DATATYPE_OP(in_list.children_[i]->type_)) {
+        all_constants = false;
+      }
+    }
+
+    if (OB_SUCC(ret) && all_constants) {
+      hash::ObHashSet<const ParseNode *, hash::NoPthreadDefendMode> seen_nodes;
+      ObSEArray<ParseNode *, 16> unique_nodes;
+      bool has_duplicate = false;
+      if (OB_FAIL(seen_nodes.create(row_cnt, "InlistDedup", "InlistDedup"))) {
+        LOG_WARN("failed to create hash set for inlist deduplication", K(ret), K(row_cnt));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
+        ParseNode *node = in_list.children_[i];
+        int hash_ret = seen_nodes.exist_refactored(node);
+        if (OB_HASH_EXIST == hash_ret) {
+          has_duplicate = true;
+        } else if (OB_HASH_NOT_EXIST != hash_ret) {
+          ret = hash_ret;
+          LOG_WARN("failed to check inlist element", K(ret), K(i));
+        } else if (OB_FAIL(seen_nodes.set_refactored(node))) {
+          LOG_WARN("failed to remember inlist element", K(ret), K(i));
+        } else if (OB_FAIL(unique_nodes.push_back(node))) {
+          LOG_WARN("failed to append unique inlist element", K(ret), K(i));
+        }
+      }
+      if (seen_nodes.created()) {
+        int tmp_ret = seen_nodes.destroy();
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("failed to destroy hash set for inlist deduplication", K(tmp_ret));
+        }
+      }
+
+      if (OB_SUCC(ret) && has_duplicate) {
+        ParseNode *new_list = new_node(&alloc, T_EXPR_LIST, unique_nodes.count());
+        if (OB_ISNULL(new_list) || OB_ISNULL(new_list->children_)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate deduplicated inlist", K(ret), K(unique_nodes.count()));
+        } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, &in_list, new_list))) {
+          LOG_WARN("failed to copy inlist node", K(ret));
+        } else {
+          new_list->num_child_ = unique_nodes.count();
+          for (int64_t i = 0; i < unique_nodes.count(); ++i) {
+            new_list->children_[i] = unique_nodes.at(i);
+          }
+          deduplicated_in_list = new_list;
+        }
+      }
     }
   }
   return ret;

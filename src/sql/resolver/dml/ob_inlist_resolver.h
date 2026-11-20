@@ -90,6 +90,11 @@ public:
                                          common::ObIAllocator &alloc,
                                          bool &is_question_mark,
                                          bool &is_enable);
+  // Remove structurally identical literals while preserving their first occurrence.
+  // Lists containing parameters or other expressions are returned unchanged.
+  static int deduplicate_inlist_constants(const ParseNode &in_list,
+                                          common::ObIAllocator &alloc,
+                                          const ParseNode *&deduplicated_in_list);
   // try to merge IN nodes under root_node (which is an AND/OR node)
   // if merge does not happen, the ret_node is root_node
   // if merge happened, the merged node will be a new node with merged children, and if:
@@ -101,6 +106,11 @@ public:
                                const ParseNode *&ret_node);
   int resolve_inlist(ObInListInfo &inlist_infos);
 private:
+  // Bound the distinct-value count without changing parameter positions.
+  static int has_fewer_distinct_params(const ParseNode &in_list,
+                                       const int64_t distinct_limit,
+                                       const ParamStore &param_store,
+                                       bool &has_fewer);
   static int get_inlist_rewrite_info(const ParseNode &in_list,
                                      const int64_t column_cnt,
                                      int64_t col_idx,

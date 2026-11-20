@@ -1,0 +1,52 @@
+# Regression for https://github.com/oceanbase/seekdb/issues/1512.
+# Duplicate literal members must be removed before the values-table rewrite check.
+
+--disable_warnings
+DROP TABLE IF EXISTS inlist_duplicate_rewrite;
+--enable_warnings
+CREATE TABLE inlist_duplicate_rewrite(id INT PRIMARY KEY, category INT);
+INSERT INTO inlist_duplicate_rewrite VALUES (1, 1), (2, 2), (3, NULL);
+--source mysql_test/include/create_plan_table.inc
+
+# Exactly 1000 members reach the default rewrite threshold, but there is only
+# one distinct value. Test both automatic parameterization and raw literals.
+let $duplicates = `SELECT CONCAT(REPEAT('1,', 999), '1')`;
+--disable_query_log
+SET ob_enable_plan_cache = true;
+--disable_result_log
+eval EXPLAIN INTO plan_table SET statement_id = 'inlist_auto_params'
+  SELECT id FROM inlist_duplicate_rewrite WHERE category IN ($duplicates);
+SET ob_enable_plan_cache = false;
+eval EXPLAIN INTO plan_table SET statement_id = 'inlist_literals'
+  SELECT id FROM inlist_duplicate_rewrite WHERE category IN ($duplicates);
+--enable_result_log
+SET ob_enable_plan_cache = true;
+--enable_query_log
+
+SELECT statement_id,
+       SUM(operator IN ('VALUES TABLE ACCESS', 'HASH DISTINCT', 'SUBPLAN SCAN')) = 0
+         AS avoids_values_rewrite,
+       SUM(operator = 'TABLE FULL SCAN') = 1 AS keeps_table_scan
+  FROM plan_table
+ WHERE statement_id IN ('inlist_auto_params', 'inlist_literals')
+ GROUP BY statement_id
+ ORDER BY statement_id;
+
+# The scalar plan keeps every automatic parameter. Reusing it with a previously
+# duplicated position bound to a new value must still return that value.
+let $mixed_values = `SELECT CONCAT(REPEAT('1,', 999), '2')`;
+--disable_query_log
+eval SELECT id FROM inlist_duplicate_rewrite
+  WHERE category IN ($duplicates) ORDER BY id;
+eval SELECT id FROM inlist_duplicate_rewrite
+  WHERE category IN ($mixed_values) ORDER BY id;
+--enable_query_log
+
+# Deduplication preserves IN/NOT IN three-valued logic and first occurrence order.
+SELECT id FROM inlist_duplicate_rewrite
+  WHERE category IN (1, 1, NULL, 1, NULL) ORDER BY id;
+SELECT id FROM inlist_duplicate_rewrite
+  WHERE category NOT IN (1, 1, NULL, 1, NULL) ORDER BY id;
+
+DROP TABLE plan_table;
+DROP TABLE inlist_duplicate_rewrite;
