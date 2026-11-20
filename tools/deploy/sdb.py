@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 import argparse
+import math
 import os
 import shlex
 import signal
@@ -512,8 +513,8 @@ def command_destroy(args):
 
 def positive_float(value):
     number = float(value)
-    if number <= 0:
-        raise argparse.ArgumentTypeError("must be greater than zero")
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError("must be finite and greater than zero")
     return number
 
 
