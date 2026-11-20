@@ -1,0 +1,107 @@
+# Regression for #1512: duplicated integers must not turn a small membership
+# filter into a VALUES subquery outside the approximate vector scan.
+--disable_warnings
+DROP TABLE IF EXISTS vector_inlist_duplicates;
+--enable_warnings
+CREATE TABLE vector_inlist_duplicates (
+  id INT PRIMARY KEY,
+  category BIGINT,
+  u BIGINT UNSIGNED,
+  embedding VECTOR(3)
+) ORGANIZATION HEAP;
+INSERT INTO vector_inlist_duplicates VALUES
+  (1,1,18446744073709551615,'[1,0,0]'),
+  (2,2,18446744073709551614,'[2,0,0]'),
+  (3,3,18446744073709551613,'[3,0,0]'),
+  (4,4,4,'[4,0,0]'), (5,5,5,'[5,0,0]'), (6,6,6,'[6,0,0]'),
+  (7,NULL,NULL,'[7,0,0]'), (8,-1,0,'[8,0,0]'),
+  (9,-9223372036854775808,9,'[9,0,0]'),
+  (10,9223372036854775807,10,'[10,0,0]');
+CREATE VECTOR INDEX idx_duplicates ON vector_inlist_duplicates(embedding)
+  WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate);
+
+--echo # Few distinct integers: keep the predicate in the vector scan.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (1,2,3,1,2,3)
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 3;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (1,2,3,1,2,3)
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 3;
+
+--echo # At the distinct-count threshold, retain the original rewrite.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (1,2,3,4,1,2)
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 3;
+
+--echo # Preserve the explicit threshold of one.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 1) */ id
+FROM vector_inlist_duplicates WHERE category IN (1,1,1)
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 3;
+
+--echo # The original 3072-item shape, using the default threshold.
+let $duplicates = `SELECT CONCAT(REPEAT('1,2,3,', 1023), '1,2,3')`;
+--disable_query_log
+eval EXPLAIN BASIC SELECT id FROM vector_inlist_duplicates WHERE category IN ($duplicates) ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 3;
+eval SELECT id FROM vector_inlist_duplicates WHERE category IN ($duplicates) ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 3;
+--enable_query_log
+
+--echo # Parameter equality constraints must reject plans when duplicate values diverge.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) AS matched
+FROM vector_inlist_duplicates WHERE category IN (1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) AS matched
+FROM vector_inlist_duplicates WHERE category IN (1,2,3,4,5,6);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) AS matched
+FROM vector_inlist_duplicates WHERE category IN (4,5,6,4,5,6);
+
+--echo # A discarded parameter can diverge while the distinct count stays small.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) AS matched
+FROM vector_inlist_duplicates WHERE category IN (1,2,1,2,1,2);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) AS matched
+FROM vector_inlist_duplicates WHERE category IN (1,2,3,2,1,2);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) AS matched
+FROM vector_inlist_duplicates WHERE category IN (4,5,4,5,4,5);
+
+--echo # A single distinct value becomes an equality predicate.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (2,2,2,2) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (2,2,3,2) ORDER BY id;
+
+--echo # NULLs, signed and unsigned boundaries retain SQL membership semantics.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (NULL,1,2,NULL,1,2) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (-1,-1,-1,-1) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN
+  (-9223372036854775808,9223372036854775807,-9223372036854775808,9223372036854775807)
+ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE u IN
+  (18446744073709551615,18446744073709551614,18446744073709551615,18446744073709551614)
+ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (NULL,NULL,NULL,NULL) ORDER BY id;
+
+--echo # Unsupported types, NOT IN and row IN retain their previous behavior.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN ('1','2','1','2') ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (1.0,2.0,1.0,2.0) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category IN (1,'2',1,'2') ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category NOT IN (1,2,1,2) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE category NOT IN (1,NULL,1,NULL) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id
+FROM vector_inlist_duplicates WHERE (category,id) IN ((1,1),(2,2),(1,1),(2,2)) ORDER BY id;
+
+--echo # Prepared statement values may change from repeated to distinct.
+PREPARE duplicate_membership FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'', 4) */ COUNT(*) AS matched FROM vector_inlist_duplicates WHERE category IN (?,?,?,?,?,?)';
+SET @a=1, @b=2, @c=3, @d=1, @e=2, @f=3;
+EXECUTE duplicate_membership USING @a,@b,@c,@d,@e,@f;
+SET @d=4, @e=5, @f=6;
+EXECUTE duplicate_membership USING @a,@b,@c,@d,@e,@f;
+DEALLOCATE PREPARE duplicate_membership;
+DROP TABLE vector_inlist_duplicates;

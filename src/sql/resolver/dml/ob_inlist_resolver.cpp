@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/utility/ob_sort.h"
 
 namespace oceanbase
 {
@@ -263,6 +264,119 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+int ObInListResolver::check_integer_inlist_cardinality(const ParseNode &in_list,
+                                                      const ParamStore *param_store,
+                                                      const int64_t threshold,
+                                                      bool &reaches_threshold)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<uint64_t, 16> values;
+  int64_t null_count = 0;
+  bool supported = true;
+  reaches_threshold = true;
+  // The caller has already checked that all non-NULL values have the same
+  // integer type. Count exact values, without applying SQL casts or collation.
+  for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    uint64_t value = 0;
+    bool is_null = false;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (T_QUESTIONMARK == node->type_) {
+      if (OB_ISNULL(param_store) || node->value_ < 0 || node->value_ >= param_store->count()) {
+        supported = false;
+      } else {
+        const ObObjParam &param = param_store->at(node->value_);
+        if (param.is_null()) {
+          is_null = true;
+        } else if (ob_is_integer_type(param.get_type())) {
+          value = param.get_uint64();
+        } else {
+          supported = false;
+        }
+      }
+    } else if (T_NULL == node->type_) {
+      is_null = true;
+    } else if (T_INT == node->type_ || T_UINT64 == node->type_ || T_BOOL == node->type_) {
+      value = static_cast<uint64_t>(node->value_);
+    } else {
+      supported = false;
+    }
+    if (OB_SUCC(ret) && supported) {
+      if (is_null) {
+        ++null_count;
+      } else if (OB_FAIL(values.push_back(value))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret) && supported) {
+    lib::ob_sort(values.begin(), values.end());
+    // NULL expressions are retained by deduplicate_integer_inlist.
+    int64_t distinct_count = null_count;
+    for (int64_t i = 0; i < values.count() && distinct_count < threshold; ++i) {
+      if (0 == i || values.at(i) != values.at(i - 1)) {
+        ++distinct_count;
+      }
+    }
+    reaches_threshold = distinct_count >= threshold;
+  }
+  return ret;
+}
+
+int ObInListResolver::deduplicate_integer_inlist(ObRawExpr &right_expr,
+                                                   ObQueryCtx &query_ctx)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<std::pair<uint64_t, int64_t>, 16> values;
+  ObSEArray<ObRawExpr *, 16> unique_exprs;
+  ObQuestionmarkEqualCtx cmp_ctx(false);
+  // Resolve all parameters first so their type metadata remains available to
+  // the plan cache. Only the expression tree is shortened, not ParamStore.
+  for (int64_t i = 0; OB_SUCC(ret) && i < right_expr.get_param_count(); ++i) {
+    ObRawExpr *expr = right_expr.get_param_expr(i);
+    if (OB_ISNULL(expr) || !expr->is_const_raw_expr()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ObConstRawExpr *constant = static_cast<ObConstRawExpr *>(expr);
+      const ObObj &value = T_QUESTIONMARK == expr->get_expr_type()
+                          ? constant->get_param() : constant->get_value();
+      if (value.is_null()) {
+        // NULL parameters are deliberately retained: equality constraints are
+        // intended for non-NULL parameters.
+        if (OB_FAIL(unique_exprs.push_back(expr))) {
+        }
+      } else if (!ob_is_integer_type(value.get_type())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(values.push_back(std::make_pair(value.get_uint64(), i)))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    lib::ob_sort(values.begin(), values.end());
+    ObRawExpr *representative = NULL;
+    for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
+      ObRawExpr *expr = right_expr.get_param_expr(values.at(i).second);
+      bool equal = false;
+      if (i > 0 && values.at(i).first == values.at(i - 1).first) {
+        equal = expr->same_as(*representative, &cmp_ctx);
+      }
+      if (OB_SUCCESS != cmp_ctx.err_code_) {
+        ret = cmp_ctx.err_code_;
+      } else if (!equal) {
+        representative = expr;
+        if (OB_FAIL(unique_exprs.push_back(expr))) {
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(append(query_ctx.all_equal_param_constraints_, cmp_ctx.equal_pairs_))) {
+      } else if (OB_FAIL(static_cast<ObOpRawExpr &>(right_expr).set_param_exprs(unique_exprs))) {
+      }
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -275,10 +389,12 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObStmt *stmt,
                                                   ObIAllocator &alloc,
                                                   bool &is_question_mark,
-                                                  bool &is_enable)
+                                                  bool &is_enable,
+                                                  bool &deduplicate)
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  deduplicate = false;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -350,6 +466,17 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && T_OP_IN == op_type && 1 == column_cnt
+          && !is_prepare_stmt && NULL != stmt && threshold > 1
+          && ob_is_integer_type(rewrite_info.param_types_.at(0).obj_type_)) {
+        // A large list with only a few distinct integers does not benefit from
+        // materializing a VALUES table and a DISTINCT subquery. In ANN queries
+        // that subquery also moves the filter out of the vector index scan.
+        if (OB_FAIL(check_integer_inlist_cardinality(in_list, param_store, threshold, is_enable))) {
+        } else {
+          deduplicate = !is_enable;
+        }
+      }
     }
   }
   return ret;
