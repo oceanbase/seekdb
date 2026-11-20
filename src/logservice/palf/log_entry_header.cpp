@@ -16,6 +16,7 @@
 
 #include "log_entry_header.h"
 #include "lib/checksum/ob_crc64.h"          // ob_crc64
+#include "share/ob_errno.h"
 #include "share/log/ob_log_base_header.h"  // ObLogBaseHeader
 
 namespace oceanbase

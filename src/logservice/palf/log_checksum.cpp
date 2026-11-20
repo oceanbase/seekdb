@@ -17,6 +17,7 @@
 #include "log_checksum.h"
 #include "share/log/palf/log_define.h"
 #include "lib/checksum/ob_crc64.h"
+#include "lib/profile/ob_trace_id.h"
 
 namespace oceanbase
 {

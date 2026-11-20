@@ -15,6 +15,7 @@
  */
 
 #include "log_meta_info.h"
+#include "share/ob_errno.h"
 
 namespace oceanbase
 {

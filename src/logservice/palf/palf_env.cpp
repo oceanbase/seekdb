@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX PALF
 #include "palf_env.h"
+#include "share/rc/ob_server_runtime.h"
 #include "palf_handle.h"
-#include "log_io_adapter.h"
 
 namespace oceanbase
 {
@@ -40,30 +40,15 @@ int PalfEnv::create_palf_env(
     share::LocalStore &store,
     const char *base_dir,
     const common::ObAddr &self,
-    common::ObILogAllocator *log_alloc_mgr,
-    ILogBlockPool *log_block_pool,
     PalfMonitorCb *monitor,
-    const storage_io::NamedOwnerHandle *log_files,
-
     PalfEnv *&palf_env)
 {
   int ret = OB_SUCCESS;
-  char log_dir[common::MAX_PATH_SIZE] = {'\0'};
-  bool directory_exists = false;
-  int length = 0;
-  palf_env = nullptr;
-  if (OB_ISNULL(base_dir)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if ((length = snprintf(log_dir, sizeof(log_dir), "%s/log_stream", base_dir)) < 0
-      || length >= sizeof(log_dir)) {
-    ret = OB_BUF_NOT_ENOUGH;
-  } else if (OB_FAIL(meta_store::check_directory(store, log_dir, directory_exists))) {
-  } else if (NULL == (palf_env = SERVER_NEW(PalfEnv, "PalfEnv"))) {
+  palf_env = SERVER_NEW(PalfEnv, "PalfEnv");
+  if (NULL == palf_env) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(delete_tmp_file_or_directory_at(base_dir))) {
-  } else if (OB_FAIL(palf_env->palf_env_impl_.init(options, store, base_dir, self,
-                                                   log_alloc_mgr, log_block_pool, monitor, 
-                                                   log_files))) {
+  } else if (OB_FAIL(FileDirectoryUtils::delete_tmp_file_or_directory_at(base_dir))) {
+  } else if (OB_FAIL(palf_env->palf_env_impl_.init(options, store, base_dir, self, monitor))) {
   } else {
     PALF_LOG(INFO, "create_palf_handle_impl success", K(base_dir));
   }
@@ -107,7 +92,7 @@ int PalfEnv::create(const AccessMode &access_mode,
                     PalfHandle &handle)
 {
   int ret = OB_SUCCESS;
-  palf::IPalfHandleImpl *palf_handle_impl = NULL;
+  palf::PalfHandleImpl *palf_handle_impl = NULL;
   if (OB_FAIL(palf_env_impl_.create_palf_handle_impl(access_mode, palf_base_info, palf_handle_impl))) {
   } else if (FALSE_IT(handle.palf_handle_impl_ = palf_handle_impl)) {
   } else {
@@ -122,7 +107,7 @@ int PalfEnv::create(const AccessMode &access_mode,
 int PalfEnv::open(PalfHandle &handle)
 {
   int ret = OB_SUCCESS;
-  palf::IPalfHandleImpl *palf_handle_impl = NULL;
+  palf::PalfHandleImpl *palf_handle_impl = NULL;
   if (OB_FAIL(palf_env_impl_.get_palf_handle_impl(palf_handle_impl))) {
   } else if (FALSE_IT(handle.palf_handle_impl_ = palf_handle_impl)) {
   } else {
@@ -136,7 +121,6 @@ int PalfEnv::open(PalfHandle &handle)
 void PalfEnv::close(PalfHandle &handle)
 {
   (void)handle.unregister_file_size_cb();
-  palf_env_impl_.revert_palf_handle_impl(handle.palf_handle_impl_);
   handle.palf_handle_impl_ = NULL;
 }
 
