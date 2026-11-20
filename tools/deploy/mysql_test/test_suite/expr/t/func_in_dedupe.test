@@ -1,0 +1,44 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: yuanyue510
+# owner group: SQL
+# description: duplicate constant items in IN/NOT IN lists must not change results
+
+--disable_warnings
+drop table if exists t_in_dedupe;
+--enable_warnings
+create table t_in_dedupe (pk int primary key, c1 int, c2 varchar(16));
+insert into t_in_dedupe values (1, 1, 'a');
+insert into t_in_dedupe values (2, 2, 'b');
+insert into t_in_dedupe values (3, 3, 'c');
+insert into t_in_dedupe values (4, NULL, NULL);
+
+--echo # constant in list with duplicate items
+select 2 in (1, 1, 2, 2, 3);
+select 4 in (1, 1, 2, 2, 3);
+select 2 not in (1, 1, 3, 3);
+select 4 not in (1, 1, 3, 3);
+select null in (1, 1, 2);
+select 1 in (1, 1, null);
+select 2 in (1, 1, null);
+select 'a' in ('a', 'a', 'b');
+select 'd' in ('a', 'a', 'b');
+
+--echo # column in list with duplicate items
+select pk, c1 from t_in_dedupe where c1 in (2, 2, 3, 3, 3) order by pk;
+select pk, c1 from t_in_dedupe where c1 not in (1, 1, 3, 3) order by pk;
+select pk, c2 from t_in_dedupe where c2 in ('a', 'a', 'c', 'c') order by pk;
+select pk from t_in_dedupe where c1 in (1, 1, 2, 2) or c1 in (3, 3) order by pk;
+select pk from t_in_dedupe where pk in (1, 1, 4, 4, 4) order by pk;
+
+--echo # duplicate items mixed with null in a column filter
+select pk from t_in_dedupe where c1 in (1, 1, null, 1) order by pk;
+select pk from t_in_dedupe where c1 not in (1, 1, null, 1) order by pk;
+
+--echo # duplicate items in a subquery filter
+select pk from t_in_dedupe where c1 in (select c1 from t_in_dedupe where c1 in (2, 2, 3, 3)) order by pk;
+
+--disable_warnings
+drop table if exists t_in_dedupe;
+--enable_warnings
