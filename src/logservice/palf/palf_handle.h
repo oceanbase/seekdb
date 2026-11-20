@@ -19,7 +19,6 @@
 #include "common/ob_role.h"
 #include "share/log/palf/lsn.h"
 #include "palf_handle_impl.h"
-#include "palf_handle_impl_guard.h"
 #include "palf_iterator.h"
 namespace oceanbase
 {
@@ -194,7 +193,7 @@ public:
 
   TO_STRING_KV(KP(palf_handle_impl_), KP(fs_cb_));
 private:
-  palf::IPalfHandleImpl *palf_handle_impl_;
+  palf::PalfHandleImpl *palf_handle_impl_;
   palf::PalfFSCbNode *fs_cb_;
 };
 } // end namespace oceanbase

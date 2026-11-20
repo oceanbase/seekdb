@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX PALF
 #include "palf_handle_impl.h"
 #include <cstring>
-#include "palf_env_impl.h"
+#include "lib/time/ob_time_utility.h"
 
 namespace oceanbase
 {
@@ -27,19 +27,6 @@ namespace palf
 {
 namespace
 {
-int get_disk_limit(IPalfEnvImpl *palf_env_impl, int64_t &disk_limit)
-{
-  PalfOptions options;
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(palf_env_impl)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(palf_env_impl->get_options(options))) {
-  } else {
-    disk_limit = options.disk_options_.log_disk_usage_limit_size_;
-  }
-  return ret;
-}
-
 void assign_scn(SCN &scn, const uint64_t value)
 {
   scn = from_rust_scn(value);
@@ -53,41 +40,28 @@ PalfHandleImpl::PalfHandleImpl()
       access_mode_(AccessMode::INVALID_ACCESS_MODE),
       fs_cb_wrapper_(),
       plugins_(),
-      has_set_deleted_(false),
-      palf_env_impl_(NULL),
       palf_epoch_(0),
+      io_lock_(common::ObLatchIds::PALF_HANDLE_IMPL_LOCK),
+      active_io_count_(0),
+      io_start_time_(OB_INVALID_TIMESTAMP),
       is_inited_(false)
-{
-  log_dir_[0] = '\0';
-}
+{}
 
 PalfHandleImpl::~PalfHandleImpl()
 {
   destroy();
 }
 
-int PalfHandleImpl::init(share::LocalStore &store, const AccessMode &access_mode,
+int PalfHandleImpl::init(const AccessMode &access_mode,
     const PalfBaseInfo &palf_base_info, const char *log_dir,
-    ObILogAllocator *alloc_mgr, ILogBlockPool *log_block_pool,
-    LogIOWorker *log_io_worker, LogSharedQueueTh *log_shared_queue_th,
-    IPalfEnvImpl *palf_env_impl, const common::ObAddr &self,
-    const int64_t palf_epoch, LogIOAdapter *io_adapter)
+    const int64_t disk_limit, const common::ObAddr &self, const int64_t palf_epoch)
 {
   int ret = OB_SUCCESS;
-  int64_t disk_limit = 0;
-  (void)store;
-  (void)alloc_mgr;
-  (void)log_block_pool;
-  (void)log_io_worker;
-  (void)log_shared_queue_th;
-  (void)io_adapter;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (!is_valid_access_mode(access_mode) || !palf_base_info.is_valid()
-             || OB_ISNULL(log_dir) || OB_ISNULL(palf_env_impl) || !self.is_valid()
-             || palf_epoch < 0 || snprintf(log_dir_, MAX_PATH_SIZE, "%s", log_dir) >= MAX_PATH_SIZE) {
+             || OB_ISNULL(log_dir) || disk_limit < 0 || !self.is_valid() || palf_epoch < 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(get_disk_limit(palf_env_impl, disk_limit))) {
   } else {
     palf_rs::BaseInfo base {
         static_cast<uint64_t>(palf_base_info.curr_lsn_.val_),
@@ -96,12 +70,11 @@ int PalfHandleImpl::init(share::LocalStore &store, const AccessMode &access_mode
         palf_base_info.prev_log_info_.log_id_,
         static_cast<uint64_t>(palf_base_info.prev_log_info_.accum_checksum_)};
     stream_.emplace(palf_rs::create_stream(
-        ::rust::Str(log_dir_), base, 0, static_cast<uint64_t>(disk_limit)));
+        ::rust::Str(log_dir), base, 0, static_cast<uint64_t>(disk_limit)));
     ret = from_rust_code(palf_rs::status_ffi(**stream_));
     if (OB_SUCC(ret)) {
       access_mode_ = access_mode;
       self_ = self;
-      palf_env_impl_ = palf_env_impl;
       palf_epoch_ = palf_epoch;
       is_inited_ = true;
     } else {
@@ -111,35 +84,22 @@ int PalfHandleImpl::init(share::LocalStore &store, const AccessMode &access_mode
   return ret;
 }
 
-int PalfHandleImpl::load(share::LocalStore &store, const char *log_dir,
-    ObILogAllocator *alloc_mgr, ILogBlockPool *log_block_pool,
-    LogIOWorker *log_io_worker, LogSharedQueueTh *log_shared_queue_th,
-    IPalfEnvImpl *palf_env_impl, const common::ObAddr &self,
-    const int64_t palf_epoch, LogIOAdapter *io_adapter, bool &is_integrity)
+int PalfHandleImpl::load(const char *log_dir, const int64_t disk_limit,
+    const common::ObAddr &self, const int64_t palf_epoch, bool &is_integrity)
 {
   int ret = OB_SUCCESS;
-  int64_t disk_limit = 0;
-  (void)store;
-  (void)alloc_mgr;
-  (void)log_block_pool;
-  (void)log_io_worker;
-  (void)log_shared_queue_th;
-  (void)io_adapter;
   is_integrity = false;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(log_dir) || OB_ISNULL(palf_env_impl) || !self.is_valid()
-             || palf_epoch < 0 || snprintf(log_dir_, MAX_PATH_SIZE, "%s", log_dir) >= MAX_PATH_SIZE) {
+  } else if (OB_ISNULL(log_dir) || disk_limit < 0 || !self.is_valid() || palf_epoch < 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(get_disk_limit(palf_env_impl, disk_limit))) {
   } else {
-    stream_.emplace(palf_rs::open_stream(::rust::Str(log_dir_), static_cast<uint64_t>(disk_limit)));
+    stream_.emplace(palf_rs::open_stream(::rust::Str(log_dir), static_cast<uint64_t>(disk_limit)));
     ret = from_rust_code(palf_rs::status_ffi(**stream_));
     if (OB_SUCC(ret)) {
       is_integrity = palf_rs::integrity_ffi(**stream_);
       access_mode_ = AccessMode::APPEND;
       self_ = self;
-      palf_env_impl_ = palf_env_impl;
       palf_epoch_ = palf_epoch;
       is_inited_ = true;
     } else {
@@ -151,7 +111,8 @@ int PalfHandleImpl::load(share::LocalStore &store, const char *log_dir,
 
 bool PalfHandleImpl::check_can_be_used() const
 {
-  return !ATOMIC_LOAD(&has_set_deleted_);
+  RLockGuard guard(lock_);
+  return is_inited_;
 }
 
 void PalfHandleImpl::destroy()
@@ -162,17 +123,7 @@ void PalfHandleImpl::destroy()
     stream_.reset();
     is_inited_ = false;
     plugins_.destroy();
-    if (!check_can_be_used() && OB_NOT_NULL(palf_env_impl_)) {
-      (void)palf_env_impl_->remove_directory(log_dir_);
-    }
-    palf_env_impl_ = NULL;
   }
-}
-
-int PalfHandleImpl::start()
-{
-  RLockGuard guard(lock_);
-  return is_inited_ ? OB_SUCCESS : OB_NOT_INIT;
 }
 
 int PalfHandleImpl::set_disk_limit(const int64_t disk_limit)
@@ -199,6 +150,7 @@ int PalfHandleImpl::submit_log(const PalfAppendOptions &opts, const char *buf,
       || !ref_scn.is_valid()) {
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
   } else {
+    IoScope io_scope(*this);
     const auto result = palf_rs::append_ffi(**stream_,
         ::rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buf), buf_len),
         ref_scn.get_val_for_logservice());
@@ -227,6 +179,7 @@ int PalfHandleImpl::submit_imported_group(const LSN &source_lsn,
       || OB_ISNULL(buf) || buf_len <= 0 || buf_len > MAX_LOG_BUFFER_SIZE) {
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
   } else {
+    IoScope io_scope(*this);
     const auto result = palf_rs::append_imported_ffi(**stream_, source_lsn.val_,
         source_scn.get_val_for_logservice(),
         ::rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buf), buf_len));
@@ -254,11 +207,6 @@ int PalfHandleImpl::set_base_lsn(const LSN &lsn)
     (void)plugins_.record_set_base_lsn_event(block_lsn);
   }
   return ret;
-}
-
-void PalfHandleImpl::set_deleted()
-{
-  ATOMIC_STORE(&has_set_deleted_, true);
 }
 
 int PalfHandleImpl::locate_by_scn_coarsely(const SCN &scn, LSN &result_lsn)
@@ -450,8 +398,18 @@ int PalfHandleImpl::get_begin_scn(SCN &scn)
 
 int PalfHandleImpl::get_base_lsn(LSN &lsn) const
 {
-  lsn = get_base_lsn_used_for_block_gc();
-  return lsn.is_valid() ? OB_SUCCESS : OB_NOT_INIT;
+  RLockGuard guard(lock_);
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else {
+    const auto progress = palf_rs::progress_ffi(**stream_);
+    ret = from_rust_code(progress.code);
+    if (OB_SUCC(ret)) {
+      lsn = LSN(progress.base_lsn);
+    }
+  }
+  return ret;
 }
 
 int PalfHandleImpl::get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info)
@@ -474,19 +432,6 @@ int PalfHandleImpl::get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info)
     }
   }
   return ret;
-}
-
-int PalfHandleImpl::get_min_block_id_for_gc(block_id_t &min_block_id)
-{
-  min_block_id = LOG_INVALID_BLOCK_ID;
-  return is_inited_ ? OB_ENTRY_NOT_EXIST : OB_NOT_INIT;
-}
-
-int PalfHandleImpl::get_min_block_info_for_gc(block_id_t &min_block_id, SCN &max_scn)
-{
-  min_block_id = LOG_INVALID_BLOCK_ID;
-  max_scn.reset();
-  return is_inited_ ? OB_ENTRY_NOT_EXIST : OB_NOT_INIT;
 }
 
 const LSN PalfHandleImpl::get_end_lsn() const
@@ -531,69 +476,6 @@ int PalfHandleImpl::get_total_used_disk_space(int64_t &total_used_disk_space,
     }
   }
   return ret;
-}
-
-LSN PalfHandleImpl::get_base_lsn_used_for_block_gc() const
-{
-  RLockGuard guard(lock_);
-  LSN base_lsn;
-  if (is_inited_) {
-    const auto progress = palf_rs::progress_ffi(**stream_);
-    if (palf_rs::Code::Ok == progress.code) {
-      base_lsn = LSN(progress.base_lsn);
-    }
-  }
-  return base_lsn;
-}
-
-int PalfHandleImpl::delete_block(const block_id_t &block_id)
-{
-  (void)block_id;
-  return OB_ENTRY_NOT_EXIST;
-}
-
-int PalfHandleImpl::inner_after_flush_log(const FlushLogCbCtx &flush_log_cb_ctx)
-{
-  (void)flush_log_cb_ctx;
-  return OB_NOT_SUPPORTED;
-}
-
-int PalfHandleImpl::inner_after_truncate_prefix_blocks(
-    const TruncatePrefixBlocksCbCtx &truncate_prefix_cb_ctx)
-{
-  (void)truncate_prefix_cb_ctx;
-  return OB_NOT_SUPPORTED;
-}
-
-int PalfHandleImpl::advance_reuse_lsn(const LSN &flush_log_end_lsn)
-{
-  (void)flush_log_end_lsn;
-  return OB_NOT_SUPPORTED;
-}
-
-int PalfHandleImpl::inner_append_log(const LSN &lsn, const LogWriteBuf &write_buf, const SCN &scn)
-{
-  (void)lsn;
-  (void)write_buf;
-  (void)scn;
-  return OB_NOT_SUPPORTED;
-}
-
-int PalfHandleImpl::inner_append_log(const LSNArray &lsn_array,
-    const LogWriteBufArray &write_buf_array, const SCNArray &scn_array,
-    int64_t &completed_count)
-{
-  completed_count = 0;
-  (void)lsn_array;
-  (void)write_buf_array;
-  (void)scn_array;
-  return OB_NOT_SUPPORTED;
-}
-
-int PalfHandleImpl::inner_truncate_prefix_blocks(const LSN &lsn)
-{
-  (void)lsn;
-  return OB_NOT_SUPPORTED;
 }
 
 int PalfHandleImpl::stat(PalfStat &palf_stat)
@@ -654,6 +536,29 @@ int PalfHandleImpl::diagnose(PalfDiagnoseInfo &diagnose_info) const
   RLockGuard guard(lock_);
   diagnose_info.log_state_ = is_inited_ ? LogState::ACTIVE : LogState::INVALID_STATE;
   return is_inited_ ? OB_SUCCESS : OB_NOT_INIT;
+}
+
+void PalfHandleImpl::begin_io_()
+{
+  ObSpinLockGuard guard(io_lock_);
+  if (0 == active_io_count_++) {
+    io_start_time_ = ObTimeUtility::fast_current_time();
+  }
+}
+
+void PalfHandleImpl::end_io_()
+{
+  ObSpinLockGuard guard(io_lock_);
+  if (0 == --active_io_count_) {
+    io_start_time_ = OB_INVALID_TIMESTAMP;
+  }
+}
+
+int PalfHandleImpl::get_io_start_time(int64_t &io_start_time) const
+{
+  ObSpinLockGuard guard(io_lock_);
+  io_start_time = io_start_time_;
+  return OB_SUCCESS;
 }
 
 PalfStat::PalfStat()

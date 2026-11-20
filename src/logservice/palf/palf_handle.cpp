@@ -15,6 +15,7 @@
  */
 
 #include "palf_handle.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {

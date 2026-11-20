@@ -15,29 +15,21 @@
  */
 
 #include "ob_log_allocator.h"
-#include "logservice/palf/log_shared_task.h"
 #include "logservice/replayservice/ob_replay_status.h"
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
 using namespace share;
-using namespace palf;
 using namespace logservice;
 namespace common
 {
 
 ObLogAllocator::ObLogAllocator()
   : total_limit_(INT64_MAX), pending_replay_mutator_size_(0),
-    LOG_HANDLE_SUBMIT_TASK_SIZE(sizeof(palf::LogHandleSubmitTask)),
-    LOG_IO_FLUSH_LOG_TASK_SIZE(sizeof(palf::LogIOFlushLogTask)),
-    LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE(sizeof(palf::LogIOTruncatePrefixBlocksTask)),
     clog_blk_alloc_(),
     replay_log_task_blk_alloc_(REPLAY_MEM_LIMIT_THRESHOLD),
     clog_ge_alloc_(ObMemAttr(ObModIds::OB_CLOG_GE), ObVSliceAlloc::DEFAULT_BLOCK_SIZE, clog_blk_alloc_),
-    log_handle_submit_task_alloc_(LOG_HANDLE_SUBMIT_TASK_SIZE, ObMemAttr("HandleSubmit"), choose_blk_size(LOG_HANDLE_SUBMIT_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_flush_log_task_alloc_(LOG_IO_FLUSH_LOG_TASK_SIZE, ObMemAttr("FlushLog"), choose_blk_size(LOG_IO_FLUSH_LOG_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_truncate_prefix_blocks_task_alloc_(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE, ObMemAttr("TruncatePrefix"), choose_blk_size(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE), clog_blk_alloc_, this),
     replay_log_task_alloc_(ObMemAttr(ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_)
 {
   set_nway(static_cast<int32_t>(share::server_cpu_count()));
@@ -53,24 +45,7 @@ void ObLogAllocator::destroy()
 {
   OB_LOG(INFO, "ObLogAllocator destroy");
   clog_ge_alloc_.destroy();
-  log_handle_submit_task_alloc_.destroy();
-  log_io_flush_log_task_alloc_.destroy();
-  log_io_truncate_prefix_blocks_task_alloc_.destroy();
   replay_log_task_alloc_.destroy();
-}
-
-int ObLogAllocator::choose_blk_size(int obj_size)
-{
-  static const int MIN_SLICE_CNT = 64;
-  int blk_size = OB_MALLOC_NORMAL_BLOCK_SIZE;  // default blk size is 8KB
-  if (obj_size <= 0) {
-  } else if (MIN_SLICE_CNT <= (OB_MALLOC_NORMAL_BLOCK_SIZE / obj_size)) {
-  } else if (MIN_SLICE_CNT <= (OB_MALLOC_MIDDLE_BLOCK_SIZE / obj_size)) {
-    blk_size = OB_MALLOC_MIDDLE_BLOCK_SIZE;
-  } else {
-    blk_size = OB_MALLOC_BIG_BLOCK_SIZE;
-  }
-  return blk_size;
 }
 
 void *ObLogAllocator::ge_alloc(const int64_t size)
@@ -103,67 +78,6 @@ void ObLogAllocator::free(void *ptr)
 const ObBlockAllocMgr &ObLogAllocator::get_clog_blk_alloc_mgr() const
 {
   return clog_blk_alloc_;
-}
-
-LogIOFlushLogTask *ObLogAllocator::alloc_log_io_flush_log_task(
-		const int64_t palf_epoch)
-{
-  LogIOFlushLogTask *ret_ptr = NULL;
-  void *ptr = log_io_flush_log_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOFlushLogTask(palf_epoch);
-    ATOMIC_INC(&flying_log_task_);
-  }
-  return ret_ptr;
-}
-
-void ObLogAllocator::free_log_io_flush_log_task(LogIOFlushLogTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~LogIOFlushLogTask();
-    log_io_flush_log_task_alloc_.free(ptr);
-    ATOMIC_DEC(&flying_log_task_);
-  }
-}
-
-LogHandleSubmitTask *ObLogAllocator::alloc_log_handle_submit_task(
-		const int64_t palf_epoch)
-{
-  LogHandleSubmitTask *ret_ptr = NULL;
-  void *ptr = log_handle_submit_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new(ptr)LogHandleSubmitTask(palf_epoch);
-    ATOMIC_INC(&flying_log_handle_submit_task_);
-  }
-  return ret_ptr;
-}
-
-void ObLogAllocator::free_log_handle_submit_task(LogHandleSubmitTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~LogHandleSubmitTask();
-    log_handle_submit_task_alloc_.free(ptr);
-    ATOMIC_DEC(&flying_log_handle_submit_task_);
-  }
-}
-
-palf::LogIOTruncatePrefixBlocksTask *ObLogAllocator::alloc_log_io_truncate_prefix_blocks_task(
-		const int64_t palf_epoch)
-{
-  LogIOTruncatePrefixBlocksTask *ret_ptr = NULL;
-  void *ptr = log_io_truncate_prefix_blocks_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOTruncatePrefixBlocksTask(palf_epoch);
-  }
-  return ret_ptr;
-}
-
-void ObLogAllocator::free_log_io_truncate_prefix_blocks_task(palf::LogIOTruncatePrefixBlocksTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~LogIOTruncatePrefixBlocksTask();
-    log_io_truncate_prefix_blocks_task_alloc_.free(ptr);
-  }
 }
 
 void *ObLogAllocator::alloc_replay_task(const int64_t size)
