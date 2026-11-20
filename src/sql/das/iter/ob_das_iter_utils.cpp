@@ -3583,9 +3583,13 @@ int ObDASIterUtils::create_vec_hnsw_lookup_tree(ObTableScanParam &scan_param,
                                           inv_idx_iter, need_index_back))) {
     }
 
+    const bool range_covers_lookup = OB_SUCC(ret) && OB_NOT_NULL(inv_idx_ctdef) &&
+        inv_idx_ctdef->op_type_ == DAS_OP_TABLE_SCAN &&
+        static_cast<const ObDASScanCtDef *>(inv_idx_ctdef)->vec_pre_filter_covers_all_;
     bool need_pre_lookup = with_other_idx_scan
                            && !data_table_ctdef->pd_expr_spec_.pushdown_filters_.empty()
-                           && need_index_back;
+                           && need_index_back
+                           && !range_covers_lookup;
 
     ObDASIter *inv_idx_scan_iter_sub_tree = nullptr;
     if (OB_FAIL(ret)) {
