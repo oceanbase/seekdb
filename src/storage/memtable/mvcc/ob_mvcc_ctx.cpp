@@ -367,9 +367,13 @@ ObMvccWriteGuard::~ObMvccWriteGuard()
                 && OB_SUCCESS == *write_ret_
                 && try_flush_redo_))) {
       bool is_freeze = memtable_->is_frozen_memtable();
-      ret = tx_ctx->submit_redo_after_write(is_freeze/*force*/, write_seq_no_);
+      bool partial_redo_submitted = false;
+      ret = tx_ctx->submit_redo_after_write(is_freeze/*force*/, write_seq_no_, partial_redo_submitted);
       if (OB_FAIL(ret)) {
-        if (REACH_TIME_INTERVAL(100 * 1000)) {
+        if (OB_EAGAIN == ret && partial_redo_submitted) {
+          TRANS_LOG(TRACE, "frozen writer submitted a redo batch and has pending redo",
+                    K(write_seq_no_), KPC(tx_ctx));
+        } else if (REACH_TIME_INTERVAL(100 * 1000)) {
           TRANS_LOG(ERROR, "failed to submit log if neccesary", K(ret), K(is_freeze), KPC(tx_ctx));
         }
         if (is_freeze && OB_BLOCK_FROZEN != ret) {

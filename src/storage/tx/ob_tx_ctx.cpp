@@ -1268,9 +1268,11 @@ int ObTxCtx::submit_redo_log_for_freeze(const uint32_t freeze_clock)
   return ret;
 }
 
-int ObTxCtx::submit_redo_after_write(const bool force, const ObTxSEQ &write_seq_no)
+int ObTxCtx::submit_redo_after_write(const bool force, const ObTxSEQ &write_seq_no,
+                                    bool &partial_redo_submitted)
 {
   int ret = OB_SUCCESS;
+  partial_redo_submitted = false;
   TRANS_LOG(TRACE, "submit_redo_after_write", K(force), K(write_seq_no), K_(trans_id), K(mt_ctx_.get_pending_log_size()));
   ObTimeGuard tg("submit_redo_for_after_write", 100000);
   if (force || mt_ctx_.pending_log_size_too_large(write_seq_no)) {
@@ -1284,7 +1286,7 @@ int ObTxCtx::submit_redo_after_write(const bool force, const ObTxSEQ &write_seq_
         // double check parallel_logging is on
         LOAD_PARALLEL_LOGGING;
         if (!parallel_logging) {
-          ret = serial_submit_redo_after_write_(submitted_cnt);
+          ret = serial_submit_redo_after_write_(submitted_cnt, partial_redo_submitted);
         }
       }
       if (submitted_cnt > 0 && OB_EAGAIN == ret) {
@@ -1300,12 +1302,12 @@ int ObTxCtx::submit_redo_after_write(const bool force, const ObTxSEQ &write_seq_
           ret = force ? OB_TRANS_HAS_DECIDED : OB_SUCCESS;
         } else {
           ObTxRedoSubmitter submitter(*this, mt_ctx_);
-          if (OB_FAIL(submitter.parallel_submit(write_seq_no))) {
-            if (!force && (OB_ITER_END == ret          // blocked by others, current remains
-                           || OB_NEED_RETRY == ret     // acquire lock failed
-                           )) {
-              ret = OB_SUCCESS;
-            }
+          ret = submitter.parallel_submit(write_seq_no);
+          partial_redo_submitted = OB_EAGAIN == ret && submitter.yielded_after_submit();
+          if (!force && (OB_ITER_END == ret        // blocked by others, current remains
+                         || OB_NEED_RETRY == ret   // acquire lock failed
+                         )) {
+            ret = OB_SUCCESS;
           }
         }
       }
@@ -1321,15 +1323,17 @@ int ObTxCtx::submit_redo_after_write(const bool force, const ObTxSEQ &write_seq_
   return ret;
 }
 
-int ObTxCtx::serial_submit_redo_after_write_(int &submitted_cnt)
+int ObTxCtx::serial_submit_redo_after_write_(int &submitted_cnt, bool &partial_redo_submitted)
 {
   int ret = OB_SUCCESS;
+  partial_redo_submitted = false;
   if (OB_SUCC(check_can_submit_redo_())) {
     int64_t before_submit_pending_size = mt_ctx_.get_pending_log_size();
     bool should_switch = should_switch_to_parallel_logging_();
     ObTxRedoSubmitter submitter(*this, mt_ctx_);
     ret = submitter.serial_submit(should_switch);
     submitted_cnt = submitter.get_submitted_cnt();
+    partial_redo_submitted = submitter.yielded_after_submit();
     if (should_switch && submitted_cnt > 0) {
       const share::SCN serial_final_scn = submitter.get_submitted_scn();
       int tmp_ret = switch_to_parallel_logging_(serial_final_scn, exec_info_.max_submitted_seq_no_);

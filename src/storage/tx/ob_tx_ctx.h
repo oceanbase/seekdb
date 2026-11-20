@@ -257,7 +257,8 @@ public:
 
   int try_submit_next_log();
   // for instant logging and freezing
-  int submit_redo_after_write(const bool force, const ObTxSEQ &write_seq_no);
+  int submit_redo_after_write(const bool force, const ObTxSEQ &write_seq_no,
+                              bool &partial_redo_submitted);
   int submit_redo_log_for_freeze(const uint32_t freeze_clock);
   int return_redo_log_cb(ObTxLogCb *log_cb);
   int push_replaying_log_ts(const share::SCN log_ts_ns, const int64_t log_entry_no);
@@ -389,7 +390,7 @@ private:
   void recovery_parallel_logging_();
   int check_can_submit_redo_();
   void force_no_need_replay_checksum_(const bool parallel_replay, const share::SCN &log_ts);
-  int serial_submit_redo_after_write_(int &submitted_cnt);
+  int serial_submit_redo_after_write_(int &submitted_cnt, bool &partial_redo_submitted);
   int submit_big_segment_log_();
   int prepare_big_segment_submit_(ObTxLogCb *segment_cb,
                                   const share::SCN &base_scn,
