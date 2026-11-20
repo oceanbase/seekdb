@@ -231,7 +231,7 @@ int PalfEnvImpl::create_palf_handle_impl_(const AccessMode &access_mode,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(create_directory(base_dir))) {
   } else if (OB_FAIL(handle->init(access_mode, palf_base_info, base_dir,
-      disk_options_wrapper_.get_disk_opts_for_stopping_writing().log_disk_usage_limit_size_,
+      disk_options_wrapper_.get_disk_opts_for_stopping_writing(),
       self_, palf_epoch))) {
   } else {
     palf_handle_ = handle;
@@ -388,8 +388,8 @@ int PalfEnvImpl::update_options(const PalfOptions &options)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(check_can_update_log_disk_options_(options.disk_options_))) {
   } else if (OB_FAIL(disk_options_wrapper_.update_disk_options(options.disk_options_))) {
-  } else if (NULL != palf_handle_ && OB_FAIL(palf_handle_->set_disk_limit(
-      disk_options_wrapper_.get_disk_opts_for_stopping_writing().log_disk_usage_limit_size_))) {
+  } else if (NULL != palf_handle_ && OB_FAIL(palf_handle_->set_disk_options(
+      disk_options_wrapper_.get_disk_opts_for_stopping_writing()))) {
   } else {
     enable_log_cache_ = options.enable_log_cache_;
     refresh_disk_state_();
@@ -436,7 +436,7 @@ int PalfEnvImpl::reload_palf_handle_impl_()
   } else if (NULL == (handle = SERVER_NEW(PalfHandleImpl, "palf_env"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(handle->load(base_dir,
-      disk_options_wrapper_.get_disk_opts_for_stopping_writing().log_disk_usage_limit_size_,
+      disk_options_wrapper_.get_disk_opts_for_stopping_writing(),
       self_, palf_epoch, is_integrity))) {
   } else {
     palf_handle_ = handle;
@@ -594,7 +594,7 @@ void PalfEnvImpl::refresh_disk_state_()
       disk_options_wrapper_.change_to_normal(sequence);
       stopping = disk_options_wrapper_.get_disk_opts_for_stopping_writing();
       if (NULL != palf_handle_) {
-        (void)palf_handle_->set_disk_limit(stopping.log_disk_usage_limit_size_);
+        (void)palf_handle_->set_disk_options(stopping);
       }
     }
     const int64_t stop_limit = stopping.log_disk_usage_limit_size_

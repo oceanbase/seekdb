@@ -851,6 +851,7 @@ int ObServerRuntimeController::refresh_server_config_()
     ret = OB_NEED_RETRY;
   } else if (OB_FAIL(build_server_resource_config_(runtime_config))) {
   } else if (OB_FAIL(apply_server_resource_config_(runtime_config))) {
+  } else if (OB_FAIL(update_palf_config())) {
   } else {
     set_synced();
     periodically_check_runtime_();
