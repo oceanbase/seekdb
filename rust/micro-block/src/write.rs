@@ -85,6 +85,7 @@ pub struct WriterConfig {
     pub row_store_type: RowStoreType,
     pub block_size_limit: usize,
     pub need_column_checksums: bool,
+    pub all_lob_in_row: bool,
     pub max_merged_trans_version: i64,
     pub original_size_override: Option<usize>,
 }
@@ -97,6 +98,7 @@ impl WriterConfig {
             row_store_type: RowStoreType::Encoding,
             block_size_limit: 2 * 1024 * 1024,
             need_column_checksums: false,
+            all_lob_in_row: true,
             max_merged_trans_version: 0,
             original_size_override: None,
         }
@@ -607,7 +609,11 @@ impl BlockWriter {
             HAS_COLUMN_CHECKSUM
         } else {
             0
-        } | ALL_LOB_IN_ROW;
+        } | if self.config.all_lob_in_row {
+            ALL_LOB_IN_ROW
+        } else {
+            0
+        };
         let mut header = Header {
             header_size,
             column_count: columns.len(),
@@ -923,6 +929,20 @@ mod tests {
         let block = Block::new(&bytes).unwrap();
         assert_eq!(block.header.row_store_type, RowStoreType::Selective as u8);
         assert_eq!(block.cell(0, 0).unwrap().bytes().unwrap(), b"index-key");
+    }
+
+    #[test]
+    fn preserves_out_row_lob_header_flag() {
+        let mut config = WriterConfig::new(vec![ColumnSpec::variable(28)], 0);
+        config.all_lob_in_row = false;
+        let mut writer = BlockWriter::new(config).unwrap();
+        writer
+            .append_row(&[OwnedDatum::Bytes(b"lob-locator".to_vec())])
+            .unwrap();
+        let bytes = writer.finish().unwrap();
+        let block = Block::new(&bytes).unwrap();
+        assert_eq!(block.header.flags & crate::format::ALL_LOB_IN_ROW, 0);
+        assert_eq!(block.cell(0, 0).unwrap().bytes().unwrap(), b"lob-locator");
     }
 
     #[test]

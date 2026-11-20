@@ -150,6 +150,7 @@ mod ffi {
             rowkey_column_count: u32,
             row_store_type: u8,
             need_column_checksums: bool,
+            all_lob_in_row: bool,
             original_size: u64,
             max_merged_trans_version: i64,
         ) -> BuildResult;
@@ -366,6 +367,7 @@ unsafe fn build_pax_block(
     rowkey_column_count: u32,
     row_store_type: u8,
     need_column_checksums: bool,
+    all_lob_in_row: bool,
     original_size: u64,
     max_merged_trans_version: i64,
 ) -> ffi::BuildResult {
@@ -375,6 +377,7 @@ unsafe fn build_pax_block(
         rowkey_column_count,
         row_store_type,
         need_column_checksums,
+        all_lob_in_row,
         original_size,
         max_merged_trans_version,
     ))
@@ -386,6 +389,7 @@ unsafe fn build_pax_block_impl(
     rowkey_column_count: u32,
     row_store_type: u8,
     need_column_checksums: bool,
+    all_lob_in_row: bool,
     original_size: u64,
     max_merged_trans_version: i64,
 ) -> Result<BuildSuccess> {
@@ -403,6 +407,7 @@ unsafe fn build_pax_block_impl(
     let mut config = WriterConfig::new(specs, rowkey_column_count as usize);
     config.row_store_type = crate::RowStoreType::try_from(row_store_type)?;
     config.need_column_checksums = need_column_checksums;
+    config.all_lob_in_row = all_lob_in_row;
     config.max_merged_trans_version = max_merged_trans_version;
     config.original_size_override =
         Some(usize::try_from(original_size).map_err(|_| Error::SizeOverflow)?);

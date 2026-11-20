@@ -559,7 +559,7 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
   rust::Vec<micro_block::InputCell> cells;
   if ((ENCODING_ROW_STORE != ctx_.row_store_type_
        && SELECTIVE_ENCODING_ROW_STORE != ctx_.row_store_type_)
-      || has_lob_out_row_ || has_string_out_row_) {
+      || has_string_out_row_) {
     ret = OB_NOT_SUPPORTED;
   } else if (!rust_block_) {
     rust_block_.reset(new (std::nothrow) RustBlockBuffer());
@@ -629,6 +629,7 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
         static_cast<uint32_t>(ctx_.rowkey_column_cnt_),
         static_cast<uint8_t>(ctx_.row_store_type_),
         ctx_.need_calc_column_chksum_,
+        !has_lob_out_row_,
         static_cast<uint64_t>(estimate_size_),
         max_merged_trans_version_);
     switch (result.code) {
