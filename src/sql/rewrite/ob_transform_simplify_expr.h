@@ -180,6 +180,7 @@ private:
   int remove_duplicate_exprs(ObQueryCtx* query_ctx, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
   int recursive_remove_duplicate_exprs(ObQueryCtx &query_ctx, ObRawExpr* &expr, bool &trans_happened);
   int do_remove_duplicate_exprs(ObQueryCtx &query_ctx, ObIArray<ObRawExpr*> &exprs);
+  int remove_implied_cmp_exprs(common::ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
   int pull_similar_expr(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
   int recursive_pull_similar(ObDMLStmt *stmt, ObRawExpr* &expr, bool &trans_happened);
   int do_pull_similar(ObDMLStmt *stmt,
