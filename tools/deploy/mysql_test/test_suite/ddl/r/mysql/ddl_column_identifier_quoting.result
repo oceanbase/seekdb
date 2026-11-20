@@ -1,0 +1,20 @@
+DROP TABLE IF EXISTS ddl_quoted_enum_set;
+CREATE TABLE ddl_quoted_enum_set (
+id INT PRIMARY KEY,
+`e``name` ENUM('a', 'b'),
+`s``name` SET('x', 'y')
+);
+INSERT INTO ddl_quoted_enum_set VALUES (1, 'a', 'x'), (2, 'b', 'y');
+CREATE UNIQUE INDEX ddl_quoted_enum_idx ON ddl_quoted_enum_set (`e``name`);
+CREATE UNIQUE INDEX ddl_quoted_set_idx ON ddl_quoted_enum_set (`s``name`);
+SELECT id, `e``name`, `s``name` FROM ddl_quoted_enum_set ORDER BY id;
+id	e`name	s`name
+1	a	x
+2	b	y
+SELECT id FROM ddl_quoted_enum_set FORCE INDEX (ddl_quoted_enum_idx) WHERE `e``name` = 'b';
+id
+2
+SELECT id FROM ddl_quoted_enum_set FORCE INDEX (ddl_quoted_set_idx) WHERE `s``name` = 'x';
+id
+1
+DROP TABLE ddl_quoted_enum_set;
