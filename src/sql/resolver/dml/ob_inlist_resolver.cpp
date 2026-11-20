@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -263,6 +264,47 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+// Only the rewrite decision depends on distinct values. Keep every original
+// operand so that cached plans remain correct when parameter values change.
+static bool has_few_distinct_integer_values(const ParseNode &in_list,
+                                           const ParamStore *param_store,
+                                           const bool is_prepare_stmt,
+                                           const int64_t threshold)
+{
+  bool has_few_values = false;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> values;
+  // Do not inspect unbound prepare-protocol parameters, row constructors, or
+  // types requiring SQL coercion/collation rules. Fall back to the old decision.
+  if (threshold > 1 && in_list.num_child_ >= threshold && NULL != in_list.children_
+      && OB_SUCCESS == values.create(MIN(threshold, 1024), "InListValues", "InListValues")) {
+    bool all_integers = true;
+    for (int64_t i = 0; all_integers && values.size() < threshold && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      int64_t value = 0;
+      if (NULL == node) {
+        all_integers = false;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_QUESTIONMARK == node->type_ && !is_prepare_stmt && NULL != param_store
+                 && node->value_ >= 0 && node->value_ < param_store->count()
+                 && ObIntType == param_store->at(node->value_).get_type()) {
+        value = param_store->at(node->value_).get_int();
+      } else {
+        all_integers = false;
+      }
+      if (all_integers) {
+        const int insert_ret = values.set_refactored(value, 0);
+        all_integers = OB_SUCCESS == insert_ret || OB_HASH_EXIST == insert_ret;
+      }
+    }
+    has_few_values = all_integers && values.size() < threshold;
+  }
+  if (values.created()) {
+    (void)values.destroy();
+  }
+  return has_few_values;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +392,10 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt
+          && has_few_distinct_integer_values(in_list, param_store, is_prepare_stmt, threshold)) {
+        is_enable = false;
+      }
     }
   }
   return ret;
