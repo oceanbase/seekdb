@@ -19,6 +19,7 @@
 #if defined(__EMSCRIPTEN__)
 #include "common/ob_timeout_ctx.h"
 #endif
+#include "common/ob_timeout_ctx.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_runtime_ddl_service.h"
@@ -672,7 +673,15 @@ int ObBootstrap::init_global_stat()
   int ret = OB_SUCCESS;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
+  // Bootstrap reads and rewrites __all_core_table. On platforms with slow buffered
+  // I/O (for example Windows without O_DIRECT) the transaction can exceed the
+  // rpc_timeout-derived default and fail with OB_TIMEOUT. This is a one-shot
+  // critical transaction, so give it an explicit, generous budget.
+  ObTimeoutCtx timeout_ctx;
+  const int64_t bootstrap_timeout_us = 60LL * 1000 * 1000; // 60 seconds
   if (OB_FAIL(check_inner_stat())) {
+  } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(bootstrap_timeout_us))) {
+  } else if (OB_FAIL(timeout_ctx.set_timeout(bootstrap_timeout_us))) {
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
