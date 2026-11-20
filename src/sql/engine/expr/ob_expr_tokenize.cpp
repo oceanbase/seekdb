@@ -39,6 +39,33 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+// Single-entry per-thread cache for repeated TOKENIZE() calls with identical
+// parser/config/text. The tokenizer setup and JSON tree are reused directly.
+struct TokenizeCacheEntry {
+  common::ObArenaAllocator alloc_;
+  ObString parser_name_;
+  ObString properties_;
+  ObString fulltext_;
+  ObCollationType coll_type_;
+  int64_t output_mode_;
+  ObIJsonBase *json_;
+  bool valid_;
+  TokenizeCacheEntry()
+    : alloc_(ObMemAttr("TokenizeCache")),
+      parser_name_(), properties_(), fulltext_(),
+      coll_type_(CS_TYPE_INVALID), output_mode_(0), json_(nullptr), valid_(false)
+  {}
+};
+
+bool same_string(const ObString &a, const ObString &b)
+{
+  return a.length() == b.length()
+      && (0 == a.length() || 0 == MEMCMP(a.ptr(), b.ptr(), a.length()));
+}
+} // anonymous namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -59,17 +86,50 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
+  static thread_local TokenizeCacheEntry tokenize_cache;
 
   // check param num, which is checked in ObExprOperator::calc_result_typeN.
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
-  } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                     ctx,
-                                                     temp_allocator,
-                                                     json_result,
-                                                     expr_datum))) {
+  } else {
+    const bool hit = tokenize_cache.valid_
+        && tokenize_cache.coll_type_ == param.meta_.get_collation_type()
+        && tokenize_cache.output_mode_ == static_cast<int64_t>(param.output_mode_)
+        && same_string(tokenize_cache.parser_name_, param.parser_name_)
+        && same_string(tokenize_cache.properties_, param.properties_)
+        && same_string(tokenize_cache.fulltext_, param.fulltext_);
+    if (hit) {
+      json_result = tokenize_cache.json_;
+    } else {
+      tokenize_cache.valid_ = false;
+      tokenize_cache.alloc_.reset();
+      if (OB_FAIL(ob_write_string(tokenize_cache.alloc_, param.parser_name_,
+                                  tokenize_cache.parser_name_))) {
+      } else if (OB_FAIL(ob_write_string(tokenize_cache.alloc_, param.properties_,
+                                         tokenize_cache.properties_))) {
+      } else if (OB_FAIL(ob_write_string(tokenize_cache.alloc_, param.fulltext_,
+                                         tokenize_cache.fulltext_))) {
+      } else {
+        // The parser stores pointers into the input text; use the cached copy
+        // so the cached JSON tree stays valid across calls.
+        param.fulltext_ = tokenize_cache.fulltext_;
+        if (OB_FAIL(tokenize_fulltext(param, param.output_mode_,
+                                      tokenize_cache.alloc_, tokenize_cache.json_))) {
+        } else {
+          tokenize_cache.coll_type_ = param.meta_.get_collation_type();
+          tokenize_cache.output_mode_ = static_cast<int64_t>(param.output_mode_);
+          tokenize_cache.valid_ = true;
+          json_result = tokenize_cache.json_;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
+                                                                ctx,
+                                                                temp_allocator,
+                                                                json_result,
+                                                                expr_datum))) {
+    }
   }
 
   return ret;
