@@ -753,3 +753,98 @@ VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
 alter system set vector_memory_limit = 0;
+
+drop table if exists t_inlist_distinct_rewrite;
+# duplicate integers must retain a filter inside the vector scan
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+from t_inlist_distinct_rewrite where category in (1,2,3,1,2,3,1,2,3)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 5;
+id
+17
+18
+19
+20
+21
+# NULL remains part of the original IN predicate
+select /*+ opt_param('inlist_rewrite_threshold' 5) */ id
+from t_inlist_distinct_rewrite where category in (1,2,3,NULL,1,2,3,NULL)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 5;
+id
+17
+18
+19
+20
+21
+# NOT IN preserves SQL NULL semantics
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category not in (4,NULL,4,NULL,4,NULL);
+matched
+0
+# a single distinct value remains correct for IN and NOT IN
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (4,4,4,4,4,4);
+matched
+16
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category not in (4,4,4,4,4,4);
+matched
+16
+# an all-NULL list must not become a regular equality
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (NULL,NULL,NULL,NULL,NULL,NULL);
+matched
+0
+# genuinely distinct lists still use the existing rewrite strategy
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,2,3,4,5,6,7,8,9);
+matched
+32
+# reuse every parameter position when the same SQL shape changes values
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,2,3,1,2,3,1,2,3);
+matched
+16
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,2,3,4,5,6,7,8,9);
+matched
+32
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,2,3,1,2,3,1,2,3);
+matched
+16
+# a VALUES plan cached first must not capture a later duplicate-heavy list
+alter system flush plan cache;
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+from t_inlist_distinct_rewrite where category in (1,2,3,4,5,6,7,8,9)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 5;
+id
+1
+2
+3
+4
+5
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+from t_inlist_distinct_rewrite where category in (1,2,3,1,2,3,1,2,3)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 5;
+id
+17
+18
+19
+20
+21
+# mixed types and row-valued lists preserve their existing paths
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where category in (1,'2',3,NULL,1,'2',3,NULL);
+matched
+16
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ count(*) as matched
+from t_inlist_distinct_rewrite where (category,id) in ((1,17),(2,18),(3,19),(1,17),(2,18),(3,19));
+matched
+3
+# prepared statements with initially unknown binds remain valid
+execute p using @a,@b,@c,@a,@b,@c;
+matched
+16
+execute p using @a,@b,@c,@a,@b,@c;
+matched
+26
