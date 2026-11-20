@@ -662,4 +662,62 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1471: an all-match filter must not force a pre-filter scan
+--disable_warnings
+drop table if exists t_issue1471_all_match_filter;
+--enable_warnings
+create table t_issue1471_all_match_filter(
+  id bigint not null,
+  embedding vector(3) not null,
+  category int not null,
+  primary key(id),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+
+--disable_query_log
+--let $row = 0
+while ($row < 100)
+{
+  eval insert into t_issue1471_all_match_filter values ($row, '[$row,0,0]', $row % 5 + 1);
+  --inc $row
+}
+--enable_query_log
+
+--disable_result_log
+analyze table t_issue1471_all_match_filter;
+--enable_result_log
+
+# Every row satisfies the predicate, so pre-filtering scans the whole table
+# before the ANN search. The adaptive path must choose iterative filtering.
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1471_all_match_filter
+where category between 1 and 5
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1471_all_match_filter') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+# A genuinely selective filter keeps the pre-filter path.
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1471_all_match_filter
+where category between 1 and 5 and id <= 1
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1471_all_match_filter') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+drop table t_issue1471_all_match_filter;
+
 alter system set vector_memory_limit = 0;
