@@ -155,6 +155,10 @@ private:
   int flatten_stmt_exprs(ObDMLStmt *stmt, bool &trans_happened);
   int flatten_join_condition_exprs(TableItem *table, bool &trans_happened);
   int flatten_exprs(common::ObIArray<ObRawExpr*> &exprs, bool &trans_happened);
+  int simplify_arithmetic_identities(ObDMLStmt *stmt, bool &trans_happened);
+  int simplify_arithmetic_identity_expr(ObRawExpr *&expr, bool &trans_happened);
+  int recursively_simplify_join_arithmetic_identities(TableItem *table,
+                                                       bool &trans_happened);
 
   int transform_is_false_true_expr(ObDMLStmt *stmt, bool &trans_happened);
   int remove_false_true(common::ObIArray<ObRawExpr*> &exprs, bool &trans_happened);

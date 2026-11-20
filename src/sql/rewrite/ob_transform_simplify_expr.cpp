@@ -21,6 +21,7 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "sql/ob_sql_utils.h"
 
 using namespace oceanbase::sql;
 
@@ -67,6 +68,13 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
     if (OB_FAIL(flatten_stmt_exprs(stmt, is_happened))) {
     } else {
       trans_happened |= is_happened;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(simplify_arithmetic_identities(stmt, is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+      OPT_TRACE("simplify arithmetic identities:", is_happened);
     }
   }
   if (OB_SUCC(ret)) {
@@ -206,6 +214,148 @@ int ObTransformSimplifyExpr::flatten_exprs(common::ObIArray<ObRawExpr*> &exprs, 
     }
     if (OB_SUCC(ret)) {
       trans_happened = temp_exprs.count() != exprs.count();
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::simplify_arithmetic_identities(ObDMLStmt *stmt,
+                                                            bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  trans_happened = false;
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_size(); ++i) {
+    if (OB_FAIL(simplify_arithmetic_identity_expr(stmt->get_condition_exprs().at(i),
+                                                  is_happened))) {
+    } else if (is_happened
+               && OB_FAIL(stmt->get_condition_exprs().at(i)->formalize(ctx_->session_info_))) {
+    } else {
+      trans_happened |= is_happened;
+    }
+  }
+  if (OB_SUCC(ret) && stmt->is_select_stmt()) {
+    ObSelectStmt *select_stmt = static_cast<ObSelectStmt *>(stmt);
+    for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_having_expr_size(); ++i) {
+      if (OB_FAIL(simplify_arithmetic_identity_expr(select_stmt->get_having_exprs().at(i),
+                                                    is_happened))) {
+      } else if (is_happened
+                 && OB_FAIL(select_stmt->get_having_exprs().at(i)->formalize(ctx_->session_info_))) {
+      } else {
+        trans_happened |= is_happened;
+      }
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_joined_tables().count(); ++i) {
+    if (OB_FAIL(recursively_simplify_join_arithmetic_identities(stmt->get_joined_tables().at(i),
+                                                                is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::recursively_simplify_join_arithmetic_identities(
+    TableItem *table,
+    bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  trans_happened = false;
+  JoinedTable *joined_table = NULL;
+  if (OB_ISNULL(table)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!table->is_joined_table()) {
+    // Nothing to simplify for a base table.
+  } else if (OB_ISNULL(joined_table = static_cast<JoinedTable *>(table))
+             || OB_ISNULL(joined_table->left_table_)
+             || OB_ISNULL(joined_table->right_table_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(SMART_CALL(recursively_simplify_join_arithmetic_identities(
+                 joined_table->left_table_, is_happened)))) {
+  } else {
+    trans_happened |= is_happened;
+    if (OB_FAIL(SMART_CALL(recursively_simplify_join_arithmetic_identities(
+                   joined_table->right_table_, is_happened)))) {
+    } else {
+      trans_happened |= is_happened;
+    }
+  }
+  for (int64_t i = 0;
+       OB_SUCC(ret) && NULL != joined_table && i < joined_table->join_conditions_.count();
+       ++i) {
+    if (OB_FAIL(simplify_arithmetic_identity_expr(joined_table->join_conditions_.at(i),
+                                                  is_happened))) {
+    } else if (is_happened
+               && OB_FAIL(joined_table->join_conditions_.at(i)->formalize(ctx_->session_info_))) {
+    } else {
+      trans_happened |= is_happened;
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::simplify_arithmetic_identity_expr(ObRawExpr *&expr,
+                                                               bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  bool is_stack_overflow = false;
+  trans_happened = false;
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)
+      || OB_ISNULL(ctx_->exec_ctx_)
+      || OB_ISNULL(ctx_->exec_ctx_->get_physical_plan_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
+  } else if (is_stack_overflow) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (expr->is_shared_reference()) {
+    // Replacing a shared node could also change a non-filter expression.
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(simplify_arithmetic_identity_expr(expr->get_param_expr(i),
+                                                               is_happened)))) {
+      } else {
+        trans_happened |= is_happened;
+      }
+    }
+    if (OB_SUCC(ret)
+        && (T_OP_ADD == expr->get_expr_type() || T_OP_MINUS == expr->get_expr_type())
+        && 2 == expr->get_param_count()) {
+      ObRawExpr *left = expr->get_param_expr(0);
+      ObRawExpr *right = expr->get_param_expr(1);
+      ObRawExpr *identity = NULL;
+      ObRawExpr *retained = NULL;
+      if (OB_ISNULL(left) || OB_ISNULL(right)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (right->is_const_raw_expr()
+                 && left->get_result_type().is_integer_type()) {
+        identity = right;
+        retained = left;
+      } else if (T_OP_ADD == expr->get_expr_type()
+                 && left->is_const_raw_expr()
+                 && right->get_result_type().is_integer_type()) {
+        identity = left;
+        retained = right;
+      }
+      if (OB_SUCC(ret) && NULL != identity && NULL != retained) {
+        ObObj value;
+        bool need_check = false;
+        const ParamStore &params =
+            ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store();
+        if (OB_FAIL(ObSQLUtils::calc_const_expr(identity, &params, value, need_check))) {
+        } else if (!value.is_null() && value.is_integer_type() && value.is_zero()) {
+          if (T_QUESTIONMARK == identity->get_expr_type() && OB_NOT_NULL(ctx_->phy_plan_)) {
+            ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
+          }
+          expr = retained;
+          trans_happened = true;
+        }
+      }
     }
   }
   return ret;

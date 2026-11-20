@@ -1,0 +1,27 @@
+#### owner: Beck007-lab
+#### owner group: community
+#### description: regression coverage for arithmetic identity predicates
+# tags: expr, optimizer
+
+--disable_warnings
+drop table if exists arithmetic_identity_t;
+--enable_warnings
+
+create table arithmetic_identity_t (
+  id int primary key,
+  age int,
+  key idx_age(age)
+);
+insert into arithmetic_identity_t values
+  (1, null), (2, 0), (3, 10), (4, 11), (5, 100);
+
+select id from arithmetic_identity_t where age > 10 order by id;
+select id from arithmetic_identity_t where ((age + 0) + 0) > 10 order by id;
+# Same normalized SQL shape with different literals must not reuse the folded plan.
+select id from arithmetic_identity_t where ((age + 5) + 0) > 10 order by id;
+select id from arithmetic_identity_t where ((age + 0) + 0) > 10 order by id;
+
+explain select id from arithmetic_identity_t where age > 10;
+explain select id from arithmetic_identity_t where ((age + 0) + 0) > 10;
+
+drop table arithmetic_identity_t;
