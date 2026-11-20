@@ -561,5 +561,9 @@ SELECT q.id FROM (SELECT id,CAST(JSON_OBJECT('key0',49) AS CHAR) j FROM seek1428
 SELECT q.id FROM (SELECT id,JSON_OBJECT('key0',id) j FROM seek1428_json_l) q WHERE q.j IN (SELECT j FROM seek1428_json_r) ORDER BY q.id;
 --echo Ordinary constant projection remains supported
 SELECT q.id FROM (SELECT id,39 n FROM seek1428_json_l) q WHERE q.n IN (SELECT n FROM seek1428_json_r) ORDER BY q.id;
+--echo Grouped filter sharing a scalar subquery with the projection
+SELECT COUNT(*) AS cnt, MIN(x) AS first_id
+FROM (SELECT id, (SELECT id FROM seek1428_json_l ORDER BY id LIMIT 1) AS x FROM seek1428_json_l) a
+WHERE (x > ANY (SELECT b.id FROM seek1428_json_l b WHERE b.id >= a.id)) IS NOT TRUE;
 DROP TABLE seek1428_json_l, seek1428_json_r;
 --enable_query_log
