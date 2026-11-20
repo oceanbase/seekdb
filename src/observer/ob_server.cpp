@@ -2141,11 +2141,8 @@ int ObServer::init_io()
         int64_t data_disk_percentage = 0;
         int64_t log_disk_percentage = 0;
 
-        if (!log_block_mgr_.can_reinitialize()) {
-          ret = OB_STATE_NOT_MATCH;
-          LOG_ERROR("previous log physical owner has not drained", KR(ret));
-        } else if (OB_FAIL(log_block_mgr_.init(storage_env_.clog_dir_,
-            ObServerUtils::get_log_disk_info_in_config, *io_service_, disk_threads, max_io_depth))) {
+        if (OB_FAIL(log_block_mgr_.init(storage_env_.clog_dir_,
+            ObServerUtils::get_log_disk_info_in_config))) {
           LOG_ERROR("log block mgr init failed", KR(ret));
         } else if (OB_FAIL(ObServerUtils::cal_all_part_disk_size(config::datafile_size(),
                                                   config::log_disk_size(),

@@ -36,7 +36,6 @@ namespace palf
 {
 class PalfHandle;
 class PalfDiskOptions;
-class ILogBlockPool;
 
 class PalfEnv
 {

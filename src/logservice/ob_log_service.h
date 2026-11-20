@@ -20,7 +20,6 @@
 #include "common/ob_role.h"
 #include "lib/ob_define.h"
 #include "applyservice/ob_log_apply_service.h"
-#include "palf/log_block_pool_interface.h"             // ILogBlockPool
 #include "share/log/palf/log_define.h"
 #include "localservice/ob_local_log_handler_set.h"
 #include "replayservice/ob_log_replay_service.h"
@@ -30,10 +29,10 @@
 
 namespace oceanbase
 {
-namespace storage_io { struct NamedOwnerHandle; }
 namespace common
 {
 class ObAddr;
+class ObIOManager;
 class ObILogAllocator;
 }
 
@@ -75,9 +74,7 @@ public:
       const char *clog_dir,
       const common::ObAddr &self,
       ObILogStorage *log_storage,
-      palf::ILogBlockPool *log_block_pool,
-      const storage_io::NamedOwnerHandle *log_files,
-
+      common::ObIOManager *io_manager,
       bool is_shared_storage_mode,
       int64_t replay_thread_quota,
       const ObLogRuntimeConfig &runtime_config);
@@ -93,9 +90,7 @@ public:
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,
            ObILogStorage *log_storage,
-           palf::ILogBlockPool *log_block_pool,
-           const storage_io::NamedOwnerHandle *log_files,
-
+           common::ObIOManager *io_manager,
            bool is_shared_storage_mode,
            int64_t replay_thread_quota,
            const ObLogRuntimeConfig &runtime_config);

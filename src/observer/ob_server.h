@@ -73,8 +73,8 @@
 #include "storage/ob_disk_usage_reporter.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "logservice/ob_server_log_block_mgr.h"
-#include "logservice/palf/log_io_adapter.h"
 #include "rust/storage_io.h"
+#include "share/startup_result.h"
 
 
 

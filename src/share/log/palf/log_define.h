@@ -69,7 +69,6 @@ typedef uint64_t block_id_t ;
 typedef uint64_t offset_t;
 class LSN;
 class LogWriteBuf;
-class ILogBlockPool;
 
 // ==================== palf env start =============================
 const int64_t MIN_DISK_SIZE_PER_PALF_INSTANCE = 512 * 1024 * 1024ul;

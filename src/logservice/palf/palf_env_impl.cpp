@@ -281,7 +281,7 @@ int PalfEnvImpl::create_directory(const char *base_dir)
     ret = OB_ERR_UNEXPECTED;
   } else if (-1 == ob_mkdir_utf8(tmp_base_dir, mode)) {
     ret = convert_sys_errno();
-  } else if (OB_FAIL(rename_with_retry(tmp_base_dir, base_dir))) {
+  } else if (OB_FAIL(rename_directory(tmp_base_dir, base_dir))) {
   } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(log_dir_))) {
   }
   if (OB_FAIL(ret)) {
@@ -298,7 +298,7 @@ int PalfEnvImpl::remove_directory(const char *log_dir)
   char tmp_log_dir[MAX_PATH_SIZE] = {'\0'};
   if (0 > (pret = snprintf(tmp_log_dir, MAX_PATH_SIZE, "%s%s", log_dir, TMP_SUFFIX))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(rename_with_retry(log_dir, tmp_log_dir))) {
+  } else if (OB_FAIL(rename_directory(log_dir, tmp_log_dir))) {
   } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(log_dir_))) {
   } else {
     char active_dir[MAX_PATH_SIZE] = {'\0'};
@@ -505,7 +505,7 @@ int PalfEnvImpl::move_incomplete_palf_into_tmp_dir_()
   } else if (0 > (pret = snprintf(dest_log_dir, MAX_PATH_SIZE, "%s/log_stream_%" PRId64,
       tmp_log_dir_, timestamp))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(rename_with_retry(src_log_dir, dest_log_dir))) {
+  } else if (OB_FAIL(rename_directory(src_log_dir, dest_log_dir))) {
   } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(log_dir_))) {
   } else {
     ret = meta_store::remove(*store_);

@@ -56,10 +56,8 @@ LOGSERVICE_UNITY_GROUPS = [
             "src/logservice/palf/palf_env_impl.cpp",
             "src/logservice/palf/palf_handle.cpp",
             "src/logservice/palf/palf_handle_impl.cpp",
-            "src/logservice/palf/log_block_pool_interface.cpp",
             "src/logservice/palf/log_io_utils.cpp",
             "src/logservice/palf/log_io_context.cpp",
-            "src/logservice/palf/log_io_adapter.cpp",
         ],
     ),
 ]

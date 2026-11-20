@@ -66,8 +66,6 @@ int ObLogService::server_module_init(
     const char *clog_dir,
     const common::ObAddr &self,
     ObILogStorage *log_storage,
-    palf::ILogBlockPool *log_block_pool,
-    common::ObIODevice *log_local_device,
     common::ObIOManager *io_manager,
     const bool is_shared_storage_mode,
     const int64_t replay_thread_quota,
@@ -77,20 +75,17 @@ int ObLogService::server_module_init(
   common::ObILogAllocator *alloc_mgr = NULL;
   if (OB_ISNULL(logservice) || OB_ISNULL(runtime_clog_dir) ||
       OB_ISNULL(clog_dir) || OB_ISNULL(log_storage) ||
-      OB_ISNULL(log_block_pool) || OB_ISNULL(log_local_device) ||
       OB_ISNULL(io_manager) || OB_UNLIKELY(!self.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid log service composition", K(ret), KP(logservice),
         KP(runtime_clog_dir), KP(clog_dir), KP(log_storage),
-        KP(log_block_pool), KP(log_local_device), KP(io_manager), K(self));
+        KP(io_manager), K(self));
   } else if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
   } else if (OB_FAIL(logservice->init(palf_options, store,
                                       runtime_clog_dir,
                                       self,
                                       alloc_mgr,
                                       log_storage,
-                                      log_block_pool,
-                                      log_local_device,
                                       io_manager,
                                       is_shared_storage_mode,
                                       replay_thread_quota,
@@ -364,8 +359,6 @@ int ObLogService::init(const PalfOptions &options,
                        const common::ObAddr &self,
                        common::ObILogAllocator *alloc_mgr,
                        ObILogStorage *log_storage,
-                       palf::ILogBlockPool *log_block_pool,
-                       common::ObIODevice *log_local_device,
                        common::ObIOManager *io_manager,
                        const bool is_shared_storage_mode,
                        const int64_t replay_thread_quota,
@@ -380,12 +373,10 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
   } else if (false == options.is_valid() || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
       || OB_ISNULL(alloc_mgr) || OB_ISNULL(log_storage)
-      || OB_ISNULL(log_block_pool) || OB_ISNULL(log_local_device)
       || OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
-             KP(alloc_mgr), KP(log_storage), KP(log_block_pool),
-             KP(log_local_device), KP(io_manager));
+             KP(alloc_mgr), KP(log_storage), KP(io_manager));
   } else if (OB_FAIL(PalfEnv::create_palf_env(options, store, base_dir, self,
                                               &monitor_, palf_env_))) {
   } else if (OB_ISNULL(palf_env_)) {
