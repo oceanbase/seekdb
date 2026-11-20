@@ -1203,8 +1203,7 @@ Outputs & filters:
   1 - output(nil), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment]), partitions(p0)
       is_index_back=false, is_global_index=false, 
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
-      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
+      calc_relevance=false, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
 select count(1) from t_ir_single_column where match (detail) against ("distributed database");
 +----------+
 | count(1) |
@@ -1630,8 +1629,7 @@ Outputs & filters:
   0 - output([1]), filter(nil), rowset=16
       access([t_ir_single_column.__pk_increment]), partitions(p0)
       limit(1), offset(nil), is_index_back=false, is_global_index=false, 
-      calc_relevance=true, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database')), 
-      pushdown_match_filter(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
+      calc_relevance=false, match_expr(MATCH(t_ir_single_column.detail) AGAINST('distributed database'))
 select distinct 1 from t_ir_single_column where match (detail) against ("distributed database");
 +---+
 | 1 |

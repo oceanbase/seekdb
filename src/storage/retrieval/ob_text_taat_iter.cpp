@@ -72,6 +72,9 @@ int ObTextTaaTIter::pre_process()
       const int64_t total_doc_cnt = bm25_param_estimator_.get_total_doc_cnt();
       partition_cnt_ = MIN((total_doc_cnt-1) / OB_HASHMAP_DEFAULT_SIZE + 1, OB_MAX_HASHMAP_COUNT);
     }
+  } else {
+    // no relevance to project, a single partition is enough to dedup the doc ids
+    partition_cnt_ = 1;
   }
   return ret;
 }
