@@ -97,6 +97,18 @@ jobs:
             "$WINDOWS_CI_IMAGE" cargo check --locked --workspace --target x86_64-pc-windows-gnu
 
       - name: cargo audit
+        shell: bash
+        env:
+          CARGO_AUDIT_VERSION: '0.23.0'
+          CARGO_AUDIT_SHA256: b77993532b253fcbf550996d7716465ec3d734d4e74e7f87bfb65a19add0fb59
         run: |
-          command -v cargo-audit >/dev/null 2>&1 || cargo install cargo-audit --locked
-          cargo audit
+          distribution="cargo-audit-x86_64-unknown-linux-gnu-v${CARGO_AUDIT_VERSION}"
+          audit_dir=$(mktemp -d "$RUNNER_TEMP/cargo-audit.XXXXXX")
+          trap 'rm -rf "$audit_dir"' EXIT
+          archive="$audit_dir/$distribution.tgz"
+          curl --proto '=https' -fsSL --retry 3 \
+            "https://github.com/rustsec/rustsec/releases/download/cargo-audit/v${CARGO_AUDIT_VERSION}/${distribution}.tgz" \
+            -o "$archive"
+          printf '%s  %s\n' "$CARGO_AUDIT_SHA256" "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$audit_dir" "$distribution/cargo-audit"
+          "$audit_dir/$distribution/cargo-audit" audit
