@@ -1,0 +1,19 @@
+src/sql/ob_spi.cpp
+  s_97c0d0bd2c1536::t_7c608ae00b15d8 1609-1614
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "15cb894858c6e46bf8fed3ad9c5b5f79d8e42c0c",
+  "prompts": {},
+  "sessions": {
+    "s_97c0d0bd2c1536": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f84c-ba34-7521-a7ae-e26873e74e84",
+        "model": "deepseek-flash"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
