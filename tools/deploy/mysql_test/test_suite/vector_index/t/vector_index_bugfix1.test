@@ -662,4 +662,64 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1534: adaptive pre-filter scans must not re-evaluate precise range predicates
+--disable_warnings
+drop table if exists t_issue1534_redundant_filter;
+--enable_warnings
+create table t_issue1534_redundant_filter(
+  id bigint not null,
+  embedding vector(3) not null,
+  age int not null,
+  primary key(id),
+  key idx_age(age),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+
+--disable_query_log
+--let $row = 0
+while ($row < 100)
+{
+  --let $age = $row + 1
+  eval insert into t_issue1534_redundant_filter values ($row, '[$row,0,0]', $age);
+  --inc $row
+}
+--enable_query_log
+--disable_result_log
+analyze table t_issue1534_redundant_filter;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1534_REDUNDANT_FILTER', numrows=>200000);
+--enable_result_log
+
+--let $redundant_filter = age < 10
+--let $upper_bound = 20
+--let $loop = 0
+while ($loop < 128)
+{
+  --let $redundant_filter = ($redundant_filter) AND (age < $upper_bound)
+  --inc $upper_bound
+  --inc $loop
+}
+
+select group_concat(id order by id) as exact_ids
+from t_issue1534_redundant_filter
+where age < 10;
+eval select group_concat(id order by id) as exact_ids
+from t_issue1534_redundant_filter
+where $redundant_filter;
+
+alter system flush plan cache;
+select id from t_issue1534_redundant_filter
+where age < 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+eval select id from t_issue1534_redundant_filter
+where $redundant_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select p.operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1534_redundant_filter') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by length(s.statement), p.plan_id;
+
+drop table t_issue1534_redundant_filter;
+
 alter system set vector_memory_limit = 0;

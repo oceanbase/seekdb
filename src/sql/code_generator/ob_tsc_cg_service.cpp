@@ -492,6 +492,12 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(prune_scan_pushdown_filters_by_table_columns(*scan_table_schema,
                                                                   scan_pushdown_filters))) {
+  } else if (OB_NOT_NULL(op.get_pre_graph())) {
+    // Keep lookup filters intact for adaptive path switching, but avoid evaluating
+    // precise range predicates again on the pre-filter index scan.
+    if (OB_FAIL(ObOptimizerUtil::remove_item(scan_pushdown_filters,
+                                             op.get_pre_graph()->get_range_exprs()))) {
+    }
   }
   if (OB_SUCC(ret) && !scan_pushdown_filters.empty()) {
     bool pd_filter = scan_ctdef.pd_expr_spec_.pd_storage_flag_.is_filter_pushdown();
