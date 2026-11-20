@@ -1,0 +1,55 @@
+# Regression for DDL escaping during vector rebuild and enum/set index creation.
+connect (c2_user,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connection c2_user;
+
+--disable_warnings
+DROP DATABASE IF EXISTS vector_rebuild_identifier_quoting;
+--enable_warnings
+CREATE DATABASE vector_rebuild_identifier_quoting;
+USE vector_rebuild_identifier_quoting;
+SET ob_query_timeout = 60000000;
+SET ob_trx_timeout = 60000000;
+
+--echo # Nonpartitioned primary key containing a literal backtick
+CREATE TABLE c2_backtick (`key``id` INT PRIMARY KEY, v VECTOR(3),
+  VECTOR INDEX idx(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO c2_backtick VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c2_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c2_backtick' AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c2_old_index_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_idx'));
+CALL dbms_vector.rebuild_index('idx','c2_backtick','v');
+SELECT (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_idx')) <> @c2_old_index_id AS rebuilt;
+SELECT `key``id` AS id,v FROM c2_backtick ORDER BY `key``id`;
+--replace_regex /_[0-9]+/_0/g /[ ]+$//
+EXPLAIN BASIC SELECT /*+ INDEX(c2_backtick idx) */ `key``id` AS id FROM c2_backtick ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+SELECT /*+ INDEX(c2_backtick idx) */ `key``id` AS id FROM c2_backtick ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+
+--echo # Partitioned primary key containing a literal backtick
+CREATE TABLE c2_partition_backtick (`key``id` INT PRIMARY KEY, v VECTOR(3),
+  VECTOR INDEX idx(v) WITH (distance=l2,type=hnsw,lib=vsag))
+  PARTITION BY RANGE COLUMNS(`key``id`) (PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO c2_partition_backtick VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c2_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c2_partition_backtick' AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c2_old_index_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_idx'));
+CALL dbms_vector.rebuild_index('idx','c2_partition_backtick','v');
+SELECT (SELECT table_id FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_idx')) <> @c2_old_index_id AS rebuilt;
+SELECT `key``id` AS id,v FROM c2_partition_backtick ORDER BY `key``id`;
+--replace_regex /_[0-9]+/_0/g /[ ]+$//
+EXPLAIN BASIC SELECT /*+ INDEX(c2_partition_backtick idx) */ `key``id` AS id FROM c2_partition_backtick ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+SELECT /*+ INDEX(c2_partition_backtick idx) */ `key``id` AS id FROM c2_partition_backtick ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+
+--echo # Shared DDL formatter: enum/set names containing literal backticks
+CREATE TABLE c2_types_quoted (id INT PRIMARY KEY, `enum``value` ENUM('a','b'), `set````value` SET('x','y'), n INT);
+INSERT INTO c2_types_quoted VALUES (1,'a','x',NULL),(2,'b','x,y',2),(3,'a','y',3);
+CREATE UNIQUE INDEX type_idx ON c2_types_quoted (`enum``value`,`set````value`,n);
+SET @c2_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c2_types_quoted' AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SELECT COUNT(*) AS usable_index FROM oceanbase.__all_table WHERE table_name = CONCAT('__idx_',@c2_table_id,'_type_idx') AND index_status = 2;
+SELECT id,CAST(`enum``value` AS UNSIGNED) AS enum_ordinal,CAST(`set````value` AS UNSIGNED) AS set_bits,n FROM c2_types_quoted ORDER BY id;
+# Read through the new index after DDL.
+--replace_regex /_[0-9]+/_0/g /[ ]+$//
+EXPLAIN BASIC SELECT /*+ INDEX(c2_types_quoted type_idx) */ id FROM c2_types_quoted WHERE id = 2;
+SELECT /*+ INDEX(c2_types_quoted type_idx) */ id FROM c2_types_quoted WHERE id = 2;
+
+USE test;
+DROP DATABASE vector_rebuild_identifier_quoting;
+disconnect c2_user;
+connection default;
