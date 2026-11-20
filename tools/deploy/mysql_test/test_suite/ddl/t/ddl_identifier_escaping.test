@@ -1,0 +1,19 @@
+--disable_warnings
+DROP TABLE IF EXISTS ddl_identifier_escaping;
+--enable_warnings
+
+CREATE TABLE ddl_identifier_escaping (
+  id INT PRIMARY KEY,
+  `enum``name` ENUM('one', 'two'),
+  `set````name` SET('one', 'two')
+);
+INSERT INTO ddl_identifier_escaping VALUES (1, 'one', 'one'), (2, 'two', 'one,two');
+
+# 构建 ENUM/SET 索引时，内部 DDL SQL 必须同时转义原列名和别名。
+CREATE UNIQUE INDEX idx_enum ON ddl_identifier_escaping (`enum``name`);
+CREATE UNIQUE INDEX idx_set ON ddl_identifier_escaping (`set````name`);
+SELECT id, `enum``name`, `set````name` FROM ddl_identifier_escaping ORDER BY id;
+SELECT /*+ INDEX(ddl_identifier_escaping idx_enum) */ id FROM ddl_identifier_escaping WHERE `enum``name` = 'two';
+SELECT /*+ INDEX(ddl_identifier_escaping idx_set) */ id FROM ddl_identifier_escaping WHERE `set````name` = 'one,two';
+
+DROP TABLE ddl_identifier_escaping;
