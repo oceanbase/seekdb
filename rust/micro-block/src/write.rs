@@ -17,7 +17,7 @@ use crate::format::{
     header_checksum, write_u16, write_u32, write_u64, ColumnHeader, Header, ALL_LOB_IN_ROW,
     COLUMN_BIT_PACKING, COLUMN_FIX_LENGTH, COLUMN_HAS_EXTEND_VALUE, COLUMN_HEADER_SIZE,
     COLUMN_LAST_VAR_FIELD, ENCODING_ROW_STORE, FIXED_HEADER_SIZE, HAS_COLUMN_CHECKSUM,
-    MICRO_BLOCK_MAGIC, MICRO_BLOCK_VERSION,
+    MICRO_BLOCK_MAGIC, MICRO_BLOCK_VERSION, SELECTIVE_ENCODING_ROW_STORE,
 };
 use crate::{Error, Result};
 
@@ -39,6 +39,25 @@ pub struct ColumnSpec {
     /// a fixed width so their original datum representation stays unambiguous.
     pub fixed_length: Option<usize>,
     pub enable_bit_packing: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum RowStoreType {
+    Encoding = ENCODING_ROW_STORE,
+    Selective = SELECTIVE_ENCODING_ROW_STORE,
+}
+
+impl TryFrom<u8> for RowStoreType {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        match value {
+            ENCODING_ROW_STORE => Ok(Self::Encoding),
+            SELECTIVE_ENCODING_ROW_STORE => Ok(Self::Selective),
+            _ => Err(Error::Unsupported),
+        }
+    }
 }
 
 impl ColumnSpec {
@@ -63,7 +82,7 @@ impl ColumnSpec {
 pub struct WriterConfig {
     pub columns: Vec<ColumnSpec>,
     pub rowkey_column_count: usize,
-    pub row_store_type: u8,
+    pub row_store_type: RowStoreType,
     pub block_size_limit: usize,
     pub need_column_checksums: bool,
     pub max_merged_trans_version: i64,
@@ -75,7 +94,7 @@ impl WriterConfig {
         Self {
             columns,
             rowkey_column_count,
-            row_store_type: ENCODING_ROW_STORE,
+            row_store_type: RowStoreType::Encoding,
             block_size_limit: 2 * 1024 * 1024,
             need_column_checksums: false,
             max_merged_trans_version: 0,
@@ -120,7 +139,6 @@ impl BlockWriter {
         if config.columns.is_empty()
             || config.columns.len() > u16::MAX as usize
             || config.rowkey_column_count > config.columns.len()
-            || config.row_store_type != ENCODING_ROW_STORE
         {
             return Err(Error::InvalidArgument);
         }
@@ -596,7 +614,7 @@ impl BlockWriter {
             rowkey_column_count: self.config.rowkey_column_count,
             flags,
             row_count: self.rows.len(),
-            row_store_type: self.config.row_store_type,
+            row_store_type: self.config.row_store_type as u8,
             opt: (row_index_byte | (extend_width << 3)) as u8,
             var_column_count,
             row_data_offset,
@@ -623,7 +641,7 @@ impl BlockWriter {
         write_u16(&mut block, 12, self.config.rowkey_column_count as u16)?;
         write_u16(&mut block, 14, flags)?;
         write_u32(&mut block, 16, self.rows.len() as u32)?;
-        block[20] = self.config.row_store_type;
+        block[20] = self.config.row_store_type as u8;
         block[21] = header.opt;
         write_u16(&mut block, 22, var_column_count as u16)?;
         write_u32(
@@ -775,7 +793,7 @@ fn write_uint(bytes: &mut [u8], offset: usize, width: usize, value: usize) -> Re
 
 #[cfg(test)]
 mod tests {
-    use super::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, WriterConfig};
+    use super::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig};
     use crate::{Block, Cell, Error};
 
     fn specs() -> Vec<ColumnSpec> {
@@ -891,6 +909,20 @@ mod tests {
         let block = Block::new(&bytes).unwrap();
         assert_eq!(block.find_uint(0, 8).unwrap(), Some(1));
         assert_eq!(block.cell(1, 1).unwrap().bytes().unwrap(), b"same");
+    }
+
+    #[test]
+    fn writes_selective_blocks_with_the_shared_layout() {
+        let mut config = WriterConfig::new(vec![ColumnSpec::variable(22)], 1);
+        config.row_store_type = RowStoreType::Selective;
+        let mut writer = BlockWriter::new(config).unwrap();
+        writer
+            .append_row(&[OwnedDatum::Bytes(b"index-key".to_vec())])
+            .unwrap();
+        let bytes = writer.finish().unwrap();
+        let block = Block::new(&bytes).unwrap();
+        assert_eq!(block.header.row_store_type, RowStoreType::Selective as u8);
+        assert_eq!(block.cell(0, 0).unwrap().bytes().unwrap(), b"index-key");
     }
 
     #[test]

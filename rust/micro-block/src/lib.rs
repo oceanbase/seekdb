@@ -24,7 +24,7 @@ mod write;
 
 pub use read::{Block, Cell, Projection, RowRange};
 pub use rowkey::{compare_unicode_ci, RowkeyKind, RowkeyValue, UcaTable};
-pub use write::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, WriterConfig};
+pub use write::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig};
 
 /// Errors produced while validating or transforming one micro-block.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

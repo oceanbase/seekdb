@@ -81,6 +81,7 @@ mod ffi {
             columns: Vec<BridgeColumn>,
             cells: Vec<InputCell>,
             rowkey_column_count: u32,
+            row_store_type: u8,
             need_column_checksums: bool,
             original_size: u64,
             max_merged_trans_version: i64,
@@ -149,6 +150,7 @@ unsafe fn build_pax_block(
     columns: Vec<ffi::BridgeColumn>,
     cells: Vec<ffi::InputCell>,
     rowkey_column_count: u32,
+    row_store_type: u8,
     need_column_checksums: bool,
     original_size: u64,
     max_merged_trans_version: i64,
@@ -157,6 +159,7 @@ unsafe fn build_pax_block(
         &columns,
         &cells,
         rowkey_column_count,
+        row_store_type,
         need_column_checksums,
         original_size,
         max_merged_trans_version,
@@ -167,6 +170,7 @@ unsafe fn build_pax_block_impl(
     columns: &[ffi::BridgeColumn],
     cells: &[ffi::InputCell],
     rowkey_column_count: u32,
+    row_store_type: u8,
     need_column_checksums: bool,
     original_size: u64,
     max_merged_trans_version: i64,
@@ -183,6 +187,7 @@ unsafe fn build_pax_block_impl(
         })
         .collect();
     let mut config = WriterConfig::new(specs, rowkey_column_count as usize);
+    config.row_store_type = crate::RowStoreType::try_from(row_store_type)?;
     config.need_column_checksums = need_column_checksums;
     config.max_merged_trans_version = max_merged_trans_version;
     config.original_size_override =
