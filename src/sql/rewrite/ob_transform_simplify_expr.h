@@ -37,6 +37,7 @@ public:
                                  ObDMLStmt *&stmt,
                                  bool &trans_happened) override;
 private:
+  int remove_redundant_integer_bounds(ObIArray<ObRawExpr *> &conditions, bool &trans_happened);
   int replace_is_null_condition(ObDMLStmt *stmt, bool &trans_happened);
   int inner_replace_is_null_condition(ObDMLStmt *stmt,
                                       ObRawExpr *&expr,

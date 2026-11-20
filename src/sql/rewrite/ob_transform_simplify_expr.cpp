@@ -70,6 +70,12 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
     }
   }
   if (OB_SUCC(ret)) {
+    if (OB_FAIL(remove_redundant_integer_bounds(stmt->get_condition_exprs(), is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+    }
+  }
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(replace_is_null_condition(stmt, is_happened))) {
     } else {
       trans_happened |= is_happened;
@@ -134,6 +140,74 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
   }
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_FAIL(add_transform_hint(*stmt))) {
+    }
+  }
+  return ret;
+}
+
+// Restrict implication checks to signed integer columns and constant bounds;
+// other types require their own implicit-cast and ordering safety checks.
+int ObTransformSimplifyExpr::remove_redundant_integer_bounds(
+    ObIArray<ObRawExpr *> &conditions, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+    ObRawExpr *strong = conditions.at(i);
+    const ObItemType type = strong->get_expr_type();
+    const bool upper = T_OP_LT == type || T_OP_LE == type;
+    if ((!upper && T_OP_GT != type && T_OP_GE != type)
+        || strong->get_param_count() != 2) {
+      continue;
+    }
+    ObRawExpr *column = strong->get_param_expr(0);
+    ObRawExpr *bound = strong->get_param_expr(1);
+    if (!column->is_column_ref_expr()
+        || column->get_result_type().get_type_class() != ObIntTC
+        || !bound->is_static_const_expr()
+        || bound->get_result_type().get_type_class() != ObIntTC) {
+      continue;
+    }
+    for (int64_t j = i + 1; OB_SUCC(ret) && j < conditions.count();) {
+      ObRawExpr *other = conditions.at(j);
+      // Keep different operators (including mixed strict/inclusive bounds).
+      if (other->get_expr_type() != type || other->get_param_count() != 2
+          || other->get_param_expr(0) != column) {
+        ++j;
+        continue;
+      }
+      ObRawExpr *other_bound = other->get_param_expr(1);
+      if (!other_bound->is_static_const_expr()
+          || other_bound->get_result_type().get_type_class() != ObIntTC) {
+        ++j;
+        continue;
+      }
+      bool implies = false;
+      bool reverse_implies = false;
+      const ObItemType cmp = upper ? T_OP_LE : T_OP_GE;
+      if (OB_FAIL(ObTransformUtils::compare_const_expr_result(
+                      ctx_, *bound, cmp, *other_bound, implies))) {
+      } else if (!implies) {
+        ret = ObTransformUtils::compare_const_expr_result(
+            ctx_, *other_bound, cmp, *bound, reverse_implies);
+      }
+      if (OB_FAIL(ret)) {
+      } else if (!implies && !reverse_implies) {
+        ++j; // NULL endpoints do not prove an implication.
+      } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(bound, ctx_))) {
+      } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(other_bound, ctx_))) {
+      } else {
+        // Constrain both endpoints before removing a predicate so cached plans
+        // cannot reuse this implication with different parameter values.
+        if (reverse_implies) {
+          conditions.at(i) = other;
+          bound = other_bound;
+        }
+        if (OB_FAIL(conditions.remove(j))) {
+        } else {
+          trans_happened = true;
+        }
+      }
     }
   }
   return ret;
