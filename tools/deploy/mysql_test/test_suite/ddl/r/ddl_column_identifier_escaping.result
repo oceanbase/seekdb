@@ -1,0 +1,57 @@
+SET ob_query_timeout = 20000000;
+DROP TABLE IF EXISTS ddl_column_identifier_escaping;
+CREATE TABLE ddl_column_identifier_escaping (
+`key``id` INT PRIMARY KEY,
+plain_col INT,
+`a``b` INT,
+```leading` INT,
+`trailing``` INT,
+`two````ticks` INT,
+`e``num` ENUM('red', 'blue'),
+`s``et` SET('a', 'b')
+);
+INSERT INTO ddl_column_identifier_escaping VALUES
+(1, 10, 20, 30, 40, 50, 'red', 'a,b'),
+(2, 11, 21, 31, 41, 51, 'blue', 'b');
+CREATE INDEX idx_plain ON ddl_column_identifier_escaping (plain_col);
+CREATE INDEX idx_quoted ON ddl_column_identifier_escaping (`a``b`);
+CREATE INDEX idx_boundaries ON ddl_column_identifier_escaping (```leading`, `trailing```, `two````ticks`);
+CREATE INDEX idx_enum ON ddl_column_identifier_escaping (`e``num`);
+CREATE INDEX idx_set ON ddl_column_identifier_escaping (`s``et`);
+CREATE UNIQUE INDEX idx_unique ON ddl_column_identifier_escaping (`a``b`);
+SELECT `key``id`, plain_col FROM ddl_column_identifier_escaping FORCE INDEX (idx_plain) ORDER BY `key``id`;
+key`id	plain_col
+1	10
+2	11
+SELECT `key``id`, `a``b` FROM ddl_column_identifier_escaping FORCE INDEX (idx_quoted) ORDER BY `key``id`;
+key`id	a`b
+1	20
+2	21
+SELECT `key``id`, ```leading`, `trailing```, `two````ticks`
+  FROM ddl_column_identifier_escaping FORCE INDEX (idx_boundaries) ORDER BY `key``id`;
+key`id	`leading	trailing`	two``ticks
+1	30	40	50
+2	31	41	51
+SELECT `key``id`, `e``num`, `e``num` + 0 AS enum_value
+FROM ddl_column_identifier_escaping FORCE INDEX (idx_enum) ORDER BY `key``id`;
+key`id	e`num	enum_value
+1	red	1
+2	blue	2
+SELECT `key``id`, `s``et`, `s``et` + 0 AS set_value
+FROM ddl_column_identifier_escaping FORCE INDEX (idx_set) ORDER BY `key``id`;
+key`id	s`et	set_value
+1	a,b	3
+2	b	2
+SELECT `key``id`, `a``b` FROM ddl_column_identifier_escaping FORCE INDEX (idx_unique) ORDER BY `key``id`;
+key`id	a`b
+1	20
+2	21
+INSERT INTO ddl_column_identifier_escaping VALUES (3, 12, 22, 32, 42, 52, 'red', 'a');
+INSERT INTO ddl_column_identifier_escaping VALUES (4, 13, 22, 33, 43, 53, 'blue', 'b');
+ERROR 23000: Duplicate entry '22' for key 'idx_unique'
+SELECT `key``id`, `a``b` FROM ddl_column_identifier_escaping FORCE INDEX (idx_unique) ORDER BY `key``id`;
+key`id	a`b
+1	20
+2	21
+3	22
+DROP TABLE ddl_column_identifier_escaping;
