@@ -70,7 +70,6 @@ public:
   //            LSN &lsn,
   //            int64_t &scn);
   DELEGATE_WITH_RET(palf_handle_, append, int);
-  DELEGATE_WITH_RET(palf_handle_, raw_read, int);
 
   // @breif, query lsn by timestamp, note that this function may be time-consuming
   // @param[in] const int64_t, specified timestamp(ns).
@@ -92,13 +91,8 @@ public:
   //         recycable lsn immediately.
   // @param[out] int64_t&, begin lsn.
   // int get_base_scn(int64_t &ts) const;
-  CONST_DELEGATE_WITH_RET(palf_handle_, get_begin_scn, int);
   // int get_begin_lsn(palf::LSN &lsn) const;
   CONST_DELEGATE_WITH_RET(palf_handle_, get_begin_lsn, int);
-  // @brief, get timestamp of begin lsn.
-  // @param[out] int64_t&, timestmap.
-  // int get_begin_scn(int64_t &ts) const;
-  // CONST_DELEGATE_WITH_RET(palf_handle_, get_begin_scn, int);
   // @brief, get end lsn.
   // @param[out] LSN&, end lsn.
   // int get_end_lsn(LSN &lsn) const;
@@ -119,10 +113,7 @@ public:
   // @param[out] lsn, readable end lsn.
   // -- OB_NOT_INIT           not_init
   // -- OB_SUCCESS
-  CONST_DELEGATE_WITH_RET(palf_handle_, get_readable_end_lsn, int);
-
   CONST_DELEGATE_WITH_RET(palf_handle_, stat, int);
-  CONST_DELEGATE_WITH_RET(palf_handle_, get_palf_epoch, int);
   TO_STRING_KV(K(palf_handle_));
 private:
   PalfHandle palf_handle_;

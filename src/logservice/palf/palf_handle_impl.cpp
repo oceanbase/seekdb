@@ -49,7 +49,6 @@ PalfHandleImpl::PalfHandleImpl()
       access_mode_(AccessMode::INVALID_ACCESS_MODE),
       fs_cb_wrapper_(),
       plugins_(),
-      palf_epoch_(0),
       io_lock_(common::ObLatchIds::PALF_HANDLE_IMPL_LOCK),
       active_io_count_(0),
       io_start_time_(OB_INVALID_TIMESTAMP),
@@ -63,13 +62,13 @@ PalfHandleImpl::~PalfHandleImpl()
 
 int PalfHandleImpl::init(const AccessMode &access_mode,
     const PalfBaseInfo &palf_base_info, const char *log_dir,
-    const PalfDiskOptions &disk_options, const common::ObAddr &self, const int64_t palf_epoch)
+    const PalfDiskOptions &disk_options, const common::ObAddr &self)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (!is_valid_access_mode(access_mode) || !palf_base_info.is_valid()
-             || OB_ISNULL(log_dir) || !disk_options.is_valid() || !self.is_valid() || palf_epoch < 0) {
+             || OB_ISNULL(log_dir) || !disk_options.is_valid() || !self.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     palf_rs::BaseInfo base {
@@ -84,7 +83,6 @@ int PalfHandleImpl::init(const AccessMode &access_mode,
     if (OB_SUCC(ret)) {
       access_mode_ = access_mode;
       self_ = self;
-      palf_epoch_ = palf_epoch;
       is_inited_ = true;
     } else {
       stream_.reset();
@@ -94,13 +92,13 @@ int PalfHandleImpl::init(const AccessMode &access_mode,
 }
 
 int PalfHandleImpl::load(const char *log_dir, const PalfDiskOptions &disk_options,
-    const common::ObAddr &self, const int64_t palf_epoch, bool &is_integrity)
+    const common::ObAddr &self, bool &is_integrity)
 {
   int ret = OB_SUCCESS;
   is_integrity = false;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(log_dir) || !disk_options.is_valid() || !self.is_valid() || palf_epoch < 0) {
+  } else if (OB_ISNULL(log_dir) || !disk_options.is_valid() || !self.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     stream_.emplace(palf_rs::open_stream(::rust::Str(log_dir), to_rust_disk_policy(disk_options)));
@@ -109,7 +107,6 @@ int PalfHandleImpl::load(const char *log_dir, const PalfDiskOptions &disk_option
       is_integrity = palf_rs::integrity_ffi(**stream_);
       access_mode_ = AccessMode::APPEND;
       self_ = self;
-      palf_epoch_ = palf_epoch;
       is_inited_ = true;
     } else {
       stream_.reset();
@@ -252,32 +249,6 @@ int PalfHandleImpl::locate_by_lsn_coarsely(const LSN &lsn, SCN &result_scn)
   return ret;
 }
 
-int PalfHandleImpl::read_data_from_buffer(const LSN &read_begin_lsn,
-    const int64_t in_read_size, char *buf, int64_t &out_read_size) const
-{
-  RLockGuard guard(lock_);
-  int ret = OB_SUCCESS;
-  out_read_size = 0;
-  if (!is_inited_ || OB_ISNULL(buf) || in_read_size <= 0) {
-    ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
-  } else {
-    auto result = palf_rs::raw_read_ffi(**stream_, read_begin_lsn.val_, in_read_size);
-    ret = from_rust_code(result.code);
-    if (OB_SUCC(ret)) {
-      out_read_size = result.bytes.size();
-      memcpy(buf, result.bytes.data(), out_read_size);
-    }
-  }
-  return ret;
-}
-
-int PalfHandleImpl::raw_read(const palf::LSN &lsn, char *buffer,
-    const int64_t nbytes, int64_t &read_size, LogIOContext &io_ctx)
-{
-  (void)io_ctx;
-  return read_data_from_buffer(lsn, nbytes, buffer, read_size);
-}
-
 int PalfHandleImpl::alloc_palf_buffer_iterator(const LSN &offset, PalfBufferIterator &iterator)
 {
   RLockGuard guard(lock_);
@@ -389,22 +360,6 @@ int PalfHandleImpl::get_begin_lsn(LSN &lsn) const
   return ret;
 }
 
-int PalfHandleImpl::get_begin_scn(SCN &scn)
-{
-  RLockGuard guard(lock_);
-  int ret = OB_SUCCESS;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else {
-    const auto progress = palf_rs::progress_ffi(**stream_);
-    ret = from_rust_code(progress.code);
-    if (OB_SUCC(ret)) {
-      assign_scn(scn, progress.begin_scn);
-    }
-  }
-  return ret;
-}
-
 int PalfHandleImpl::get_base_lsn(LSN &lsn) const
 {
   RLockGuard guard(lock_);
@@ -507,18 +462,6 @@ int PalfHandleImpl::stat(PalfStat &palf_stat)
       palf_stat.max_lsn_ = palf_stat.end_lsn_;
       palf_stat.max_scn_ = palf_stat.end_scn_;
     }
-  }
-  return ret;
-}
-
-int PalfHandleImpl::get_palf_epoch(int64_t &palf_epoch) const
-{
-  RLockGuard guard(lock_);
-  int ret = OB_SUCCESS;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else {
-    palf_epoch = palf_epoch_;
   }
   return ret;
 }

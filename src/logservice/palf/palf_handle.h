@@ -60,33 +60,6 @@ public:
                             const void *buffer,
                             const int64_t nbytes);
 
-  // @brief: read up to 'nbytes' from palf at offset of 'lsn' into the 'read_buf', and 
-  //         there are alignment restrictions on the length and address of user-space buffers
-  //         and the file offset.
-  //
-  // @param[in] lsn, the start offset to be read, must be aligned with LOG_DIO_ALIGN_SIZE
-  // @param[in] buffer, the start of 'buffer', must be aligned with LOG_DIO_ALIGN_SIZE.
-  // @param[in] nbytes, the read size, must aligned with LOG_DIO_ALIGN_SIZE
-  // @param[out] read_size, the number of bytes read return.
-  // @param[out] io_ctx, io context
-  //
-  // @return value
-  // OB_SUCCESS.
-  // OB_INVALID_ARGUMENT.
-  // OB_ERR_OUT_OF_LOWER_BOUND, the lsn is out of lower bound.
-  // OB_ERR_OUT_OF_UPPER_BOUND, the lsn is out of upper bound.
-  // OB_NEED_RETRY, log blocks changed during raw_read.
-  // others.
-  // 
-  // 1. use oceanbase::share::server_malloc_align or oceanbase::common::ob_malloc_align
-  //    with LOG_DIO_ALIGN_SIZE to allocate aligned buffer.
-  // 2. use oceanbase::common::lower_align or oceanbase::common::upper_align with
-  //    LOG_DIO_ALIGN_SIZE to get aligned lsn or nbytes.
-  int raw_read(const palf::LSN &lsn,
-               void *buffer,
-               const int64_t nbytes,
-               int64_t &read_size,
-               LogIOContext &io_ctx);
   // iter->next returns the value written by the append call, and will not carry the header information added by Palf in the returned buf
   //           The returned value does not include unconfirmed logs
   //
@@ -147,8 +120,6 @@ public:
   int advance_base_lsn(const LSN &lsn);
   // Return the position information of the earliest readable log in the file
   int get_begin_lsn(LSN &lsn) const;
-  int get_begin_scn(share::SCN &scn) const;
-
   // return the max recyclable point of Palf
   int get_base_lsn(LSN &lsn) const;
 
@@ -163,15 +134,6 @@ public:
   int get_end_scn(share::SCN &scn) const;
   int get_max_lsn(LSN &lsn) const;
   int get_max_scn(share::SCN &scn) const;
-  // @brief get readable end lsn; all logs before it are readable.
-  // @param[out] lsn, readable end lsn.
-  // -- OB_NOT_INIT           not_init
-  // -- OB_SUCCESS
-  int get_readable_end_lsn(LSN &lsn) const;
-  int get_palf_epoch(int64_t &palf_epoch) const;
-
-
-
   int get_access_mode_ref_scn(AccessMode &access_mode,
                               SCN &ref_scn) const;
 

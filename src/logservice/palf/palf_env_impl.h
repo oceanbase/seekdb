@@ -149,7 +149,6 @@ private:
   char tmp_log_dir_[common::MAX_PATH_SIZE];
   common::ObAddr self_;
   PalfHandleImpl *palf_handle_;
-  int64_t last_palf_epoch_;
   bool enable_log_cache_;
   bool diskspace_enough_;
   bool is_inited_;

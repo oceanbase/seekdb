@@ -151,12 +151,6 @@ int PalfHandle::get_begin_lsn(LSN &lsn) const
   return palf_handle_impl_->get_begin_lsn(lsn);
 }
 
-int PalfHandle::get_begin_scn(SCN &scn) const
-{
-  CHECK_VALID;
-  return palf_handle_impl_->get_begin_scn(scn);
-}
-
 int PalfHandle::get_base_lsn(LSN &lsn) const
 {
   CHECK_VALID;
@@ -193,12 +187,6 @@ int PalfHandle::get_max_scn(SCN &scn) const
   CHECK_VALID;
   scn = palf_handle_impl_->get_max_scn();
   return ret;
-}
-
-int PalfHandle::get_palf_epoch(int64_t &palf_epoch) const
-{
-  CHECK_VALID;
-  return palf_handle_impl_->get_palf_epoch(palf_epoch);
 }
 
 int PalfHandle::get_end_scn(SCN &scn) const
@@ -266,24 +254,6 @@ int PalfHandle::diagnose(PalfDiagnoseInfo &diagnose_info) const
 {
   CHECK_VALID;
   return palf_handle_impl_->diagnose(diagnose_info);
-}
-
-int PalfHandle::raw_read(const palf::LSN &lsn,
-                         void *buffer,
-                         const int64_t nbytes,
-                         int64_t &read_size,
-                         LogIOContext &io_ctx)
-{
-  CHECK_VALID;
-  return palf_handle_impl_->raw_read(lsn, reinterpret_cast<char*>(buffer), nbytes, read_size, io_ctx);
-}
-
-int PalfHandle::get_readable_end_lsn(LSN &lsn) const
-{
-  int ret = OB_SUCCESS;
-  CHECK_VALID;
-  lsn = palf_handle_impl_->get_readable_end_lsn();
-  return ret;
 }
 
 } // end namespace palf
