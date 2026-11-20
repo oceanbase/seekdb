@@ -1,0 +1,25 @@
+CREATE TABLE ddl_identifier_plain (id INT PRIMARY KEY, status ENUM('active', 'paused'));
+INSERT INTO ddl_identifier_plain VALUES (1, 'active'), (2, 'paused');
+CREATE UNIQUE INDEX uk_plain_control ON ddl_identifier_plain (status);
+SELECT id, status FROM ddl_identifier_plain ORDER BY id;
+id	status
+1	active
+2	paused
+DROP TABLE ddl_identifier_plain;
+CREATE TABLE ddl_identifier_escaping (`p``k` INT PRIMARY KEY, `e``n` ENUM('first', 'second'), `s``t` SET('red', 'blue'), `a````b` ENUM('x', 'y'), `列``名` ENUM('x', 'y'), `status` ENUM('active', 'paused'));
+INSERT INTO ddl_identifier_escaping VALUES (1, 'first', 'red', 'x', 'x', 'active'), (2, 'second', 'blue', 'y', 'y', 'paused'), (3, NULL, NULL, NULL, NULL, NULL), (4, NULL, NULL, NULL, NULL, NULL);
+CREATE UNIQUE INDEX uk_enum ON ddl_identifier_escaping (`e``n`);
+CREATE UNIQUE INDEX uk_set ON ddl_identifier_escaping (`s``t`);
+CREATE UNIQUE INDEX uk_adjacent ON ddl_identifier_escaping (`a````b`);
+CREATE UNIQUE INDEX uk_unicode ON ddl_identifier_escaping (`列``名`);
+CREATE UNIQUE INDEX uk_plain ON ddl_identifier_escaping (`status`);
+SELECT `p``k`, `e``n`, `s``t`, `a````b`, `列``名`, `status` FROM ddl_identifier_escaping ORDER BY `p``k`;
+p`k	e`n	s`t	a``b	列`名	status
+1	first	red	x	x	active
+2	second	blue	y	y	paused
+3	NULL	NULL	NULL	NULL	NULL
+4	NULL	NULL	NULL	NULL	NULL
+SELECT COUNT(DISTINCT index_name) AS built_indexes FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'ddl_identifier_escaping' AND index_name IN ('uk_enum', 'uk_set', 'uk_adjacent', 'uk_unicode', 'uk_plain') AND non_unique = 0;
+built_indexes
+5
+DROP TABLE ddl_identifier_escaping;
