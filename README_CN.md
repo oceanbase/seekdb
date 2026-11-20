@@ -6,7 +6,7 @@
   <img alt="seekdb logo" src="images/logo.svg" width="420">
 </picture>
 
-# **写入 · 搜索 · Fork · AI Agent 的状态存储**
+# **写入 · 搜索 · Fork · AI Agent 的状态存储（此处修改Demo）**
 
 <p>
     <a href="https://github.com/oceanbase/seekdb/stargazers">
