@@ -160,11 +160,11 @@ int ObCSVGeneralFormat::to_json_kv_string(char *buf, const int64_t buf_len, int6
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::FIELD_DELIMITER)],
                      helper.convert(ObHexStringWrap(field_term_str_))));
   OZ(J_COMMA());
-  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%" PRId64 ")",
+  OZ(databuff_printf(buf, buf_len, pos, "\"%s\":%" PRId64,
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::ESCAPE)],
                      field_escaped_char_));
   OZ(J_COMMA());
-  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%" PRId64 ")",
+  OZ(databuff_printf(buf, buf_len, pos, "\"%s\":%" PRId64,
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::FIELD_OPTIONALLY_ENCLOSED_BY)],
                      field_enclosed_char_));
   OZ(J_COMMA());
@@ -172,7 +172,7 @@ int ObCSVGeneralFormat::to_json_kv_string(char *buf, const int64_t buf_len, int6
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::ENCODING)],
                      ObCharset::charset_name(cs_type_)));
   OZ(J_COMMA());
-  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%" PRId64 ")",
+  OZ(databuff_printf(buf, buf_len, pos, "\"%s\":%" PRId64,
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::SKIP_HEADER)],
                      skip_header_lines_));
   OZ(J_COMMA());
