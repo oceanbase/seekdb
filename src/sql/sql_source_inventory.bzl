@@ -1587,6 +1587,7 @@ SQL_STANDALONE_SOURCES = [
     "src/sql/engine/expr/ob_expr_array_sort.cpp",
     "src/sql/engine/expr/ob_expr_in.cpp",
     "src/sql/engine/expr/ob_expr_mul.cpp",
+    "src/sql/engine/expr/pl_composite_client_output.cpp",
 ]
 
 SQL_EXTRA_SOURCES = [
