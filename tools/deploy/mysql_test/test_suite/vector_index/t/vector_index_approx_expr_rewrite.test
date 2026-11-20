@@ -1,0 +1,32 @@
+--echo # Expression-level rewrites for approximate vector queries (issue #1489)
+--disable_warnings
+drop table if exists t_approx_rewrite;
+--enable_warnings
+alter system set vector_memory_limit = 0;
+sleep 3;
+--disable_warnings
+drop table if exists t_approx_rewrite;
+--enable_warnings
+create table t_approx_rewrite(id int primary key, category int, age int, embedding vector(3), key idx_category(category), key idx_age(age), vector index idx_emb(embedding) with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128));
+insert into t_approx_rewrite values(1, 1, 5, '[1,0,0]');
+insert into t_approx_rewrite values(2, 1, 15, '[0.9,0.1,0]');
+insert into t_approx_rewrite values(3, 2, 25, '[0,1,0]');
+insert into t_approx_rewrite values(4, 2, 8, '[0,0.9,0.1]');
+insert into t_approx_rewrite values(5, 1, 35, '[0,0,1]');
+insert into t_approx_rewrite values(6, 3, 100, '[0.1,0,0.9]');
+
+--echo # plain filter
+select id from t_approx_rewrite where category = 1 order by l2_distance(embedding, [1,0,0]) approximate limit 3;
+--echo # redundant OR branches
+select id from t_approx_rewrite where (category = 1) or (age > 1000) or (age > 1000) or (age > 1000) order by l2_distance(embedding, [1,0,0]) approximate limit 3;
+--echo # redundant AND terms
+select id from t_approx_rewrite where (category = 1) and (age < 1000) and (age < 1000) order by l2_distance(embedding, [1,0,0]) approximate limit 3;
+--echo # always-true term
+select id from t_approx_rewrite where (category = 1) and (1 = 1) order by l2_distance(embedding, [1,0,0]) approximate limit 3;
+--echo # no filter
+select id from t_approx_rewrite order by l2_distance(embedding, [1,0,0]) approximate limit 3;
+--echo # exact kNN control with redundant OR branches
+select id from t_approx_rewrite where (category = 1) or (age > 1000) or (age > 1000) or (age > 1000) order by l2_distance(embedding, [1,0,0]) limit 3;
+
+drop table t_approx_rewrite;
+alter system set vector_memory_limit = 0;

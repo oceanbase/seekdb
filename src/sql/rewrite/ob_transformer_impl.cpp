@@ -113,12 +113,12 @@ int ObTransformerImpl::set_transformation_parameters(ObQueryCtx *query_ctx)
     ctx_->cbqt_policy_ = static_cast<TransPolicy>(opt_param_val);
   }
   if (OB_SUCC(ret)) {
-    
+
 
     ctx_->complex_cbqt_table_num_ = config::_complex_cbqt_table_num();
     ctx_->force_subquery_unnest_ = config::_force_subquery_unnest();
     ctx_->nested_loop_join_enabled_ = config::_nested_loop_join_enabled();
-    if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_bool_opt_param(ObOptParamHint::NESTED_LOOP_JOIN_ENABLED, 
+    if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_bool_opt_param(ObOptParamHint::NESTED_LOOP_JOIN_ENABLED,
                                                                             ctx_->nested_loop_join_enabled_))) {
     }
 
@@ -168,7 +168,7 @@ int ObTransformerImpl::get_random_order_array(uint64_t need_types,
           std::swap(index_array.at(rand_pos), index_array.at(idx));
         }
       }
-      
+
       for (int64_t i = 0; i < index_array.count() && OB_SUCC(ret); ++i) {
         int need_types_pos = index_array.at(i);
         uint64_t need_types_local = 1u << need_types_pos;
@@ -180,7 +180,7 @@ int ObTransformerImpl::get_random_order_array(uint64_t need_types,
   return ret;
 }
 
-int ObTransformerImpl::transform_random_order(ObDMLStmt *&stmt, ObQueryCtx *query_ctx, uint64_t need_types, int iter_count) 
+int ObTransformerImpl::transform_random_order(ObDMLStmt *&stmt, ObQueryCtx *query_ctx, uint64_t need_types, int iter_count)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_ctx)) {
@@ -539,6 +539,15 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
     if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
     }
+    if (func.contain_vec_index_approx_ && !func.contain_geometry_values_ && !func.contain_fulltext_search_) {
+      // Approximate vector index (ANN) queries used to skip every rewrite rule, so
+      // semantically redundant filters (duplicated predicates, always-true terms)
+      // were never simplified and had to be evaluated per row by the vector index
+      // pre-filter. Keep the statement shape untouched (no OR-expansion, no view
+      // merge, etc.) but re-enable the expression-level heuristic rules so that
+      // the redundant expressions are folded before the vector scan.
+      disable_list &= ~ObTransformRule::ALL_EXPR_LEVEL_HEURISTICS_RULES;
+    }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
       ObTransformRule::add_trans_type(enum_set_enable_list, SIMPLIFY_DISTINCT);
@@ -635,7 +644,7 @@ int ObTransformerImpl::check_stmt_functions(const ObDMLStmt *stmt, StmtFunc &fun
       func.contain_geometry_values_ |= ob_is_geometry_tc(col.get_expr()->get_data_type());
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && !func.contain_json_table_ && 
+  for (int64_t i = 0; OB_SUCC(ret) && !func.contain_json_table_ &&
                       i < stmt->get_table_items().count(); ++i) {
     const TableItem *table = stmt->get_table_item(i);
     if (OB_ISNULL(table)) {
@@ -660,7 +669,7 @@ int ObTransformerImpl::check_stmt_functions(const ObDMLStmt *stmt, StmtFunc &fun
   }
   if (OB_SUCC(ret) && (stmt->is_update_stmt() || stmt->is_delete_stmt())) {
     ObSqlSchemaGuard &schema_guard = stmt->query_ctx_->sql_schema_guard_;
-    for (int64_t i = 0; OB_SUCC(ret) && !func.contain_dml_with_doc_id_ && 
+    for (int64_t i = 0; OB_SUCC(ret) && !func.contain_dml_with_doc_id_ &&
                         i < stmt->get_table_items().count(); ++i) {
       const ObTableSchema *table_schema;
       if (OB_ISNULL(stmt->get_table_items().at(i))) {
@@ -820,7 +829,7 @@ int ObTransformerImpl::add_param_and_expr_constraints(ObExecContext &exec_ctx,
                             trans_ctx.plan_const_param_constraints_))) {
   } else if (OB_FAIL(append(query_ctx->all_equal_param_constraints_,
                             trans_ctx.equal_param_constraints_))) {
-  } else if (OB_FAIL(append(query_ctx->all_expr_constraints_, 
+  } else if (OB_FAIL(append(query_ctx->all_expr_constraints_,
                             trans_ctx.expr_constraints_))) {
   }
   return ret;
