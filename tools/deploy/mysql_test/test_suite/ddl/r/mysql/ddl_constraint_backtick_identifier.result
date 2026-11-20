@@ -1,0 +1,32 @@
+drop database if exists `db``x`;
+drop database if exists `db``parent`;
+create database `db``x`;
+use `db``x`;
+create table t1 (a int);
+alter table t1 add constraint ck1 check (a > 0);
+insert into t1 values (1);
+select * from t1;
+a
+1
+create table `t``2` (a int);
+alter table `t``2` add constraint ck2 check (a > 0);
+insert into `t``2` values (2);
+select * from `t``2`;
+a
+2
+create database `db``parent`;
+use `db``parent`;
+create table t_parent (`c``1` int, `c``3` int, primary key (`c``1`, `c``3`));
+insert into t_parent values (1, 2);
+use `db``x`;
+create table `t``3` (`c``2` int, `c``4` int, constraint fk1 foreign key (`c``2`, `c``4`) references `db``parent`.t_parent(`c``1`, `c``3`));
+insert into `t``3` values (1, 2);
+select * from `t``3`;
+c`2	c`4
+1	2
+insert into t1 values (-1);
+ERROR HY000: check constraint violated
+insert into `t``3` values (9, 9);
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+drop database `db``x`;
+drop database `db``parent`;
