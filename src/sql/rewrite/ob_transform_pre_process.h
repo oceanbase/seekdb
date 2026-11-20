@@ -83,6 +83,8 @@ public:
                             ObRawExpr *&expr,
                             bool &trans_happened);
 private:
+  int simplify_ann_integer_ranges(ObDMLStmt *stmt, bool &trans_happened);
+
   virtual int need_transform(const common::ObIArray<ObParentDMLStmt> &parent_stmts,
                              const int64_t current_level,
                              const ObDMLStmt &stmt,

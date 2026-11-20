@@ -1,0 +1,103 @@
+# Regression for GitHub issue #1534: equivalent ANN integer range predicates.
+# Keep results deterministic; do not assert timing on shared CI runners.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS ann_range_1534;
+--enable_warnings
+CREATE TABLE ann_range_1534 (id INT PRIMARY KEY, age BIGINT, other_age BIGINT, u BIGINT UNSIGNED, s VARCHAR(32), embedding VECTOR(3), INDEX idx_age(age)) ORGANIZATION=HEAP;
+INSERT INTO ann_range_1534 VALUES (0,NULL,0,0,NULL,'[0,0,0]');
+INSERT INTO ann_range_1534 VALUES (1,-10,1,1,'-10','[1,0,0]');
+INSERT INTO ann_range_1534 VALUES (2,0,2,2,'0','[2,0,0]');
+INSERT INTO ann_range_1534 VALUES (3,5,3,3,'5','[3,0,0]');
+INSERT INTO ann_range_1534 VALUES (4,9,0,4,'9','[4,0,0]');
+INSERT INTO ann_range_1534 VALUES (5,10,1,5,'10','[5,0,0]');
+INSERT INTO ann_range_1534 VALUES (6,11,2,6,'11','[6,0,0]');
+INSERT INTO ann_range_1534 VALUES (7,19,3,7,'19','[7,0,0]');
+INSERT INTO ann_range_1534 VALUES (8,20,0,8,'20','[8,0,0]');
+INSERT INTO ann_range_1534 VALUES (9,21,1,9,'21','[9,0,0]');
+INSERT INTO ann_range_1534 VALUES (10,30,2,10,'30','[10,0,0]');
+INSERT INTO ann_range_1534 VALUES (11,9223372036854775807,3,11,'9223372036854775807','[11,0,0]');
+INSERT INTO ann_range_1534 VALUES (12,-9223372036854775808,0,12,'-9223372036854775808','[12,0,0]');
+CREATE VECTOR INDEX idx_vec ON ann_range_1534(embedding) WITH (distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=64,sync_mode=immediate);
+SET @saved_ef_search = @@ob_hnsw_ef_search;
+SET ob_hnsw_ef_search=64;
+--echo # Exact eligible IDs: original
+SELECT id FROM ann_range_1534 WHERE age < 10 ORDER BY id;
+--echo # Exact eligible IDs: balanced 129-term conjunction
+SELECT id FROM ann_range_1534 WHERE (((((((age < 10) AND (age < 20)) AND ((age < 25) AND (age < 30))) AND (((age < 35) AND (age < 40)) AND ((age < 45) AND (age < 50)))) AND ((((age < 55) AND (age < 60)) AND ((age < 65) AND (age < 70))) AND (((age < 75) AND (age < 80)) AND ((age < 85) AND (age < 90))))) AND (((((age < 95) AND (age < 100)) AND ((age < 105) AND (age < 110))) AND (((age < 115) AND (age < 120)) AND ((age < 125) AND (age < 130)))) AND ((((age < 135) AND (age < 140)) AND ((age < 145) AND (age < 150))) AND (((age < 155) AND (age < 160)) AND ((age < 165) AND (age < 170)))))) AND ((((((age < 175) AND (age < 180)) AND ((age < 185) AND (age < 190))) AND (((age < 195) AND (age < 200)) AND ((age < 205) AND (age < 210)))) AND ((((age < 215) AND (age < 220)) AND ((age < 225) AND (age < 230))) AND (((age < 235) AND (age < 240)) AND ((age < 245) AND (age < 250))))) AND (((((age < 255) AND (age < 260)) AND ((age < 265) AND (age < 270))) AND (((age < 275) AND (age < 280)) AND ((age < 285) AND (age < 290)))) AND ((((age < 295) AND (age < 300)) AND ((age < 305) AND (age < 310))) AND (((age < 315) AND (age < 320)) AND ((age < 325) AND (age < 330))))))) AND (((((((age < 335) AND (age < 340)) AND ((age < 345) AND (age < 350))) AND (((age < 355) AND (age < 360)) AND ((age < 365) AND (age < 370)))) AND ((((age < 375) AND (age < 380)) AND ((age < 385) AND (age < 390))) AND (((age < 395) AND (age < 400)) AND ((age < 405) AND (age < 410))))) AND (((((age < 415) AND (age < 420)) AND ((age < 425) AND (age < 430))) AND (((age < 435) AND (age < 440)) AND ((age < 445) AND (age < 450)))) AND ((((age < 455) AND (age < 460)) AND ((age < 465) AND (age < 470))) AND (((age < 475) AND (age < 480)) AND ((age < 485) AND (age < 490)))))) AND ((((((age < 495) AND (age < 500)) AND ((age < 505) AND (age < 510))) AND (((age < 515) AND (age < 520)) AND ((age < 525) AND (age < 530)))) AND ((((age < 535) AND (age < 540)) AND ((age < 545) AND (age < 550))) AND (((age < 555) AND (age < 560)) AND ((age < 565) AND (age < 570))))) AND (((((age < 575) AND (age < 580)) AND ((age < 585) AND (age < 590))) AND (((age < 595) AND (age < 600)) AND ((age < 605) AND (age < 610)))) AND ((((age < 615) AND (age < 620)) AND ((age < 625) AND (age < 630))) AND (((age < 635) AND (age < 640)) AND ((age < 645) AND ((age < 650) AND (age < 655)))))))) ORDER BY id;
+--echo # ANN: original
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 10 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # ANN: balanced 129-term conjunction
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE (((((((age < 10) AND (age < 20)) AND ((age < 25) AND (age < 30))) AND (((age < 35) AND (age < 40)) AND ((age < 45) AND (age < 50)))) AND ((((age < 55) AND (age < 60)) AND ((age < 65) AND (age < 70))) AND (((age < 75) AND (age < 80)) AND ((age < 85) AND (age < 90))))) AND (((((age < 95) AND (age < 100)) AND ((age < 105) AND (age < 110))) AND (((age < 115) AND (age < 120)) AND ((age < 125) AND (age < 130)))) AND ((((age < 135) AND (age < 140)) AND ((age < 145) AND (age < 150))) AND (((age < 155) AND (age < 160)) AND ((age < 165) AND (age < 170)))))) AND ((((((age < 175) AND (age < 180)) AND ((age < 185) AND (age < 190))) AND (((age < 195) AND (age < 200)) AND ((age < 205) AND (age < 210)))) AND ((((age < 215) AND (age < 220)) AND ((age < 225) AND (age < 230))) AND (((age < 235) AND (age < 240)) AND ((age < 245) AND (age < 250))))) AND (((((age < 255) AND (age < 260)) AND ((age < 265) AND (age < 270))) AND (((age < 275) AND (age < 280)) AND ((age < 285) AND (age < 290)))) AND ((((age < 295) AND (age < 300)) AND ((age < 305) AND (age < 310))) AND (((age < 315) AND (age < 320)) AND ((age < 325) AND (age < 330))))))) AND (((((((age < 335) AND (age < 340)) AND ((age < 345) AND (age < 350))) AND (((age < 355) AND (age < 360)) AND ((age < 365) AND (age < 370)))) AND ((((age < 375) AND (age < 380)) AND ((age < 385) AND (age < 390))) AND (((age < 395) AND (age < 400)) AND ((age < 405) AND (age < 410))))) AND (((((age < 415) AND (age < 420)) AND ((age < 425) AND (age < 430))) AND (((age < 435) AND (age < 440)) AND ((age < 445) AND (age < 450)))) AND ((((age < 455) AND (age < 460)) AND ((age < 465) AND (age < 470))) AND (((age < 475) AND (age < 480)) AND ((age < 485) AND (age < 490)))))) AND ((((((age < 495) AND (age < 500)) AND ((age < 505) AND (age < 510))) AND (((age < 515) AND (age < 520)) AND ((age < 525) AND (age < 530)))) AND ((((age < 535) AND (age < 540)) AND ((age < 545) AND (age < 550))) AND (((age < 555) AND (age < 560)) AND ((age < 565) AND (age < 570))))) AND (((((age < 575) AND (age < 580)) AND ((age < 585) AND (age < 590))) AND (((age < 595) AND (age < 600)) AND ((age < 605) AND (age < 610)))) AND ((((age < 615) AND (age < 620)) AND ((age < 625) AND (age < 630))) AND (((age < 635) AND (age < 640)) AND ((age < 645) AND ((age < 650) AND (age < 655)))))))) ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Original filter plan
+let $ann_range_plan = query_get_value(EXPLAIN SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 10 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20, Query Plan, 8);
+--replace_regex /rowset=[0-9]+/rowset=N/
+--echo $ann_range_plan
+--echo # Expanded filter plan
+let $ann_range_plan = query_get_value(EXPLAIN SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE (((((((age < 10) AND (age < 20)) AND ((age < 25) AND (age < 30))) AND (((age < 35) AND (age < 40)) AND ((age < 45) AND (age < 50)))) AND ((((age < 55) AND (age < 60)) AND ((age < 65) AND (age < 70))) AND (((age < 75) AND (age < 80)) AND ((age < 85) AND (age < 90))))) AND (((((age < 95) AND (age < 100)) AND ((age < 105) AND (age < 110))) AND (((age < 115) AND (age < 120)) AND ((age < 125) AND (age < 130)))) AND ((((age < 135) AND (age < 140)) AND ((age < 145) AND (age < 150))) AND (((age < 155) AND (age < 160)) AND ((age < 165) AND (age < 170)))))) AND ((((((age < 175) AND (age < 180)) AND ((age < 185) AND (age < 190))) AND (((age < 195) AND (age < 200)) AND ((age < 205) AND (age < 210)))) AND ((((age < 215) AND (age < 220)) AND ((age < 225) AND (age < 230))) AND (((age < 235) AND (age < 240)) AND ((age < 245) AND (age < 250))))) AND (((((age < 255) AND (age < 260)) AND ((age < 265) AND (age < 270))) AND (((age < 275) AND (age < 280)) AND ((age < 285) AND (age < 290)))) AND ((((age < 295) AND (age < 300)) AND ((age < 305) AND (age < 310))) AND (((age < 315) AND (age < 320)) AND ((age < 325) AND (age < 330))))))) AND (((((((age < 335) AND (age < 340)) AND ((age < 345) AND (age < 350))) AND (((age < 355) AND (age < 360)) AND ((age < 365) AND (age < 370)))) AND ((((age < 375) AND (age < 380)) AND ((age < 385) AND (age < 390))) AND (((age < 395) AND (age < 400)) AND ((age < 405) AND (age < 410))))) AND (((((age < 415) AND (age < 420)) AND ((age < 425) AND (age < 430))) AND (((age < 435) AND (age < 440)) AND ((age < 445) AND (age < 450)))) AND ((((age < 455) AND (age < 460)) AND ((age < 465) AND (age < 470))) AND (((age < 475) AND (age < 480)) AND ((age < 485) AND (age < 490)))))) AND ((((((age < 495) AND (age < 500)) AND ((age < 505) AND (age < 510))) AND (((age < 515) AND (age < 520)) AND ((age < 525) AND (age < 530)))) AND ((((age < 535) AND (age < 540)) AND ((age < 545) AND (age < 550))) AND (((age < 555) AND (age < 560)) AND ((age < 565) AND (age < 570))))) AND (((((age < 575) AND (age < 580)) AND ((age < 585) AND (age < 590))) AND (((age < 595) AND (age < 600)) AND ((age < 605) AND (age < 610)))) AND ((((age < 615) AND (age < 620)) AND ((age < 625) AND (age < 630))) AND (((age < 635) AND (age < 640)) AND ((age < 645) AND ((age < 650) AND (age < 655)))))))) ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20, Query Plan, 8);
+--replace_regex /rowset=[0-9]+/rowset=N/
+--echo $ann_range_plan
+--echo # Strict bound replaces inclusive bound
+let $ann_range_plan = query_get_value(EXPLAIN SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age <= 10 AND age < 10 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20, Query Plan, 8);
+--replace_regex /rowset=[0-9]+/rowset=N/
+--echo $ann_range_plan
+--echo # Later tighter bound replaces earlier bound
+let $ann_range_plan = query_get_value(EXPLAIN SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 20 AND age < 10 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20, Query Plan, 8);
+--replace_regex /rowset=[0-9]+/rowset=N/
+--echo $ann_range_plan
+--echo # Inclusive upper bound
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age <= 10 AND age <= 20 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Strict lower bound
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age >= 10 AND age > 10 AND age > 5 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Inclusive lower bound
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age >= 10 AND age >= 5 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Keep both range directions
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age >= 10 AND age < 20 AND age < 30 AND age >= 5 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Contradictory bounds
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age > 20 AND age < 10 AND age < 30 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # NULL comparison remains UNKNOWN
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 10 AND age < NULL ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # NULL column remains excluded
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 10 AND age < 20 AND age IS NULL ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Other column is not subsumed
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 10 AND other_age < 2 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # OR boundary is preserved
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE (age < 10 OR other_age < 2) AND age < 20 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Unsigned column is preserved
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE u < 10 AND u < 20 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # String comparison is preserved
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE s < '10' AND s < '20' ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Lexical and numeric bound ordering differ
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE s < '9' AND s < '20' ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Implicit string conversion is preserved
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < '10' AND age < '20' ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Decimal bound is preserved
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 9.5 AND age < 20 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Explicit cast is preserved
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE CAST(age AS SIGNED) < 10 AND CAST(age AS SIGNED) < 20 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Reversed comparison is preserved
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE 10 > age AND 20 > age ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Signed maximum has no overflow
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 9223372036854775807 AND age <= 9223372036854775807 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Signed minimum has no overflow
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age > -9223372036854775808 AND age >= -9223372036854775808 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # NO_REWRITE keeps results
+SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 10 AND age < 20 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Literal plan cache: original order
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 10 AND age < 20 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Literal plan cache: second bound becomes tighter
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < 20 AND age < 5 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20;
+--echo # Prepared statement: changed values, NULL, then changed type
+PREPARE ann_range_ps FROM "SELECT /*+ INDEX(t idx_age) */ id FROM ann_range_1534 t WHERE age < ? AND age < ? ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 20";
+SET @ann_range_a=10, @ann_range_b=20;
+EXECUTE ann_range_ps USING @ann_range_a,@ann_range_b;
+SET @ann_range_a=20, @ann_range_b=5;
+EXECUTE ann_range_ps USING @ann_range_a,@ann_range_b;
+SET @ann_range_a=10, @ann_range_b=NULL;
+EXECUTE ann_range_ps USING @ann_range_a,@ann_range_b;
+SET @ann_range_a='10', @ann_range_b=20;
+EXECUTE ann_range_ps USING @ann_range_a,@ann_range_b;
+DEALLOCATE PREPARE ann_range_ps;
+SET ob_hnsw_ef_search=@saved_ef_search;
+DROP TABLE ann_range_1534;
+--enable_query_log
