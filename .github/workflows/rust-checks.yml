@@ -43,6 +43,9 @@ jobs:
   clippy-and-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The image includes the Rust version pinned in rust-toolchain.toml.
+      WINDOWS_CI_IMAGE: ghcr.io/oceanbase/seekdb-rust-windows-gnu@sha256:6fcb7032ed8625a2e9fa1da91ea40a08c6fc1b469a98b8e702bd1b0d05b453c2
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,13 +82,19 @@ jobs:
         working-directory: rust
         run: cargo test --locked --workspace --exclude crypto --exclude http-client
 
+      - name: Pull Windows GNU toolchain image
+        run: docker pull "$WINDOWS_CI_IMAGE"
+
       # Compile Windows code on Linux; this does not run Windows tests.
       - name: check windows target
-        working-directory: rust
         run: |
-          rustup target add x86_64-pc-windows-gnu
-          sudo apt-get update -qq && sudo apt-get install -y -qq gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
-          cargo check --locked --workspace --target x86_64-pc-windows-gnu
+          docker run --rm --user "$(id -u):$(id -g)" \
+            --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" \
+            --volume "$CARGO_HOME:/ci-cargo" \
+            --workdir "$GITHUB_WORKSPACE/rust" \
+            --env CARGO_HOME=/ci-cargo --env CARGO_TARGET_DIR=/tmp/target \
+            --env RUSTUP_AUTO_INSTALL=0 --env MVT_PROTO_RS --env STANDBY_PROTO_RS --env CONFIG_RS \
+            "$WINDOWS_CI_IMAGE" cargo check --locked --workspace --target x86_64-pc-windows-gnu
 
       - name: cargo audit
         run: |
