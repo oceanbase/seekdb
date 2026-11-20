@@ -1,0 +1,13 @@
+CREATE TABLE tablet_memory_budget (p BIGINT)
+PARTITION BY HASH (p) PARTITIONS 8192;
+SELECT COUNT(*) AS partition_count
+FROM information_schema.PARTITIONS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tablet_memory_budget';
+partition_count
+8192
+INSERT INTO tablet_memory_budget VALUES (1), (2);
+SELECT p FROM tablet_memory_budget WHERE p IN (1, 2) ORDER BY p;
+p
+1
+2
+DROP TABLE tablet_memory_budget;
