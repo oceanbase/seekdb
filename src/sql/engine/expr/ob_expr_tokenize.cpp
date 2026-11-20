@@ -353,7 +353,7 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
     bool is_null = false;
     if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, mm_alloc, 2, base, is_null))) {
     } else {
-      if (ObJsonNodeType::J_ARRAY != base->json_type()) {
+      if (is_null || OB_ISNULL(base) || ObJsonNodeType::J_ARRAY != base->json_type()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser args should be in an array.");
       } else {
