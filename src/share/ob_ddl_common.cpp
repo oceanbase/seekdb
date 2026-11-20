@@ -541,6 +541,45 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+int ObDDLUtil::escape_ddl_identifier(
+    common::ObIAllocator &allocator,
+    const common::ObString &identifier,
+    common::ObString &escaped_identifier)
+{
+  int ret = OB_SUCCESS;
+  const char escape_character = '`';
+  const int64_t identifier_len = identifier.length();
+  int64_t escaped_len = identifier_len;
+  escaped_identifier.reset();
+  if (OB_ISNULL(identifier.ptr()) || identifier_len <= 0) {
+    escaped_identifier.reset();
+  } else if (NULL == identifier.find(escape_character)) {
+    escaped_identifier = identifier;
+  } else {
+    for (int64_t i = 0; i < identifier_len; ++i) {
+      if (escape_character == identifier[i]) {
+        ++escaped_len;
+      }
+    }
+    char *buf = static_cast<char *>(allocator.alloc(escaped_len + 1));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for escaped identifier", K(ret), K(escaped_len));
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; i < identifier_len; ++i) {
+        if (escape_character == identifier[i]) {
+          buf[pos++] = escape_character;
+        }
+        buf[pos++] = identifier[i];
+      }
+      buf[pos] = '\0';
+      escaped_identifier.assign_ptr(buf, static_cast<int32_t>(pos));
+    }
+  }
+  return ret;
+}
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -550,8 +589,14 @@ int ObDDLUtil::generate_column_name_str(
 {
   int ret = OB_SUCCESS;
   const char *split_char = "`";
+  ObArenaAllocator allocator("ObDDLTmp");
+  ObString escaped_column_name = column_name_info.column_name_;
+  if ((with_origin_name || with_alias_name)
+      && OB_FAIL(escape_ddl_identifier(
+          allocator, column_name_info.column_name_, escaped_column_name))) {
+  }
   // append comma
-  if (with_comma) {
+  if (OB_SUCC(ret) && with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
     }
   }
@@ -559,9 +604,9 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   // append AS
@@ -572,7 +617,7 @@ int ObDDLUtil::generate_column_name_str(
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+        escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   return ret;

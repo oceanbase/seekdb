@@ -613,6 +613,12 @@ public:
       const uint64_t task_id,
       ObDDLTaskDataInfo &data_info);
 
+  // Duplicates embedded backticks so DDL can quote an identifier safely.
+  // Kept in share to avoid a share -> sql dependency for identifier escaping.
+  static int escape_ddl_identifier(
+      common::ObIAllocator &allocator,
+      const common::ObString &identifier,
+      common::ObString &escaped_identifier);
   static int generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
     const bool with_origin_name,
