@@ -1,0 +1,343 @@
+#
+# Regression test: predicate simplification for HNSW ANN queries
+#
+DROP TABLE IF EXISTS t_ann_predicate_simplify;
+Warnings:
+Note	1051	Unknown table 'test.t_ann_predicate_simplify'
+CREATE TABLE t_ann_predicate_simplify (
+id INT,
+category INT,
+age INT,
+embedding VECTOR(3),
+PRIMARY KEY (id),
+VECTOR INDEX idx_hnsw(embedding)
+WITH (distance=l2, type=hnsw, lib=vsag)
+);
+INSERT INTO t_ann_predicate_simplify VALUES
+(1,  1,  20, '[0.10,0.20,0.30]'),
+(2,  2,  30, '[0.20,0.30,0.40]'),
+(3,  1,  40, '[0.30,0.40,0.50]'),
+(4,  2,  50, '[0.40,0.50,0.60]'),
+(5,  1,  60, '[0.50,0.60,0.70]'),
+(6,  2,  70, '[0.60,0.70,0.80]'),
+(7,  1,  80, '[0.70,0.80,0.90]'),
+(8,  2,  90, '[0.80,0.90,1.00]'),
+(9,  1, 100, '[0.90,1.00,1.10]'),
+(10, 2, 110, '[1.00,1.10,1.20]'),
+(11, 1, 120, '[1.10,1.20,1.30]'),
+(12, 2, 130, '[1.20,1.30,1.40]');
+# Baseline ANN query
+EXPLAIN SELECT id
+FROM t_ann_predicate_simplify
+WHERE category = 1
+ORDER BY l2_distance(embedding, [0.1,0.2,0.3]) APPROXIMATE
+LIMIT 5;
+Query Plan
+===========================================================================================
+|ID|OPERATOR                               |NAME                    |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_ann_predicate_simplify|1       |3           |
+===========================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ann_predicate_simplify.id]), filter([t_ann_predicate_simplify.category = 1]), rowset=16
+      access([t_ann_predicate_simplify.id], [t_ann_predicate_simplify.category]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t_ann_predicate_simplify.id]), range(MIN ; MAX)always true
+SELECT id
+FROM t_ann_predicate_simplify
+WHERE category = 1
+ORDER BY l2_distance(embedding, [0.1,0.2,0.3]) APPROXIMATE
+LIMIT 5;
+id
+1
+3
+5
+7
+9
+# ANN query with 128 repeated predicates
+EXPLAIN SELECT id
+FROM t_ann_predicate_simplify
+WHERE category = 1
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+ORDER BY l2_distance(embedding, [0.1,0.2,0.3]) APPROXIMATE
+LIMIT 5;
+Query Plan
+===========================================================================================
+|ID|OPERATOR                               |NAME                    |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_ann_predicate_simplify|2       |3           |
+===========================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ann_predicate_simplify.id]), filter([t_ann_predicate_simplify.category = 1 OR t_ann_predicate_simplify.age > 1000]), rowset=16
+      access([t_ann_predicate_simplify.id], [t_ann_predicate_simplify.category], [t_ann_predicate_simplify.age]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t_ann_predicate_simplify.id]), range(MIN ; MAX)always true
+SELECT id
+FROM t_ann_predicate_simplify
+WHERE category = 1
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+OR age > 1000
+ORDER BY l2_distance(embedding, [0.1,0.2,0.3]) APPROXIMATE
+LIMIT 5;
+id
+1
+3
+5
+7
+9
+DROP TABLE t_ann_predicate_simplify;
