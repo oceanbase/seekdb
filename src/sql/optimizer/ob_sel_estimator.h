@@ -80,6 +80,7 @@ enum class ObSelEstType
   SIMPLE_JOIN,
   INEQUAL_JOIN,
   UNIFORM_RANGE,
+  NOT_EQUAL,
 };
 
 class ObSelEstimatorFactory;
@@ -452,12 +453,38 @@ public:
     return T_OP_IN == expr.get_expr_type() || T_OP_NOT_IN == expr.get_expr_type();
   }
 private:
+  friend class NotEqualSelEstimator;
   static int get_in_sel(const OptTableMetas &table_metas,
                         const OptSelectivityCtx &ctx,
                         const ObRawExpr &qual,
                         double &selectivity);
 private:
   DISABLE_COPY_ASSIGN(ObInSelEstimator);
+};
+
+// Exclusions on one column are not fully correlated: c != 1 AND c != 2
+// excludes both values. Estimate their union through the NOT IN estimator.
+class NotEqualSelEstimator : public ObSelEstimator
+{
+public:
+  NotEqualSelEstimator() : ObSelEstimator(ObSelEstType::NOT_EQUAL), column_expr_(NULL) {}
+  virtual ~NotEqualSelEstimator() = default;
+  static int create_estimator(ObSelEstimatorFactory &factory,
+                              const OptSelectivityCtx &ctx,
+                              const ObRawExpr &expr,
+                              ObSelEstimator *&estimator);
+  virtual int merge(const ObSelEstimator &other, bool &is_success) override;
+  virtual bool is_independent() const override { return false; }
+  virtual bool is_complex_filter_qual() override { return false; }
+  virtual bool is_complex_join_qual() override { return false; }
+  virtual int get_sel(const OptTableMetas &table_metas,
+                      const OptSelectivityCtx &ctx,
+                      double &selectivity,
+                      ObIArray<ObExprSelPair> &all_predicate_sel) override;
+private:
+  const ObRawExpr *column_expr_;
+  ObSEArray<ObRawExpr *, 4> excluded_values_;
+  DISABLE_COPY_ASSIGN(NotEqualSelEstimator);
 };
 
 // get var is[not] NULL\true\false selectivity

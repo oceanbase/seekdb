@@ -1,0 +1,125 @@
+# Regression for #1511: exclusions on the same column must be estimated together.
+# APPROXIMATE deliberately bypasses normal predicate rewriting.
+--disable_query_log
+SET @saved_plan_cache = @@ob_enable_plan_cache;
+SET ob_enable_plan_cache = 0;
+--disable_warnings
+DROP TABLE IF EXISTS vector_exclusion_sel;
+--enable_warnings
+CREATE TABLE vector_exclusion_sel(id INT PRIMARY KEY, c INT, d INT, v VECTOR(3)) ORGANIZATION HEAP;
+INSERT INTO vector_exclusion_sel VALUES
+  (1,1,5,'[1,0,0]'),(2,2,4,'[2,0,0]'),(3,3,3,'[3,0,0]'),
+  (4,4,2,'[4,0,0]'),(5,5,1,'[5,0,0]'),(6,NULL,NULL,'[6,0,0]');
+CREATE VECTOR INDEX exclusion_idx ON vector_exclusion_sel(v)
+  WITH(distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=128,sync_mode=immediate);
+CALL dbms_stats.gather_table_stats('test','vector_exclusion_sel',method_opt=>'for all columns size 254');
+
+# A one-operator JSON plan puts EST.ROWS on row 5. Keep that field in the
+# result, without platform-dependent costs or the full predicate formatting.
+
+--echo # NOT IN control
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c NOT IN (1,2,3,4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c NOT IN (1,2,3,4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # NOT around IN
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE NOT(c IN (1,2,3,4)) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE NOT(c IN (1,2,3,4)) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # Conjoined inequalities
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 3 AND c != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 3 AND c != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # Negated equalities
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE NOT(c = 1) AND NOT(c = 2) AND NOT(c = 3) AND NOT(c = 4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE NOT(c = 1) AND NOT(c = 2) AND NOT(c = 3) AND NOT(c = 4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # Mixed exclusion forms
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c NOT IN (1,2) AND NOT(c = 3) AND c != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c NOT IN (1,2) AND NOT(c = 3) AND c != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # Repeated exclusions
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 1 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 1 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # Different values with the same query shape
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 3 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 3 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # Reversed equality operands
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE NOT(1 = c) AND 2 != c AND c != 3 AND c != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE NOT(1 = c) AND 2 != c AND c != 3 AND c != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # NULL in NOT IN
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c NOT IN (1,NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c NOT IN (1,NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # NULL in a separate exclusion
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c != 1 AND NOT(c = NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c != 1 AND NOT(c = NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+# Each column excludes two values independently of the other estimator.
+# Existing partial correlation gives ceil(6 * 0.5 * sqrt(0.5)) = 3 rows.
+--echo # Different columns
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND d != 3 AND d != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND d != 3 AND d != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # OR is not an exclusion conjunction
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c != 1 OR c != 2 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c != 1 OR c != 2 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # NULL-safe equality is not ordinary equality
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE NOT(c <=> 1) AND NOT(c <=> 2) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE NOT(c <=> 1) AND NOT(c <=> 2) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+# Ordinary SQL also uses the same estimator; no ANN rewrite rule is involved.
+--echo # Exact SQL exclusion estimate
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 3 AND c != 4;
+let $estimated_rows = query_get_value("$sql", Query Plan, 5);
+--echo $estimated_rows
+SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 3 AND c != 4;
+
+# Controlled cardinality crosses the adaptive scan threshold without a large
+# data load. Equal filters must choose the same initial scan strategy.
+CALL dbms_stats.set_table_stats('test','vector_exclusion_sel',numrows=>50000);
+--echo # NOT IN strategy
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c NOT IN (1,2,3,4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $scan_operator = query_get_value("$sql", Query Plan, 3);
+--echo $scan_operator
+--echo # Inequality strategy
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE c != 1 AND c != 2 AND c != 3 AND c != 4 ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $scan_operator = query_get_value("$sql", Query Plan, 3);
+--echo $scan_operator
+--echo # Negated equality strategy
+let $sql = EXPLAIN FORMAT=JSON SELECT id FROM vector_exclusion_sel WHERE NOT(c = 1) AND NOT(c = 2) AND NOT(c = 3) AND NOT(c = 4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+let $scan_operator = query_get_value("$sql", Query Plan, 3);
+--echo $scan_operator
+
+DROP TABLE vector_exclusion_sel;
+SET ob_enable_plan_cache = @saved_plan_cache;
+--enable_query_log

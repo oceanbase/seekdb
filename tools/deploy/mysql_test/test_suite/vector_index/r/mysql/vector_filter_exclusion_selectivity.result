@@ -1,0 +1,71 @@
+# NOT IN control
+  "EST.ROWS":1,
+id
+5
+# NOT around IN
+  "EST.ROWS":1,
+id
+5
+# Conjoined inequalities
+  "EST.ROWS":1,
+id
+5
+# Negated equalities
+  "EST.ROWS":1,
+id
+5
+# Mixed exclusion forms
+  "EST.ROWS":1,
+id
+5
+# Repeated exclusions
+  "EST.ROWS":3,
+id
+3
+4
+5
+# Different values with the same query shape
+  "EST.ROWS":2,
+id
+4
+5
+# Reversed equality operands
+  "EST.ROWS":1,
+id
+5
+# NULL in NOT IN
+  "EST.ROWS":0,
+id
+# NULL in a separate exclusion
+  "EST.ROWS":0,
+id
+# Different columns
+  "EST.ROWS":3,
+id
+4
+5
+# OR is not an exclusion conjunction
+  "EST.ROWS":6,
+id
+1
+2
+3
+4
+5
+# NULL-safe equality is not ordinary equality
+  "EST.ROWS":5,
+id
+3
+4
+5
+6
+# Exact SQL exclusion estimate
+  "EST.ROWS":1,
+id
+5
+# NOT IN strategy
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)",
+# Inequality strategy
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)",
+# Negated equality strategy
+  "OPERATOR":"VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)",
