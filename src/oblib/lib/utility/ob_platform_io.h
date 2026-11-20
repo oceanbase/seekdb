@@ -197,11 +197,6 @@ int ob_closedir_utf8(ObPlatformDir *dir);
 // Absolute UTF-8 path of the running executable (without a verbatim prefix).
 int ob_get_executable_path_utf8(char *buffer, int64_t buffer_size);
 
-// Creates/refreshes `alias_path` as an alias of the running executable:
-// a symbolic link on POSIX/macOS, and on Windows a hard link (copy fallback)
-// named `<alias_path>.exe`. The previous alias is removed first.
-int ob_create_executable_alias_utf8(const char *alias_path);
-
 #ifdef _WIN32
 // Maps a Win32 error code (GetLastError()) to the errno value this layer would
 // report for it. Exposed for callers that also own a Win32 error path and for

@@ -413,17 +413,6 @@ const char  LOG_DIR[]  = "log";
 const char  PID_DIR[]  = "run";
 const char  CONF_DIR[] = "etc";
 
-static int create_observer_softlink()
-{
-  int ret = OB_SUCCESS;
-  char softlink_path[4096] = {0};
-  snprintf(softlink_path, sizeof(softlink_path), "%s/seekdb", PID_DIR);
-  if (0 != common::ob_create_executable_alias_utf8(softlink_path)) {
-    ret = OB_IO_ERROR;
-    MPRINT("create seekdb softlink failed, errno=%d (%s)", errno, strerror(errno));
-  }
-  return ret;
-}
 static void print_args(int argc, char *argv[])
 {
   for (int i = 0; i < argc - 1; ++i) {
@@ -669,7 +658,6 @@ int inner_main(int argc, char *argv[])
     MPRINT("create log dir fail: ./log/");
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(CONF_DIR))) {
     MPRINT("create log dir fail: ./etc/");
-  } else if (FALSE_IT(create_observer_softlink())) {
   }
   if (OB_FAIL(ret)) {
   } else if (!opts->nodaemon_ && !opts->initialize_) {
