@@ -65,7 +65,8 @@ public:
   ObTransformerImpl(ObTransformerCtx *ctx)
     : ctx_(ctx),
       needed_transform_types_(ObTransformRule::ALL_TRANSFORM_RULES),
-      max_iteration_count_(ObTransformerImpl::DEFAULT_ITERATION_COUNT)
+      max_iteration_count_(ObTransformerImpl::DEFAULT_ITERATION_COUNT),
+      ann_predicates_only_(false)
   {
     memset(trans_count_, 0, sizeof(trans_count_));
   }
@@ -208,6 +209,7 @@ private:
   ObTransformerCtx *ctx_;
   uint64_t needed_transform_types_;
   int64_t max_iteration_count_;
+  bool ann_predicates_only_;
   int64_t trans_count_[MAX_RULE_COUNT];
 };
 

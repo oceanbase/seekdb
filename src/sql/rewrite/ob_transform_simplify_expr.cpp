@@ -63,6 +63,20 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   }
+  if (predicates_only_) {
+    if (OB_SUCC(ret) && OB_FAIL(flatten_stmt_exprs(stmt, is_happened))) {
+    } else if (OB_SUCC(ret)) {
+      trans_happened |= is_happened;
+    }
+    if (OB_SUCC(ret) && OB_FAIL(canonicalize_conditions(stmt, is_happened))) {
+    } else if (OB_SUCC(ret)) {
+      trans_happened |= is_happened;
+    }
+    if (OB_SUCC(ret) && trans_happened) {
+      ret = add_transform_hint(*stmt);
+    }
+    return ret;
+  }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(flatten_stmt_exprs(stmt, is_happened))) {
     } else {
