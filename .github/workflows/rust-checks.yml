@@ -66,8 +66,38 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: cargo-${{ runner.os }}-
 
+      - name: Restore native build dependencies
+        id: native-deps-cache
+        continue-on-error: true
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          # Cache the extracted dependencies and their readiness markers.
+          path: |
+            deps/3rd/*
+            !deps/3rd/pkg
+            deps/prebuilt/native
+          key: rust-checks-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('deps/init/*.deps', 'deps/init/prepare.py', 'deps.lock.json') }}
+
       - name: Initialize build dependencies
-        run: ./build.py init
+        env:
+          NATIVE_DEPS_CACHE_HIT: ${{ steps.native-deps-cache.outputs.cache-hit }}
+        run: |
+          if [[ "$NATIVE_DEPS_CACHE_HIT" != true ]]; then
+            # A failed restore may have left partially extracted files.
+            rm -rf deps/3rd deps/prebuilt/native
+          fi
+          ./build.py init
+
+      - name: Save native build dependencies
+        if: steps.native-deps-cache.outputs.cache-hit != 'true' && steps.native-deps-cache.outputs.cache-primary-key != ''
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            deps/3rd/*
+            !deps/3rd/pkg
+            deps/prebuilt/native
+          key: ${{ steps.native-deps-cache.outputs.cache-primary-key }}
 
       - name: clippy (deny warnings)
         run: ./build.py build --lockfile_mode=error --config=clippy //rust/... //bazel/prost-codegen:prost_codegen
