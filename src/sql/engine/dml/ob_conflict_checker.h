@@ -82,15 +82,19 @@ struct ObConflictValue
   ObConflictValue()
     : baseline_datum_row_(NULL),
       current_datum_row_(NULL),
-      new_row_source_(ObNewRowSource::FROM_SCAN)
+      new_row_source_(ObNewRowSource::FROM_SCAN),
+      is_from_insert_(false)
   {}
   // When performing check_duplicate_rowkey, it will remove duplicate rows (add_var_to_array_no_dup)
   // Need to use this operator
   bool operator==(const ObConflictValue &other) const;
-  TO_STRING_KV(KPC_(baseline_datum_row), KPC_(current_datum_row), K_(new_row_source));
+  TO_STRING_KV(KPC_(baseline_datum_row), KPC_(current_datum_row), K_(new_row_source), K_(is_from_insert));
   const ObChunkDatumStore::StoredRow *baseline_datum_row_;
   const ObChunkDatumStore::StoredRow *current_datum_row_;
   ObNewRowSource new_row_source_;
+  // Whether the current row originated from an INSERT in this statement rather
+  // than a scanned storage row (needed for semantic index embedding).
+  bool is_from_insert_;
 };
 
 typedef common::hash::ObHashMap<ObRowkey,
@@ -221,18 +225,18 @@ public:
   // Check if the current primary key conflicts
   int check_duplicate_rowkey(const ObChunkDatumStore::StoredRow *replace_row,
                              ObIArray<ObConflictValue> &constraint_values,
-                             bool is_insert_up,
-                             ObNewRowSource &conflict_row_source);
+                             bool is_insert_up);
   // Remove conflicting rows from hash map
   int delete_old_row(const ObChunkDatumStore::StoredRow *replace_row,
                      ObNewRowSource from);
   // Insert new line into hash map
   int insert_new_row(const ObChunkDatumStore::StoredRow *new_row,
-                     ObNewRowSource from);
+                     ObNewRowSource from,
+                     bool is_from_insert = false);
 
   int update_row(const ObChunkDatumStore::StoredRow *new_row,
                  const ObChunkDatumStore::StoredRow *old_row,
-                 ObNewRowSource from);
+                 bool is_from_insert = false);
 
   int lock_row(const ObChunkDatumStore::StoredRow *lock_row);
 

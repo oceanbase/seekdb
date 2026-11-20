@@ -475,7 +475,8 @@ public:
                    ObDASWriteBuffer &write_buffer,
                    common::ObIAllocator &alloc,
                    common::ObISrsProvider *srs_provider,
-                   const common::ObLobReadOptions *lob_read_options)
+                   const common::ObLobReadOptions *lob_read_options,
+                   bool force_text_embedding = false)
     : write_buffer_(write_buffer),
       das_ctdef_(das_ctdef),
       row_projector_(nullptr),
@@ -486,7 +487,9 @@ public:
       domain_iter_(nullptr),
       ft_doc_word_info_(nullptr),
       srs_provider_(srs_provider),
-      lob_read_options_(lob_read_options)
+      lob_read_options_(lob_read_options),
+      batch_size_(0),
+      force_text_embedding_(force_text_embedding)
   {
     set_ctdef(das_ctdef);
     batch_size_ = MIN(write_buffer_.get_row_cnt(), DEFAULT_BATCH_SIZE);
@@ -521,6 +524,7 @@ private:
   common::ObISrsProvider *srs_provider_;
   const common::ObLobReadOptions *lob_read_options_;
   int64_t batch_size_;
+  bool force_text_embedding_;
 };
 
 }  // namespace sql
