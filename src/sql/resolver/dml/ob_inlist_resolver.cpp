@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -263,6 +264,60 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+int ObInListResolver::check_inlist_rewrite_threshold(const ParseNode &in_list,
+                                                    const ParamStore *param_store,
+                                                    const bool is_prepare_stmt,
+                                                    const int64_t threshold,
+                                                    bool &is_enable)
+{
+  int ret = OB_SUCCESS;
+  is_enable = in_list.num_child_ >= threshold;
+  // This only chooses a plan shape. Keep every original expression/parameter:
+  // a cached plan must still evaluate later executions with different values.
+  // Unknown prepare-time values and non-integer comparisons retain the existing
+  // decision, avoiding assumptions about coercion, collation or row semantics.
+  if (is_enable && threshold > 1 && OB_NOT_NULL(in_list.children_)) {
+    hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> distinct;
+    bool supported = true;
+    if (OB_FAIL(distinct.create(threshold, ObModIds::OB_SQL_COMPILE, ObModIds::OB_SQL_COMPILE))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && supported && distinct.size() < threshold
+           && i < in_list.num_child_; ++i) {
+        const ParseNode *node = in_list.children_[i];
+        int64_t value = 0;
+        if (OB_ISNULL(node)) {
+          supported = false;
+        } else if (T_INT == node->type_) {
+          value = node->value_;
+        } else if (T_QUESTIONMARK == node->type_ && !is_prepare_stmt
+                   && OB_NOT_NULL(param_store) && node->value_ >= 0
+                   && node->value_ < param_store->count()
+                   && param_store->at(node->value_).is_int()) {
+          value = param_store->at(node->value_).get_int();
+        } else {
+          supported = false;
+        }
+        if (supported) {
+          const int insert_ret = distinct.set_refactored(value, 0);
+          if (OB_HASH_EXIST != insert_ret && OB_SUCCESS != insert_ret) {
+            ret = insert_ret;
+          }
+        }
+      }
+      if (OB_SUCC(ret) && supported) {
+        is_enable = distinct.size() >= threshold;
+      }
+    }
+    if (distinct.created()) {
+      const int destroy_ret = distinct.destroy();
+      if (OB_SUCC(ret)) {
+        ret = destroy_ret;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -306,9 +361,8 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       }
     }
     if (OB_SUCC(ret)) {
-      if (in_list.num_child_ < threshold) {
-      } else {
-        is_enable = true;
+      if (OB_FAIL(check_inlist_rewrite_threshold(in_list, param_store, is_prepare_stmt,
+                                                threshold, is_enable))) {
       }
     }
   }
