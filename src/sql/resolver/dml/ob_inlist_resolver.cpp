@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -350,6 +351,35 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+    }
+  }
+  // A long list with few distinct values is still a small membership filter.
+  // Keep every original parameter: this changes only the choice of plan, so a
+  // cached plan remains correct when later executions bind different values.
+  if (OB_SUCC(ret) && is_enable && !is_prepare_stmt && threshold > 1
+      && T_OP_ROW != left_expr.get_expr_type() && OB_NOT_NULL(param_store)) {
+    hash::ObHashSet<ObObj> distinct_values;
+    bool all_values_available = true;
+    const int64_t bucket_count = MIN(static_cast<int64_t>(in_list.num_child_), threshold);
+    if (OB_FAIL(distinct_values.create(hash::cal_next_prime(bucket_count),
+                                      "InListDistinct", "InListDistinct"))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && all_values_available
+          && i < in_list.num_child_ && distinct_values.size() < threshold; ++i) {
+        const ParseNode *value = in_list.children_[i];
+        if (OB_ISNULL(value) || value->type_ != T_QUESTIONMARK
+            || value->value_ < 0 || value->value_ >= param_store->count()) {
+          all_values_available = false;
+        } else {
+          const int insert_ret = distinct_values.set_refactored(param_store->at(value->value_));
+          if (insert_ret != OB_SUCCESS && insert_ret != OB_HASH_EXIST) {
+            ret = insert_ret;
+          }
+        }
+      }
+      if (OB_SUCC(ret) && all_values_available && distinct_values.size() < threshold) {
+        is_enable = false;
+      }
     }
   }
   return ret;
