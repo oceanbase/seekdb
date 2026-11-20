@@ -536,8 +536,16 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // ANN scans depend on the statement shape, so keep structural rewrite
+      // families disabled.  Expression simplification is shape preserving and
+      // is required to remove identity predicates such as `p OR FALSE` before
+      // the filter is copied into the vector scan path.
+      uint64_t ann_enable_list = 0;
+      ObTransformRule::add_trans_type(ann_enable_list, SIMPLIFY_EXPR);
+      disable_list |= (~ann_enable_list);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
