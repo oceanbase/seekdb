@@ -227,6 +227,7 @@ private:
   ObApplyFsCb fs_cb_;
   mutable RWLock lock_;
   mutable lib::ObMutex mutex_; // Mutex for acquiring the maximum consecutive checkpoint will not be called concurrently
+  mutable lib::ObMutex append_progress_mutex_;
   mutable int64_t get_info_debug_time_;
   mutable int64_t try_wrlock_debug_time_;
   ObMiniStat::ObStatItem cb_append_stat_; //Get the time cost of obtaining lsn and ts
