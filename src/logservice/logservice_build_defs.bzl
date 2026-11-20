@@ -36,8 +36,6 @@ LOGSERVICE_UNITY_GROUPS = [
         name = "ob_logservice_palf_0",
         language = "c++",
         srcs = [
-            "src/logservice/palf/log_block_header.cpp",
-            "src/logservice/palf/log_checksum.cpp",
             "src/logservice/palf/log_entry.cpp",
             "src/logservice/palf/log_entry_header.cpp",
             "src/logservice/palf/log_group_entry.cpp",
@@ -50,7 +48,6 @@ LOGSERVICE_UNITY_GROUPS = [
         name = "ob_logservice_palf_1",
         language = "c++",
         srcs = [
-            "src/logservice/palf/log_writer_utils.cpp",
             "src/logservice/palf/palf_callback_wrapper.cpp",
             "src/logservice/palf/palf_env.cpp",
             "src/logservice/palf/palf_env_impl.cpp",

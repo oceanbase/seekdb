@@ -24,7 +24,6 @@ namespace palf
 void PalfOptions::reset()
 {
   disk_options_.reset();
-  enable_log_cache_ = false;
 }
 
 bool PalfOptions::is_valid() const

@@ -68,8 +68,6 @@ typedef int FileDesc;
 typedef uint64_t block_id_t ;
 typedef uint64_t offset_t;
 class LSN;
-class LogWriteBuf;
-
 // ==================== palf env start =============================
 const int64_t MIN_DISK_SIZE_PER_PALF_INSTANCE = 512 * 1024 * 1024ul;
 // =====================palf env end ===============================
@@ -99,11 +97,9 @@ constexpr block_id_t LOG_MAX_BLOCK_ID = UINT64_MAX/PALF_BLOCK_SIZE - 1;
 constexpr block_id_t LOG_INVALID_BLOCK_ID = LOG_MAX_BLOCK_ID + 1;
 typedef common::ObFixedArray<share::SCN, ObIAllocator> SCNArray;
 typedef common::ObFixedArray<LSN, ObIAllocator> LSNArray;
-typedef common::ObFixedArray<LogWriteBuf *, ObIAllocator> LogWriteBufArray;
 // ==================== block and log end ===========================
 
 // ====================== Local log state begin =====================
-constexpr int64_t DEFAULT_GROUP_BUFFER_SIZE = 1 << 22;
 const int64_t PALF_STAT_PRINT_INTERVAL_US = 1 * 1000 * 1000L;
 const int64_t PALF_IO_STAT_PRINT_INTERVAL_US = 10 * 1000 * 1000L;
 const int64_t MATCH_LSN_ADVANCE_DELAY_THRESHOLD_US = 1 * 1000 * 1000L;

@@ -106,16 +106,14 @@ inline bool is_valid_access_mode(const AccessMode &access_mode)
 
 struct PalfOptions
 {
-  PalfOptions() : disk_options_(),
-                  enable_log_cache_(false)
+  PalfOptions() : disk_options_()
   {}
   ~PalfOptions() { reset(); }
   void reset();
   bool is_valid() const;
-  TO_STRING_KV(K(disk_options_), K(enable_log_cache_));
+  TO_STRING_KV(K(disk_options_));
 public:
   PalfDiskOptions disk_options_;
-  bool enable_log_cache_;
 };
 
 struct PalfThrottleOptions
