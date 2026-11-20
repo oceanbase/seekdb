@@ -1,0 +1,14 @@
+SELECT `key``id` AS id, `enum``value` AS enum_value,
+`set``value` AS set_value, `值``列` AS text_value
+FROM ddl_identifier_escaping ORDER BY `key``id`;
+id	enum_value	set_value	text_value
+1	alpha	x	甲
+2	beta	y	乙
+3	alpha	x,y	丙
+SELECT COUNT(*) AS row_count FROM ddl_identifier_escaping FORCE INDEX(idx_enum);
+row_count
+3
+SELECT `key``id` AS id FROM ddl_identifier_escaping FORCE INDEX(idx_unique)
+WHERE `值``列` = '乙';
+id
+2
