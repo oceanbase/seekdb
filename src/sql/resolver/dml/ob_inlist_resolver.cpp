@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashmap.h"
 
 namespace oceanbase
 {
@@ -28,6 +29,62 @@ using namespace common;
 
 namespace sql
 {
+// Compact duplicate-heavy scalar lists before choosing a VALUES subquery.
+// Each removed parameter is guarded by a plan-cache equality constraint; a
+// later execution with a different membership must be resolved again.
+static int compact_integer_membership(const ParseNode &list, const ParamStore *params,
+                                      int64_t threshold, ObQueryCtx *query_ctx,
+                                      ObIAllocator &allocator, const ParseNode *&compacted)
+{
+  int ret = OB_SUCCESS;
+  compacted = &list;
+  if (threshold <= 1) return ret;
+  const bool parameterized = list.children_[0]->type_ == T_QUESTIONMARK;
+  if (parameterized && query_ctx == nullptr) return ret;
+  hash::ObHashMap<ObObj, int64_t> values;
+  ObSEArray<ParseNode *, 4> distinct;
+  ObSEArray<ObPCParamEqualInfo, 4> equalities;
+  if (OB_FAIL(values.create(hash::cal_next_prime(threshold), "InListValues", "InListValues"))) return ret;
+  for (int64_t i = 0; i < list.num_child_; ++i) {
+    ParseNode *node = list.children_[i];
+    if (nullptr == node || parameterized != (node->type_ == T_QUESTIONMARK)) return OB_SUCCESS;
+    ObObj value;
+    if (node->type_ == T_INT) value.set_int(node->value_);
+    else if (node->type_ == T_UINT64) value.set_uint64(static_cast<uint64_t>(node->value_));
+    else if (node->type_ == T_NULL) value.set_null();
+    else if (parameterized && params != nullptr && node->value_ >= 0 && node->value_ < params->count()) {
+      value = params->at(node->value_);
+      if (!value.is_integer_type() && !value.is_decimal_int() && !value.is_null()) return OB_SUCCESS;
+    } else {
+      return OB_SUCCESS; // Unknown or non-integer values retain the existing strategy.
+    }
+    int64_t representative = -1;
+    const int found = values.get_refactored(value, representative);
+    if (found == OB_HASH_NOT_EXIST) {
+      if (OB_FAIL(values.set_refactored(value, i))) return ret;
+      if (OB_FAIL(distinct.push_back(node))) return ret;
+    } else if (found != OB_SUCCESS) {
+      return found;
+    } else if (parameterized) {
+      ObPCParamEqualInfo equality;
+      equality.first_param_idx_ = list.children_[representative]->value_;
+      equality.second_param_idx_ = node->value_;
+      if (equality.first_param_idx_ != equality.second_param_idx_ && OB_FAIL(equalities.push_back(equality))) return ret;
+    }
+    if (distinct.count() >= threshold) return OB_SUCCESS;
+  }
+  void *buffer = allocator.alloc(sizeof(ParseNode));
+  auto **children = static_cast<ParseNode **>(allocator.alloc(sizeof(ParseNode *) * distinct.count()));
+  if (nullptr == buffer || nullptr == children) return OB_ALLOCATE_MEMORY_FAILED;
+  auto *result = new (buffer) ParseNode(list);
+  for (int64_t i = 0; i < distinct.count(); ++i) children[i] = distinct.at(i);
+  result->children_ = children;
+  result->num_child_ = distinct.count();
+  if (parameterized && OB_FAIL(append(query_ctx->all_equal_param_constraints_, equalities))) return ret;
+  compacted = result;
+  return ret;
+}
+
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -275,10 +332,12 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObStmt *stmt,
                                                   ObIAllocator &alloc,
                                                   bool &is_question_mark,
-                                                  bool &is_enable)
+                                                  bool &is_enable,
+                                                  const ParseNode *&compacted)
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  compacted = &in_list;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -350,6 +409,13 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && column_cnt == 1 && !is_prepare_stmt) {
+        if (OB_FAIL(compact_integer_membership(in_list, param_store, threshold,
+            stmt == nullptr ? nullptr : stmt->get_query_ctx(), alloc, compacted))) {
+        } else if (compacted != &in_list) {
+          is_enable = false;
+        }
+      }
     }
   }
   return ret;
