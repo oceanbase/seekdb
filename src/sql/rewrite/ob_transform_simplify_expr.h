@@ -59,6 +59,12 @@ private:
   int convert_preds_vector_to_scalar(ObDMLStmt *stmt, bool &trans_happened);
   int recursively_convert_join_preds_vector_to_scalar(TableItem *table_item, bool &trans_happened);
   int remove_dummy_exprs(ObDMLStmt *stmt, bool &trans_happened);
+  int simplify_arith_identity(ObDMLStmt *stmt, bool &trans_happened);
+  int simplify_arith_identity_in_expr(ObRawExpr *&expr, bool &trans_happened);
+  int get_int_const_value(const ObRawExpr *expr,
+                          int64_t &value,
+                          bool &is_int_const,
+                          bool &from_param);
   int remove_dummy_filter_exprs(common::ObIArray<ObRawExpr*> &exprs,
                                 ObIArray<ObExprConstraint> &constraints);
   int remove_dummy_join_condition_exprs(TableItem *table,

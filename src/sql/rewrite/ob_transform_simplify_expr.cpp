@@ -21,6 +21,7 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "common/number/ob_number_v2.h"
 
 using namespace oceanbase::sql;
 
@@ -102,6 +103,13 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
     } else {
       trans_happened |= is_happened;
       OPT_TRACE("remove dummy exprs:", is_happened);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(simplify_arith_identity(stmt, is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+      OPT_TRACE("simplify arith identity:", is_happened);
     }
   }
   if (OB_SUCC(ret)){
@@ -717,6 +725,146 @@ int ObTransformSimplifyExpr::remove_dummy_exprs(ObDMLStmt *stmt, bool &trans_hap
       if (OB_FAIL(append(ctx_->expr_constraints_, constraints))) {
       } else {
         trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+
+// Resolve the integer value of a constant operand. Literals may be stored as
+// auto-parameterized question marks, in which case the raw ObObj only carries
+// the parameter index, so the real value must be read from the parameter store.
+int ObTransformSimplifyExpr::get_int_const_value(const ObRawExpr *expr,
+                                                 int64_t &value,
+                                                 bool &is_int_const,
+                                                 bool &from_param)
+{
+  int ret = OB_SUCCESS;
+  is_int_const = false;
+  from_param = false;
+  value = 0;
+  const ObRawExpr *cur = expr;
+  while (OB_NOT_NULL(cur) && T_FUN_SYS_CAST == cur->get_expr_type()
+         && 1 == cur->get_param_count()) {
+    cur = cur->get_param_expr(0);
+  }
+  if (OB_NOT_NULL(cur) && cur->is_const_raw_expr()) {
+    ObObj obj_value;
+    bool need_check = false;
+    const ParamStore *params = NULL;
+    if (OB_NOT_NULL(ctx_) && OB_NOT_NULL(ctx_->exec_ctx_)
+        && OB_NOT_NULL(ctx_->exec_ctx_->get_physical_plan_ctx())) {
+      params = &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store();
+    }
+    if (OB_FAIL(ObSQLUtils::calc_const_expr(cur, params, obj_value, need_check))) {
+    } else if (obj_value.is_integer_type()) {
+      value = obj_value.get_int();
+      is_int_const = true;
+    } else if (obj_value.is_number()) {
+      number::ObNumber num;
+      int64_t int_value = 0;
+      if (OB_FAIL(obj_value.get_number(num))) {
+      } else if (num.is_valid_int64(int_value)) {
+        value = int_value;
+        is_int_const = true;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      from_param = (T_QUESTIONMARK == cur->get_expr_type());
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::simplify_arith_identity(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIArray<ObRawExpr *> &conditions = stmt->get_condition_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      bool happened = false;
+      if (OB_FAIL(simplify_arith_identity_in_expr(conditions.at(i), happened))) {
+      } else if (happened) {
+        trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::simplify_arith_identity_in_expr(ObRawExpr *&expr, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const ObItemType op_type = expr->get_expr_type();
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      ObRawExpr *child = expr->get_param_expr(i);
+      bool child_happened = false;
+      if (OB_FAIL(simplify_arith_identity_in_expr(child, child_happened))) {
+      } else if (child_happened) {
+        expr->get_param_expr(i) = child;
+        trans_happened = true;
+      }
+    }
+    if (OB_SUCC(ret)
+        && (T_OP_ADD == op_type || T_OP_MINUS == op_type || T_OP_MUL == op_type)
+        && 2 == expr->get_param_count()) {
+      ObRawExpr *left = expr->get_param_expr(0);
+      ObRawExpr *right = expr->get_param_expr(1);
+      ObRawExpr *keep = NULL;
+      bool folded_from_param = false;
+      if (OB_ISNULL(left) || OB_ISNULL(right)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        int64_t left_value = 0;
+        int64_t right_value = 0;
+        bool left_is_int = false;
+        bool right_is_int = false;
+        bool left_from_param = false;
+        bool right_from_param = false;
+        if (OB_FAIL(get_int_const_value(left, left_value, left_is_int, left_from_param))) {
+        } else if (OB_FAIL(get_int_const_value(right, right_value, right_is_int, right_from_param))) {
+        } else if (T_OP_ADD == op_type) {
+          if (right_is_int && 0 == right_value) {
+            keep = left;
+            folded_from_param = right_from_param;
+          } else if (left_is_int && 0 == left_value) {
+            keep = right;
+            folded_from_param = left_from_param;
+          }
+        } else if (T_OP_MINUS == op_type) {
+          if (right_is_int && 0 == right_value) {
+            keep = left;
+            folded_from_param = right_from_param;
+          }
+        } else if (T_OP_MUL == op_type) {
+          if (right_is_int && 1 == right_value) {
+            keep = left;
+            folded_from_param = right_from_param;
+          } else if (left_is_int && 1 == left_value) {
+            keep = right;
+            folded_from_param = left_from_param;
+          }
+        }
+      }
+      if (OB_SUCC(ret) && OB_NOT_NULL(keep) && keep != expr) {
+        const ObRawExprResType &keep_type = keep->get_result_type();
+        if (keep_type.is_numeric_type()
+            && !keep->has_flag(CNT_SUB_QUERY)) {
+          expr = keep;
+          trans_happened = true;
+          if (folded_from_param && OB_NOT_NULL(ctx_) && OB_NOT_NULL(ctx_->phy_plan_)) {
+            // The identity only holds for the current parameter value; the folded
+            // plan must not be reused once the parameter takes another value.
+            ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
+          }
+        }
       }
     }
   }
