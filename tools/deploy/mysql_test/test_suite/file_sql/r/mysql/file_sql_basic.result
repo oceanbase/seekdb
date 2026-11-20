@@ -1,0 +1,40 @@
+# enable_file_sql defaults to OFF
+default_enabled
+0
+# syntax and format validation
+# CSV scan, type conversion, duplicate headers and multiline quotes
+id	name	score	active	day	created	note	id__2
+1	Alice	98.5	1	2026-08-01	2026-08-01 10:11:12	hello,<NL>world	101
+2	Bob	87	0	NULL	NULL	plain	102
+3	Chen	90.25	1	2026-08-03	2026-08-03 12:13:14	say "hi"	103
+row_count	id_sum	score_avg	active_count
+3	6	91.92	2
+# JSONL union schema and missing fields
+id	name	score	active	day	note
+1	Alice	98.5	1	NULL	NULL
+2	Bob	NULL	0	2026-08-02	NULL
+3	Chen	90	1	NULL	ok
+# inferred CSV schema using DuckDB DESCRIBE syntax
+column_name	column_type	null	key	default	extra
+id	BIGINT	NO	NULL	NULL	NULL
+name	VARCHAR	NO	NULL	NULL	NULL
+score	DOUBLE	NO	NULL	NULL	NULL
+active	BOOLEAN	NO	NULL	NULL	NULL
+day	DATE	YES	NULL	NULL	NULL
+created	DATETIME	YES	NULL	NULL	NULL
+note	VARCHAR	NO	NULL	NULL	NULL
+id__2	BIGINT	NO	NULL	NULL	NULL
+# Parquet scan and aggregate push through projected columns
+row_count	min_c1	max_c1	sum_c1
+7	0	6	21
+# DuckDB glob returns one file column
+file
+basic.csv
+basic.jsonl
+invalid.txt
+simple.parquet
+# COPY query to CSV and read it back
+id	name	score
+1	Alice	98.5
+2	Bob	87
+3	Chen	90.25

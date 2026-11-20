@@ -1,0 +1,69 @@
+# owner: database-competition
+# owner group: SQL
+# description: Query local CSV, JSONL and Parquet files as database tables.
+# tags: sql,executor,file_sql
+
+--source mysql_test/test_suite/file_sql/include/copy_file_sql_data.inc
+
+--disable_query_log
+let $FILE_SQL_DATA_DIR = $OBSERVER_DIR/data_for_mysqltest_file_sql;
+
+--echo # enable_file_sql defaults to OFF
+select @@session.enable_file_sql AS default_enabled;
+--disable_result_log
+--error 1235
+eval select count(*) from read_csv('$FILE_SQL_DATA_DIR/basic.csv');
+--enable_result_log
+
+set session enable_file_sql = ON;
+
+--echo # syntax and format validation
+--disable_result_log
+eval select count(*) from read_csv('$FILE_SQL_DATA_DIR/basic.csv');
+--error 1064
+eval select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', 'xml');
+--error 1235
+eval select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', sample_size = 10);
+--enable_result_log
+
+--echo # CSV scan, type conversion, duplicate headers and multiline quotes
+eval select id, name, score, active, day, created,
+            replace(note, char(10), '<NL>') AS note, id__2
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+      order by id;
+eval select count(*) AS row_count, sum(id) AS id_sum,
+            round(avg(score), 2) AS score_avg, sum(active) AS active_count
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv', header = true, sample_size = -1) f;
+
+--echo # JSONL union schema and missing fields
+eval select id, name, score, active, day, note
+       from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
+      order by id;
+
+--echo # inferred CSV schema using DuckDB DESCRIBE syntax
+eval describe select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv');
+
+--echo # Parquet scan and aggregate push through projected columns
+eval select count(*) AS row_count, min(c1) AS min_c1,
+            max(c1) AS max_c1, sum(c1) AS sum_c1
+       from read_parquet('$FILE_SQL_DATA_DIR/simple.parquet') p;
+
+--echo # DuckDB glob returns one file column
+eval select substring_index(file, '/', -1) AS file
+       from glob('$FILE_SQL_DATA_DIR/*')
+      order by file;
+
+--echo # COPY query to CSV and read it back
+eval copy (select id, name, score
+             from read_csv('$FILE_SQL_DATA_DIR/basic.csv')
+            order by id)
+       to '$FILE_SQL_DATA_DIR/export.csv'
+       (format csv, header, nullstr 'NULL');
+eval select id, name, score
+       from read_csv('$FILE_SQL_DATA_DIR/export.csv')
+      order by id;
+
+set session enable_file_sql = OFF;
+--enable_query_log
+
+--source mysql_test/test_suite/file_sql/include/remove_file_sql_data.inc
