@@ -28,6 +28,71 @@ using namespace common;
 
 namespace sql
 {
+
+namespace
+{
+// Check whether a long IN list contains only a small number
+// of distinct signed integer values.
+int check_small_integer_domain(const ParseNode &in_list,
+                               const ParamStore *param_store,
+                               const int64_t threshold,
+                               bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  is_small = false;
+  bool supported = true;
+  const int64_t MAX_DISTINCT = 64;
+  ObSEArray<int64_t, 8> distinct_values;
+
+  if (OB_ISNULL(in_list.children_)) {
+    supported = false;
+  }
+
+  for (int64_t i = 0;
+       OB_SUCC(ret) && supported && i < in_list.num_child_;
+       ++i) {
+    const ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+
+    if (OB_ISNULL(node)) {
+      supported = false;
+    } else if (T_INT == node->type_) {
+      value = node->value_;
+    } else if (T_QUESTIONMARK == node->type_
+               && NULL != param_store
+               && node->value_ >= 0
+               && node->value_ < param_store->count()
+               && ObIntType == param_store->at(node->value_).get_type()) {
+      value = param_store->at(node->value_).get_int();
+    } else {
+      supported = false;
+    }
+
+    if (supported) {
+      bool found = false;
+      for (int64_t j = 0;
+           !found && j < distinct_values.count();
+           ++j) {
+        found = (distinct_values.at(j) == value);
+      }
+
+      if (!found) {
+        // Fall back to the original rewrite when the
+        // distinct domain is too large.
+        if (distinct_values.count() >= MAX_DISTINCT ||
+            distinct_values.count() + 1 >= threshold) {
+          supported = false;
+        } else if (OB_FAIL(distinct_values.push_back(value))) {
+        }
+      }
+    }
+  }
+
+  is_small = OB_SUCC(ret) && supported;
+  return ret;
+}
+} // namespace
+
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -352,6 +417,22 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       is_question_mark = rewrite_info.is_question_mark_;
     }
   }
+
+  // Avoid VALUES-table rewriting for small integer domains.
+  // Preserve prepared-statement and multi-column behavior.
+  if (OB_SUCC(ret) && is_enable &&
+      threshold > 1 &&
+      !is_prepare_stmt &&
+      T_OP_ROW != left_expr.get_expr_type()) {
+    bool is_small = false;
+
+    if (OB_FAIL(check_small_integer_domain(
+            in_list, param_store, threshold, is_small))) {
+    } else if (is_small) {
+      is_enable = false;
+    }
+  }
+
   return ret;
 }
 
