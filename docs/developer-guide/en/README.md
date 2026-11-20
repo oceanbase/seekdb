@@ -3,7 +3,7 @@
 ## About this guide
 
 * **The target audience** of this guide is OceanBase seekdb contributors, both new and experienced.
-* **The objective** of this guide is to help contributors become an expert of OceanBase seekdb, who is familiar with its design and implementation and thus is able to use it fluently in the real world as well as develop OceanBase seekdb itself deeply.
+* **The objective** of this guide is to help contributors understand seekdb's design and implementation, use it effectively in real-world applications, and contribute to the project's development.
 
 ## The structure of this guide
 
