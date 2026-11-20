@@ -1,0 +1,53 @@
+#owner: luck569
+#owner group: shenzhen
+# description: constant identity operands in the pre-filter of an approximate vector
+#   index query are simplified, as they are for exact queries (issue #1489)
+
+--disable_warnings
+drop table if exists t_vfi;
+--enable_warnings
+
+create table t_vfi (
+  id bigint not null primary key,
+  embedding vector(4) not null,
+  category int not null,
+  age int not null,
+  key idx_category(category),
+  key idx_age(age)
+) organization heap;
+insert into t_vfi values
+  (1, '[1,0,0,0]', 1, 10),  (2, '[0,1,0,0]', 2, 20),
+  (3, '[0.9,0.1,0,0]', 1, 30), (4, '[0,0,1,0]', 3, 1000),
+  (5, '[0.8,0.2,0,0]', 1, 500), (6, '[0,0,0,1]', 2, 999),
+  (7, '[0.7,0.3,0,0]', 4, 40),  (8, '[0.6,0,0.4,0]', 1, 1);
+create vector index t_vfi_hnsw on t_vfi(embedding)
+  with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128);
+
+--echo # "category = 1 OR FALSE" keeps only the real predicate, like an exact query
+--replace_regex /\|[0-9]+ *\|[0-9]+ *\|$/|ROWS|COST|/
+explain select id from t_vfi
+where category = 1 or false
+order by l2_distance(embedding, '[1,0,0,0]') approximate limit 3;
+
+--echo # "category = 1 AND TRUE" keeps only the real predicate
+--replace_regex /\|[0-9]+ *\|[0-9]+ *\|$/|ROWS|COST|/
+explain select id from t_vfi
+where category = 1 and true
+order by l2_distance(embedding, '[1,0,0,0]') approximate limit 3;
+
+--echo # the identity filters return the same rows as the plain predicate
+select id from t_vfi where category = 1
+order by l2_distance(embedding, '[1,0,0,0]') approximate limit 3;
+select id from t_vfi
+where category = 1 or false
+order by l2_distance(embedding, '[1,0,0,0]') approximate limit 3;
+select id from t_vfi
+where category = 1 and true
+order by l2_distance(embedding, '[1,0,0,0]') approximate limit 3;
+
+--echo # exact (non-approximate) queries are unaffected
+select id from t_vfi
+where category = 1 or false
+order by l2_distance(embedding, '[1,0,0,0]') limit 3;
+
+drop table t_vfi;
