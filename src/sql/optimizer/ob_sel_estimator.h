@@ -456,6 +456,9 @@ private:
                         const OptSelectivityCtx &ctx,
                         const ObRawExpr &qual,
                         double &selectivity);
+  static int add_duplicate_param_constraint(const OptSelectivityCtx &ctx,
+                                            const ObRawExpr *first_param,
+                                            const ObRawExpr *second_param);
 private:
   DISABLE_COPY_ASSIGN(ObInSelEstimator);
 };
