@@ -1,0 +1,21 @@
+src/oblib/lib/oblog/ob_warning_buffer.h
+  s_97c0d0bd2c1536::t_3c94db1151eb02 118,231,233
+src/sql/ob_spi.cpp
+  s_97c0d0bd2c1536::t_3c94db1151eb02 1683
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ec7ebd63271d1ee19853a660a9084f8ff88d6097",
+  "prompts": {},
+  "sessions": {
+    "s_97c0d0bd2c1536": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f84c-ba34-7521-a7ae-e26873e74e84",
+        "model": "deepseek-flash"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
