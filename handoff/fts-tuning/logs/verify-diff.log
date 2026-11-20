@@ -1,0 +1,6 @@
+# Semantic equivalence: baseline vs optimized query results
+# input: handoff/fts-tuning/logs/verify-baseline.log (bin a918d84e...)
+# input: handoff/fts-tuning/logs/verify.log          (bin 5044bda8...)
+# method: strip comment lines, then diff -u the query output
+
+# diff_exit=0  (0 means byte-identical query results)

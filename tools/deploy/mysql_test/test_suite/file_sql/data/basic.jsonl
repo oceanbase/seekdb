@@ -1,0 +1,3 @@
+{"id":1,"name":"Alice","score":98.5,"active":true}
+{"id":2,"name":"Bob","active":false,"day":"2026-08-02"}
+{"id":3,"name":"Chen","score":90,"active":true,"note":"ok"}

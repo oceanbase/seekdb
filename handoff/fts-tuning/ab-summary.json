@@ -1,0 +1,100 @@
+{
+  "select1_avg_ms": {
+    "before_median": 0.1846,
+    "after_median": 0.1847,
+    "change_pct": -0.05417118093175338
+  },
+  "build_ik_all_sec": {
+    "before_median": 5.555,
+    "after_median": 5.563,
+    "change_pct": -0.14401440144014416
+  },
+  "build_ik_content_sec": {
+    "before_median": 4.132,
+    "after_median": 4.032,
+    "change_pct": 2.4201355275895367
+  },
+  "build_beng_en_sec": {
+    "before_median": 2.326,
+    "after_median": 2.325,
+    "change_pct": 0.042992261392944535
+  },
+  "tokenize_ik_avg_ms": {
+    "before_median": 0.2671,
+    "after_median": 0.2422,
+    "change_pct": 9.322351179333586
+  },
+  "tokenize_beng_avg_ms": {
+    "before_median": 0.2134,
+    "after_median": 0.1946,
+    "change_pct": 8.809746954076855
+  },
+  "query_cn_avg_ms": {
+    "before_median": 1.2112,
+    "after_median": 1.2114,
+    "change_pct": -0.016512549537646793
+  },
+  "query_beng_avg_ms": {
+    "before_median": 1.7351,
+    "after_median": 1.6951,
+    "change_pct": 2.305342631548616
+  },
+  "query_mixed_avg_ms": {
+    "before_median": 1.3845,
+    "after_median": 1.3746,
+    "change_pct": 0.7150595882990264
+  },
+  "query_limit_avg_ms": {
+    "before_median": 1.4999,
+    "after_median": 1.5102,
+    "change_pct": -0.6867124474964982
+  },
+  "query_cn_hits": {
+    "before": [
+      8001.0,
+      8001.0,
+      8001.0
+    ],
+    "after": [
+      8001.0,
+      8001.0,
+      8001.0
+    ]
+  },
+  "query_beng_hits": {
+    "before": [
+      11000.0,
+      11000.0,
+      11000.0
+    ],
+    "after": [
+      11000.0,
+      11000.0,
+      11000.0
+    ]
+  },
+  "query_mixed_hits": {
+    "before": [
+      7332.0,
+      7332.0,
+      7332.0
+    ],
+    "after": [
+      7332.0,
+      7332.0,
+      7332.0
+    ]
+  },
+  "query_limit_hits": {
+    "before": [
+      20.0,
+      20.0,
+      20.0
+    ],
+    "after": [
+      20.0,
+      20.0,
+      20.0
+    ]
+  }
+}

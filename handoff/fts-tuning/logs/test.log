@@ -1,0 +1,93 @@
+# FTS tuning correctness regression
+# date: 2026-11-01T19:09:02+08:00
+# branch: feat/fts-tuning
+# optimized binary sha256: 5044bda810fb4873984c47c17a482b61b554d709f277d44986c803f97f963563
+
+# [1] official suite fts_index (mysqltest, 15 cases)
+# driver: tools/deploy/mysql_test/test_suite/fts_index/t/*.test
+# env: OBMYSQL_MS0=127.0.0.1 OBMYSQL_PORT=2881 OBMYSQL_PWD=admin
+PASS basic_dml
+PASS basic_dml_sequel
+PASS cn_word
+PASS create_fts_index_afterward
+PASS create_table_with_fts_index
+PASS domain_id_merge_with_compare_null
+PASS drop_index
+PASS index_view
+PASS load_data
+PASS offline_ddl_with_fts_index
+PASS online_ddl_on_table_with_fts_index
+PASS parser_properties
+FAIL partitioned_simple_query
+ select /*+ use_das(t_ir_single_column) */
+     t_ir_single_column.digest, t_ir_single_column.seq, t_dim_table.seq, t_dim_table.log as log , match (detail) against ("computer") as score
+
+[2026-11-01 18:49:32] mysqltest: Result content mismatch
+
+not ok
+PASS simple_query
+PASS tokenize_function
+Total 15, Passed 14, Failed 1
+
+# [2] the single failure is pre-existing, not introduced by this change
+# same test case was rerun with the baseline binary (sha256 a918d84e...) and with
+# the optimized binary (sha256 5044bda8...); both mismatch on the same EXPLAIN
+# nl_params numbering line (':0' vs ':1'), which the golden result pins to ':0'.
+# ---- baseline binary run ----
+--- mysql_test/test_suite/fts_index/r/mysql/partitioned_simple_query.result	2026-10-30 21:46:13.729735104 +0800
++++ partitioned_simple_query.reject	2026-11-01 19:01:41.175373002 +0800
+@@ -826,7 +826,7 @@
+   0 - output([t_ir_single_column.digest], [t_ir_single_column.seq], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_single_column.detail) AGAINST('computer')]), filter(nil), rowset=16
+       sort_keys([t_ir_single_column.seq, ASC], [t_dim_table.seq, ASC])
+   1 - output([t_ir_single_column.seq], [t_dim_table.seq], [t_ir_single_column.digest], [t_dim_table.log], [MATCH(t_ir_single_column.detail) AGAINST('computer')]), filter(nil), rowset=16
+-      conds(nil), nl_params_([t_dim_table.seq(:0)]), use_batch=false
++      conds(nil), nl_params_([t_dim_table.seq(:1)]), use_batch=false
+   2 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
+       access([t_dim_table.seq], [t_dim_table.log]), partitions(p0)
+       is_index_back=false, is_global_index=false, 
+@@ -836,7 +836,7 @@
+       access([t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p[0-1])
+       is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+       range_key([t_ir_single_column.seq]), range(MIN ; MAX), 
+-      range_cond([t_ir_single_column.seq < :0]), has_functional_lookup=true
++      range_cond([t_ir_single_column.seq < :1]), has_functional_lookup=true
+ 
+ select /*+ use_das(t_ir_single_column) */
+     t_ir_single_column.digest, t_ir_single_column.seq, t_dim_table.seq, t_dim_table.log as log , match (detail) against ("computer") as score
+
+[2026-11-01 19:01:41] mysqltest: Result content mismatch
+
+not ok
+# ---- optimized binary run ----
+--- mysql_test/test_suite/fts_index/r/mysql/partitioned_simple_query.result	2026-10-30 21:46:13.729735104 +0800
++++ partitioned_simple_query.reject	2026-11-01 19:02:10.021665234 +0800
+@@ -826,7 +826,7 @@
+   0 - output([t_ir_single_column.digest], [t_ir_single_column.seq], [t_dim_table.seq], [t_dim_table.log], [MATCH(t_ir_single_column.detail) AGAINST('computer')]), filter(nil), rowset=16
+       sort_keys([t_ir_single_column.seq, ASC], [t_dim_table.seq, ASC])
+   1 - output([t_ir_single_column.seq], [t_dim_table.seq], [t_ir_single_column.digest], [t_dim_table.log], [MATCH(t_ir_single_column.detail) AGAINST('computer')]), filter(nil), rowset=16
+-      conds(nil), nl_params_([t_dim_table.seq(:0)]), use_batch=false
++      conds(nil), nl_params_([t_dim_table.seq(:1)]), use_batch=false
+   2 - output([t_dim_table.seq], [t_dim_table.log]), filter(nil), rowset=16
+       access([t_dim_table.seq], [t_dim_table.log]), partitions(p0)
+       is_index_back=false, is_global_index=false, 
+@@ -836,7 +836,7 @@
+       access([t_ir_single_column.seq], [t_ir_single_column.digest]), partitions(p[0-1])
+       is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+       range_key([t_ir_single_column.seq]), range(MIN ; MAX), 
+-      range_cond([t_ir_single_column.seq < :0]), has_functional_lookup=true
++      range_cond([t_ir_single_column.seq < :1]), has_functional_lookup=true
+ 
+ select /*+ use_das(t_ir_single_column) */
+     t_ir_single_column.digest, t_ir_single_column.seq, t_dim_table.seq, t_dim_table.log as log , match (detail) against ("computer") as score
+
+[2026-11-01 19:02:10] mysqltest: Result content mismatch
+
+not ok
+
+# [3] duplicate-word semantic equivalence (baseline vs optimized)
+# Semantic equivalence: baseline vs optimized query results
+# input: handoff/fts-tuning/logs/verify-baseline.log (bin a918d84e...)
+# input: handoff/fts-tuning/logs/verify.log          (bin 5044bda8...)
+# method: strip comment lines, then diff -u the query output
+
+# diff_exit=0  (0 means byte-identical query results)

@@ -1,0 +1,147 @@
+{
+  "label": "after",
+  "benchmark_config": {
+    "rows": 20000,
+    "batch": 500,
+    "rounds": 3000,
+    "query_rounds": 200,
+    "samples": 3,
+    "warmup": 30,
+    "skip_load": 0
+  },
+  "source_runs": [
+    "after-1.txt",
+    "after-2.txt",
+    "after-3.txt"
+  ],
+  "metrics": {
+    "select1_avg_ms": {
+      "median": 0.1847,
+      "runs": [
+        0.1847,
+        0.171,
+        0.207
+      ]
+    },
+    "raw_load_sec": {
+      "median": 0.209,
+      "runs": [
+        0.215,
+        0.209,
+        0.196
+      ]
+    },
+    "build_ik_all_sec": {
+      "median": 5.563,
+      "runs": [
+        5.563,
+        5.658,
+        5.454
+      ]
+    },
+    "build_ik_content_sec": {
+      "median": 4.032,
+      "runs": [
+        4.145,
+        4.03,
+        4.032
+      ]
+    },
+    "build_beng_en_sec": {
+      "median": 2.325,
+      "runs": [
+        2.329,
+        2.325,
+        2.227
+      ]
+    },
+    "build_total_sec": {
+      "median": 12.021,
+      "runs": [
+        12.043,
+        12.021,
+        11.72
+      ]
+    },
+    "tokenize_ik_avg_ms": {
+      "median": 0.2422,
+      "runs": [
+        0.2379,
+        0.2566,
+        0.2422
+      ]
+    },
+    "tokenize_beng_avg_ms": {
+      "median": 0.1946,
+      "runs": [
+        0.2103,
+        0.1946,
+        0.1896
+      ]
+    },
+    "query_cn_hits": {
+      "median": 8001.0,
+      "runs": [
+        8001.0,
+        8001.0,
+        8001.0
+      ]
+    },
+    "query_cn_avg_ms": {
+      "median": 1.2114,
+      "runs": [
+        1.2182,
+        1.2114,
+        1.2036
+      ]
+    },
+    "query_beng_hits": {
+      "median": 11000.0,
+      "runs": [
+        11000.0,
+        11000.0,
+        11000.0
+      ]
+    },
+    "query_beng_avg_ms": {
+      "median": 1.6951,
+      "runs": [
+        1.6951,
+        1.7716,
+        1.691
+      ]
+    },
+    "query_mixed_hits": {
+      "median": 7332.0,
+      "runs": [
+        7332.0,
+        7332.0,
+        7332.0
+      ]
+    },
+    "query_mixed_avg_ms": {
+      "median": 1.3746,
+      "runs": [
+        1.3693,
+        1.3746,
+        1.3955
+      ]
+    },
+    "query_limit_hits": {
+      "median": 20.0,
+      "runs": [
+        20.0,
+        20.0,
+        20.0
+      ]
+    },
+    "query_limit_avg_ms": {
+      "median": 1.5102,
+      "runs": [
+        1.5278,
+        1.5028,
+        1.5102
+      ]
+    }
+  }
+}

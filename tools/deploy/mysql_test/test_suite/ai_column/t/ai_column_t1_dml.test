@@ -1,0 +1,178 @@
+# AI column T1 task creation, invalidation, batching, and transaction coverage.
+
+connection default;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py start 19121
+--disable_warnings
+drop database if exists ai_column_p0_t1;
+--enable_warnings
+create database ai_column_p0_t1;
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_t1_complete_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_t1_complete');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_t1_complete',
+  '{"type":"completion","model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_t1_complete_ep',
+  '{"ai_model_name":"p0_t1_complete","url":"http://127.0.0.1:19121/v1/chat/completions","access_key":"p0-key","provider":"openai","request_model_name":"mock-complete"}');
+
+drop table if exists ai_column_p0_t1.docs;
+create table ai_column_p0_t1.docs(
+  id bigint primary key,
+  title varchar(100),
+  content varchar(200),
+  tags json AI COLUMN (
+    AI_COMPLETE('p0_t1_complete', concat('Classify: ', content))
+  ) WITH (sync_mode='async', max_retries=2)
+);
+
+start transaction;
+insert into ai_column_p0_t1.docs(id, title, content)
+values(1, 'title-1', 'initial');
+select id, tags is null as result_hidden_until_t2 from ai_column_p0_t1.docs;
+select count(*) = 1 and max(task.eligible_ts <= now(6)) = 1
+       as insert_task_eligible_immediately
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs';
+commit;
+
+let $retry = 15;
+let $done = 0;
+while ($retry)
+{
+  let $done = `select tags is not null from ai_column_p0_t1.docs where id = 1`;
+  if ($done == 1)
+  {
+    let $retry = 0;
+  }
+  if ($done == 0)
+  {
+    --real_sleep 1
+    dec $retry;
+  }
+}
+select tags is not null as initial_worker_completed,
+       json_unquote(json_extract(tags, '$.input')) = 'Classify: initial' as initial_value
+from ai_column_p0_t1.docs where id = 1;
+
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py reset 19121
+update ai_column_p0_t1.docs set title = 'title-2' where id = 1;
+--real_sleep 2
+select tags is not null as unrelated_update_keeps_result
+from ai_column_p0_t1.docs where id = 1;
+select count(*) = 0 as unrelated_update_creates_no_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs';
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py assert 19121 no-requests
+
+start transaction;
+update ai_column_p0_t1.docs set content = 'dependency-update' where id = 1;
+select tags is null as dependency_update_invalidates
+from ai_column_p0_t1.docs where id = 1;
+select count(*) = 1 as dependency_update_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs';
+commit;
+
+let $retry = 15;
+let $done = 0;
+while ($retry)
+{
+  let $done = `select tags is not null from ai_column_p0_t1.docs where id = 1`;
+  if ($done == 1) { let $retry = 0; }
+  if ($done == 0) { --real_sleep 1
+    dec $retry; }
+}
+select json_unquote(json_extract(tags, '$.input')) = 'Classify: dependency-update'
+       as dependency_update_completed
+from ai_column_p0_t1.docs where id = 1;
+
+start transaction;
+update ai_column_p0_t1.docs set id = 2 where id = 1;
+select count(*) = 0 as old_primary_key_removed
+from ai_column_p0_t1.docs where id = 1;
+select tags is null as primary_key_update_invalidates
+from ai_column_p0_t1.docs where id = 2;
+select count(*) = 1 as task_uses_new_primary_key
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs'
+  and task.rowkey_predicate = '`id` = 2';
+commit;
+
+let $retry = 15;
+let $done = 0;
+while ($retry)
+{
+  let $done = `select tags is not null from ai_column_p0_t1.docs where id = 2`;
+  if ($done == 1) { let $retry = 0; }
+  if ($done == 0) { --real_sleep 1
+    dec $retry; }
+}
+eval select $done = 1 as primary_key_update_completed;
+select count(*) = 0 as primary_key_update_task_drained
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs';
+
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py reset 19121
+start transaction;
+update ai_column_p0_t1.docs set content = 'rollback-value' where id = 2;
+select content = 'rollback-value' and tags is null as transaction_sees_invalidation
+from ai_column_p0_t1.docs where id = 2;
+select count(*) = 1 as transaction_sees_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs';
+rollback;
+select content = 'dependency-update' and tags is not null as rollback_restores_row
+from ai_column_p0_t1.docs where id = 2;
+select count(*) = 0 as rollback_removes_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs';
+--real_sleep 2
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py assert 19121 no-rollback-value
+
+start transaction;
+insert into ai_column_p0_t1.docs(id, title, content)
+values (10, 'batch-10', 'batch-10'), (11, 'batch-11', 'batch-11');
+select count(*) = 2 as batch_insert_invalidates_two_rows
+from ai_column_p0_t1.docs where id in (10, 11) and tags is null;
+select count(*) = 2 as batch_insert_creates_two_tasks
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs'
+  and task.rowkey_predicate in ('`id` = 10', '`id` = 11');
+delete from ai_column_p0_t1.docs where id in (10, 11);
+select count(*) = 0 as delete_cleans_pending_tasks
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs'
+  and task.rowkey_predicate in ('`id` = 10', '`id` = 11');
+commit;
+
+delete from ai_column_p0_t1.docs where id = 2;
+select count(*) = 0 as delete_removes_row from ai_column_p0_t1.docs;
+select count(*) = 0 as delete_leaves_no_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_t1' and t.table_name = 'docs';
+
+drop table ai_column_p0_t1.docs;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_t1_complete_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_t1_complete');
+drop database ai_column_p0_t1;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py stop 19121
