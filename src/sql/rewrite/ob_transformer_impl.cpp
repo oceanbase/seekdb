@@ -539,6 +539,15 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
     if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
     }
+    if (func.contain_vec_index_approx_) {
+      // Approximate vector queries still need the general SQL rewrites. Without them an
+      // equivalent predicate keeps its complex form, the filter is evaluated for every
+      // candidate row, and the whole table is scanned instead of the matching rows.
+      uint64_t vec_approx_enable_list = 0;
+      ObTransformRule::add_trans_type(vec_approx_enable_list, SIMPLIFY_EXPR);
+      ObTransformRule::add_trans_type(vec_approx_enable_list, OR_EXPANSION);
+      disable_list = ObTransformRule::ALL_TRANSFORM_RULES & (~vec_approx_enable_list);
+    }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
       ObTransformRule::add_trans_type(enum_set_enable_list, SIMPLIFY_DISTINCT);
