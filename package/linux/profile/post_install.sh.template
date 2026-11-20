@@ -16,7 +16,7 @@ if [ "$is_upgrade" -eq 1 ] && [ -f /tmp/seekdb.cnf.bak ]; then
 fi
 systemctl daemon-reload
 
-/bin/bash /usr/libexec/seekdb/scripts/telemetry.sh $1 >/dev/null 2>&1
+/bin/bash /usr/libexec/seekdb/scripts/telemetry.sh "$1" "$2" >/dev/null 2>&1
 
 GREEN='\033[32m'
 NC="\033[0m"

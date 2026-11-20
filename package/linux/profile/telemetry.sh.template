@@ -16,10 +16,10 @@ step='none'
 reporter='none'
 
 function add_observer_config {
-    rm -rf $json_file
-    cp $json_pre_file $json_file
+    rm -f "$json_file"
+    cp "$json_pre_file" "$json_file"
     local temp_file=$(mktemp)
-    first_observer_configration=true
+    first_observer_configuration=true
 
     while IFS='=' read -r key value; do
         if [[ ! $key || $key =~ ^[[:space:]]*# ]]; then
@@ -30,11 +30,12 @@ function add_observer_config {
         value=$(echo "$value" | awk '{$1=$1};1')
         value=$(echo "$value" | sed 's/^"//' | sed 's/"$//')
         if [[ -n "$key" && ! "$key" =~ ^\; && $key != *"rootPwd"* ]]; then
-            if $first_observer_configration; then
-                first_observer_configration=false
-                sed "s/\"observerConfig\": {}/\"observerConfig\": {\n                \"$key\": \"$value\"\n            }/" "$json_file" > "$temp_file"
+            if $first_observer_configuration; then
+                first_observer_configuration=false
+                # Use '|' as the sed delimiter: configuration values (e.g. paths) commonly contain '/'.
+                sed "s|\"observerConfig\": {}|\"observerConfig\": {\n                \"$key\": \"$value\"\n            }|" "$json_file" > "$temp_file"
             else
-                observer_config_line=$(grep -n "observerConfig" $json_file | head -n 1 | cut -d: -f1)
+                observer_config_line=$(grep -n "observerConfig" "$json_file" | head -n 1 | cut -d: -f1)
                 sed "$((observer_config_line+1))i\\        \"$key\": \"$value\"," "$json_file" > "$temp_file"
             fi
             mv "$temp_file" "$json_file"
@@ -43,27 +44,55 @@ function add_observer_config {
 }
 
 function update_json {
-    sed -i "s|#reporter#|${reporter}|g" $json_file
-    sed -i "s|#type#|${type}|g" $json_file
-    sed -i "s|#step#|${step}|g" $json_file
-    sed -i "s|#version#|${version}|g" $json_file
-    sed -i "s|#release#|${release}|g" $json_file
-    sed -i "s|#hostHash#|${hostHash}|g" $json_file
-    sed -i "s|#osName#|${osName}|g" $json_file
-    sed -i "s|#osRelease#|${osRelease}|g" $json_file
+    sed -i "s|#reporter#|${reporter}|g" "$json_file"
+    sed -i "s|#type#|${type}|g" "$json_file"
+    sed -i "s|#step#|${step}|g" "$json_file"
+    sed -i "s|#version#|${version}|g" "$json_file"
+    sed -i "s|#release#|${release}|g" "$json_file"
+    sed -i "s|#hostHash#|${hostHash}|g" "$json_file"
+    sed -i "s|#osName#|${osName}|g" "$json_file"
+    sed -i "s|#osRelease#|${osRelease}|g" "$json_file"
+    # Standalone installs have no cluster id; never report the literal placeholder.
+    sed -i "s|#clusterId#||g" "$json_file"
 }
 
 function do_telemetry {
-    if [ "$1" -eq 0 ]; then
-        step="0"
-        reporter="rpm"
-    elif [ "$1" -eq 1 ]; then
-        step="1"
-        reporter="rpm"
-    elif [ "$1" -eq 2 ]; then
-        step="2"
-        reporter="rpm"
-        add_observer_config
+    case "${1:-}" in
+        0)
+            # RPM uninstall
+            step="0"
+            reporter="rpm"
+            ;;
+        1)
+            # RPM install
+            step="1"
+            reporter="rpm"
+            ;;
+        2)
+            # RPM upgrade
+            step="2"
+            reporter="rpm"
+            add_observer_config
+            ;;
+        configure)
+            # Debian install/upgrade: $2 is set to the previously installed version on upgrade
+            reporter="deb"
+            if [ -n "${2:-}" ]; then
+                step="2"
+                add_observer_config
+            else
+                step="1"
+            fi
+            ;;
+        remove|purge)
+            # Debian uninstall
+            step="0"
+            reporter="deb"
+            ;;
+    esac
+    # Make sure the telemetry payload exists before rewriting its placeholders.
+    if [ ! -f "$json_file" ]; then
+        cp "$json_pre_file" "$json_file"
     fi
     update_json
 
@@ -73,5 +102,5 @@ function do_telemetry {
 }
 
 if [[ -z "$TELEMETRY_MODE" ]] || ( [[ "$TELEMETRY_MODE" =~ ^-?[0-9]+$ ]] && [[ "$TELEMETRY_MODE" -eq 1 ]] ); then
-    do_telemetry "$1"
+    do_telemetry "${1:-}" "${2:-}"
 fi
