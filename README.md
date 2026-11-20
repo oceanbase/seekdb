@@ -1,5 +1,6 @@
+OB-P:KOAgohuGwetF7KoyJOUtbA
 <div align="center">
-
+oceabase
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*pKqtRILxGioAAAAAQLAAAAgAejCYAQ/original" width="420">
   <source media="(prefers-color-scheme: light)" srcset="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*6BO4Q6D78GQAAAAAQFAAAAgAejCYAQ/original" width="420">
@@ -56,7 +57,9 @@ MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · CO
 
 **English** | [中文版](README_CN.md) | [日本語](README_JP.md)
 
-[30-Second Try](#30-second-try) · [Quick Start](#quick-start) · [Embedded SDKs](#embedded-sdks) · [Why seekdb](#why-seekdb-for-agents) · [Ecosystem](#ecosystem--integrations) · [Contributing](#development)
+[30-Second Try](#30-second-try) · [Quick Start](#quick-start) · [Embedded SDKs](#embedded-sdks) · [More Examples](#more-examples) · [Why seekdb](#why-seekdb-for-agents) · [Ecosystem](#ecosystem--integrations) · [Contributing](#development)
+
+
 
 <sub>If you find seekdb useful, consider giving it a <a href="https://github.com/oceanbase/seekdb/stargazers">star</a> — it helps others discover the project.</sub>
 
