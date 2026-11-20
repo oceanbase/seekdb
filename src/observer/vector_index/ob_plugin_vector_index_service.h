@@ -68,7 +68,21 @@ public:
   bool is_hybrid_;
   bool is_complete()
   {
-    return inc_adatper_guard_.is_valid() && bitmp_adatper_guard_.is_valid() && sn_adatper_guard_.is_valid() && (!is_hybrid_ || embedded_adatper_guard_.is_valid());
+    auto *inc = inc_adatper_guard_.get_adatper();
+    auto *bitmap = bitmp_adatper_guard_.get_adatper();
+    auto *snapshot = sn_adatper_guard_.get_adatper();
+    auto *embedded = embedded_adatper_guard_.get_adatper();
+    // The query path can populate tablet keys before maintenance sees their table schemas.
+    if (inc == nullptr || !inc->is_inc_tablet_valid() || inc->get_inc_table_id() == OB_INVALID_ID
+        || bitmap == nullptr || !bitmap->is_vbitmap_tablet_valid() || bitmap->get_vbitmap_table_id() == OB_INVALID_ID
+        || snapshot == nullptr || !snapshot->is_snap_tablet_valid() || snapshot->get_snapshot_table_id() == OB_INVALID_ID) {
+      return false;
+    }
+    // A hybrid index still needs its embedded table if that partial map entry is absent.
+    const bool needs_embedded = is_hybrid_ || inc->is_hybrid_index()
+        || bitmap->is_hybrid_index() || snapshot->is_hybrid_index();
+    return !needs_embedded || (embedded != nullptr && embedded->is_embedded_tablet_valid()
+                               && embedded->get_embedded_table_id() != OB_INVALID_ID);
   }
   ObPluginVectorIndexAdapterGuard inc_adatper_guard_;
   ObPluginVectorIndexAdapterGuard bitmp_adatper_guard_;
