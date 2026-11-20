@@ -1606,12 +1606,13 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
 
             OX (session->get_pl_sqlcode_info()->set_sqlcode(OB_SUCCESS));
 
-            // A SELECT does not start a new diagnostics area in a stored
-            // program. In particular, a later SELECT must not erase a warning
-            // that the CALL containing it has to propagate to its caller.
+            const bool is_select = ObStmt::is_select_stmt(stmt_type);
+            ObWarningBuffer *wb = OB_NOT_NULL(session) ? ob_get_tsi_warning_buffer() : NULL;
+            const uint32_t warning_count_before =
+                OB_NOT_NULL(wb) ? wb->get_total_warning_count() : 0;
             if (OB_SUCC(ret)
                 && !ObStmt::is_diagnostic_stmt(stmt_type)
-                && !ObStmt::is_select_stmt(stmt_type)) {
+                && !is_select) {
               ob_reset_tsi_warning_buffer();
             }
 
@@ -1628,6 +1629,17 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
                            spi_result.get_out_params(),
                            is_dynamic_sql,
                            is_cursor_params), K(sql), K(ps_sql));
+
+            bool select_accesses_tables = false;
+            if (OB_SUCC(ret) && is_select) {
+              ObPhysicalPlan *plan = OB_NOT_NULL(spi_result.get_result_set())
+                  ? spi_result.get_result_set()->get_physical_plan() : NULL;
+              select_accesses_tables = OB_NOT_NULL(plan) && plan->get_access_table_num() > 0;
+              if (select_accesses_tables) {
+                ob_reset_tsi_warning_buffer();
+              }
+            }
+
             OZ (inner_fetch(ctx,
                             can_retry,
                             spi_result,
@@ -1644,6 +1656,38 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
                             NULL,
                             0,
                             is_type_record), K(ps_sql), K(sql), K(type));
+
+            if (OB_SUCC(ret) && is_select && !select_accesses_tables) {
+              wb = ob_get_tsi_warning_buffer();
+              if (OB_NOT_NULL(wb) && wb->get_total_warning_count() > warning_count_before) {
+                // A table-free SELECT keeps an earlier diagnostics area only when
+                // it produces no new conditions. If it does generate conditions,
+                // retain just this statement's appended warning items.
+                const uint32_t new_warning_count =
+                    wb->get_total_warning_count() - warning_count_before;
+                ObSEArray<ObWarningBuffer::WarningItem, 8> new_warnings;
+                const uint32_t readable = wb->get_readable_warning_count();
+                const uint32_t first_new =
+                    readable > new_warning_count ? readable - new_warning_count : 0;
+                for (uint32_t i = first_new; OB_SUCC(ret) && i < readable; ++i) {
+                  const ObWarningBuffer::WarningItem *item = wb->get_warning_item(i);
+                  if (OB_NOT_NULL(item) && OB_FAIL(new_warnings.push_back(*item))) {
+                    LOG_WARN("failed to retain SELECT warning", K(ret), K(i));
+                  }
+                }
+                if (OB_SUCC(ret)) {
+                  wb->reset_warning();
+                  for (int64_t i = 0; i < new_warnings.count(); ++i) {
+                    const ObWarningBuffer::WarningItem &item = new_warnings.at(i);
+                    if (USER_NOTE == item.log_level_) {
+                      wb->append_note(item.get(), item.get_code());
+                    } else {
+                      wb->append_warning(item.get(), item.get_code(), item.get_sql_state());
+                    }
+                  }
+                }
+              }
+            }
 
             if (OB_SUCC(ret) && (is_dynamic_sql || is_cursor_params)) {
               OZ (dynamic_out_params(
