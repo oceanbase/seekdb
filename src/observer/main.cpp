@@ -605,7 +605,6 @@ int inner_main(int argc, char *argv[])
     snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
   }
 #endif
-  ObStackHeaderGuard stack_header_guard;
   int64_t memory_used = get_virtual_memory_used();
 
   ObCurTraceId::SeqGenerator::seed(ObTimeUtility::current_time());
