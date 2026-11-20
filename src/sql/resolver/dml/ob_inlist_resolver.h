@@ -84,6 +84,7 @@ public:
                                          const bool is_root_condition,
                                          const bool is_need_print,
                                          const bool is_in_pl_prepare,
+                                         const bool has_approx_clause,
                                          const ObSQLSessionInfo *session_info,
                                          const ParamStore *param_store,
                                          const ObStmt *stmt,

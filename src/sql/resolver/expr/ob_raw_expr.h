@@ -1620,6 +1620,7 @@ struct ObResolveContext
     prepare_param_count_(0),
     external_param_info_(NULL),
     current_scope_(T_NONE_SCOPE),
+    has_approx_clause_(false),
     is_win_agg_(false),
     schema_checker_(NULL),
     session_info_(NULL),
@@ -1667,6 +1668,7 @@ struct ObResolveContext
   int64_t prepare_param_count_;
   ExternalParams *external_param_info_;//for anonymous + ps
   ObStmtScope current_scope_;
+  bool has_approx_clause_;
   common::ObArenaAllocator local_allocator_;
   typedef common::ObDList<ObAggResolveLinkNode> ObAggResolveLink;
   ObAggResolveLink agg_resolve_link_;

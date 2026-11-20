@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -54,6 +55,68 @@ struct InListRewriteInfo {
     param_types_.reuse();
   }
 };
+
+namespace
+{
+// Only use the distinct count to choose a plan shape. In particular, do not
+// remove parse nodes: different executions of a parameterized statement can
+// have different duplicate positions, and every parameter must remain live.
+int check_small_integer_inlist(const ParseNode &in_list,
+                              const ParamStore *param_store,
+                              const int64_t threshold,
+                              bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  bool supported = true;
+  bool has_null = false;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> values;
+  is_small = false;
+  if (OB_FAIL(values.create(threshold, "InListDistinct", "InListDistinct"))) {
+    LOG_WARN("failed to create inlist distinct set", K(ret), K(threshold));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_
+                     && values.size() + has_null < threshold; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+    bool is_null = false;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (T_INT == node->type_) {
+      value = node->value_;
+    } else if (T_NULL == node->type_) {
+      is_null = true;
+    } else if (T_QUESTIONMARK == node->type_ && NULL != param_store
+               && node->value_ >= 0 && node->value_ < param_store->count()) {
+      const ObObjParam &param = param_store->at(node->value_);
+      if (param.is_null()) {
+        is_null = true;
+      } else if (ob_is_int_tc(param.get_type())) {
+        value = param.get_int();
+      } else {
+        supported = false;
+      }
+    } else {
+      // Leave strings, unsigned integers, decimals, expressions and rows on
+      // the existing path; their SQL equality may require type conversion.
+      supported = false;
+    }
+    if (OB_FAIL(ret) || !supported) {
+    } else if (is_null) {
+      has_null = true;
+    } else if (OB_FAIL(values.set_refactored(value, 0))) {
+      if (OB_HASH_EXIST == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("failed to count distinct inlist values", K(ret));
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    is_small = supported && values.size() + has_null < threshold;
+  }
+  return ret;
+}
+} // namespace
 
 int ObInListResolver::resolve_inlist(ObInListInfo &inlist_info)
 {
@@ -270,6 +333,7 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const bool is_root_condition,
                                                   const bool is_need_print,
                                                   const bool is_in_pl_prepare,
+                                                  const bool has_approx_clause,
                                                   const ObSQLSessionInfo *session_info,
                                                   const ParamStore *param_store,
                                                   const ObStmt *stmt,
@@ -350,6 +414,17 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      // A VALUES subquery prevents a direct ANN scan. Keep the existing
+      // rewrite for ordinary SQL, where it can accelerate large IN lists.
+      if (OB_SUCC(ret) && is_enable && has_approx_clause && !is_prepare_stmt
+          && 1 == column_cnt && threshold > 1) {
+        bool is_small = false;
+        if (OB_FAIL(check_small_integer_inlist(in_list, param_store, threshold, is_small))) {
+          LOG_WARN("failed to check distinct inlist size", K(ret));
+        } else if (is_small) {
+          is_enable = false;
+        }
+      }
     }
   }
   return ret;

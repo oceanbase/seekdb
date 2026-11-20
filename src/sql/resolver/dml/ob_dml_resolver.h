@@ -849,6 +849,8 @@ protected:
   ObStmtScope current_scope_;
   int32_t current_level_;
   bool field_list_first_;
+  // Syntax of this query block; vector-index eligibility is resolved later.
+  bool has_approx_clause_;
   ObDMLResolver *parent_namespace_resolver_;
   ObColumnNamespaceChecker column_namespace_checker_;
   //these generated column exprs are not the reference by query expression,

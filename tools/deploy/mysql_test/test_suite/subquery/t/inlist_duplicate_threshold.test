@@ -1,0 +1,103 @@
+# Regression for #1512: a duplicate-heavy integer IN list must not introduce
+# a VALUES subquery into an otherwise direct ANN scan. Retain all parameters
+# so cached statements remain correct when duplicate positions change.
+
+CREATE DATABASE inlist_duplicate_1512;
+USE inlist_duplicate_1512;
+SET @saved_plan_cache = @@ob_enable_plan_cache;
+SET @saved_ef_search = @@ob_hnsw_ef_search;
+SET ob_enable_plan_cache = 1;
+SET ob_hnsw_ef_search = 100;
+CREATE TABLE t(id BIGINT PRIMARY KEY, k BIGINT, v VECTOR(3),
+  VECTOR INDEX vi(v) WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate))
+  ORGANIZATION HEAP;
+--disable_query_log
+let $i = 0;
+while ($i < 100)
+{
+  eval INSERT INTO t VALUES ($i, MOD($i, 5) + 1, CONCAT('[', $i, ',0,0]'));
+  inc $i;
+}
+ANALYZE TABLE t;
+--enable_query_log
+
+--echo # Small distinct count stays in the vector scan (hint threshold).
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t WHERE k IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10", "Query Plan", 4);
+eval SELECT LOCATE('VECTOR INDEX', '$plan') > 0 AS direct_ann_scan;
+--enable_query_log
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t
+WHERE k IN (1,2,3,1,2,3,1,2,3,1,2,3)
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # The reported 3072-element list also stays direct at the default threshold.
+--disable_query_log
+let $values = 1,2,3;
+let $copies = 1023;
+while ($copies)
+{
+  let $values = $values,1,2,3;
+  dec $copies;
+}
+let $plan = query_get_value("EXPLAIN BASIC SELECT id FROM t WHERE k IN ($values) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10", "Query Plan", 4);
+eval SELECT LOCATE('VECTOR INDEX', '$plan') > 0 AS direct_ann_scan;
+eval SELECT id FROM t WHERE k IN ($values) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10;
+--enable_query_log
+
+--echo # Ordinary SQL retains the VALUES rewrite for the same long list.
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT id FROM t WHERE k IN ($values) ORDER BY l2_distance(v,'[0,0,0]') LIMIT 10", "Query Plan", 8);
+eval SELECT LOCATE('VALUES TABLE ACCESS', '$plan') > 0 AS exact_values_rewrite;
+--enable_query_log
+
+--echo # Lists with enough distinct integers retain the existing rewrite.
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM t WHERE k IN (1,2,3,4) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 10", "Query Plan", 4);
+eval SELECT LOCATE('VECTOR INDEX', '$plan') > 0 AS direct_ann_scan;
+--enable_query_log
+
+--echo # Cached ANN parameters stay live when duplicate positions change.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t WHERE k IN (1,1,1,1,1,1,1,1,1,1,1,1) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t WHERE k IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ id FROM t WHERE k IN (5,5,5,5,5,5,5,5,5,5,5,5) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+
+--echo # ANN NULL semantics and a top-level conjunction.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM t WHERE id >= 5 AND k IN (1,NULL,1,NULL,1,NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM t WHERE k NOT IN (1,NULL,1,NULL,1,NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM t WHERE k IN (NULL,NULL,NULL,NULL) ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 3;
+
+--echo # Same parameterized SQL, different duplicate positions and values.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ COUNT(*), SUM(id) FROM t WHERE k IN (1,1,1,1,1,1,1,1,1,1,1,1);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ COUNT(*), SUM(id) FROM t WHERE k IN (1,2,3,4,5,6,7,8,9,10,11,12);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 8) */ COUNT(*), SUM(id) FROM t WHERE k IN (5,5,5,5,5,5,5,5,5,5,5,5);
+
+--echo # NULL preserves IN and NOT IN three-valued logic.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k IN (1,NULL,1,NULL,1,NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k NOT IN (1,NULL,1,NULL,1,NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k IN (NULL,NULL,NULL,NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k NOT IN (1,1,1,1);
+
+--echo # Prepared placeholders are retained across executions.
+PREPARE ps FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'', 4) */ COUNT(*), SUM(id) FROM t WHERE k IN (?,?,?,?,?,?)';
+SET @a=1, @b=1, @c=1, @d=1, @e=1, @f=1;
+EXECUTE ps USING @a,@b,@c,@d,@e,@f;
+SET @a=1, @b=2, @c=3, @d=4, @e=5, @f=NULL;
+EXECUTE ps USING @a,@b,@c,@d,@e,@f;
+DEALLOCATE PREPARE ps;
+
+--echo # Existing coercion and row-expression paths remain valid.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k IN ('1','2','1','2');
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE k IN (1.0,2.0,1.0,2.0);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM t WHERE (k,k) IN ((1,1),(2,2),(1,1),(2,2));
+
+--echo # Signed boundaries and unsigned fallback do not alias.
+CREATE TABLE bounds(k BIGINT);
+INSERT INTO bounds VALUES (-9223372036854775808),(-1),(0),(9223372036854775807),(NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ k FROM bounds WHERE k IN (-9223372036854775808,-1,-9223372036854775808,-1) ORDER BY k;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ k FROM bounds WHERE k IN (9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807) ORDER BY k;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ COUNT(*) FROM bounds WHERE k IN (18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615);
+
+SET ob_enable_plan_cache = @saved_plan_cache;
+SET ob_hnsw_ef_search = @saved_ef_search;
+USE test;
+DROP DATABASE inlist_duplicate_1512;
