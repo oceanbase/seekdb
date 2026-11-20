@@ -69,7 +69,8 @@ void point2pointer(T *&dst_pointer, B *dst_base, T *src_pointer, const B *src_ba
 
 int ObChunkDatumStore::StoredRow::to_expr(const common::ObIArray<ObExpr*> &exprs,
                                           ObEvalCtx &ctx,
-                                          int64_t count) const
+                                          int64_t count,
+                                          bool include_const_expr) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(cnt_ < count || exprs.count() < count)) {
@@ -77,7 +78,7 @@ int ObChunkDatumStore::StoredRow::to_expr(const common::ObIArray<ObExpr*> &exprs
     LOG_WARN("datum count mismatch", K(ret), K(cnt_), K(exprs.count()), K(count));
   } else {
     for (uint32_t i = 0; i < count; ++i) {
-      if (exprs.at(i)->is_const_expr()) {
+      if (!include_const_expr && exprs.at(i)->is_const_expr()) {
         continue;
       } else {
         exprs.at(i)->locate_expr_datum(ctx) = cells()[i];

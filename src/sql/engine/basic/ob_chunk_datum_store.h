@@ -134,7 +134,10 @@ public:
       char *buf, const int64_t size, const int64_t row_size, const uint32_t row_extend_size);
     template <bool fill_invariable_res_buf = false>
     int to_expr(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx) const;
-    int to_expr(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, int64_t count) const;
+    int to_expr(const common::ObIArray<ObExpr*> &exprs,
+                ObEvalCtx &ctx,
+                int64_t count,
+                bool include_const_expr = false) const;
     inline common::ObDatum *cells() { return reinterpret_cast<common::ObDatum *>(payload_); }
     inline const common::ObDatum *cells() const
         { return reinterpret_cast<const common::ObDatum *>(payload_); }
