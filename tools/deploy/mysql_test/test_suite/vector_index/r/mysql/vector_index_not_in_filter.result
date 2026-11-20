@@ -1,0 +1,73 @@
+# HNSW adaptive scan: NOT (IN) should expose the same B-tree range as NOT IN
+alter system set vector_memory_limit = 0;
+drop table if exists t_not_in_range;
+create table t_not_in_range (
+id int,
+age int not null,
+embedding vector(3),
+primary key (id),
+key idx_age (age)
+) organization heap;
+insert into t_not_in_range values
+(1, 1, '[0.1,0.2,0.3]'),
+(2, 2, '[0.2,0.3,0.4]'),
+(3, 3, '[0.3,0.4,0.5]'),
+(4, 4, '[0.4,0.5,0.6]'),
+(5, 5, '[0.5,0.6,0.7]'),
+(6, 6, '[0.6,0.7,0.8]'),
+(7, 7, '[0.7,0.8,0.9]'),
+(8, 8, '[0.8,0.9,1.0]'),
+(9, 9, '[0.9,1.0,0.1]'),
+(10, 10, '[1.0,0.1,0.2]');
+create vector index idx_hnsw on t_not_in_range(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16,
+ef_construction=128, ef_search=64, sync_mode=immediate);
+analyze table t_not_in_range;
+set ob_hnsw_ef_search = 16;
+explain select /*+ index(t_not_in_range idx_age) */ id
+from t_not_in_range
+where not (age in (2,3,4,5,6,7,8,9,10))
+order by l2_distance(embedding, [0.1,0.2,0.3]) approximate
+limit 1;
+Query Plan
+==========================================================================================
+|ID|OPERATOR                               |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_not_in_range(idx_age)|1       |45          |
+==========================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_not_in_range.id]), filter([(T_OP_NOT, t_not_in_range.age IN (2, 3, 4, 5, 6, 7, 8, 9, 10))]), rowset=16
+      access([t_not_in_range.__pk_increment], [t_not_in_range.age], [t_not_in_range.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
+      range_key([t_not_in_range.age], [t_not_in_range.__pk_increment]), range(NULL,MAX ; 2,MIN), (2,MAX ; 3,MIN), (3,MAX ; 4,MIN), (4,MAX ; 5,MIN), (5,MAX 
+      ; 6,MIN), (6,MAX ; 7,MIN), (7,MAX ; 8,MIN), (8,MAX ; 9,MIN), (9,MAX ; 10,MIN), (10,MAX ; MAX,MAX)
+explain select /*+ index(t_not_in_range idx_age) */ id
+from t_not_in_range
+where age not in (2,3,4,5,6,7,8,9,10)
+order by l2_distance(embedding, [0.1,0.2,0.3]) approximate
+limit 1;
+Query Plan
+==========================================================================================
+|ID|OPERATOR                               |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_not_in_range(idx_age)|1       |45          |
+==========================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_not_in_range.id]), filter([(T_OP_NOT_IN, t_not_in_range.age, (2, 3, 4, 5, 6, 7, 8, 9, 10))]), rowset=16
+      access([t_not_in_range.__pk_increment], [t_not_in_range.age], [t_not_in_range.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
+      range_key([t_not_in_range.age], [t_not_in_range.__pk_increment]), range(NULL,MAX ; 2,MIN), (2,MAX ; 3,MIN), (3,MAX ; 4,MIN), (4,MAX ; 5,MIN), (5,MAX 
+      ; 6,MIN), (6,MAX ; 7,MIN), (7,MAX ; 8,MIN), (8,MAX ; 9,MIN), (9,MAX ; 10,MIN), (10,MAX ; MAX,MAX)
+select group_concat(id order by id)
+from t_not_in_range
+where not (age in (2,3,4,5,6,7,8,9,10));
+group_concat(id order by id)
+1
+select group_concat(id order by id)
+from t_not_in_range
+where age not in (2,3,4,5,6,7,8,9,10);
+group_concat(id order by id)
+1
+drop table t_not_in_range;
