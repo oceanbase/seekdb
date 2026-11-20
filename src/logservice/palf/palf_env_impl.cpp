@@ -422,7 +422,17 @@ int PalfEnvImpl::reload_palf_handle_impl_()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(FileDirectoryUtils::is_exists(base_dir, dir_exist))) {
   } else if (!dir_exist) {
-    ret = meta_store::remove(*store_);
+    LogMeta meta;
+    block_id_t expected_next_block_id = 0;
+    const int load_ret = meta_store::load(*store_, meta, expected_next_block_id);
+    if (OB_ENTRY_NOT_EXIST == load_ret) {
+    } else if (OB_SUCCESS != load_ret) {
+      ret = load_ret;
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      PALF_LOG(ERROR, "PALF metadata exists but its log directory is missing",
+          K(ret), K(base_dir), K(expected_next_block_id));
+    }
   } else if (NULL == (handle = SERVER_NEW(PalfHandleImpl, "palf_env"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(handle->load(base_dir,
