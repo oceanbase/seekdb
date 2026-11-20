@@ -1,0 +1,31 @@
+# Weak, strong and threshold-adjacent filters retain the canonical vector plan
+uses_vector_index
+1
+same_operator
+1
+equivalent_estimated_rows
+1
+uses_vector_index
+1
+same_operator
+1
+equivalent_estimated_rows
+1
+uses_vector_index
+1
+same_operator
+1
+equivalent_estimated_rows
+1
+# Commuted additions and reversed comparisons retain the same estimate
+same_commuted_estimate
+1
+same_reversed_estimate
+1
+# Normalization for estimation preserves the executed arithmetic
+preserves_execution_filter
+1
+# ANN still fills Top-K with eligible rows
+returned_rows	invalid_rows
+3	0
+# vector integer add-zero filter regression finished

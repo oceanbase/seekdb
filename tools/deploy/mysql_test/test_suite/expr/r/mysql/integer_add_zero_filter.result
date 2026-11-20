@@ -1,0 +1,44 @@
+# NULLs, narrow integers, BIGINT boundaries, both addition/comparison sides
+mismatches
+0
+ids
+8,9,10
+ids
+8,9,10
+ids
+10
+ids
+2
+ids
+2,8,9
+# Cached plans preserve nonzero outer and inner arithmetic
+ids
+8,9,10
+ids
+6,7,8,9,10
+ids
+6,7,8,9,10
+ids
+8,9,10
+ids
+8,9,10
+ids
+6,7,8,9,10
+ids
+6,7,8,9,10
+# Mixed types and non-identity expressions retain their SQL semantics
+ids
+8,9
+ids
+10
+ids
+10
+ids
+10
+matched
+0
+ids
+2
+data_type
+bigint
+# integer add-zero filter regression finished
