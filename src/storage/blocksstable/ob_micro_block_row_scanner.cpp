@@ -471,9 +471,7 @@ int ObIMicroBlockRowScanner::apply_black_filter_batch(
   const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
   ObSEArray<ObSqlDatumInfo, 16> datum_infos;
   bool filter_applied_directly = false;
-  if ((ObIMicroBlockReader::Decoder == reader_->get_type() ||
-      ObIMicroBlockReader::CSDecoder == reader_->get_type()) &&
-      filter.can_pushdown_decoder()) {
+  if (ObIMicroBlockReader::Decoder == reader_->get_type() && filter.can_pushdown_decoder()) {
     if (decoder_->can_apply_black(col_offsets) &&
         OB_FAIL(decoder_->filter_black_filter_batch(
                 parent,
@@ -547,8 +545,7 @@ int ObIMicroBlockRowScanner::get_rows_for_old_format(
                                       exprs,
                                       eval_ctx))) {
     }
-  } else if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
-             ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
+  } else if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
     ObIMicroBlockDecoder *decoder = static_cast<ObIMicroBlockDecoder *>(reader_);
     if (OB_FAIL(decoder->get_rows(col_offsets,
                                   col_params,
@@ -595,13 +592,9 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
                 sstable_->is_major_sstable(),
                 bitmap))) {
     }
-  } else if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
-             ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
-    // change to black filter in below situation
-    // 1. if need project lob column and micro block has outrow lob  
-    // 2. if it is semistruct_filter_node, but not cs decoder (beacuase semistrcut white filter only support cs decoder)
+  } else if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
     if ((param_->has_lob_column_out() && reader_->has_lob_out_row())
-        || (filter->is_semistruct_filter_node() && ObIMicroBlockReader::CSDecoder != reader_->get_type())) {
+        || filter->is_semistruct_filter_node()) {
       sql::ObPhysicalFilterExecutor *physical_filter = static_cast<sql::ObPhysicalFilterExecutor *>(filter);
       if (OB_FAIL(decoder_->filter_pushdown_filter(parent,
                                                    *physical_filter,
@@ -653,8 +646,7 @@ int ObIMicroBlockRowScanner::filter_truncate_evaluator(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == reader_ || !evaluator.is_valid() || start < 0 || count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
-             ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
+  } else if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
     if (OB_FAIL(decoder_->filter_truncate_evaluator(
             evaluator, start, count, candidate_rows, result))) {
     }
@@ -804,8 +796,7 @@ int ObIMicroBlockRowScanner::read_distinct(
     storage::ObGroupByCellBase &group_by_cell) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(blocksstable::ObIMicroBlockReader::Decoder != reader_->get_type() &&
-      blocksstable::ObIMicroBlockReader::CSDecoder != reader_->get_type())) {
+  if (OB_UNLIKELY(blocksstable::ObIMicroBlockReader::Decoder != reader_->get_type())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL((static_cast<blocksstable::ObIMicroBlockDecoder*>(reader_))->read_distinct(
       group_by_col, cell_datas, is_padding_mode, group_by_cell))) {
@@ -820,8 +811,7 @@ int ObIMicroBlockRowScanner::read_reference(
     storage::ObGroupByCellBase &group_by_cell) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(blocksstable::ObIMicroBlockReader::Decoder != reader_->get_type() &&
-      blocksstable::ObIMicroBlockReader::CSDecoder != reader_->get_type())) {
+  if (OB_UNLIKELY(blocksstable::ObIMicroBlockReader::Decoder != reader_->get_type())) {
   } else if (OB_FAIL((static_cast<blocksstable::ObIMicroBlockDecoder*>(reader_))->read_reference(
       group_by_col, row_ids, row_cap, group_by_cell))) {
   }

@@ -374,8 +374,7 @@ int ObMicroBlockRowLockMultiChecker::seek_forward()
   int ret = OB_SUCCESS;
   ObIMicroBlockReader *micro_block_reader = nullptr;
   bool need_search_duplicate_row = false;
-  if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
-      ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
+  if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
     micro_block_reader = decoder_;
   } else {
     micro_block_reader = flat_reader_;
