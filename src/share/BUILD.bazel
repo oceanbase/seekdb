@@ -119,6 +119,21 @@ cc_library(
 )
 
 cc_library(
+    name = "identifier_escape",
+    hdrs = ["ob_identifier_escape.h"],
+    deps = [
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_foundation",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
     name = "thread_pool_interface",
     hdrs = ["ob_thread_pool.h"],
     deps = ["//src/oblib:oblib_foundation"],
