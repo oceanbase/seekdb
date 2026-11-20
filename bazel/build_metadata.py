@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -33,8 +34,13 @@ def version_source(template, status_file, output):
         "BUILD_INFO": "",
     }
     source = Path(template).read_text(encoding="utf-8")
-    for key, value in values.items():
-        source = source.replace("@" + key + "@", value)
+    # These placeholders occur inside C++ string literals. Git permits quotes
+    # and placeholder-like text in branch names; insert escaped values once.
+    source = re.sub(
+        r"@(" + "|".join(values) + r")@",
+        lambda match: values[match[1]].replace("\\", "\\\\").replace('"', '\\"'),
+        source,
+    )
     with open(output, "w", encoding="utf-8", newline="\n") as stream:
         stream.write(source)
 
