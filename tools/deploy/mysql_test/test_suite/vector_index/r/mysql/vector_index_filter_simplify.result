@@ -1,0 +1,191 @@
+SET ob_hnsw_ef_search = 64;
+CREATE TABLE ann_filter_simplify (
+id INT PRIMARY KEY, v VECTOR(3), category INT, age INT,
+KEY idx_category(category), KEY idx_age(age),
+VECTOR INDEX idx_v(v) WITH (distance=l2, type=hnsw, lib=vsag,
+sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO ann_filter_simplify VALUES
+(1, '[1,0,0]', 1, 10), (2, '[2,0,0]', 2, 20),
+(3, '[3,0,0]', NULL, NULL), (4, '[4,0,0]', 1, NULL),
+(5, '[5,0,0]', NULL, 30), (6, '[6,0,0]', 2, NULL),
+(7, '[7,0,0]', 1, 1000), (8, '[8,0,0]', 2, 40);
+EXPLAIN BASIC SELECT id FROM ann_filter_simplify
+WHERE category = 1 OR FALSE OR category = 1
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+Query Plan
+==============================================================================
+|ID|OPERATOR                               |NAME                             |
+------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_filter_simplify(idx_category)|
+==============================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ann_filter_simplify.id]), filter([ann_filter_simplify.category = 1]), rowset=16
+      access([ann_filter_simplify.__pk_increment], [ann_filter_simplify.category], [ann_filter_simplify.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([ann_filter_simplify.category], [ann_filter_simplify.__pk_increment]), range(1,MIN ; 1,MAX)
+SELECT id FROM ann_filter_simplify WHERE category = 1
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+4
+7
+EXPLAIN BASIC SELECT id FROM ann_filter_simplify
+WHERE category = 1 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+Query Plan
+================================================================
+|ID|OPERATOR                               |NAME               |
+----------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_filter_simplify|
+================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ann_filter_simplify.id]), filter([ann_filter_simplify.category = 1 OR ann_filter_simplify.age > 1000]), rowset=16
+      access([ann_filter_simplify.__pk_increment], [ann_filter_simplify.category], [ann_filter_simplify.age], [ann_filter_simplify.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([ann_filter_simplify.__pk_increment]), range(MIN ; MAX)always true
+SELECT id FROM ann_filter_simplify
+WHERE category = 1 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+4
+7
+SELECT id FROM ann_filter_simplify
+WHERE (category = 1 OR category = 1 OR NULL) AND (age > 0 OR age IS NULL)
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 1, 2;
+id
+4
+7
+SELECT id FROM ann_filter_simplify
+WHERE NOT (category <> 1 AND category <> 1)
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+4
+7
+SELECT id FROM ann_filter_simplify WHERE category = 1 AND FALSE
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+id
+SELECT id FROM (
+SELECT id, l2_distance(v, '[0,0,0]') AS distance FROM ann_filter_simplify
+WHERE category = 1 OR FALSE OR category = 1
+ORDER BY distance APPROXIMATE LIMIT 2
+) AS nearest ORDER BY id;
+id
+1
+4
+INSERT INTO ann_filter_simplify VALUES (9, '[9,0,0]', NULL, 2000);
+SELECT id FROM ann_filter_simplify
+WHERE category = 1 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+4
+7
+9
+PREPARE ann_filter_stmt FROM 'SELECT id FROM ann_filter_simplify WHERE category = ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? ORDER BY l2_distance(v, \'[0,0,0]\') APPROXIMATE LIMIT 10';
+SET @category = 1, @high = 1000, @low = 25;
+EXECUTE ann_filter_stmt USING @category, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high;
+id
+1
+4
+7
+9
+EXECUTE ann_filter_stmt USING @category, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @low;
+id
+1
+4
+5
+7
+8
+9
+EXECUTE ann_filter_stmt USING @category, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high;
+id
+1
+4
+7
+9
+DEALLOCATE PREPARE ann_filter_stmt;
+# Distinct OR predicates after exhausting the comparison budget
+id
+1
+2
+5
+7
+8
+9
+# Repeated top-level AND predicates also simplify
+Query Plan
+==============================================================================
+|ID|OPERATOR                               |NAME                             |
+------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_filter_simplify(idx_category)|
+==============================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ann_filter_simplify.id]), filter([ann_filter_simplify.category = 1]), rowset=16
+      access([ann_filter_simplify.__pk_increment], [ann_filter_simplify.category], [ann_filter_simplify.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([ann_filter_simplify.category], [ann_filter_simplify.__pk_increment]), range(1,MIN ; 1,MAX)
+id
+1
+4
+7
+# The shared deduplication budget also preserves exact search results
+id
+1
+4
+7
+9
+DROP TABLE ann_filter_simplify;
