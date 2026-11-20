@@ -23,7 +23,6 @@
 #include "log_entry.h"
 #include "log_group_entry.h"
 #include "log_io_context.h"
-#include "log_iterator_info.h"
 #include "rust/palf.h"
 #include "share/ob_errno.h"
 

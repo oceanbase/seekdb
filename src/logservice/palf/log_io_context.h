@@ -18,7 +18,6 @@
 #define OCEANBASE_LOGSERVICE_LOG_IO_CONTEXT_
 #include <cstdint>
 #include "lib/utility/ob_print_utils.h"
-#include "log_iterator_info.h"
 
 namespace oceanbase
 {
@@ -71,46 +70,17 @@ public:
   void destroy()
   {
     user_ = LogIOUser::DEFAULT;
-    iterator_info_.reset();
   }
   LogIOContext &operator=(const LogIOContext &io_ctx)
   {
     if (&io_ctx != this) {
       this->user_ = io_ctx.user_;
-      this->iterator_info_ = io_ctx.iterator_info_;
     }
     return *this;
   }
-  void set_start_lsn(const LSN &start_lsn) { iterator_info_.set_start_lsn(start_lsn); }
-  LogIteratorInfo *get_iterator_info() { return &iterator_info_; }
-  void inc_read_io_cnt() 
-  { 
-    iterator_info_.inc_read_io_cnt();
-  }
-  void inc_read_io_size(const int64_t read_size) 
-  {
-    iterator_info_.inc_read_io_size(read_size);
-  }
-  void inc_read_disk_cost_ts(const int64_t cost_ts)
-  {
-    iterator_info_.inc_read_disk_cost_ts(cost_ts);
-  }
-  void inc_cache_hit_cnt()
-  {
-    iterator_info_.inc_cache_hit_cnt();
-  }
-  void inc_cache_miss_cnt()
-  {
-    iterator_info_.inc_cache_miss_cnt();
-  }
-  void inc_cache_read_size(const int64_t read_size)
-  {
-    iterator_info_.inc_cache_read_size(read_size);
-  }
-  TO_STRING_KV("user", log_io_user_str(user_), K_(iterator_info));
+  TO_STRING_KV("user", log_io_user_str(user_));
 private:
   LogIOUser user_;
-  LogIteratorInfo iterator_info_;
 };
 }
 }

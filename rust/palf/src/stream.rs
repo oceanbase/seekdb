@@ -535,8 +535,7 @@ impl Stream {
         let lsn = state
             .records
             .iter()
-            .filter(|(_, record)| record.header.max_scn <= scn)
-            .next_back()
+            .rfind(|(_, record)| record.header.max_scn <= scn)
             .map(|(lsn, _)| *lsn)
             .ok_or(Error::OutLower)?;
         Ok((block_id(lsn) * BLOCK_SIZE).max(state.manifest.base_lsn))
@@ -638,6 +637,16 @@ impl Cursor {
                 .map(|(_, meta)| meta.clone())
                 .ok_or(Error::OutLower)?;
             if self.next_lsn >= meta.end_lsn() {
+                let remaining = BLOCK_SIZE - block_offset(self.next_lsn);
+                if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64
+                    && self.next_lsn + remaining <= state.end_lsn
+                {
+                    let next_lsn = self.next_lsn + remaining;
+                    drop(state);
+                    self.next_lsn = next_lsn;
+                    self.bytes.clear();
+                    continue;
+                }
                 return Err(Error::Partial);
             }
             let bytes = state.read_record(meta.lsn)?;
@@ -1026,6 +1035,7 @@ impl State {
             let create = !self.segment_lengths.contains_key(&id);
             let mut file = OpenOptions::new()
                 .create(true)
+                .truncate(false)
                 .read(true)
                 .write(true)
                 .open(path)?;
@@ -1104,6 +1114,7 @@ impl State {
         let new_segment = !self.segment_lengths.contains_key(&id);
         let mut file = OpenOptions::new()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(&path)?;
@@ -1260,7 +1271,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         let path = segment_path(directory, id);
         let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
         let length = file.metadata()?.len();
-        if length < SEGMENT_HEADER_SIZE || length > PHYSICAL_BLOCK_SIZE {
+        if !(SEGMENT_HEADER_SIZE..=PHYSICAL_BLOCK_SIZE).contains(&length) {
             return Err(Error::Corrupt);
         }
         let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
@@ -1591,11 +1602,18 @@ mod tests {
         stream.append_imported(0, 10, &group).unwrap();
         let appended = stream.append(b"next", 11).unwrap();
         assert_eq!(block_id(appended.lsn), 1);
+        let mut cursor = stream.cursor(0, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), vec![7; payload_len]);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"next");
         drop(stream);
 
         let reopened = Stream::open(&path, 0);
         assert_eq!(reopened.status(), Ok(true));
-        let mut cursor = reopened.cursor(appended.lsn, false);
+        let mut cursor = reopened.cursor(0, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), vec![7; payload_len]);
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"next");
         assert_eq!(cursor.next(u64::MAX), Err(Error::End));
@@ -1722,20 +1740,90 @@ mod tests {
     }
 
     #[test]
-    fn product_log_body_limit_is_enforced() {
+    fn product_log_boundaries_survive_reopen_and_import() {
+        const OLD_NORMAL_LIMIT: usize = 2 * 1024 * 1024 + 16 * 1024;
+        const MAX_GROUP_LEN: u64 =
+            (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE + MAX_LOG_BODY_SIZE) as u64;
+
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0, 0);
-        let largest = vec![7; MAX_LOG_BODY_SIZE];
-        let accepted = stream.append(&largest, 10).unwrap();
+        let mut expected = Vec::new();
+        for (index, size) in [OLD_NORMAL_LIMIT - 1, OLD_NORMAL_LIMIT, OLD_NORMAL_LIMIT + 1]
+            .into_iter()
+            .enumerate()
+        {
+            let payload = vec![index as u8 + 1; size];
+            let appended = stream.append(&payload, index as u64 + 10).unwrap();
+            expected.push((appended.lsn, appended.scn, payload));
+        }
+
+        let target_group_lsn = BLOCK_SIZE - MAX_GROUP_LEN;
+        while stream.progress().unwrap().end_lsn < target_group_lsn {
+            let remaining = target_group_lsn - stream.progress().unwrap().end_lsn;
+            let group_len = if remaining > MAX_GROUP_LEN && remaining < 2 * MAX_GROUP_LEN {
+                remaining / 2
+            } else {
+                remaining.min(MAX_GROUP_LEN)
+            };
+            let payload_len =
+                (group_len - GROUP_HEADER_SIZE as u64 - ENTRY_HEADER_SIZE as u64) as usize;
+            let payload = vec![4; payload_len];
+            let appended = stream.append(&payload, 20).unwrap();
+            expected.push((appended.lsn, appended.scn, payload));
+        }
+        let largest = vec![5; MAX_LOG_BODY_SIZE];
+        let accepted = stream.append(&largest, 30).unwrap();
         assert_eq!(
-            stream.append(&vec![8; MAX_LOG_BODY_SIZE + 1], 11),
+            accepted.lsn,
+            target_group_lsn + GROUP_HEADER_SIZE as u64
+        );
+        assert_eq!(accepted.end_lsn, BLOCK_SIZE);
+        expected.push((accepted.lsn, accepted.scn, largest));
+        let next_segment = stream.append(b"next-segment", 31).unwrap();
+        assert_eq!(next_segment.lsn, BLOCK_SIZE + GROUP_HEADER_SIZE as u64);
+        expected.push((
+            next_segment.lsn,
+            next_segment.scn,
+            b"next-segment".to_vec(),
+        ));
+
+        assert_eq!(
+            stream.append(&vec![6; MAX_LOG_BODY_SIZE + 1], 32),
             Err(Error::Invalid)
         );
-        assert_eq!(stream.progress().unwrap().end_lsn, accepted.end_lsn);
-        let mut cursor = stream.cursor(0, false);
-        cursor.next(u64::MAX).unwrap();
-        assert_eq!(cursor.payload(), largest);
+        assert_eq!(stream.progress().unwrap().end_lsn, next_segment.end_lsn);
+        drop(stream);
+
+        let verify = |stream: &Stream| {
+            let mut cursor = stream.cursor(0, false);
+            for (_, _, payload) in &expected {
+                cursor.next(u64::MAX).unwrap();
+                assert_eq!(cursor.payload(), payload);
+            }
+            assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        };
+        let reopened = Stream::open(&path, 0);
+        assert_eq!(reopened.status(), Ok(true));
+        verify(&reopened);
+
+        let target_directory = Directory::new();
+        let target_path = target_directory.0.to_string_lossy().into_owned();
+        let target = Stream::create(&target_path, base(), 0, 0);
+        let mut groups = reopened.cursor(0, true);
+        for (lsn, scn, _) in &expected {
+            groups.next(u64::MAX).unwrap();
+            assert_eq!(groups.lsn() + GROUP_HEADER_SIZE as u64, *lsn);
+            assert_eq!(groups.scn(), *scn);
+            target
+                .append_imported(groups.lsn(), *scn, groups.bytes())
+                .unwrap();
+        }
+        assert_eq!(groups.next(u64::MAX), Err(Error::End));
+        drop(target);
+        let target = Stream::open(&target_path, 0);
+        assert_eq!(target.status(), Ok(true));
+        verify(&target);
     }
 
     #[test]

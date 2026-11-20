@@ -64,14 +64,6 @@ public:
                      AppendCb *cb,
                      palf::LSN &lsn,
                      share::SCN &scn) = 0;
-  
-  virtual int append_big_log(const void *buffer,
-                             const int64_t nbytes,
-                             const share::SCN &ref_scn,
-                             const bool need_nonblock,
-                             AppendCb *cb,
-                             palf::LSN &lsn,
-                             share::SCN &scn) = 0;
 
   virtual int get_append_mode_initial_scn(share::SCN &ref_scn) const = 0;
   virtual int seek(const palf::LSN &lsn, palf::PalfBufferIterator &iter) = 0;
@@ -135,27 +127,6 @@ public:
              palf::LSN &lsn,
              share::SCN &scn) override final;
   
-  // @brief append count bytes(which is bigger than MAX_NORMAL_LOG_BODY_SIZE) from the buffer starting at buf to the palf handle, return the LSN and timestamp
-  // @param[in] const void *, the data buffer.
-  // @param[in] const uint64_t, the length of data buffer.
-  // @param[in] const int64_t, the base timestamp(ns), palf will ensure that the return tiemstamp will greater
-  //            or equal than this field.
-  // @param[in] const bool, decide this append option whether need block thread.
-  // @param[int] AppendCb*, the callback of this append option, log handler will ensure that cb will be called after log has been committed
-  // @param[out] LSN&, the append position.
-  // @param[out] int64_t&, the append timestamp.
-  // @retval
-  //    OB_SUCCESS
-  //    OB_NOT_MASTER, the prospoal_id of ObLogHandler is not same with PalfHandle.
-  // NB: only support for primary(AccessMode::APPEND)
-  int append_big_log(const void *buffer,
-                     const int64_t nbytes,
-                     const share::SCN &ref_scn,
-                     const bool need_nonblock,
-                     AppendCb *cb,
-                     palf::LSN &lsn,
-                     share::SCN &scn) override final;
-
   int append_imported_group(const palf::LSN &source_lsn,
                             const share::SCN &source_scn,
                             const void *buffer,
