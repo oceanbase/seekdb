@@ -159,7 +159,11 @@ impl<'a> FlatBlock<'a> {
         parsed.cell(column)
     }
 
-    pub fn project(&self, rows: &[u32], columns: &[u32]) -> Result<Projection<'a>> {
+    pub fn project(
+        &self,
+        rows: &[u32],
+        columns: &[u32],
+    ) -> Result<(Projection<'a>, Vec<FlatRowInfo>)> {
         let cell_count = rows
             .len()
             .checked_mul(columns.len())
@@ -168,8 +172,13 @@ impl<'a> FlatBlock<'a> {
         cells
             .try_reserve_exact(cell_count)
             .map_err(|_| Error::SizeOverflow)?;
+        let mut row_info = Vec::new();
+        row_info
+            .try_reserve_exact(rows.len())
+            .map_err(|_| Error::SizeOverflow)?;
         for &row in rows {
             let parsed = self.row(row as usize)?;
+            row_info.push(parsed.info);
             for &column in columns {
                 cells.push(if column as usize >= self.column_count() {
                     Cell::Nop
@@ -178,7 +187,7 @@ impl<'a> FlatBlock<'a> {
                 });
             }
         }
-        Ok(Projection::new(rows.len(), columns.len(), cells))
+        Ok((Projection::new(rows.len(), columns.len(), cells), row_info))
     }
 }
 
@@ -522,7 +531,7 @@ mod tests {
         assert_eq!(block.cell(1, 7).unwrap(), Cell::Bytes(b"default-value"));
         assert_eq!(block.cell(2, 1).unwrap().bytes().unwrap(), "中".as_bytes());
         assert_eq!(block.cell(7, 7).unwrap(), Cell::Bytes(b"default-value"));
-        let projection = block.project(&[0, 1, 2], &[0, 1, 4, 7, 8]).unwrap();
+        let (projection, _) = block.project(&[0, 1, 2], &[0, 1, 4, 7, 8]).unwrap();
         assert_eq!(projection.row_count(), 3);
         assert_eq!(projection.column_count(), 5);
         assert_eq!(projection.get(0, 4).unwrap(), Cell::Nop);
@@ -563,9 +572,12 @@ mod tests {
         assert_eq!(block.cell(1, 44).unwrap(), Cell::Null);
         assert_eq!(block.cell(1, 45).unwrap(), Cell::UInt(241));
         assert_eq!(block.cell(1, 55).unwrap(), Cell::Bytes(b"wide-default-52"));
-        let projection = block
+        let (projection, row_info) = block
             .project(&[1, 2], &[0, 4, 35, 36, 44, 45, 55, 56])
             .unwrap();
+        assert_eq!(row_info.len(), 2);
+        assert_eq!(row_info[0], block.row_info(1).unwrap());
+        assert_eq!(row_info[1], block.row_info(2).unwrap());
         assert_eq!(projection.row_count(), 2);
         assert_eq!(projection.column_count(), 8);
         assert_eq!(projection.get(0, 2).unwrap(), Cell::UInt(231));

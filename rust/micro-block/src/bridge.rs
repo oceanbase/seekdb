@@ -50,6 +50,12 @@ mod ffi {
         value: u64,
     }
 
+    struct FlatRowMeta {
+        row_flag: u8,
+        multi_version_flag: u8,
+        trans_id: i64,
+    }
+
     struct BuildResult {
         code: Code,
         block: Vec<u8>,
@@ -61,6 +67,7 @@ mod ffi {
         code: Code,
         rows: Vec<u32>,
         cells: Vec<CellDesc>,
+        row_meta: Vec<FlatRowMeta>,
     }
 
     struct LocateResult {
@@ -256,11 +263,13 @@ fn batch_result(result: Result<(Vec<u32>, Vec<ffi::CellDesc>)>) -> ffi::BatchRes
             code: ffi::Code::Ok,
             rows,
             cells,
+            row_meta: Vec::new(),
         },
         Err(error) => ffi::BatchResult {
             code: code(error),
             rows: Vec::new(),
             cells: Vec::new(),
+            row_meta: Vec::new(),
         },
     }
 }
@@ -308,12 +317,29 @@ fn project_pax_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::BatchR
 }
 
 fn project_flat_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::BatchResult {
-    batch_result((|| {
+    let result = (|| {
         let parsed = FlatBlock::new(block)?;
-        let projection = parsed.project(rows, columns)?;
+        let (projection, row_info) = parsed.project(rows, columns)?;
         let cells = describe_cells(block, projection);
-        Ok((rows.to_vec(), cells))
-    })())
+        let row_meta = row_info
+            .into_iter()
+            .map(|info| ffi::FlatRowMeta {
+                row_flag: info.row_flag,
+                multi_version_flag: info.multi_version_flag,
+                trans_id: info.trans_id,
+            })
+            .collect();
+        Ok((rows.to_vec(), cells, row_meta))
+    })();
+    match result {
+        Ok((rows, cells, row_meta)) => ffi::BatchResult {
+            code: ffi::Code::Ok,
+            rows,
+            cells,
+            row_meta,
+        },
+        Err(error) => batch_result(Err(error)),
+    }
 }
 
 fn filter_project_uint(

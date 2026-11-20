@@ -48,7 +48,21 @@ protected:
                          int64_t &row_idx,
                          bool &equal);
   OB_INLINE int init(const ObMicroBlockData &block_data);
+  int read_row(
+      const storage::ObITableReadInfo *read_info,
+      const int64_t index,
+      ObDatumRow &row);
 protected:
+  struct RustFlatBatch;
+  int try_get_rows_rust(
+      const storage::ObITableReadInfo &read_info,
+      const int32_t *row_ids,
+      const int64_t row_cap,
+      RustFlatBatch &batch);
+  int read_rust_row(
+      const RustFlatBatch &batch,
+      const int64_t row_idx,
+      ObDatumRow &row_buf);
   const ObMicroBlockHeader *header_;
   const char *data_begin_;
   const char *data_end_;
@@ -183,15 +197,6 @@ public:
   { return nullptr != header_ && header_->has_lob_out_row(); }
 
 protected:
-  struct RustFlatBatch;
-  int try_get_rows_rust(
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      RustFlatBatch &batch);
-  int read_rust_row(
-      const RustFlatBatch &batch,
-      const int64_t row_idx,
-      ObDatumRow &row_buf);
   virtual int find_bound(
       const ObDatumRange &range,
       const int64_t begin_idx,
