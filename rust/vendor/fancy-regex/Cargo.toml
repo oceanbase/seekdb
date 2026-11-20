@@ -1,0 +1,43 @@
+[package]
+name = "fancy-regex"
+version = "0.20.0"
+authors = ["Raph Levien <raph@google.com>", "Robin Stocker <robin@nibor.org>", "Keith Hall <keith.hall@available.systems>"]
+edition = "2021"
+license = "MIT"
+description = "An implementation of regexes, supporting a relatively rich set of features, including backreferences and look-around. Aims to be compatible with Oniguruma syntax when the relevant flag is set."
+repository = "https://github.com/fancy-regex/fancy-regex"
+documentation = "https://docs.rs/fancy-regex"
+categories = ["text-processing"]
+exclude = ["/.github/*", "/Cargo.lock.msrv"]
+rust-version = "1.66"
+
+[features]
+default = ["unicode", "perf", "std", "variable-lookbehinds"]
+# Enable #[track_caller] in unit tests.
+track_caller = []
+perf = ["regex-automata/perf"]
+unicode = ["regex-automata/unicode", "regex-syntax/unicode"]
+std = ["regex-automata/std", "regex-syntax/std", "bit-set/std"]
+# Enable variable-length lookbehinds using reverse DFA search
+variable-lookbehinds = ["regex-automata/dfa-search"]
+# Enable builder support for leftmost-longest match semantics (as opposed to default leftmost-first).
+leftmost_longest = []
+# Let regex-automata eagerly build a fully compiled dense DFA for small
+# patterns (and delegated fragments). Trades noticeably slower compiles and
+# more memory for the fastest search engine; without it searches use the lazy
+# DFA, which performs about the same on typical workloads. Mirrors the `regex`
+# crate's `perf-dfa-full` opt-in.
+perf-dfa-full = ["regex-automata/dfa-build"]
+
+[dependencies.regex-automata]
+version = "0.4.16"
+default-features = false
+features = ["alloc", "syntax", "meta", "nfa", "dfa-onepass", "dfa-search", "hybrid"]
+
+[dependencies.regex-syntax]
+version = "0.8"
+default-features = false
+
+[dependencies.bit-set]
+version = "0.8"
+default-features = false

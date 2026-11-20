@@ -3,6 +3,10 @@
 [workspace]
 resolver = "2"
 members = ["rust/seekdb-rust", "bazel/prost-codegen"]
+exclude = ["rust/vendor/fancy-regex"]
+
+[patch.crates-io]
+fancy-regex = { path = "rust/vendor/fancy-regex" }
 
 [profile.release]
 opt-level = 3
