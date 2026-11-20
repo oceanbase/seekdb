@@ -88,6 +88,16 @@ public:
                                        const ColumnsFieldIArray *fields = NULL,
                                        share::schema::ObSchemaGetterGuard *schema_guard = NULL);
 
+  // Encode a PL composite result value (record / nested table / varray) as a
+  // single JSON text cell right before it is sent to a MySQL client.
+  // On success `value` is a utf8mb4 varchar holding the JSON text, or SQL NULL
+  // when the composite itself is NULL. Values that cannot be represented
+  // (associative arrays, unsupported leaf types) are rejected with an error.
+  static int convert_pl_composite_for_client(common::ObObj &value, ObResultSet &result);
+  static int convert_pl_composite_for_client(common::ObObj &value,
+                                             common::ObIAllocator &allocator,
+                                             ObExecContext &exec_ctx);
+
   // functions to flattern nested udt to a single object array
   static int ob_udt_flattern_pl_extend(const ObObj **flattern_objs,
                                        const int32_t &flattern_object_count,
