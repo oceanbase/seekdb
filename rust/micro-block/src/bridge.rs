@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::{
-    Block, BlockWriter, Cell, ColumnSpec, Error, FlatBlock, OwnedDatum, Result, RowRange,
-    WriterConfig,
+    Block, BlockWriter, Cell, ColumnSpec, Error, FlatBlock, FlatDatum, FlatRowInfo, FlatWriter,
+    FlatWriterConfig, OwnedDatum, Result, RowRange, WriterConfig,
 };
 
 #[cxx::bridge(namespace = "oceanbase::blocksstable::micro_block")]
@@ -56,6 +56,30 @@ mod ffi {
         trans_id: i64,
     }
 
+    struct FlatFinishOptionsDesc {
+        single_version_rows: bool,
+        contain_uncommitted_rows: bool,
+        is_last_row_last_flag: bool,
+        has_string_out_row: bool,
+        all_lob_in_row: bool,
+        has_min_merged_trans_version: bool,
+        min_merged_trans_version: i64,
+        max_merged_trans_version: i64,
+    }
+
+    struct FlatAppendResult {
+        code: Code,
+        accepted_rows: usize,
+        is_full: bool,
+    }
+
+    struct FlatStatsResult {
+        code: Code,
+        block_size: u64,
+        original_size: u64,
+        row_count: u64,
+    }
+
     struct BuildResult {
         code: Code,
         block: Vec<u8>,
@@ -83,6 +107,40 @@ mod ffi {
     }
 
     extern "Rust" {
+        type FlatWriter;
+
+        fn new_flat_writer() -> Box<FlatWriter>;
+
+        fn init_flat_writer(
+            writer: &mut FlatWriter,
+            column_count: u32,
+            rowkey_column_count: u32,
+            micro_block_size_limit: u64,
+            block_size_upper_bound: u64,
+            need_column_checksums: bool,
+        ) -> Code;
+
+        /// Cells borrow C++ datum storage only for this call. Rust copies
+        /// accepted rows into its writer before returning.
+        unsafe fn append_flat_row(
+            writer: &mut FlatWriter,
+            cells: &[InputCell],
+            row_meta: FlatRowMeta,
+            rowkey_column_count: u32,
+            hash_index_size: usize,
+        ) -> FlatAppendResult;
+
+        /// The returned block owns its storage. C++ keeps it alive until the
+        /// macro writer finishes consuming the block.
+        fn finish_flat_writer(
+            writer: &mut FlatWriter,
+            options: FlatFinishOptionsDesc,
+            column_checksums: &[u64],
+            hash_index: &[u8],
+        ) -> BuildResult;
+
+        fn flat_writer_stats(writer: &FlatWriter, hash_index_size: usize) -> FlatStatsResult;
+
         /// Every non-null pointer references `length` readable bytes for the
         /// duration of this call. Cells are row-major and owned by Rust for
         /// the duration of this call.
@@ -125,6 +183,145 @@ mod ffi {
             range_start: u32,
             range_end: u32,
         ) -> LocateResult;
+    }
+}
+
+fn new_flat_writer() -> Box<FlatWriter> {
+    Box::new(FlatWriter::default())
+}
+
+fn init_flat_writer(
+    writer: &mut FlatWriter,
+    column_count: u32,
+    rowkey_column_count: u32,
+    micro_block_size_limit: u64,
+    block_size_upper_bound: u64,
+    need_column_checksums: bool,
+) -> ffi::Code {
+    let config = (|| {
+        Ok(FlatWriterConfig {
+            column_count: column_count as usize,
+            rowkey_column_count: rowkey_column_count as usize,
+            micro_block_size_limit: usize::try_from(micro_block_size_limit)
+                .map_err(|_| Error::SizeOverflow)?,
+            block_size_upper_bound: usize::try_from(block_size_upper_bound)
+                .map_err(|_| Error::SizeOverflow)?,
+            need_column_checksums,
+        })
+    })();
+    match config.and_then(FlatWriter::new) {
+        Ok(new_writer) => {
+            *writer = new_writer;
+            ffi::Code::Ok
+        }
+        Err(error) => code(error),
+    }
+}
+
+unsafe fn append_flat_row(
+    writer: &mut FlatWriter,
+    cells: &[ffi::InputCell],
+    row_meta: ffi::FlatRowMeta,
+    rowkey_column_count: u32,
+    hash_index_size: usize,
+) -> ffi::FlatAppendResult {
+    let result = (|| {
+        let mut datums = Vec::new();
+        datums
+            .try_reserve_exact(cells.len())
+            .map_err(|_| Error::SizeOverflow)?;
+        for cell in cells {
+            let bytes = || {
+                if cell.length > 0 && cell.pointer == 0 {
+                    return Err(Error::InvalidArgument);
+                }
+                Ok(if cell.length == 0 {
+                    &[][..]
+                } else {
+                    std::slice::from_raw_parts(cell.pointer as *const u8, cell.length as usize)
+                })
+            };
+            let datum = match cell.kind {
+                0 => FlatDatum::Bytes(bytes()?),
+                1 => FlatDatum::Null,
+                2 => FlatDatum::Nop,
+                4 => FlatDatum::Outrow(bytes()?),
+                _ => return Err(Error::InvalidArgument),
+            };
+            datums.push(datum);
+        }
+        writer.append_row(
+            &datums,
+            FlatRowInfo {
+                row_flag: row_meta.row_flag,
+                multi_version_flag: row_meta.multi_version_flag,
+                rowkey_column_count: rowkey_column_count as usize,
+                column_count: cells.len(),
+                trans_id: row_meta.trans_id,
+            },
+            hash_index_size,
+        )
+    })();
+    match result {
+        Ok(outcome) => ffi::FlatAppendResult {
+            code: ffi::Code::Ok,
+            accepted_rows: outcome.accepted_rows,
+            is_full: outcome.is_full,
+        },
+        Err(error) => ffi::FlatAppendResult {
+            code: code(error),
+            accepted_rows: writer.row_count(),
+            is_full: false,
+        },
+    }
+}
+
+fn finish_flat_writer(
+    writer: &mut FlatWriter,
+    options: ffi::FlatFinishOptionsDesc,
+    column_checksums: &[u64],
+    hash_index: &[u8],
+) -> ffi::BuildResult {
+    let accepted_rows = writer.row_count();
+    let result = writer.finish(
+        crate::FlatFinishOptions {
+            single_version_rows: options.single_version_rows,
+            contain_uncommitted_rows: options.contain_uncommitted_rows,
+            is_last_row_last_flag: options.is_last_row_last_flag,
+            has_string_out_row: options.has_string_out_row,
+            all_lob_in_row: options.all_lob_in_row,
+            has_min_merged_trans_version: options.has_min_merged_trans_version,
+            min_merged_trans_version: options.min_merged_trans_version,
+            max_merged_trans_version: options.max_merged_trans_version,
+        },
+        column_checksums,
+        hash_index,
+    );
+    match result {
+        Ok(block) => ffi::BuildResult {
+            code: ffi::Code::Ok,
+            block,
+            column_types: Vec::new(),
+            accepted_rows,
+        },
+        Err(error) => build_result(Err(error)),
+    }
+}
+
+fn flat_writer_stats(writer: &FlatWriter, hash_index_size: usize) -> ffi::FlatStatsResult {
+    match writer.block_size(hash_index_size) {
+        Ok(block_size) => ffi::FlatStatsResult {
+            code: ffi::Code::Ok,
+            block_size: block_size as u64,
+            original_size: writer.original_size() as u64,
+            row_count: writer.row_count() as u64,
+        },
+        Err(error) => ffi::FlatStatsResult {
+            code: code(error),
+            block_size: 0,
+            original_size: 0,
+            row_count: 0,
+        },
     }
 }
 

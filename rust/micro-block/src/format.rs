@@ -24,6 +24,9 @@ pub(crate) const SELECTIVE_ENCODING_ROW_STORE: u8 = 2;
 pub(crate) const FLAT_ROW_STORE: u8 = 0;
 pub(crate) const HAS_COLUMN_CHECKSUM: u16 = 1;
 pub(crate) const ALL_LOB_IN_ROW: u16 = 1 << 2;
+pub(crate) const CONTAINS_HASH_INDEX: u16 = 1 << 3;
+pub(crate) const HASH_INDEX_OFFSET_SHIFT: u16 = 4;
+pub(crate) const HASH_INDEX_OFFSET_MASK: u16 = 0x3ff;
 pub(crate) const COLUMN_FIX_LENGTH: u8 = 1;
 pub(crate) const COLUMN_HAS_EXTEND_VALUE: u8 = 2;
 pub(crate) const COLUMN_BIT_PACKING: u8 = 4;
@@ -209,6 +212,12 @@ pub(crate) fn parse_header(bytes: &[u8]) -> Result<Header> {
 pub(crate) fn parse_flat_header(bytes: &[u8]) -> Result<Header> {
     let header = decode_header(bytes)?;
     validate_common_header(bytes, &header)?;
+    let encoded_hash_size = (header.flags >> HASH_INDEX_OFFSET_SHIFT) & HASH_INDEX_OFFSET_MASK;
+    let has_hash_index = header.flags & CONTAINS_HASH_INDEX != 0;
+    if (has_hash_index && encoded_hash_size == 0) || (!has_hash_index && encoded_hash_size != 0) {
+        return Err(Error::InvalidData);
+    }
+    let hash_index_size = encoded_hash_size as usize;
     let index_length = header
         .row_count
         .checked_add(1)
@@ -219,6 +228,7 @@ pub(crate) fn parse_flat_header(bytes: &[u8]) -> Result<Header> {
         || header
             .row_data_offset
             .checked_add(index_length)
+            .and_then(|offset| offset.checked_add(hash_index_size))
             .ok_or(Error::SizeOverflow)?
             != bytes.len()
     {

@@ -15,8 +15,8 @@
 use crate::checksum::crc32c;
 use crate::format::{
     header_checksum, write_u16, write_u32, write_u64, Header, ALL_LOB_IN_ROW,
-    FIXED_HEADER_SIZE, FLAT_ROW_STORE, HAS_COLUMN_CHECKSUM, MICRO_BLOCK_MAGIC,
-    MICRO_BLOCK_VERSION,
+    CONTAINS_HASH_INDEX, FIXED_HEADER_SIZE, FLAT_ROW_STORE, HAS_COLUMN_CHECKSUM,
+    HASH_INDEX_OFFSET_SHIFT, MICRO_BLOCK_MAGIC, MICRO_BLOCK_VERSION,
 };
 use crate::{AppendOutcome, Error, FlatRowInfo, Result};
 
@@ -27,8 +27,6 @@ const MAX_CLUSTER_COLUMN_COUNT: usize = 256;
 const MAX_SPARSE_COLUMNS: usize = 3;
 const SPARSE_NOP_THRESHOLD: usize = CLUSTER_COLUMNS - MAX_SPARSE_COLUMNS;
 const HAS_STRING_OUT_ROW: u16 = 1 << 1;
-const CONTAINS_HASH_INDEX: u16 = 1 << 3;
-const HASH_INDEX_OFFSET_SHIFT: u32 = 4;
 const HAS_MIN_MERGED_TRANS_VERSION: u16 = 1 << 14;
 const VAL_NORMAL: u8 = 0;
 const VAL_OUTROW: u8 = 1;
@@ -70,6 +68,23 @@ pub struct FlatWriter {
     row_data: Vec<u8>,
     row_offsets: Vec<u32>,
     frozen: bool,
+}
+
+impl Default for FlatWriter {
+    fn default() -> Self {
+        Self {
+            config: FlatWriterConfig {
+                column_count: 0,
+                rowkey_column_count: 0,
+                micro_block_size_limit: 0,
+                block_size_upper_bound: 0,
+                need_column_checksums: false,
+            },
+            row_data: Vec::new(),
+            row_offsets: vec![0],
+            frozen: false,
+        }
+    }
 }
 
 impl FlatWriter {
@@ -616,6 +631,38 @@ mod tests {
             .unwrap();
         let parsed = FlatBlock::new(&block).unwrap();
         assert_eq!(1, parsed.row_count());
+        assert_eq!(crate::Cell::Bytes(b"row"), parsed.cell(0, 0).unwrap());
+    }
+
+    #[test]
+    fn reads_hash_index_trailer() {
+        let cells = [FlatDatum::Bytes(b"row")];
+        let config = FlatWriterConfig {
+            column_count: 1,
+            rowkey_column_count: 1,
+            micro_block_size_limit: 1024,
+            block_size_upper_bound: 1024,
+            need_column_checksums: false,
+        };
+        let mut writer = FlatWriter::new(config).unwrap();
+        writer.append_row(&cells, info(1, 1), 3).unwrap();
+        let block = writer
+            .finish(
+                FlatFinishOptions {
+                    single_version_rows: false,
+                    contain_uncommitted_rows: false,
+                    is_last_row_last_flag: false,
+                    has_string_out_row: false,
+                    all_lob_in_row: true,
+                    has_min_merged_trans_version: true,
+                    min_merged_trans_version: 0,
+                    max_merged_trans_version: 0,
+                },
+                &[],
+                &[0, 2, 0xff],
+            )
+            .unwrap();
+        let parsed = FlatBlock::new(&block).unwrap();
         assert_eq!(crate::Cell::Bytes(b"row"), parsed.cell(0, 0).unwrap());
     }
 }
