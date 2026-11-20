@@ -24,6 +24,39 @@
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 
+int ObTransformSemiToInner::get_cost_eval_parents(
+    const ObIArray<ObParentDMLStmt> &parents,
+    ObIArray<ObParentDMLStmt> &eval_parents,
+    bool &use_branch_cost)
+{
+  int ret = OB_SUCCESS;
+  use_branch_cost = false;
+  if (parents.count() > 1 && current_temp_table_ == NULL
+      && parents.at(0).stmt_->is_select_stmt()) {
+    ObSelectStmt *root = static_cast<ObSelectStmt*>(parents.at(0).stmt_);
+    ObDMLStmt *branch = parents.at(1).stmt_;
+    if (root->get_set_op() == ObSelectStmt::UNION && !root->is_set_distinct()
+        && !root->is_recursive_union() && !root->has_order_by() && !root->has_limit()
+        && root->get_condition_exprs().empty() && root->get_having_exprs().empty()
+        && root->get_qualify_filters().empty()
+        && root->get_set_query(parents.at(0).pos_) == branch) {
+      ObSEArray<ObParentDMLStmt, 1> outside_parents;
+      ObSEArray<ObDMLStmt::TempTableInfo, 1> temp_tables;
+      if (OB_FAIL(branch->collect_temp_table_infos(temp_tables))) {
+      } else if (!temp_tables.empty()) {
+      } else if (OB_FAIL(outside_parents.push_back(parents.at(0)))) {
+      } else if (OB_FAIL(ObTransformUtils::partial_cost_eval_validity_check(
+                           *ctx_, outside_parents, branch, true, use_branch_cost))) {
+      }
+    }
+  }
+  for (int64_t i = use_branch_cost ? 1 : 0; OB_SUCC(ret) && i < parents.count(); ++i) {
+    if (OB_FAIL(eval_parents.push_back(parents.at(i)))) {
+    }
+  }
+  return ret;
+}
+
 /**
  * @brief ObTransformSemiToInner::transform_one_stmt
  * @param parent_stmts
@@ -42,6 +75,10 @@ int ObTransformSemiToInner::transform_one_stmt(
   ObSEArray<TableItem*, 4> trans_right_table_items;
   ObCostBasedRewriteCtx ctx;
   ObTryTransHelper try_trans_helper;
+  ObSEArray<ObParentDMLStmt, 4> eval_parents;
+  bool use_branch_cost = false;
+  bool eval_parents_ready = false;
+  bool last_partial_cost_check = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(semi_infos.assign(stmt->get_semi_infos()))) {
@@ -91,25 +128,41 @@ int ObTransformSemiToInner::transform_one_stmt(
       } else if (OB_FAIL(ObTransformUtils::partial_cost_eval_validity_check(*ctx_, parent_stmts, 
                                                                             stmt, true, 
                                                                             partial_cost_check))) {
-      } else if (OB_FAIL(accept_transform(parent_stmts, stmt, trans_stmt,
-                                          !need_check_cost || ctx.hint_force_,
-                                          false,
-                                          accepted, partial_cost_check, &ctx))) {
-      } else if (OB_FAIL(try_trans_helper.finish(accepted, stmt->get_query_ctx(), ctx_))) {
-      } else if (!accepted) {
-        if (OB_FAIL(add_ignore_semi_info(semi_info->semi_id_))) {
-        } else {
-        }
       } else {
-        if (!need_check_cost || ctx.hint_force_) {
-          cost_based_trans_tried_ = cost_based_trans_tried;
-        } else {
-          cost_based_trans_tried = cost_based_trans_tried_;
-          add_trans_type(ctx_->happened_cost_based_trans_, SEMI_TO_INNER);
+        if (!eval_parents_ready && need_check_cost && !ctx.hint_force_
+            && !partial_cost_check && !ctx_->is_set_stmt_oversize_ && !ctx_->eval_cost_) {
+          if (OB_FAIL(get_cost_eval_parents(parent_stmts, eval_parents, use_branch_cost))) {
+          } else {
+            eval_parents_ready = true;
+            if (use_branch_cost) {
+              reset_stmt_cost();
+            }
+          }
         }
-        if (OB_FAIL(trans_right_table_items.push_back(table_item))) {
+        if (use_branch_cost && last_partial_cost_check != partial_cost_check) {
+          reset_stmt_cost();
+        }
+        last_partial_cost_check = partial_cost_check;
+        ObIArray<ObParentDMLStmt> &cost_parents = eval_parents_ready ? eval_parents : parent_stmts;
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(accept_transform(cost_parents, stmt, trans_stmt,
+                                    !need_check_cost || ctx.hint_force_, false,
+                                    accepted, partial_cost_check, &ctx))) {
+        } else if (OB_FAIL(try_trans_helper.finish(accepted, stmt->get_query_ctx(), ctx_))) {
+        } else if (!accepted) {
+          if (OB_FAIL(add_ignore_semi_info(semi_info->semi_id_))) {
+          }
         } else {
-          trans_happened = true;
+          if (!need_check_cost || ctx.hint_force_) {
+            cost_based_trans_tried_ = cost_based_trans_tried;
+          } else {
+            cost_based_trans_tried = cost_based_trans_tried_;
+            add_trans_type(ctx_->happened_cost_based_trans_, SEMI_TO_INNER);
+          }
+          if (OB_FAIL(trans_right_table_items.push_back(table_item))) {
+          } else {
+            trans_happened = true;
+          }
         }
       }
     }
