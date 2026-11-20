@@ -1,0 +1,224 @@
+# Three distinct values stay below the rewrite threshold of four.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_cardinality WHERE v IN (1,2,3,1,2,3);
+Query Plan
+=======================================
+|ID|OPERATOR       |NAME              |
+---------------------------------------
+|0 |TABLE FULL SCAN|inlist_cardinality|
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_cardinality.id]), filter([inlist_cardinality.v IN (1, 2, 3, 1, 2, 3)]), rowset=ROWS
+      access([inlist_cardinality.id], [inlist_cardinality.v]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([inlist_cardinality.id]), range(MIN ; MAX)always true
+# Three distinct values reach the original threshold and are rewritten.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',3) */ id
+FROM inlist_cardinality WHERE v IN (1,2,3,1,2,3);
+Query Plan
+=================================================
+|ID|OPERATOR                 |NAME              |
+-------------------------------------------------
+|0 |HASH JOIN                |                  |
+|1 |├─SUBPLAN SCAN           |VIEW2             |
+|2 |│ └─HASH DISTINCT        |                  |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1     |
+|4 |└─TABLE FULL SCAN        |inlist_cardinality|
+=================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_cardinality.id]), filter(nil), rowset=ROWS
+      equal_conds([inlist_cardinality.v = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=ROWS
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=ROWS
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([inlist_cardinality.id], [inlist_cardinality.v]), filter(nil), rowset=ROWS
+      access([inlist_cardinality.id], [inlist_cardinality.v]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([inlist_cardinality.id]), range(MIN ; MAX)always true
+# NULL, mixed types, row values and NOT IN retain their existing paths.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_cardinality WHERE v IN (1,2,3,1,2,NULL);
+Query Plan
+=================================================
+|ID|OPERATOR                 |NAME              |
+-------------------------------------------------
+|0 |HASH JOIN                |                  |
+|1 |├─SUBPLAN SCAN           |VIEW2             |
+|2 |│ └─HASH DISTINCT        |                  |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1     |
+|4 |└─TABLE FULL SCAN        |inlist_cardinality|
+=================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_cardinality.id]), filter(nil), rowset=ROWS
+      equal_conds([inlist_cardinality.v = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=ROWS
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=ROWS
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([inlist_cardinality.id], [inlist_cardinality.v]), filter(nil), rowset=ROWS
+      access([inlist_cardinality.id], [inlist_cardinality.v]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([inlist_cardinality.id]), range(MIN ; MAX)always true
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_cardinality WHERE (id,v) IN ((1,1),(2,2),(1,1),(2,2));
+Query Plan
+===================================================
+|ID|OPERATOR                   |NAME              |
+---------------------------------------------------
+|0 |MERGE JOIN                 |                  |
+|1 |├─TABLE FULL SCAN          |inlist_cardinality|
+|2 |└─SORT                     |                  |
+|3 |  └─SUBPLAN SCAN           |VIEW2             |
+|4 |    └─HASH DISTINCT        |                  |
+|5 |      └─VALUES TABLE ACCESS|VALUES_TABLE1     |
+===================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_cardinality.id]), filter(nil), rowset=ROWS
+      equal_conds([inlist_cardinality.id = VIEW2.column_0], [inlist_cardinality.v = VIEW2.column_1]), other_conds(nil)
+      merge_directions([ASC], [ASC])
+  1 - output([inlist_cardinality.id], [inlist_cardinality.v]), filter(nil), rowset=ROWS
+      access([inlist_cardinality.id], [inlist_cardinality.v]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([inlist_cardinality.id]), range(MIN ; MAX)always true
+  2 - output([VIEW2.column_0], [VIEW2.column_1]), filter(nil), rowset=ROWS
+      sort_keys([VIEW2.column_0, ASC], [VIEW2.column_1, ASC])
+  3 - output([VIEW2.column_0], [VIEW2.column_1]), filter(nil), rowset=ROWS
+      access([VIEW2.column_0], [VIEW2.column_1])
+  4 - output([VALUES_TABLE1.column_0], [VALUES_TABLE1.column_1]), filter(nil), rowset=ROWS
+      distinct([VALUES_TABLE1.column_0], [VALUES_TABLE1.column_1])
+  5 - output([VALUES_TABLE1.column_0], [VALUES_TABLE1.column_1]), filter(nil)
+      access([VALUES_TABLE1.column_0], [VALUES_TABLE1.column_1])
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_cardinality WHERE v NOT IN (1,2,3,1,2,3);
+Query Plan
+=================================================
+|ID|OPERATOR                 |NAME              |
+-------------------------------------------------
+|0 |HASH RIGHT ANTI JOIN NA  |                  |
+|1 |├─SUBPLAN SCAN           |VIEW2             |
+|2 |│ └─HASH DISTINCT        |                  |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1     |
+|4 |└─TABLE FULL SCAN        |inlist_cardinality|
+=================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_cardinality.id]), filter(nil), rowset=ROWS
+      equal_conds([inlist_cardinality.v = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=ROWS
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=ROWS
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([inlist_cardinality.id], [inlist_cardinality.v]), filter(nil), rowset=ROWS
+      access([inlist_cardinality.id], [inlist_cardinality.v]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([inlist_cardinality.id]), range(MIN ; MAX)always true
+# The scalar filter remains attached to the ANN operator.
+CREATE TABLE inlist_cardinality_ann (
+id INT PRIMARY KEY,
+v INT,
+embedding VECTOR(3),
+VECTOR INDEX inlist_cardinality_idx(embedding)
+WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO inlist_cardinality_ann VALUES
+(1,1,'[0,0,0]'),(2,2,'[1,0,0]'),(3,3,'[2,0,0]'),
+(4,4,'[3,0,0]'),(5,NULL,'[4,0,0]');
+EXPLAIN BASIC
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4)
+INDEX(inlist_cardinality_ann inlist_cardinality_idx) */ id
+FROM inlist_cardinality_ann
+WHERE v IN (1,2,3,1,2,3)
+ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 3;
+Query Plan
+==============================================================================
+|ID|OPERATOR                                          |NAME                  |
+------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)|inlist_cardinality_ann|
+==============================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_cardinality_ann.id]), filter([inlist_cardinality_ann.v IN (1, 2, 3, 1, 2, 3)]), rowset=ROWS
+      access([inlist_cardinality_ann.__pk_increment], [inlist_cardinality_ann.v], [inlist_cardinality_ann.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([inlist_cardinality_ann.__pk_increment]), range(MIN ; MAX)always true
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4)
+INDEX(inlist_cardinality_ann inlist_cardinality_idx) */ id
+FROM inlist_cardinality_ann
+WHERE v IN (1,2,3,1,2,3)
+ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 3;
+id
+1
+2
+3
+# Query results remain identical across the changed plan shapes.
+SELECT id FROM inlist_cardinality WHERE v IN (1,2,3,1,2,3) ORDER BY id;
+id
+1
+2
+3
+SELECT id FROM inlist_cardinality WHERE v NOT IN (1,2,3,1,2,NULL) ORDER BY id;
+id
+SELECT id FROM inlist_cardinality WHERE (id,v) IN ((1,1),(2,2),(1,1),(2,2)) ORDER BY id;
+id
+1
+2
+SELECT id FROM inlist_cardinality WHERE v IN ('1','2','3','1','2','3') ORDER BY id;
+id
+1
+2
+3
+SELECT id FROM inlist_cardinality WHERE v IN (-1,-1,-1,-1) ORDER BY id;
+id
+7
+SELECT id FROM inlist_cardinality
+WHERE v IN (1,1,1,18446744073709551615) ORDER BY id;
+id
+1
+# Literal parameterization and prepared statements retain every slot.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_cardinality WHERE v IN (1,2,3,1,2,3) ORDER BY id;
+id
+1
+2
+3
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_cardinality WHERE v IN (4,5,6,4,5,6) ORDER BY id;
+id
+4
+5
+6
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_cardinality WHERE v IN (1,2,3,1,2,3) ORDER BY id;
+id
+1
+2
+3
+PREPARE inlist_stmt FROM
+'SELECT id FROM inlist_cardinality WHERE v IN (?,?,?,?,?,?) ORDER BY id';
+SET @a=1,@b=2,@c=3,@d=1,@e=2,@f=3;
+EXECUTE inlist_stmt USING @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+SET @d=4,@e=5,@f=6;
+EXECUTE inlist_stmt USING @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+4
+5
+6
+DEALLOCATE PREPARE inlist_stmt;
