@@ -1134,6 +1134,26 @@ public:
                                const ObRawExpr *expr,
                                ObObj &min_value,
                                ObObj &max_value);
+  // Extract the linear form `factor * column + offset` of an expression that
+  // refers to a single column and only contains arithmetic operators whose
+  // other operands are constants, e.g. `(c1 + 2)`, `((c1 + 0) * 1)` and
+  // `c1 / 2.0`. The value of such an expression is a linear function of the
+  // column, so its range can be derived from the range of the column.
+  static int extract_linear_form(const OptSelectivityCtx &ctx,
+                                 const ObRawExpr *expr,
+                                 double &factor,
+                                 double &offset,
+                                 common::ObIArray<const ObColumnRefRawExpr *> &columns,
+                                 bool &is_valid);
+  // Derive the min/max value of a single column linear arithmetic expression
+  // from the column statistics, e.g. the range of `(c1 + 2)` is
+  // `[min(c1) + 2, max(c1) + 2]`.
+  static int calc_linear_expr_min_max(const OptTableMetas &table_metas,
+                                      const OptSelectivityCtx &ctx,
+                                      const ObRawExpr *expr,
+                                      ObObj &min_value,
+                                      ObObj &max_value,
+                                      bool &is_valid);
   static int calc_year_min_max(const OptTableMetas &table_metas,
                                const OptSelectivityCtx &ctx,
                                const ObRawExpr *expr,
