@@ -428,7 +428,7 @@ public:
       }
       if (tx_ctx->is_too_long_transaction()) {
         // If the transaction has not completed in 600 seconds, print its trace log
-        tx_ctx->print_trace_log();
+        tx_ctx->dump_state();
       }
       if (OB_SUCC(ret)) {
         int tmp_ret = OB_SUCCESS;
@@ -650,7 +650,7 @@ public:
       TRANS_LOG(INFO, "hashmap item", K(tx_id), "context", *tx_ctx);
       bool_ret = true;
       if (verbose_) {
-        tx_ctx->print_trace_log();
+        tx_ctx->dump_state();
       }
     } else {
       // do nothing
