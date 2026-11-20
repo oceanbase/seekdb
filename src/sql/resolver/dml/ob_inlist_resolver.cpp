@@ -28,6 +28,53 @@ using namespace common;
 
 namespace sql
 {
+namespace
+{
+// A large number of repeated integer values does not make an IN predicate a
+// large membership set. Keep small domains in the scalar IN implementation,
+// whose hash lookup avoids the VALUES/subquery path (especially for ANN).
+// Bound the work and leave all input nodes intact: a cached plan must still
+// evaluate every bind parameter when its value changes on the next execution.
+bool has_small_integer_domain(const ParseNode &in_list,
+                              const ParamStore *param_store,
+                              const int64_t threshold)
+{
+  const int64_t max_domain_size = 64;
+  int64_t values[max_domain_size];
+  int64_t distinct_count = 0;
+  bool is_small = threshold > 1 && in_list.num_child_ > 0 && in_list.children_ != nullptr;
+  for (int64_t i = 0; is_small && i < in_list.num_child_; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+    if (nullptr == node) {
+      is_small = false;
+    } else if (T_INT == node->type_) {
+      value = node->value_;
+    } else if (T_QUESTIONMARK == node->type_
+               && nullptr != param_store
+               && node->value_ >= 0 && node->value_ < param_store->count()
+               && param_store->at(node->value_).is_int()) {
+      value = param_store->at(node->value_).get_int();
+    } else {
+      // Do not infer equality across NULL, casts, strings/collations, or row IN.
+      is_small = false;
+    }
+    if (is_small) {
+      int64_t j = 0;
+      for (; j < distinct_count && values[j] != value; ++j) {}
+      if (j == distinct_count) {
+        if (distinct_count == max_domain_size || distinct_count + 1 >= threshold) {
+          is_small = false;
+        } else {
+          values[distinct_count++] = value;
+        }
+      }
+    }
+  }
+  return is_small;
+}
+} // namespace
+
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -350,6 +397,10 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && column_cnt == 1 && !is_prepare_stmt
+          && has_small_integer_domain(in_list, param_store, threshold)) {
+        is_enable = false;
+      }
     }
   }
   return ret;
