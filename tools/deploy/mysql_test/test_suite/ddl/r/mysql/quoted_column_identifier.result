@@ -1,0 +1,10 @@
+SELECT id, `a``b`, ```edge``` FROM quoted_column_identifier ORDER BY id;
+id	a`b	`edge`
+1	10	first
+2	20	second
+3	NULL	third
+4	NULL	fourth
+SELECT id, `e``num`, `s``et` FROM quoted_enum_identifier ORDER BY id;
+id	e`num	s`et
+1	red	x
+2	blue	x,y
