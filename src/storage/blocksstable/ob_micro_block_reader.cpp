@@ -1242,14 +1242,24 @@ int ObMicroBlockReader::get_aggregate_result(
     const common::ObIArray<ObColumnParam *> *col_params = read_info_->get_columns();
     const bool has_lob_out_row = iter_param.has_lob_column_out() && header_->has_lob_out_row();
     bool need_reuse_lob_locator = false;
+    bool read_by_rust = false;
+    RustFlatBatch rust_batch;
     if (OB_ISNULL(col_params)) {
       ret = OB_ERR_UNEXPECTED;
+    } else {
+      ret = try_get_rows_rust(*read_info_, row_ids, row_cap, rust_batch);
+      if (OB_NOT_SUPPORTED == ret) {
+        ret = OB_SUCCESS;
+      } else if (OB_SUCC(ret)) {
+        read_by_rust = true;
+      }
     }
     for (int64_t idx = 0; OB_SUCC(ret) && idx < row_cap; ++idx) {
       row_idx = row_ids[idx];
       if (OB_UNLIKELY(row_idx < 0 || row_idx >= header_->row_count_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(flat_row_reader_.read_row(
+      } else if (read_by_rust && OB_FAIL(read_rust_row(rust_batch, idx, row_buf))) {
+      } else if (!read_by_rust && OB_FAIL(flat_row_reader_.read_row(
           data_begin_ + index_data_[row_idx],
           index_data_[row_idx + 1] - index_data_[row_idx],
           read_info_,
