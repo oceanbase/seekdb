@@ -672,7 +672,10 @@ int ObBootstrap::init_global_stat()
   int ret = OB_SUCCESS;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
+  ObTimeoutCtx timeout_ctx;
   if (OB_FAIL(check_inner_stat())) {
+  } else if (OB_FAIL(timeout_ctx.set_timeout(60LL * 1000 * 1000))) {
+    LOG_WARN("failed to set timeout for init_global_stat", K(ret));
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
