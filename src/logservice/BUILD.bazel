@@ -33,7 +33,6 @@ _PUBLIC_HDRS = [
     "palf/log_group_entry_header.h",
     "palf/log_io_context.h",
     "palf/log_io_utils.h",
-    "palf/log_iterator_info.h",
     "palf/log_meta.h",
     "palf/log_meta_info.h",
     "palf/palf_callback.h",

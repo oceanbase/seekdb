@@ -54,7 +54,6 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
   palf::LSN lsn;
   SCN scn;
   int64_t cur_ts = ObTimeUtility::current_time();
-  const bool is_big_log = (size > palf::MAX_NORMAL_LOG_BODY_SIZE);
 
   if (base_scn.convert_to_ts() > cur_ts + 86400000000L) {
     // only print error log
@@ -82,14 +81,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
       block_flag = false;
     }
     do {
-      if (is_big_log && OB_FAIL(log_handler_->append_big_log(buf, size, base_scn, block_flag,
-                                                              cb, lsn, scn))) {
-        if ((!need_nonblock || OB_EAGAIN != ret) || 0 == retry_cnt || REACH_TIME_INTERVAL(1000 * 1000)) {
-          TRANS_LOG(WARN, "append big log to palf failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
-                K(need_nonblock), K(block_flag), K(expire_us), K(is_big_log), K(retry_cnt));
-        }
-      } else if (!is_big_log && OB_FAIL(log_handler_->append(buf, size, base_scn, block_flag,
-                                                         cb, lsn, scn))) {
+      if (OB_FAIL(log_handler_->append(buf, size, base_scn, block_flag, cb, lsn, scn))) {
         if ((!need_nonblock || OB_EAGAIN != ret) || 0 == retry_cnt || REACH_TIME_INTERVAL(1000 * 1000)) {
           TRANS_LOG(WARN, "append log to palf failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
               K(need_nonblock), K(block_flag), K(expire_us), K(retry_cnt));
@@ -113,7 +105,7 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     } while (OB_EAGAIN == ret && cur_ts < expire_us);
     if (need_nonblock && OB_EAGAIN == ret) {
       TRANS_LOG(WARN, "append log to palf retry timeout", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
-          K(block_flag), K(expire_us), K(is_big_log), K(retry_cnt));
+          K(block_flag), K(expire_us), K(retry_cnt));
     }
   }
 

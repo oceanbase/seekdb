@@ -159,31 +159,6 @@ int ObLogHandler::append(const void *buffer,
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
       CLOG_LOG(INFO, "local append is disabled", K(ret), K(nbytes), K(ref_scn));
     }
-  } else if (nbytes > MAX_NORMAL_LOG_BODY_SIZE) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "nbytes is greater than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
-  } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
-  }
-  return ret;
-}
-
-int ObLogHandler::append_big_log(const void *buffer,
-                                 const int64_t nbytes,
-                                 const SCN &ref_scn,
-                                 const bool need_nonblock,
-                                 AppendCb *cb,
-                                 LSN &lsn,
-                                 SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  if (!local_append_enabled_.load(std::memory_order_acquire)) {
-    ret = OB_NOT_MASTER;
-    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-      CLOG_LOG(INFO, "local big-log append is disabled", K(ret), K(nbytes), K(ref_scn));
-    }
-  } else if (nbytes <= MAX_NORMAL_LOG_BODY_SIZE) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "nbytes is smaller than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
   }
   return ret;
