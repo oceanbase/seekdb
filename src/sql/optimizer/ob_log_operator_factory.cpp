@@ -28,6 +28,7 @@
 #include "ob_log_distinct.h"
 #include "ob_log_expr_values.h"
 #include "ob_log_function_table.h"
+#include "ob_log_file_scan.h"
 #include "ob_log_json_table.h"
 #include "ob_log_values.h"
 #include "ob_log_material.h"
@@ -242,6 +243,13 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     if (NULL != ptr) {
       ret_op = new (ptr) ObLogFunctionTable(plan);
     } else { /* do nothing */ }
+    break;
+  }
+  case LOG_FILE_SCAN: {
+    ptr = allocator_.alloc(sizeof(ObLogFileScan));
+    if (NULL != ptr) {
+      ret_op = new (ptr) ObLogFileScan(plan);
+    }
     break;
   }
   case LOG_JSON_TABLE: {
