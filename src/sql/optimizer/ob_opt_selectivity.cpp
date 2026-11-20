@@ -4024,6 +4024,23 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
     }
   } else if (expr->get_param_count() < 1) {
     // do nothing
+  } else if (T_OP_ADD == expr->get_expr_type() &&
+             ObIntTC == expr->get_type_class() && expr->get_param_count() == 2 &&
+             OB_NOT_NULL(expr->get_param_expr(0)) &&
+             OB_NOT_NULL(expr->get_param_expr(1)) &&
+             ObIntTC == expr->get_param_expr(0)->get_type_class() &&
+             expr->get_param_expr(1)->is_static_scalar_const_expr()) {
+    ObObj offset;
+    bool got_result = false;
+    if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
+        ctx.get_opt_ctx().get_exec_ctx(), expr->get_param_expr(1),
+        offset, got_result, ctx.get_allocator()))) {
+    } else if (got_result && offset.is_int() && 0 == offset.get_int()) {
+      // Adding integer zero preserves the operand's value range.
+      if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas, ctx,
+          expr->get_param_expr(0), min_value, max_value)))) {
+      }
+    }
   } else if (T_FUN_SYS_CAST == expr->get_expr_type()) {
     bool is_monotonic = false;
     const ObRawExpr *param_expr = expr->get_param_expr(0);
