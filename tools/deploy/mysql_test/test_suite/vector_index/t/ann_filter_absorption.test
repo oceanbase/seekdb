@@ -1,0 +1,38 @@
+--echo # ANN filter absorption keeps vector access and SQL NULL semantics
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS ann_absorb;
+--enable_warnings
+CREATE TABLE ann_absorb (
+  id INT PRIMARY KEY, p INT, q INT, v VECTOR(3),
+  VECTOR INDEX ann_idx(v) WITH (distance=l2,type=hnsw,lib=vsag)
+);
+INSERT INTO ann_absorb VALUES
+ (1,1,0,'[1,0,0]'),(2,1,1,'[0,1,0]'),(3,0,1,'[0,0,1]'),
+ (4,NULL,1,'[2,0,0]'),(5,1,NULL,'[0,2,0]');
+
+--echo # The filter must be absorbed, not merely return equivalent rows.
+--let $filter = query_get_value("EXPLAIN BASIC SELECT id FROM ann_absorb WHERE p=1 AND (p=1 OR q=1) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3", Query Plan, 8)
+--eval SELECT '$filter' NOT LIKE '% OR %' AS absorbed;
+--let $access = query_get_value("EXPLAIN BASIC SELECT id FROM ann_absorb WHERE p=1 AND (p=1 OR q=1) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3", Query Plan, 4)
+--eval SELECT '$access' LIKE '%VECTOR INDEX%' AS uses_ann;
+SELECT id FROM ann_absorb WHERE p=1 AND (p=1 OR q=1)
+ ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+SELECT id FROM ann_absorb WHERE p=1
+ ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+
+--echo # Repeated clauses and nullable predicates
+SELECT id FROM ann_absorb WHERE p=1 AND (p=1 OR q=1)
+ AND (p=1 OR q=1) AND (p=1 OR q=1) AND (p=1 OR q=1)
+ ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+SELECT id FROM ann_absorb WHERE p IS NULL AND (p IS NULL OR q=1)
+ ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+
+--echo # Cached plans must respect changing parameter equality
+PREPARE ann_stmt FROM 'SELECT id FROM ann_absorb WHERE p=? AND (p=? OR q=?) ORDER BY l2_distance(v,\'[1,0,0]\') APPROXIMATE LIMIT 3';
+SET @p=1,@q=1;
+EXECUTE ann_stmt USING @p,@p,@q;
+SET @other=0,@q=0;
+EXECUTE ann_stmt USING @p,@other,@q;
+DEALLOCATE PREPARE ann_stmt;
+DROP TABLE ann_absorb;
