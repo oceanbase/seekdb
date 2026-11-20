@@ -1,0 +1,36 @@
+# Regression for #1469: the terminal share module escapes the SQL identifier
+# quote character on its own, without including a header of the upper sql
+# module.
+# A primary key column whose name contains the identifier quote character
+# must still allow a vector index rebuild to generate a valid DDL statement.
+
+SET ob_enable_index_direct_select = 1;
+SET ob_query_timeout = 20000000;
+SET ob_trx_timeout = 60000000;
+CREATE DATABASE `seekdb_identifier_escaping`;
+
+# column_backtick
+USE `seekdb_identifier_escaping`;
+CREATE TABLE `c1_column_backtick` (`key``id` INT PRIMARY KEY, v VECTOR(3),
+  VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_column_backtick` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+CALL dbms_vector.rebuild_index('idx','c1_column_backtick','v');
+SELECT `key``id` AS id,v FROM `c1_column_backtick` ORDER BY `key``id`;
+
+# column_backtick_partitioned
+USE `seekdb_identifier_escaping`;
+CREATE TABLE `c1_partition_backtick` (`key``id` INT PRIMARY KEY, v VECTOR(3),
+  VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag))
+PARTITION BY RANGE COLUMNS(`key``id`)
+(PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO `c1_partition_backtick` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+CALL dbms_vector.rebuild_index('idx','c1_partition_backtick','v');
+SELECT `key``id` AS id,v FROM `c1_partition_backtick` ORDER BY `key``id`;
+
+# plain_column_control
+USE `seekdb_identifier_escaping`;
+CREATE TABLE `c1_plain_column` (`id` INT PRIMARY KEY, v VECTOR(3),
+  VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_plain_column` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+CALL dbms_vector.rebuild_index('idx','c1_plain_column','v');
+SELECT `id` AS id,v FROM `c1_plain_column` ORDER BY `id`;
