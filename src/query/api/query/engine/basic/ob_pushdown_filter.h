@@ -608,6 +608,8 @@ private:
                common::ObArray<ObPushdownFilterNode*> &filter_nodes,
                uint32_t &valid_nodes,
                const bool need_dedup);
+  bool is_duplicated_filter_expr(const common::ObIArray<ObRawExpr*> &exprs,
+                                 const int64_t cur_idx) const;
   int generate(ObRawExpr *raw_expr, ObPushdownFilterNode *&filter_tree);
   int split_multi_cols_runtime_filter(ObOpRawExpr *raw_expr, ObPushdownFilterNode *&filter_tree);
   int remove_runtime_filter_root_node(ObArray<ObPushdownFilterNode *> &filter_nodes,

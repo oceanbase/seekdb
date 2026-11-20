@@ -1,0 +1,50 @@
+#owner: joey08121112-web
+#owner group: competition
+--echo # regression test for issue #1489: duplicated OR/AND operands in pushdown filter
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+alter system set vector_memory_limit = 0;
+sleep 1;
+
+create table t1(c1 int primary key, c2 int, c3 vector(3), c4 int) organization heap;
+create vector index idxv on t1(c3) with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
+
+insert into t1 values(1,1,'[1.0, 0.0, 0]',10);
+insert into t1 values(2,1,'[0.9, 0.1, 0]',999);
+insert into t1 values(3,1,'[0.8, 0.2, 0]',1000);
+insert into t1 values(4,1,'[0.7, 0.3, 0]',1);
+insert into t1 values(5,1,'[0.6, 0.4, 0]',500);
+insert into t1 values(6,2,'[0.5, 0.4, 0.0]',160);
+insert into t1 values(7,2,'[0.5, 0.4, 0.1]',170);
+insert into t1 values(8,2,'[0.5, 0.4, 0.2]',180);
+insert into t1 values(9,2,'[0.5, 0.4, 0.3]',190);
+insert into t1 values(10,2,'[0.5, 0.4, 0.4]',200);
+insert into t1 values(11,2,'[0.5, 0.4, 0.5]',210);
+insert into t1 values(12,2,'[0.5, 0.4, 0.6]',220);
+insert into t1 values(13,2,'[0.5, 0.4, 0.7]',230);
+insert into t1 values(14,3,'[0.3, 0.2, 0.0]',580);
+insert into t1 values(15,3,'[0.3, 0.2, 0.1]',600);
+insert into t1 values(16,3,'[0.3, 0.2, 0.2]',620);
+insert into t1 values(17,3,'[0.3, 0.2, 0.3]',640);
+insert into t1 values(18,3,'[0.3, 0.2, 0.4]',660);
+insert into t1 values(19,3,'[0.3, 0.2, 0.5]',680);
+insert into t1 values(20,3,'[0.3, 0.2, 0.6]',700);
+
+--echo # eligible set: simple filter
+select count(*) from t1 where c2 = 1;
+--echo # eligible set: filter with 32 duplicated always-false OR operands
+select count(*) from t1 where (c2 = 1) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000);
+--echo # eligible range: simple filter
+select min(c1), max(c1) from t1 where c2 = 1;
+--echo # eligible range: duplicated OR operands
+select min(c1), max(c1) from t1 where (c2 = 1) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000);
+--echo # AND idempotence: duplicated always-true AND operands
+select count(*) from t1 where (c2 = 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1) and (c4 >= 1);
+--echo # filtered ANN with duplicated OR operands returns top-k
+select count(*) from (select c1 from t1 where (c2 = 1) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) or (c4 > 1000) order by l2_distance(c3, '[0,1,0]') approximate limit 3) a;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings

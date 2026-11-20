@@ -1,0 +1,44 @@
+# regression test for issue #1489: duplicated OR/AND operands in pushdown filter
+drop table if exists t1;
+alter system set vector_memory_limit = 0;
+create table t1(c1 int primary key, c2 int, c3 vector(3), c4 int) organization heap;
+create vector index idxv on t1(c3) with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
+insert into t1 values(1,1,'[1.0, 0.0, 0]',10);
+insert into t1 values(2,1,'[0.9, 0.1, 0]',999);
+insert into t1 values(3,1,'[0.8, 0.2, 0]',1000);
+insert into t1 values(4,1,'[0.7, 0.3, 0]',1);
+insert into t1 values(5,1,'[0.6, 0.4, 0]',500);
+insert into t1 values(6,2,'[0.5, 0.4, 0.0]',160);
+insert into t1 values(7,2,'[0.5, 0.4, 0.1]',170);
+insert into t1 values(8,2,'[0.5, 0.4, 0.2]',180);
+insert into t1 values(9,2,'[0.5, 0.4, 0.3]',190);
+insert into t1 values(10,2,'[0.5, 0.4, 0.4]',200);
+insert into t1 values(11,2,'[0.5, 0.4, 0.5]',210);
+insert into t1 values(12,2,'[0.5, 0.4, 0.6]',220);
+insert into t1 values(13,2,'[0.5, 0.4, 0.7]',230);
+insert into t1 values(14,3,'[0.3, 0.2, 0.0]',580);
+insert into t1 values(15,3,'[0.3, 0.2, 0.1]',600);
+insert into t1 values(16,3,'[0.3, 0.2, 0.2]',620);
+insert into t1 values(17,3,'[0.3, 0.2, 0.3]',640);
+insert into t1 values(18,3,'[0.3, 0.2, 0.4]',660);
+insert into t1 values(19,3,'[0.3, 0.2, 0.5]',680);
+insert into t1 values(20,3,'[0.3, 0.2, 0.6]',700);
+# eligible set: simple filter
+count(*)
+5
+# eligible set: filter with 32 duplicated always-false OR operands
+count(*)
+5
+# eligible range: simple filter
+min(c1)	max(c1)
+1	5
+# eligible range: duplicated OR operands
+min(c1)	max(c1)
+1	5
+# AND idempotence: duplicated always-true AND operands
+count(*)
+5
+# filtered ANN with duplicated OR operands returns top-k
+count(*)
+3
+drop table if exists t1;
