@@ -1,0 +1,84 @@
+DROP TABLE IF EXISTS inlist_distinct_threshold;
+CREATE TABLE inlist_distinct_threshold (id INT PRIMARY KEY, v BIGINT);
+INSERT INTO inlist_distinct_threshold VALUES (1,1),(2,2),(3,3),(4,4),(5,NULL),(6,-1);
+Duplicate integers below the distinct-value threshold stay in the scan.
+EXPLAIN BASIC SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,2,3,1,2,3,1,2);
+Query Plan
+==============================================
+|ID|OPERATOR       |NAME                     |
+----------------------------------------------
+|0 |TABLE FULL SCAN|inlist_distinct_threshold|
+==============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_distinct_threshold.id]), filter([inlist_distinct_threshold.v IN (1, 2, 3, 1, 2, 3, 1, 2)]), rowset=16
+      access([inlist_distinct_threshold.id], [inlist_distinct_threshold.v]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([inlist_distinct_threshold.id]), range(MIN ; MAX)always true
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,2,3,1,2,3,1,2) ORDER BY id;
+id
+1
+2
+3
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v NOT IN (1,2,3,1,2,3,1,2) ORDER BY id;
+id
+4
+6
+A genuinely large distinct set retains the values-table rewrite.
+EXPLAIN BASIC SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,2,3,4,1,2,3,4);
+Query Plan
+========================================================
+|ID|OPERATOR                 |NAME                     |
+--------------------------------------------------------
+|0 |HASH JOIN                |                         |
+|1 |├─SUBPLAN SCAN           |VIEW2                    |
+|2 |│ └─HASH DISTINCT        |                         |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1            |
+|4 |└─TABLE FULL SCAN        |inlist_distinct_threshold|
+========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_distinct_threshold.id]), filter(nil), rowset=16
+      equal_conds([inlist_distinct_threshold.v = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([inlist_distinct_threshold.id], [inlist_distinct_threshold.v]), filter(nil), rowset=16
+      access([inlist_distinct_threshold.id], [inlist_distinct_threshold.v]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([inlist_distinct_threshold.id]), range(MIN ; MAX)always true
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,2,3,4,1,2,3,4) ORDER BY id;
+id
+1
+2
+3
+4
+NULL and mixed-type lists keep their existing semantics.
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,1,NULL,1,1,NULL,1,1) ORDER BY id;
+id
+1
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v NOT IN (1,1,NULL,1,1,NULL,1,1) ORDER BY id;
+id
+SELECT /*+OPT_PARAM('inlist_rewrite_threshold', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (1,'2',1,'2',1,'2',1,'2') ORDER BY id;
+id
+1
+2
+Cached parameterized statements must retain all parameter positions.
+PREPARE membership_stmt FROM 'SELECT /*+OPT_PARAM(''inlist_rewrite_threshold'', 4)*/ id FROM inlist_distinct_threshold WHERE v IN (?,?,?,?,?,?,?,?) ORDER BY id';
+SET @a=1, @b=1, @c=1, @d=1, @e=1, @f=1, @g=1, @h=1;
+EXECUTE membership_stmt USING @a,@b,@c,@d,@e,@f,@g,@h;
+id
+1
+SET @a=1, @b=2, @c=3, @d=4, @e=-1, @f=6, @g=7, @h=NULL;
+EXECUTE membership_stmt USING @a,@b,@c,@d,@e,@f,@g,@h;
+id
+1
+2
+3
+4
+6
+DEALLOCATE PREPARE membership_stmt;
+DROP TABLE inlist_distinct_threshold;

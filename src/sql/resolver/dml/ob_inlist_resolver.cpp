@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -28,6 +29,58 @@ using namespace common;
 
 namespace sql
 {
+namespace
+{
+// Only choose a plan here; retain every input and parameter in the IN expression.
+// In particular, a cached plan must still evaluate subsequent parameter values.
+int check_small_integer_inlist(const ParseNode &in_list,
+                              const ParamStore *param_store,
+                              const bool is_prepare_stmt,
+                              const int64_t threshold,
+                              bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  is_small = false;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> values;
+  bool supported = true;
+  if (threshold <= 1 || OB_ISNULL(in_list.children_)) {
+  } else if (OB_FAIL(values.create(threshold, "InListDistinct", "InListDistinct"))) {
+    LOG_WARN("failed to create IN-list value set", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && supported && values.size() < threshold
+                        && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      int64_t value = 0;
+      if (OB_ISNULL(node)) {
+        supported = false;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_QUESTIONMARK == node->type_ && !is_prepare_stmt
+                 && NULL != param_store && node->value_ >= 0
+                 && node->value_ < param_store->count()
+                 && ObIntType == param_store->at(node->value_).get_type()) {
+        value = param_store->at(node->value_).get_int();
+      } else {
+        // Preserve the existing decision for NULL, mixed types, rows, and
+        // unbound parameters; do not introduce comparison or casting rules.
+        supported = false;
+      }
+      if (supported) {
+        if (OB_FAIL(values.set_refactored(value))) {
+          if (OB_HASH_EXIST == ret) {
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("failed to record IN-list value", K(ret));
+          }
+        }
+      }
+    }
+    is_small = OB_SUCC(ret) && supported && values.size() < threshold;
+  }
+  return ret;
+}
+} // namespace
+
 struct InListRewriteInfo {
   bool is_valid_as_values_table_;
   bool is_question_mark_;
@@ -309,6 +362,15 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       if (in_list.num_child_ < threshold) {
       } else {
         is_enable = true;
+        bool is_small_integer_list = false;
+        if (T_OP_ROW != left_expr.get_expr_type()) {
+          if (OB_FAIL(check_small_integer_inlist(in_list, param_store, is_prepare_stmt,
+                                               threshold, is_small_integer_list))) {
+            LOG_WARN("failed to check distinct IN-list values", K(ret));
+          } else if (is_small_integer_list) {
+            is_enable = false;
+          }
+        }
       }
     }
   }
