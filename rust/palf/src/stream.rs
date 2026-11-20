@@ -13,23 +13,27 @@
 // limitations under the License.
 
 use crate::format::{
-    block_id, block_offset, crc64, crc64_with_seed, decode_group_header, encode_entry,
-    encode_group, encode_segment_header, group_entries, physical_offset, segment_path,
-    validate_group, validate_segment_header, Error, GroupHeader, Result, BLOCK_SIZE,
-    ENTRY_HEADER_SIZE, GROUP_HEADER_SIZE, MAX_LOG_BODY_SIZE, PHYSICAL_BLOCK_SIZE,
-    SEGMENT_HEADER_SIZE,
+    block_id, block_offset, copied_bytes, crc64, crc64_with_seed, decode_group_header,
+    encode_entry, encode_group, encode_segment_header, group_entries, physical_offset,
+    segment_path, validate_group, validate_segment_header, zeroed_bytes, Error, GroupHeader,
+    Result, BLOCK_SIZE, ENTRY_HEADER_SIZE, GROUP_HEADER_SIZE, MAX_LOG_BODY_SIZE,
+    PHYSICAL_BLOCK_SIZE, SEGMENT_HEADER_SIZE,
 };
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
 const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN2";
 const THROTTLE_CHECK_INTERVAL: Duration = Duration::from_millis(30);
+const APPEND_BATCH_WINDOW: Duration = Duration::from_micros(50);
+const MAX_APPEND_BATCH_REQUESTS: usize = 32;
+const MAX_APPEND_BATCH_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DiskPolicy {
@@ -120,6 +124,38 @@ impl RecordMeta {
     }
 }
 
+struct PendingAppend {
+    id: u64,
+    payload: Vec<u8>,
+    ref_scn: u64,
+}
+
+struct PlannedRecord {
+    lsn: u64,
+    bytes: Vec<u8>,
+    meta: Option<RecordMeta>,
+}
+
+struct AppendBatch {
+    records: Vec<PlannedRecord>,
+    appends: Vec<(u64, u64, u64, u64)>,
+    segment_lengths: BTreeMap<u64, u64>,
+    end_lsn: u64,
+    end_scn: u64,
+    next_log_id: i64,
+    accumulated_checksum: u64,
+}
+
+struct BatchCheckpoint {
+    records_len: usize,
+    appends_len: usize,
+    segment_lengths: BTreeMap<u64, u64>,
+    end_lsn: u64,
+    end_scn: u64,
+    next_log_id: i64,
+    accumulated_checksum: u64,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct CommittedTail {
     end_lsn: u64,
@@ -149,11 +185,25 @@ struct State {
     integrity: bool,
     closed: bool,
     failed: Option<Error>,
+    next_append_id: u64,
+    pending_appends: Vec<PendingAppend>,
+    pending_append_bytes: usize,
+    append_leader: bool,
+    append_results: BTreeMap<u64, Result<AppendResult>>,
 }
 
 struct StreamInner {
     state: Mutex<State>,
     changed: Condvar,
+    append_callers: AtomicUsize,
+}
+
+struct AppendCallGuard<'a>(&'a AtomicUsize);
+
+impl Drop for AppendCallGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 pub struct Stream {
@@ -209,11 +259,17 @@ impl Stream {
             integrity: false,
             closed: false,
             failed: Some(error),
+            next_append_id: 0,
+            pending_appends: Vec::new(),
+            pending_append_bytes: 0,
+            append_leader: false,
+            append_results: BTreeMap::new(),
         });
         Self {
             inner: Arc::new(StreamInner {
                 state: Mutex::new(state),
                 changed: Condvar::new(),
+                append_callers: AtomicUsize::new(0),
             }),
         }
     }
@@ -281,48 +337,60 @@ impl Stream {
         if payload.is_empty() || payload.len() > MAX_LOG_BODY_SIZE || ref_scn == u64::MAX {
             return Err(Error::Invalid);
         }
+        self.inner.append_callers.fetch_add(1, Ordering::Relaxed);
+        let _call_guard = AppendCallGuard(&self.inner.append_callers);
         let mut state = self.lock_for_write(payload.len() as u64)?;
-        let scn = ref_scn.max(state.end_scn.saturating_add(1));
-        let entry = encode_entry(payload, scn, false);
-        let group_len = GROUP_HEADER_SIZE + entry.len();
-        let mut lsn = state.end_lsn;
-        let remaining = BLOCK_SIZE - block_offset(lsn);
-        if remaining < group_len as u64 {
-            if let Err(error) = state.write_padding(lsn, remaining, scn) {
-                state.failed = Some(error);
-                return Err(error);
+        let id = state.next_append_id;
+        state.next_append_id = state.next_append_id.checked_add(1).ok_or(Error::Invalid)?;
+        let mut request = Some(PendingAppend {
+            id,
+            payload: copied_bytes(payload)?,
+            ref_scn,
+        });
+        loop {
+            if let Some(result) = state.append_results.remove(&id) {
+                return result;
             }
-            lsn = state.end_lsn;
+            state.check_writable()?;
+            if let Some(pending) = request.as_ref() {
+                if state.can_queue_append(pending.payload.len()) {
+                    state.enqueue_append(request.take().unwrap());
+                    self.inner.changed.notify_all();
+                }
+            }
+            if !state.append_leader && !state.pending_appends.is_empty() {
+                state.append_leader = true;
+                if self.inner.append_callers.load(Ordering::Relaxed) > 1 {
+                    let deadline = Instant::now() + APPEND_BATCH_WINDOW;
+                    while state.append_batch_has_capacity()
+                        && !state.closed
+                        && state.failed.is_none()
+                    {
+                        let now = Instant::now();
+                        if now >= deadline {
+                            break;
+                        }
+                        let (next, timeout) = self
+                            .inner
+                            .changed
+                            .wait_timeout(state, deadline - now)
+                            .map_err(|_| Error::Io)?;
+                        state = next;
+                        if timeout.timed_out() {
+                            break;
+                        }
+                    }
+                }
+                let requests = state.take_append_batch();
+                let (results, retry) = state.execute_append_batch(requests);
+                state.requeue_appends(retry);
+                state.append_results.extend(results);
+                state.append_leader = false;
+                self.inner.changed.notify_all();
+            } else {
+                state = self.inner.changed.wait(state).map_err(|_| Error::Io)?;
+            }
         }
-        let group = encode_group(
-            &entry,
-            lsn,
-            scn,
-            state.next_log_id,
-            state.accumulated_checksum,
-            false,
-        )?;
-        state.ensure_capacity(group.len() as u64)?;
-        if let Err(error) = state.write_record(lsn, &group) {
-            state.failed = Some(error);
-            return Err(error);
-        }
-        let header = validate_group(&group, lsn)?;
-        let meta = RecordMeta {
-            lsn,
-            len: group.len() as u64,
-            header: header.clone(),
-        };
-        if let Err(error) = state.commit_record(meta) {
-            state.failed = Some(error);
-            return Err(error);
-        }
-        Ok(AppendResult {
-            lsn: lsn + GROUP_HEADER_SIZE as u64,
-            scn,
-            end_lsn: state.end_lsn,
-            end_scn: state.end_scn,
-        })
     }
 
     pub fn append_imported(
@@ -692,6 +760,132 @@ impl Cursor {
     }
 }
 
+impl AppendBatch {
+    fn new(state: &State) -> Self {
+        Self {
+            records: Vec::new(),
+            appends: Vec::new(),
+            segment_lengths: state.segment_lengths.clone(),
+            end_lsn: state.end_lsn,
+            end_scn: state.end_scn,
+            next_log_id: state.next_log_id,
+            accumulated_checksum: state.accumulated_checksum,
+        }
+    }
+
+    fn checkpoint(&self) -> BatchCheckpoint {
+        BatchCheckpoint {
+            records_len: self.records.len(),
+            appends_len: self.appends.len(),
+            segment_lengths: self.segment_lengths.clone(),
+            end_lsn: self.end_lsn,
+            end_scn: self.end_scn,
+            next_log_id: self.next_log_id,
+            accumulated_checksum: self.accumulated_checksum,
+        }
+    }
+
+    fn rollback(&mut self, checkpoint: BatchCheckpoint) {
+        self.records.truncate(checkpoint.records_len);
+        self.appends.truncate(checkpoint.appends_len);
+        self.segment_lengths = checkpoint.segment_lengths;
+        self.end_lsn = checkpoint.end_lsn;
+        self.end_scn = checkpoint.end_scn;
+        self.next_log_id = checkpoint.next_log_id;
+        self.accumulated_checksum = checkpoint.accumulated_checksum;
+    }
+
+    fn ensure_capacity(&self, state: &State, additional: u64) -> Result<()> {
+        state.ensure_capacity_at(&self.segment_lengths, self.end_lsn, additional)
+    }
+
+    fn note_write(&mut self, lsn: u64, length: usize) {
+        let segment_length = self
+            .segment_lengths
+            .entry(block_id(lsn))
+            .or_insert(SEGMENT_HEADER_SIZE);
+        *segment_length = (*segment_length).max(physical_offset(lsn) + length as u64);
+    }
+
+    fn push(&mut self, state: &State, request: &PendingAppend) -> Result<()> {
+        let scn = request.ref_scn.max(self.end_scn.saturating_add(1));
+        let entry = encode_entry(&request.payload, scn, false)?;
+        let group_len = GROUP_HEADER_SIZE + entry.len();
+        let mut lsn = self.end_lsn;
+        let remaining = BLOCK_SIZE - block_offset(lsn);
+        if remaining < group_len as u64 {
+            if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64 {
+                self.ensure_capacity(state, remaining)?;
+                let bytes = zeroed_bytes(remaining as usize)?;
+                self.note_write(lsn, bytes.len());
+                self.records.push(PlannedRecord {
+                    lsn,
+                    bytes,
+                    meta: None,
+                });
+            } else {
+                let payload_len = remaining as usize - GROUP_HEADER_SIZE - ENTRY_HEADER_SIZE;
+                let entry = encode_entry(&zeroed_bytes(payload_len)?, scn, true)?;
+                let group = encode_group(
+                    &entry,
+                    lsn,
+                    scn,
+                    self.next_log_id,
+                    self.accumulated_checksum,
+                    true,
+                )?;
+                self.ensure_capacity(state, group.len() as u64)?;
+                let header = validate_group(&group, lsn)?;
+                self.note_write(lsn, group.len());
+                self.records.push(PlannedRecord {
+                    lsn,
+                    bytes: group,
+                    meta: Some(RecordMeta {
+                        lsn,
+                        len: remaining,
+                        header: header.clone(),
+                    }),
+                });
+                self.accumulated_checksum = header.accumulated_checksum;
+                self.next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
+            }
+            self.end_lsn = (block_id(lsn) + 1) * BLOCK_SIZE;
+            lsn = self.end_lsn;
+        }
+        let group = encode_group(
+            &entry,
+            lsn,
+            scn,
+            self.next_log_id,
+            self.accumulated_checksum,
+            false,
+        )?;
+        self.ensure_capacity(state, group.len() as u64)?;
+        let header = validate_group(&group, lsn)?;
+        self.note_write(lsn, group.len());
+        self.records.push(PlannedRecord {
+            lsn,
+            bytes: group,
+            meta: Some(RecordMeta {
+                lsn,
+                len: group_len as u64,
+                header: header.clone(),
+            }),
+        });
+        self.end_lsn = lsn + group_len as u64;
+        self.end_scn = scn;
+        self.appends.push((
+            request.id,
+            lsn + GROUP_HEADER_SIZE as u64,
+            scn,
+            self.end_lsn,
+        ));
+        self.accumulated_checksum = header.accumulated_checksum;
+        self.next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
+        Ok(())
+    }
+}
+
 impl State {
     fn check_open(&self) -> Result<()> {
         if self.closed {
@@ -707,14 +901,169 @@ impl State {
         self.check_open()
     }
 
+    fn can_queue_append(&self, payload_len: usize) -> bool {
+        self.pending_appends.len() < MAX_APPEND_BATCH_REQUESTS
+            && (self.pending_appends.is_empty()
+                || self.pending_append_bytes.saturating_add(payload_len) <= MAX_APPEND_BATCH_BYTES)
+    }
+
+    fn append_batch_has_capacity(&self) -> bool {
+        self.pending_appends.len() < MAX_APPEND_BATCH_REQUESTS
+            && self.pending_append_bytes < MAX_APPEND_BATCH_BYTES
+    }
+
+    fn enqueue_append(&mut self, request: PendingAppend) {
+        self.pending_append_bytes = self
+            .pending_append_bytes
+            .saturating_add(request.payload.len());
+        self.pending_appends.push(request);
+    }
+
+    fn take_append_batch(&mut self) -> Vec<PendingAppend> {
+        self.pending_append_bytes = 0;
+        std::mem::take(&mut self.pending_appends)
+    }
+
+    fn requeue_appends(&mut self, requests: Vec<PendingAppend>) {
+        self.pending_append_bytes = requests.iter().fold(0usize, |bytes, request| {
+            bytes.saturating_add(request.payload.len())
+        });
+        self.pending_appends = requests;
+    }
+
+    fn execute_append_batch(
+        &mut self,
+        requests: Vec<PendingAppend>,
+    ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
+        if let Err(error) = self.check_writable() {
+            return (
+                requests
+                    .into_iter()
+                    .map(|request| (request.id, Err(error)))
+                    .collect(),
+                Vec::new(),
+            );
+        }
+        let mut plan = AppendBatch::new(self);
+        let mut results = Vec::new();
+        let mut requests = requests.into_iter();
+        while let Some(request) = requests.next() {
+            let checkpoint = plan.checkpoint();
+            if let Err(error) = plan.push(self, &request) {
+                plan.rollback(checkpoint);
+                results.push((request.id, Err(error)));
+                return self.finish_append_batch(plan, results, requests.collect());
+            }
+        }
+        self.finish_append_batch(plan, results, Vec::new())
+    }
+
+    fn finish_append_batch(
+        &mut self,
+        plan: AppendBatch,
+        mut results: Vec<(u64, Result<AppendResult>)>,
+        retry: Vec<PendingAppend>,
+    ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
+        if plan.appends.is_empty() {
+            return (results, retry);
+        }
+        if let Err(error) = self.persist_append_batch(&plan) {
+            self.failed = Some(error);
+            results.extend(plan.appends.iter().map(|(id, _, _, _)| (*id, Err(error))));
+            results.extend(retry.into_iter().map(|request| (request.id, Err(error))));
+            return (results, Vec::new());
+        }
+        results.extend(plan.appends.into_iter().map(|(id, lsn, scn, end_lsn)| {
+            (
+                id,
+                Ok(AppendResult {
+                    lsn,
+                    scn,
+                    end_lsn,
+                    end_scn: scn,
+                }),
+            )
+        }));
+        (results, retry)
+    }
+
+    fn persist_append_batch(&mut self, plan: &AppendBatch) -> Result<()> {
+        self.write_planned_records(&plan.records)?;
+        let committed = plan
+            .records
+            .iter()
+            .rev()
+            .find_map(|record| record.meta.as_ref())
+            .ok_or(Error::Invalid)?;
+        let mut manifest = self.manifest.clone();
+        manifest.committed = CommittedTail {
+            end_lsn: plan.end_lsn,
+            end_scn: plan.end_scn,
+            log_id: committed.header.log_id,
+            accumulated_checksum: committed.header.accumulated_checksum,
+        };
+        write_manifest(&self.directory, &manifest)?;
+        self.manifest = manifest;
+        self.segment_lengths = plan.segment_lengths.clone();
+        self.end_lsn = plan.end_lsn;
+        self.end_scn = plan.end_scn;
+        self.next_log_id = plan.next_log_id;
+        self.accumulated_checksum = plan.accumulated_checksum;
+        for record in &plan.records {
+            if let Some(meta) = &record.meta {
+                self.records.insert(meta.lsn, meta.clone());
+            }
+        }
+        Ok(())
+    }
+
+    fn write_planned_records(&mut self, records: &[PlannedRecord]) -> Result<()> {
+        let mut index = 0;
+        let mut new_segment = false;
+        while index < records.len() {
+            let id = block_id(records[index].lsn);
+            let path = segment_path(&self.directory, id);
+            let create = !self.segment_lengths.contains_key(&id);
+            let mut file = OpenOptions::new()
+                .create(true)
+                .read(true)
+                .write(true)
+                .open(path)?;
+            if create {
+                file.write_all(&encode_segment_header(id)?)?;
+                new_segment = true;
+            }
+            while index < records.len() && block_id(records[index].lsn) == id {
+                let record = &records[index];
+                file.seek(SeekFrom::Start(physical_offset(record.lsn)))?;
+                file.write_all(&record.bytes)?;
+                index += 1;
+            }
+            file.sync_data()?;
+        }
+        if new_segment {
+            sync_directory(&self.directory)?;
+        }
+        Ok(())
+    }
+
     fn ensure_capacity(&self, additional: u64) -> Result<()> {
+        self.ensure_capacity_at(&self.segment_lengths, self.end_lsn, additional)
+    }
+
+    fn ensure_capacity_at(
+        &self,
+        segment_lengths: &BTreeMap<u64, u64>,
+        end_lsn: u64,
+        additional: u64,
+    ) -> Result<()> {
         let hard_limit = self.disk_policy.hard_limit();
         if hard_limit == 0 {
             return Ok(());
         }
-        let used: u64 = self.segment_lengths.values().sum();
-        let id = block_id(self.end_lsn);
-        let segment_exists = self.segment_lengths.contains_key(&id);
+        let used: u64 = segment_lengths.values().sum();
+        let id = block_id(end_lsn);
+        let segment_exists = segment_lengths.contains_key(&id);
         let required = additional
             + if segment_exists {
                 0
@@ -749,47 +1098,6 @@ impl State {
         Some(Duration::from_micros(delay_us.min(u64::MAX as u128) as u64))
     }
 
-    fn write_padding(&mut self, lsn: u64, remaining: u64, scn: u64) -> Result<()> {
-        if remaining == 0 {
-            return Ok(());
-        }
-        if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64 {
-            self.ensure_capacity(remaining)?;
-            let path = segment_path(&self.directory, block_id(lsn));
-            let mut file = OpenOptions::new().write(true).open(path)?;
-            file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-            file.write_all(&vec![0; remaining as usize])?;
-            file.sync_data()?;
-            self.segment_lengths
-                .insert(block_id(lsn), file.metadata()?.len());
-            self.end_lsn = (block_id(lsn) + 1) * BLOCK_SIZE;
-            return Ok(());
-        }
-        let entry_payload_len = remaining as usize - GROUP_HEADER_SIZE - ENTRY_HEADER_SIZE;
-        let entry = encode_entry(&vec![0; entry_payload_len], scn, true);
-        let group = encode_group(
-            &entry,
-            lsn,
-            scn,
-            self.next_log_id,
-            self.accumulated_checksum,
-            true,
-        )?;
-        self.ensure_capacity(group.len() as u64)?;
-        self.write_record(lsn, &group)?;
-        let header = validate_group(&group, lsn)?;
-        let meta = RecordMeta {
-            lsn,
-            len: remaining,
-            header: header.clone(),
-        };
-        self.records.insert(lsn, meta);
-        self.end_lsn = lsn + remaining;
-        self.accumulated_checksum = header.accumulated_checksum;
-        self.next_log_id += 1;
-        Ok(())
-    }
-
     fn write_record(&mut self, lsn: u64, bytes: &[u8]) -> Result<()> {
         let id = block_id(lsn);
         let path = segment_path(&self.directory, id);
@@ -800,7 +1108,7 @@ impl State {
             .write(true)
             .open(&path)?;
         if new_segment {
-            file.write_all(&encode_segment_header(id))?;
+            file.write_all(&encode_segment_header(id)?)?;
         }
         file.seek(SeekFrom::Start(physical_offset(lsn)))?;
         file.write_all(bytes)?;
@@ -836,7 +1144,7 @@ impl State {
         let meta = self.records.get(&lsn).ok_or(Error::OutLower)?;
         let mut file = File::open(segment_path(&self.directory, block_id(lsn)))?;
         file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-        let mut bytes = vec![0; meta.len as usize];
+        let mut bytes = zeroed_bytes(meta.len as usize)?;
         file.read_exact(&mut bytes)?;
         validate_group(&bytes, lsn)?;
         Ok(bytes)
@@ -897,6 +1205,11 @@ fn create_state(
         integrity: true,
         closed: false,
         failed: None,
+        next_append_id: 0,
+        pending_appends: Vec::new(),
+        pending_append_bytes: 0,
+        append_leader: false,
+        append_results: BTreeMap::new(),
     })
 }
 
@@ -950,7 +1263,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         if length < SEGMENT_HEADER_SIZE || length > PHYSICAL_BLOCK_SIZE {
             return Err(Error::Corrupt);
         }
-        let mut segment_header = vec![0; SEGMENT_HEADER_SIZE as usize];
+        let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
         file.read_exact(&mut segment_header)?;
         validate_segment_header(&segment_header, id)?;
         segment_lengths.insert(id, length);
@@ -961,7 +1274,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
                 if physical_offset(lsn) + remaining > length {
                     return Err(Error::Corrupt);
                 }
-                let mut padding = vec![0; remaining as usize];
+                let mut padding = zeroed_bytes(remaining as usize)?;
                 file.seek(SeekFrom::Start(physical_offset(lsn)))?;
                 file.read_exact(&mut padding)?;
                 if padding.iter().any(|byte| *byte != 0) {
@@ -974,7 +1287,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
                 return Err(Error::Corrupt);
             }
             file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-            let mut header_bytes = vec![0; GROUP_HEADER_SIZE];
+            let mut header_bytes = zeroed_bytes(GROUP_HEADER_SIZE)?;
             file.read_exact(&mut header_bytes)?;
             if header_bytes.iter().all(|byte| *byte == 0) {
                 return Err(Error::Corrupt);
@@ -988,7 +1301,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
             {
                 return Err(Error::Corrupt);
             }
-            let mut bytes = vec![0; record_len as usize];
+            let mut bytes = zeroed_bytes(record_len as usize)?;
             file.seek(SeekFrom::Start(physical_offset(lsn)))?;
             file.read_exact(&mut bytes)?;
             let header = validate_group(&bytes, lsn)?;
@@ -1060,11 +1373,16 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         integrity: true,
         closed: false,
         failed: None,
+        next_append_id: 0,
+        pending_appends: Vec::new(),
+        pending_append_bytes: 0,
+        append_leader: false,
+        append_results: BTreeMap::new(),
     })
 }
 
 fn write_manifest(directory: &Path, manifest: &Manifest) -> Result<()> {
-    let mut bytes = vec![0; MANIFEST_SIZE];
+    let mut bytes = zeroed_bytes(MANIFEST_SIZE)?;
     bytes[..8].copy_from_slice(MANIFEST_MAGIC);
     bytes[8..16].copy_from_slice(&manifest.base_lsn.to_le_bytes());
     bytes[16..24].copy_from_slice(&manifest.previous.prev_lsn.to_le_bytes());
@@ -1089,7 +1407,12 @@ fn write_manifest(directory: &Path, manifest: &Manifest) -> Result<()> {
 
 fn read_manifest(directory: &Path) -> Result<Manifest> {
     let mut bytes = Vec::new();
-    File::open(directory.join(MANIFEST_FILE))?.read_to_end(&mut bytes)?;
+    bytes
+        .try_reserve_exact(MANIFEST_SIZE + 1)
+        .map_err(|_| Error::NoMemory)?;
+    File::open(directory.join(MANIFEST_FILE))?
+        .take((MANIFEST_SIZE + 1) as u64)
+        .read_to_end(&mut bytes)?;
     if bytes.len() != MANIFEST_SIZE
         || bytes.get(..8) != Some(MANIFEST_MAGIC)
         || crc64(&bytes[..88]) != u64::from_le_bytes(bytes[88..96].try_into().unwrap())
@@ -1205,7 +1528,7 @@ mod tests {
         {
             let mut state = stream.inner.state.lock().unwrap();
             let lsn = state.end_lsn;
-            let entry = encode_entry(b"unconfirmed", 11, false);
+            let entry = encode_entry(b"unconfirmed", 11, false).unwrap();
             let group = encode_group(
                 &entry,
                 lsn,
@@ -1263,7 +1586,7 @@ mod tests {
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0, 0);
         let payload_len = BLOCK_SIZE as usize - GROUP_HEADER_SIZE - ENTRY_HEADER_SIZE - 32;
-        let entry = encode_entry(&vec![7; payload_len], 10, false);
+        let entry = encode_entry(&vec![7; payload_len], 10, false).unwrap();
         let group = encode_group(&entry, 0, 10, 1, 0, false).unwrap();
         stream.append_imported(0, 10, &group).unwrap();
         let appended = stream.append(b"next", 11).unwrap();
@@ -1299,6 +1622,34 @@ mod tests {
         let reopened = Stream::open(&path, 0);
         assert_eq!(reopened.progress().unwrap().base_lsn, checkpoint);
         assert_eq!(reopened.base_info(checkpoint).unwrap().curr_lsn, checkpoint);
+    }
+
+    #[test]
+    fn checkpoint_failure_preserves_segments_and_empty_gc_is_idempotent() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let large = vec![7; 1024 * 1024];
+        for index in 0..70 {
+            stream.append(&large, index + 1).unwrap();
+        }
+        let temporary = directory.0.join("manifest.tmp");
+        fs::create_dir(&temporary).unwrap();
+        assert!(matches!(stream.set_base_lsn(BLOCK_SIZE), Err(Error::Io)));
+        assert_eq!(stream.progress().unwrap().base_lsn, 0);
+        assert!(segment_path(&directory.0, 0).exists());
+        fs::remove_dir(&temporary).unwrap();
+        stream.set_base_lsn(BLOCK_SIZE).unwrap();
+        assert!(!segment_path(&directory.0, 0).exists());
+        assert_eq!(
+            stream.set_base_lsn(BLOCK_SIZE).unwrap().base_lsn,
+            BLOCK_SIZE
+        );
+        drop(stream);
+        assert_eq!(
+            Stream::open(&path, 0).progress().unwrap().base_lsn,
+            BLOCK_SIZE
+        );
     }
 
     #[test]
@@ -1344,7 +1695,7 @@ mod tests {
         assert_eq!(target.append_imported(0, 10, &bytes), Err(Error::Duplicate));
         let header = validate_group(&bytes, 0).unwrap();
         let next_lsn = bytes.len() as u64;
-        let entry = encode_entry(b"two", 11, false);
+        let entry = encode_entry(b"two", 11, false).unwrap();
         let wrong_id = encode_group(
             &entry,
             next_lsn,
@@ -1405,10 +1756,10 @@ mod tests {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0, 0);
-        let mut payload = encode_entry(b"one", 10, false);
+        let mut payload = encode_entry(b"one", 10, false).unwrap();
         let first_entry_len = payload.len() as u64;
-        payload.extend(encode_entry(b"two", 10, false));
-        payload.extend(encode_entry(b"three", 11, false));
+        payload.extend(encode_entry(b"two", 10, false).unwrap());
+        payload.extend(encode_entry(b"three", 11, false).unwrap());
         let group = encode_group(&payload, 0, 11, 1, 0, false).unwrap();
         stream.append_imported(0, 11, &group).unwrap();
 
@@ -1429,9 +1780,9 @@ mod tests {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0, 0);
-        let mut payload = encode_entry(b"one", 10, false);
-        payload.extend(encode_entry(b"two", 11, false));
-        payload.extend(encode_entry(b"three", 12, false));
+        let mut payload = encode_entry(b"one", 10, false).unwrap();
+        payload.extend(encode_entry(b"two", 11, false).unwrap());
+        payload.extend(encode_entry(b"three", 12, false).unwrap());
         let group = encode_group(&payload, 0, 12, 1, 0, false).unwrap();
         stream.append_imported(0, 12, &group).unwrap();
 
@@ -1453,7 +1804,7 @@ mod tests {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0, 0);
-        let entry = encode_entry(&[0; 8], 10, true);
+        let entry = encode_entry(&[0; 8], 10, true).unwrap();
         let group = encode_group(&entry, 0, 10, 1, 0, true).unwrap();
         stream.append_imported(0, 10, &group).unwrap();
         stream.append(b"visible", 11).unwrap();
@@ -1500,6 +1851,66 @@ mod tests {
         assert!(stream.progress().unwrap().used_disk <= 8192);
         stream.set_disk_limit(16_384).unwrap();
         stream.append(&vec![0; 3000], 11).unwrap();
+    }
+
+    #[test]
+    fn concurrent_appends_complete_once_and_survive_reopen() {
+        use std::collections::BTreeSet;
+        use std::sync::Barrier;
+
+        const WRITERS: usize = 8;
+        const WRITES_PER_WRITER: usize = 16;
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Arc::new(Stream::create(&path, base(), 0, 0));
+        let barrier = Arc::new(Barrier::new(WRITERS));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let mut threads = Vec::new();
+        for writer in 0..WRITERS {
+            let stream = Arc::clone(&stream);
+            let barrier = Arc::clone(&barrier);
+            let sender = sender.clone();
+            threads.push(std::thread::spawn(move || {
+                barrier.wait();
+                for sequence in 0..WRITES_PER_WRITER {
+                    let payload = format!("{writer}:{sequence}");
+                    let result = stream.append(payload.as_bytes(), sequence as u64 + 1);
+                    sender.send((writer, sequence, payload, result)).unwrap();
+                }
+            }));
+        }
+        drop(sender);
+        let mut positions = BTreeSet::new();
+        let mut expected = BTreeSet::new();
+        let mut last_lsns = vec![0; WRITERS];
+        let mut end_lsns = BTreeSet::new();
+        for (writer, sequence, payload, result) in receiver {
+            let result = result.unwrap();
+            assert!(sequence == 0 || result.lsn > last_lsns[writer]);
+            last_lsns[writer] = result.lsn;
+            assert!(positions.insert(result.lsn));
+            assert!(end_lsns.insert(result.end_lsn));
+            assert!(expected.insert(payload));
+        }
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        assert_eq!(positions.len(), WRITERS * WRITES_PER_WRITER);
+        drop(stream);
+
+        let reopened = Stream::open(&path, 0);
+        let mut actual = BTreeSet::new();
+        let mut cursor = reopened.cursor(GROUP_HEADER_SIZE as u64, false);
+        loop {
+            match cursor.next(u64::MAX) {
+                Ok(()) => {
+                    actual.insert(String::from_utf8(cursor.payload().to_vec()).unwrap());
+                }
+                Err(Error::End) => break,
+                error => panic!("unexpected cursor result: {error:?}"),
+            }
+        }
+        assert_eq!(actual, expected);
     }
 
     #[test]

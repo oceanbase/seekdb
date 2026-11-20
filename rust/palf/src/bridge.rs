@@ -31,6 +31,7 @@ mod ffi {
         UnknownVersion,
         Io,
         NoSpace,
+        NoMemory,
         Closed,
     }
 
@@ -121,9 +122,7 @@ mod ffi {
     }
 }
 
-pub use ffi::{
-    AppendResult, BaseInfo, BaseInfoResult, Code, DiskPolicy, PositionResult, Progress,
-};
+pub use ffi::{AppendResult, BaseInfo, BaseInfoResult, Code, DiskPolicy, PositionResult, Progress};
 
 impl From<DiskPolicy> for NativeDiskPolicy {
     fn from(policy: DiskPolicy) -> Self {
@@ -157,6 +156,7 @@ impl From<Error> for Code {
             Error::UnknownVersion => Self::UnknownVersion,
             Error::Io => Self::Io,
             Error::NoSpace => Self::NoSpace,
+            Error::NoMemory => Self::NoMemory,
             Error::Closed => Self::Closed,
         }
     }

@@ -40,6 +40,7 @@ pub enum Error {
     UnknownVersion,
     Io,
     NoSpace,
+    NoMemory,
     Closed,
 }
 
@@ -62,6 +63,22 @@ impl From<std::io::Error> for Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub(crate) fn zeroed_bytes(len: usize) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(len).map_err(|_| Error::NoMemory)?;
+    bytes.resize(len, 0);
+    Ok(bytes)
+}
+
+pub(crate) fn copied_bytes(source: &[u8]) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(source.len())
+        .map_err(|_| Error::NoMemory)?;
+    bytes.extend_from_slice(source);
+    Ok(bytes)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EntryHeader {
@@ -175,8 +192,8 @@ fn put_u64(bytes: &mut [u8], offset: usize, value: u64) {
     bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
 }
 
-pub fn encode_entry(payload: &[u8], scn: u64, padding: bool) -> Vec<u8> {
-    let mut bytes = vec![0; ENTRY_HEADER_SIZE + payload.len()];
+pub fn encode_entry(payload: &[u8], scn: u64, padding: bool) -> Result<Vec<u8>> {
+    let mut bytes = zeroed_bytes(ENTRY_HEADER_SIZE + payload.len())?;
     put_u16(&mut bytes, 0, ENTRY_MAGIC);
     put_u16(&mut bytes, 2, ENTRY_VERSION);
     put_u32(&mut bytes, 4, ENTRY_HEADER_SIZE as u32);
@@ -185,7 +202,7 @@ pub fn encode_entry(payload: &[u8], scn: u64, padding: bool) -> Vec<u8> {
     put_u64(&mut bytes, 16, scn);
     put_u64(&mut bytes, 24, crc64(payload));
     bytes[ENTRY_HEADER_SIZE..].copy_from_slice(payload);
-    bytes
+    Ok(bytes)
 }
 
 pub fn decode_entry_header(bytes: &[u8]) -> Result<EntryHeader> {
@@ -232,6 +249,7 @@ pub fn group_entries(bytes: &[u8], group_lsn: u64) -> Result<Vec<EntryMeta>> {
         if crc64(&bytes[offset + ENTRY_HEADER_SIZE..end]) != header.data_checksum {
             return Err(Error::Corrupt);
         }
+        entries.try_reserve(1).map_err(|_| Error::NoMemory)?;
         entries.push(EntryMeta {
             offset,
             lsn: group_lsn + GROUP_HEADER_SIZE as u64 + offset as u64,
@@ -258,7 +276,7 @@ pub fn encode_group(
     let data_checksum = fold_entry_checksums(&entries);
     let accumulated_checksum =
         crc64_with_seed(previous_accumulated_checksum, &data_checksum.to_le_bytes());
-    let mut bytes = vec![0; GROUP_HEADER_SIZE + payload.len()];
+    let mut bytes = zeroed_bytes(GROUP_HEADER_SIZE + payload.len())?;
     put_u16(&mut bytes, 0, GROUP_MAGIC);
     put_u16(&mut bytes, 2, GROUP_VERSION);
     put_u32(&mut bytes, 4, GROUP_HEADER_SIZE as u32);
@@ -345,13 +363,13 @@ pub fn validate_group(bytes: &[u8], group_lsn: u64) -> Result<GroupHeader> {
     Ok(header)
 }
 
-pub fn encode_segment_header(id: u64) -> Vec<u8> {
-    let mut bytes = vec![0; SEGMENT_HEADER_SIZE as usize];
+pub fn encode_segment_header(id: u64) -> Result<Vec<u8>> {
+    let mut bytes = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
     bytes[..8].copy_from_slice(SEGMENT_MAGIC);
     put_u64(&mut bytes, 8, id);
     let header_checksum = crc64(&bytes[..16]);
     put_u64(&mut bytes, 16, header_checksum);
-    bytes
+    Ok(bytes)
 }
 
 pub fn validate_segment_header(bytes: &[u8], id: u64) -> Result<()> {
@@ -370,8 +388,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn impossible_allocation_is_an_error() {
+        assert_eq!(zeroed_bytes(usize::MAX).unwrap_err(), Error::NoMemory);
+    }
+
+    #[test]
     fn records_round_trip_and_detect_damage() {
-        let entry = encode_entry(b"transaction", 42, false);
+        let entry = encode_entry(b"transaction", 42, false).unwrap();
         let group = encode_group(&entry, 0, 42, 1, 0, false).unwrap();
         let header = validate_group(&group, 0).unwrap();
         assert_eq!(header.max_scn, 42);
@@ -386,9 +409,9 @@ mod tests {
 
     #[test]
     fn groups_fold_every_entry_and_require_ordered_scns() {
-        let mut payload = encode_entry(b"one", 42, false);
-        payload.extend(encode_entry(b"two", 42, false));
-        payload.extend(encode_entry(b"three", 43, false));
+        let mut payload = encode_entry(b"one", 42, false).unwrap();
+        payload.extend(encode_entry(b"two", 42, false).unwrap());
+        payload.extend(encode_entry(b"three", 43, false).unwrap());
         let group = encode_group(&payload, 0, 43, 1, 0, false).unwrap();
         assert_eq!(
             group_entries(&group[GROUP_HEADER_SIZE..], 0).unwrap().len(),
@@ -399,8 +422,8 @@ mod tests {
             Err(Error::Corrupt)
         );
 
-        let mut reversed = encode_entry(b"two", 43, false);
-        reversed.extend(encode_entry(b"one", 42, false));
+        let mut reversed = encode_entry(b"two", 43, false).unwrap();
+        reversed.extend(encode_entry(b"one", 42, false).unwrap());
         assert_eq!(
             encode_group(&reversed, 0, 43, 1, 0, false),
             Err(Error::Corrupt)
@@ -409,7 +432,7 @@ mod tests {
 
     #[test]
     fn unknown_versions_are_not_torn_writes() {
-        let entry = encode_entry(b"x", 1, false);
+        let entry = encode_entry(b"x", 1, false).unwrap();
         let mut group = encode_group(&entry, 0, 1, 1, 0, false).unwrap();
         group[2] = 2;
         assert_eq!(decode_group_header(&group), Err(Error::UnknownVersion));

@@ -258,6 +258,7 @@ ObApplyStatus::ObApplyStatus()
       fs_cb_(),
       lock_(ObLatchIds::APPLY_STATUS_LOCK),
       mutex_(common::ObLatchIds::MAX_APPLY_SCN_LOCK),
+      append_progress_mutex_(common::ObLatchIds::MAX_APPLY_SCN_LOCK),
       get_info_debug_time_(OB_INVALID_TIMESTAMP),
       try_wrlock_debug_time_(OB_INVALID_TIMESTAMP),
       cb_append_stat_("[APPLY STAT CB APPEND COST TIME]", 5 * 1000 * 1000),
@@ -577,7 +578,6 @@ int ObApplyStatus::stop_local_append_()
   }
   return ret;
 }
-//Single-threaded call
 int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
                                                  const SCN &end_scn)
 {
@@ -588,15 +588,14 @@ int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
   } else {
     {
       RLockGuard guard(lock_);
+      lib::ObMutexGuard progress_guard(append_progress_mutex_);
       if (is_in_stop_state_) {
         //skip
         CLOG_LOG(WARN, "apply status has been stopped", K(ret), KPC(this));
       } else if (accepting_append_) {
-        if (palf_committed_end_lsn_ >= end_lsn) {
-          CLOG_LOG(ERROR, "invalid new end_lsn", KPC(this), K(end_lsn));
-        } else {
+        if (palf_committed_end_lsn_ < end_lsn) {
           palf_committed_end_scn_.atomic_store(end_scn);
-          palf_committed_end_lsn_ = end_lsn;
+          ATOMIC_SET(&palf_committed_end_lsn_.val_, end_lsn.val_);
           if (OB_FAIL(submit_task_to_apply_service_(submit_task_))) {
           }
         }

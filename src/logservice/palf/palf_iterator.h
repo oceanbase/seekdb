@@ -48,6 +48,7 @@ inline int from_rust_code(const palf_rs::Code code)
     case palf_rs::Code::UnknownVersion: return OB_INVALID_DATA;
     case palf_rs::Code::Io: return OB_IO_ERROR;
     case palf_rs::Code::NoSpace: return common::OB_LOG_OUTOF_DISK_SPACE;
+    case palf_rs::Code::NoMemory: return OB_ALLOCATE_MEMORY_FAILED;
     case palf_rs::Code::Closed: return OB_NOT_RUNNING;
     default: return OB_ERR_UNEXPECTED;
   }
