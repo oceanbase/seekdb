@@ -31,6 +31,7 @@
 #include "sql/engine/expr/ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_obj_cast_runtime.h"
 #include <algorithm>
+#include <limits>
 
 namespace oceanbase
 {
@@ -608,20 +609,53 @@ int ObRangeGenerator::formalize_complex_range(const ObRangeNode *node)
     } else if (cur_node->is_not_in_node_) {
       bool always_false = false;
       ObTmpInParam *tmp_in_param = nullptr;
+      const ObRangeColumnMeta *meta = nullptr;
+
       if (OB_FAIL(generate_tmp_not_in_param(*cur_node, tmp_in_param))) {
       } else if (OB_ISNULL(tmp_in_param)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_ISNULL(meta = pre_range_graph_->get_column_meta(cur_node->min_offset_))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (tmp_in_param->always_false_) {
         if (OB_FAIL(generate_one_range(*always_false_tmp_range_))) {
         }
       } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < tmp_in_param->in_param_.count() + 1; ++i) {
+        const ObObjTypeClass column_tc = meta->column_type_.get_type_class();
+
+        for (int64_t i = 0;
+             OB_SUCC(ret) && i < tmp_in_param->in_param_.count() + 1;
+             ++i) {
           ObTmpRange *new_range = nullptr;
+
           if (pre_node_offset != -1 && add_last) {
             tmp_range_lists_[pre_node_offset].remove_last();
           }
           add_last = false;
-          if (OB_FAIL(final_not_in_range_node(*cur_node, i, tmp_in_param, new_range))) {
+
+          // Skip empty intervals between consecutive integer values.
+          bool is_empty_integer_interval = false;
+          if (i > 0 && i < tmp_in_param->in_param_.count()) {
+            const ObObj &prev = *tmp_in_param->in_param_.at(i - 1);
+            const ObObj &curr = *tmp_in_param->in_param_.at(i);
+
+            if (ObIntTC == column_tc) {
+              const int64_t prev_value = prev.get_int();
+              const int64_t curr_value = curr.get_int();
+              is_empty_integer_interval =
+                  prev_value != std::numeric_limits<int64_t>::max() &&
+                  curr_value == prev_value + 1;
+            } else if (ObUIntTC == column_tc) {
+              const uint64_t prev_value = prev.get_uint64();
+              const uint64_t curr_value = curr.get_uint64();
+              is_empty_integer_interval =
+                  prev_value != std::numeric_limits<uint64_t>::max() &&
+                  curr_value == prev_value + 1;
+            }
+          }
+
+          if (is_empty_integer_interval) {
+            continue;
+          } else if (OB_FAIL(final_not_in_range_node(*cur_node, i, tmp_in_param, new_range))) {
           } else if (OB_UNLIKELY(!tmp_range_lists_[pre_node_offset].add_last(new_range))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("failed to add last to dlist", KPC(new_range));
