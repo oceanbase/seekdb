@@ -80,7 +80,7 @@ const int64_t ObSystemPackageLoadTask::SCHEDULE_INTERVAL_US;
 
 ObSystemPackageLoadTask::ObSystemPackageLoadTask()
   : inited_(false),
-    fail_count_(0)
+    timer_(nullptr)
 {
 }
 
@@ -91,7 +91,7 @@ int ObSystemPackageLoadTask::init()
     ret = OB_INIT_TWICE;
   } else {
     inited_ = true;
-    fail_count_ = 0;
+    timer_ = nullptr;
   }
   return ret;
 }
@@ -99,13 +99,13 @@ int ObSystemPackageLoadTask::init()
 int ObSystemPackageLoadTask::start(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
-  const bool did_repeat = true;
+  timer_ = &timer;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else {
     if (timer.task_exist(*this)) {
       // ignore duplicate schedule
-    } else if (OB_FAIL(timer.schedule(*this, SCHEDULE_INTERVAL_US, did_repeat))) {
+    } else if (OB_FAIL(timer.schedule_repeate_task_immediately(*this, SCHEDULE_INTERVAL_US))) {
     } else {
       LOG_INFO("finish schedule timer task", K(SCHEDULE_INTERVAL_US));
     }
@@ -127,7 +127,7 @@ void ObSystemPackageLoadTask::stop(common::ObTimer &timer)
 void ObSystemPackageLoadTask::destroy()
 {
   inited_ = false;
-  fail_count_ = 0;
+  timer_ = nullptr;
 }
 
 int ObSystemPackageLoadTask::load_system_package_()
@@ -141,7 +141,7 @@ int ObSystemPackageLoadTask::load_system_package_()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(GET_ADMIN_JOB_COUNT(LOAD_MYSQL_SYS_PACKAGE, job_count))) {
   } else if (0 == job_count) {
-    // job not exists, try insert inprogress job
+    // Continue with the new job in this callback.
     if (OB_FAIL(ADMIN_JOB_CREATE_WITH_RET(job_id, JOB_TYPE_LOAD_MYSQL_SYS_PACKAGE))) {
     }
   } else if (OB_FAIL(ADMIN_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
@@ -151,12 +151,15 @@ int ObSystemPackageLoadTask::load_system_package_()
       LOG_INFO("find a success job or job_id not exist", KR(ret), K(job_id));
     } else {
     }
-  } else if (OB_FAIL(pl::ObPLPackageManager::load_all_common_sys_package(
+  }
+  if (OB_SUCC(ret) && !packages_loaded) {
+    if (OB_FAIL(pl::ObPLPackageManager::load_all_common_sys_package(
                          *sql_proxy,
                          false/*from_file*/))) {
-  } else if (OB_FAIL(ADMIN_JOB_COMPLETE(job_id, 0/*result_code*/))) {
-  } else {
-    packages_loaded = true;
+    } else if (OB_FAIL(ADMIN_JOB_COMPLETE(job_id, 0/*result_code*/))) {
+    } else {
+      packages_loaded = true;
+    }
   }
   if (OB_SUCC(ret) && packages_loaded) {
     // Old data directories keep a completed common-package job. Use the
@@ -164,7 +167,7 @@ int ObSystemPackageLoadTask::load_system_package_()
     // body reload is retried rather than mistaken for a completed refresh.
     if (OB_FAIL(ensure_scheduler_invoker_rights(*sql_proxy))) {
     } else {
-      GCTX.sys_package_ready_ = true;
+      LOG_INFO("system package catalog is ready");
     }
   }
   return ret;
@@ -177,44 +180,13 @@ void ObSystemPackageLoadTask::runTimerTask()
     ret = OB_NOT_INIT;
   } else if (!share::server_is_write_enabled()) {
     LOG_INFO("read-only server skips loading sys package");
-  } else if (GCTX.sys_package_ready_) {
-    LOG_INFO("sys package already loaded");
   } else if (OB_FAIL(load_system_package_())) {
-    fail_count_++;
-    if (fail_count_ >= 5) {
-      LOG_ERROR("failed to execute system package load task, will retry", KR(ret), K_(fail_count));
-    } else {
-    }
+    LOG_WARN("system package installation failed, timer will retry", K(ret));
+  } else if (OB_FAIL(timer_->cancel(*this))) {
+    LOG_WARN("failed to retire system package timer", K(ret));
   } else {
-    fail_count_ = 0;
-    LOG_INFO("finish loading sys packages");
+    LOG_INFO("system package installation timer retired");
   }
-}
-
-int ObSystemPackageLoadTask::wait_system_package_ready(const common::ObTimeoutCtx &ctx)
-{
-  int ret = OB_SUCCESS;
-  const int64_t retry_interval_us = 500l * 1000l;
-  int64_t job_id = OB_INVALID_ID;
-  bool finish = false;
-  int64_t inprogress_job_count = 0;
-  while (OB_SUCC(ret) && !finish) {
-    int tmp_ret = OB_SUCCESS;
-    if (ctx.is_timeouted()) {
-      ret = OB_TIMEOUT;
-    } else {
-      inprogress_job_count = 0;
-      if (OB_ENTRY_NOT_EXIST != (tmp_ret = ADMIN_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
-        inprogress_job_count++;
-      }
-      if (inprogress_job_count == 0) {
-        finish = true;
-      } else {
-        ob_usleep(retry_interval_us);
-      }
-    }
-  }
-  return ret;
 }
 
 } // namespace rootserver

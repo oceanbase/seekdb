@@ -420,7 +420,6 @@ int ObLocalManagementService::execute_bootstrap()
     BOOTSTRAP_LOG(INFO, "start local services");
     ObGlobalStatProxy global_proxy(sql_proxy_);
     ObArray<ObAddr> self_addr;
-    ObTimeoutCtx ctx;
     if (OB_FAIL(ret)) {
       // load all sys packages after local schema and DDL services are ready
     } else if (OB_FAIL(start_local_services_())) {
@@ -434,20 +433,6 @@ int ObLocalManagementService::execute_bootstrap()
                        baseline_schema_version_))) {
     } else if (OB_FAIL(set_config_after_bootstrap_())) {
     }
-    if (OB_SUCC(ret)) {
-      LOG_DBA_INFO_V2(OB_BOOTSTRAP_WAIT_SYS_PACKAGE_BEGIN,
-                      DBA_STEP_INC_INFO(bootstrap),
-                      "bootstrap wait sys package begin.");
-      if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::_ob_ddl_timeout()))) {
-      } else if (!config::_enable_async_load_sys_package() &&
-          OB_FAIL(local_command_service_->wait_system_package_ready(ctx))) {
-      } else {
-        LOG_DBA_INFO_V2(OB_BOOTSTRAP_WAIT_SYS_PACKAGE_SUCCESS,
-                        DBA_STEP_INC_INFO(bootstrap),
-                        "bootstrap wait sys package success.");
-      }
-    }
-
     if (OB_SUCC(ret)) {
       char data_format_version[OB_SERVER_VERSION_LENGTH] = {'\0'};
       const uint64_t current_data_version = DATA_CURRENT_VERSION;

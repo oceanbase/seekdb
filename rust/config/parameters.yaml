@@ -1785,13 +1785,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "Enable topn runtime filter."
 
-- name: _enable_async_load_sys_package
-  type: BOOL
-  default: "True"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "Controls the ability to enable/disable async load sys package"
-
 - name: _enable_px_task_rebalance
   type: BOOL
   default: "False"

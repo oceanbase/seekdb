@@ -195,6 +195,8 @@ public:
       LOG_WARN("failed to wait for schema readiness", KR(ret));
     } else if (OB_FAIL(server_.check_if_timezone_usable())) {
       LOG_WARN("failed to wait for timezone readiness", KR(ret));
+    } else if (OB_FAIL(server_.system_package_load_service()->start())) {
+      LOG_WARN("failed to schedule system package installation", KR(ret));
     }
     return ret;
   }

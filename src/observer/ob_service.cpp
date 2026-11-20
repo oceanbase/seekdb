@@ -34,7 +34,6 @@
 
 #include "rootserver/ob_bootstrap.h"
 #include "observer/ob_server.h"
-#include "observer/ob_system_package_load_task.h"
 #include "share/ob_structured_event_logger.h"
 #include "storage/ddl/ob_delete_lob_meta_row_task.h" // delete lob meta row for drop vec index
 #include "storage/ddl/ob_build_index_task.h"
@@ -768,11 +767,6 @@ int ObService::get_build_version(char *buf, int64_t buf_len)
   } else if (OB_FAIL(get_package_and_svn(buf, buf_len))) {
   }
   return ret;
-}
-
-int ObService::wait_system_package_ready(const common::ObTimeoutCtx &ctx)
-{
-  return ObSystemPackageLoadTask::wait_system_package_ready(ctx);
 }
 
 int ObService::clear_expired_deadlock_events()

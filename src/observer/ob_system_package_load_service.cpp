@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "observer/ob_system_package_load_service.h"
+#include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
@@ -106,7 +107,7 @@ int ObSystemPackageLoadService::activate()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(start())) {
+  } else if (GCTX.status_ == share::SS_SERVING && OB_FAIL(start())) {
   }
   return ret;
 }
