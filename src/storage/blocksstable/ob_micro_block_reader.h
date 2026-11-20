@@ -60,6 +60,15 @@ protected:
       const int32_t *row_ids,
       const int64_t row_cap,
       RustFlatBatch &batch);
+  int try_project_rust(
+      const int32_t *row_ids,
+      const int64_t row_cap,
+      RustFlatBatch &batch);
+  int read_rust_cell(
+      const RustFlatBatch &batch,
+      const int64_t row_idx,
+      const int64_t col_idx,
+      ObStorageDatum &datum);
   int read_rust_row(
       const RustFlatBatch &batch,
       const int64_t row_idx,
