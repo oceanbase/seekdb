@@ -662,4 +662,87 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1538: additive identities must preserve range selectivity
+--disable_warnings
+drop table if exists t_issue1538_arith_selectivity;
+--enable_warnings
+create table t_issue1538_arith_selectivity(
+  id bigint not null,
+  embedding vector(3) not null,
+  age bigint not null,
+  primary key(id),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+
+--disable_query_log
+--let $row = 0
+while ($row < 100)
+{
+  --let $age = $row
+  --inc $age
+  eval insert into t_issue1538_arith_selectivity values ($row, '[$row,0,0]', $age);
+  --inc $row
+}
+--enable_query_log
+--disable_result_log
+analyze table t_issue1538_arith_selectivity;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1538_ARITH_SELECTIVITY', numrows=>200000);
+--enable_result_log
+
+# Text-protocol constants are parameterized in the plan cache. All additive identity
+# forms must resolve those parameters and choose the same high-selectivity scan.
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1538_arith_selectivity
+where age > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity
+where ((age + 0) + 0) > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity
+where 0 + age > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity
+where age - 0 > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1538_arith_selectivity') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by p.cardinality, p.plan_id;
+
+# Selective identity filters must remain pre-filters, while non-identity arithmetic
+# must keep the existing fallback instead of being treated as an identity.
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1538_arith_selectivity
+where age >= 96
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity
+where age + 0 >= 96
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select id from t_issue1538_arith_selectivity
+where age + 1 > 10
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1538_arith_selectivity') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by p.cardinality, p.plan_id;
+
+select count(*) from t_issue1538_arith_selectivity where age > 10;
+select count(*) from t_issue1538_arith_selectivity where ((age + 0) + 0) > 10;
+select count(*) from t_issue1538_arith_selectivity where 0 + age > 10;
+select count(*) from t_issue1538_arith_selectivity where age - 0 > 10;
+
+drop table t_issue1538_arith_selectivity;
+
 alter system set vector_memory_limit = 0;

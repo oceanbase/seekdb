@@ -752,4 +752,50 @@ operator	cardinality	hit_count
 VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
+drop table if exists t_issue1538_arith_selectivity;
+create table t_issue1538_arith_selectivity(
+id bigint not null,
+embedding vector(3) not null,
+age bigint not null,
+primary key(id),
+vector key idx_embedding(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+analyze table t_issue1538_arith_selectivity;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1538_ARITH_SELECTIVITY', numrows=>200000);
+alter system flush plan cache;
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1538_arith_selectivity') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by p.cardinality, p.plan_id;
+operator	cardinality
+VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	91
+VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	91
+VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	91
+VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	91
+alter system flush plan cache;
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1538_arith_selectivity') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by p.cardinality, p.plan_id;
+operator	cardinality
+VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	6
+VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	6
+VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	34
+select count(*) from t_issue1538_arith_selectivity where age > 10;
+count(*)
+90
+select count(*) from t_issue1538_arith_selectivity where ((age + 0) + 0) > 10;
+count(*)
+90
+select count(*) from t_issue1538_arith_selectivity where 0 + age > 10;
+count(*)
+90
+select count(*) from t_issue1538_arith_selectivity where age - 0 > 10;
+count(*)
+90
+drop table t_issue1538_arith_selectivity;
 alter system set vector_memory_limit = 0;
