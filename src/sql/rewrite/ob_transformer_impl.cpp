@@ -536,8 +536,18 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // A vector index scan requires a stable statement shape, so the
+      // statement level rewrites stay disabled. Expression simplification is
+      // semantics preserving and has to run anyway: generated filters often
+      // repeat equivalent predicates (duplicated OR terms, redundant bounds,
+      // folded NOT chains), and every redundant term is evaluated for each
+      // candidate row of the ANN scan.
+      uint64_t vec_approx_enable_list = 0;
+      ObTransformRule::add_trans_type(vec_approx_enable_list, SIMPLIFY_EXPR);
+      disable_list = (ObTransformRule::ALL_TRANSFORM_RULES & (~vec_approx_enable_list));
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
