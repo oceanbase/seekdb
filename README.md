@@ -377,7 +377,7 @@ docker run -d \
   -v ./data:/var/lib/oceanbase \
   oceanbase/seekdb:latest
 ```
-Please refer to the [document](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) of this docker image for details.
+Please refer to the [Docker image documentation](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) for details.
 
 </details>
 
