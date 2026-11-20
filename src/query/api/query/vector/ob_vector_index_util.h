@@ -320,6 +320,17 @@ static constexpr double DEFAULT_SINDI_SELECTIVITY_RATE = 0.1;
 static const uint64_t MAX_HNSW_BRUTE_FORCE_SIZE = 20000;
 static const uint64_t MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY = 1000000;
 static const uint64_t MAX_HNSW_PRE_ROW_CNT_WITH_IDX = 300000;
+// issue #1472: the pre-filter path reads and materializes the whole candidate
+// set (one scan row + one rowkey->vid lookup per candidate) before the ANN
+// search starts, so its cost is linear in the candidate count, while an
+// iterative graph search is bounded by the search effort. Keep the
+// materialization bound far below MAX_HNSW_BRUTE_FORCE_SIZE: that value is the
+// brute-force buffer capacity, not a cost bound.
+static const uint64_t MAX_HNSW_PRE_FILTER_ROW_CNT = 1000;
+// Rows a pre-filter may read before the ANN search starts. A predicate that is
+// not turned into a key range forces a full base-table scan, which an iterative
+// graph search avoids entirely.
+static const uint64_t MAX_HNSW_PRE_FILTER_SCAN_ROW_CNT = 20000;
 static constexpr double DEFAULT_IVFPQ_SELECTIVITY_RATE = 0.9;
   ObVecIdxExtraInfo()
     : vec_idx_type_(ObVecIndexType::VEC_INDEX_INVALID),
