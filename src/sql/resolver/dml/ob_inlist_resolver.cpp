@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -263,6 +264,60 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+// Count only values whose equality is independent of SQL casts and collations.
+// This is a costing decision: keep every original element/parameter so a cached
+// plan remains correct when the same parameterized SQL has different values.
+static int has_few_distinct_integer_values(const ParseNode &in_list,
+                                         const ParamStore *param_store,
+                                         const int64_t threshold,
+                                         bool &has_few_values)
+{
+  int ret = OB_SUCCESS;
+  has_few_values = false;
+  hash::ObHashSet<ObObj> values;
+  bool supported = true;
+  if (OB_ISNULL(in_list.children_)) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && supported && values.size() < threshold
+                        && i < in_list.num_child_; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    ObObj value;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (T_INT == node->type_) {
+      value.set_int(node->value_);
+    } else if (T_UINT64 == node->type_) {
+      value.set_uint64(static_cast<uint64_t>(node->value_));
+    } else if (T_NULL == node->type_) {
+      value.set_null();
+    } else if (T_QUESTIONMARK == node->type_ && NULL != param_store
+               && node->value_ >= 0 && node->value_ < param_store->count()) {
+      value = param_store->at(node->value_);
+      supported = value.is_integer_type() || value.is_null();
+    } else {
+      supported = false;
+    }
+    if (OB_SUCC(ret) && supported) {
+      if (!values.created()
+          && OB_FAIL(values.create(hash::cal_next_prime(threshold),
+                                   "InListNDV", "InListNDV"))) {
+        LOG_WARN("failed to create in-list value set", K(ret));
+      } else if (OB_FAIL(values.set_refactored(value))) {
+        if (OB_HASH_EXIST == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("failed to add in-list value", K(ret));
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    has_few_values = supported && values.size() < threshold;
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +405,16 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+    }
+    if (OB_SUCC(ret) && is_enable && column_cnt == 1
+        && !is_prepare_stmt && threshold > 1) {
+      bool has_few_values = false;
+      if (OB_FAIL(has_few_distinct_integer_values(in_list, param_store, threshold,
+                                                 has_few_values))) {
+        LOG_WARN("failed to check in-list distinct values", K(ret));
+      } else if (has_few_values) {
+        is_enable = false;
+      }
     }
   }
   return ret;
