@@ -1354,7 +1354,7 @@
   range: "[0,16384]"
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
-  description: "specifies the maximum number of job slaves per instance that can be created for the execution of DBMS_JOB and DBMS_SCHEDULER jobs."
+  description: "specifies the maximum number of job slaves per instance that can be created for the execution of DBMS_SCHEDULER jobs."
 
 - name: _enable_block_file_punch_hole
   type: BOOL

@@ -56,7 +56,7 @@ public:
   void stop();
   void wait();
   void destroy();
-  bool is_leader() { return job_master_.is_leader(); }
+  bool is_active() { return job_master_.is_active(); }
   bool is_stop() { return job_master_.is_stop(); }
 
 public:

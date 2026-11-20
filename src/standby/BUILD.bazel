@@ -28,6 +28,7 @@ _STANDBY_DEPS = [
     "//src/share:diagnostics",
     "//src/share:execution_contracts",
     "//src/share:freeze_coordination",
+    "//src/share:internal_table_change_notifier",
     "//src/share:io",
     "//src/share:io_device_interface",
     "//src/share:lob_diff_interface",

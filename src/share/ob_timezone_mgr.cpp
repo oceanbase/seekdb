@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_timezone_mgr.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/ob_server_struct.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 
 using namespace oceanbase::common;
 
@@ -29,17 +32,14 @@ void ObTimezoneMgr::UpdateTimezoneTask::runTimerTask()
   if (OB_ISNULL(timezone_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("time zone manager is null", K(ret));
-  } else if (OB_FAIL(timezone_mgr_->refresh_timezone_info())) {
+  } else if (OB_FAIL(timezone_mgr_->refresh_timezone_info_if_changed_())) {
+    LOG_WARN("update time zone failed", K(ret));
   }
 }
 
 ObTimezoneMgr::ObTimezoneMgr()
-    : is_inited_(false),
-      update_task_(this),
-      timer_(),
-      usable_(false)
-{
-}
+    : is_inited_(false), update_task_(this), timer_(), usable_(false),
+      table_change_watcher_() {}
 
 ObTimezoneMgr::~ObTimezoneMgr()
 {
@@ -57,6 +57,13 @@ int ObTimezoneMgr::init(ObMySQLProxy &sql_proxy)
   is_inited_ = true;
   if (OB_FAIL(init_timezone(sql_proxy))) {
   } else if (OB_FAIL(timer_.init("TimezoneMgr", ObMemAttr("TimezoneMgr")))) {
+    LOG_WARN("init timezone timer failed", K(ret));
+  } else if (OB_FAIL(table_change_watcher_.init_watched_tables(
+                 {share::OB_ALL_SYS_STAT_TID,
+                  share::OB_ALL_TIME_ZONE_NAME_TID,
+                  share::OB_ALL_TIME_ZONE_TRANSITION_TID,
+                  share::OB_ALL_TIME_ZONE_TRANSITION_TYPE_TID}))) {
+    LOG_WARN("register timezone table change tracking failed", K(ret));
   }
   return ret;
 }
@@ -125,6 +132,25 @@ int ObTimezoneMgr::schedule_retry()
   if (OB_FAIL(timer_.schedule(update_task_, 1000000, false))) {
   } else {
     LOG_INFO("[TIMEZONE] retry timer scheduled");
+  }
+  return ret;
+}
+
+int ObTimezoneMgr::refresh_timezone_info_if_changed_()
+{
+  int ret = OB_SUCCESS;
+  share::InternalTableChangeWatcher::CheckResult check_result;
+  if (OB_FAIL(table_change_watcher_.check_changed(check_result))) {
+    LOG_WARN("fail to check timezone table change, defer refresh", K(ret));
+  } else if (share::InternalTableChangeWatcher::NO_CHANGE == check_result) {
+    // The timer remains active, but unchanged tables need no inner SQL.
+  } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
+             check_result) {
+    LOG_DEBUG("defer timezone refresh until GTS reaches commit version");
+  } else if (OB_FAIL(refresh_timezone_info())) {
+    LOG_WARN("refresh changed timezone tables failed", K(ret));
+  } else if (OB_FAIL(table_change_watcher_.mark_refreshed())) {
+    LOG_WARN("failed to acknowledge refreshed timezone tables", K(ret));
   }
   return ret;
 }
