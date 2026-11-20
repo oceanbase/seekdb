@@ -1166,7 +1166,7 @@ int ObTableInsertUpOp::do_update(const ObConflictValue &constraint_value)
       OZ(constraint_value.baseline_datum_row_->to_expr(get_primary_table_upd_old_row(), eval_ctx_));
       OZ(delete_upd_old_row_to_das());
       OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_upd_new_row(), eval_ctx_));
-      OZ(insert_upd_new_row_to_das());
+      OZ(insert_upd_new_row_to_das(constraint_value.is_from_insert_));
     } else if (NULL == constraint_value.baseline_datum_row_ &&
                NULL != constraint_value.current_datum_row_) {
       // base_line does not exist but curr_row exists, which means curr_row is updated from other rows
