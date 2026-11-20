@@ -1,0 +1,22 @@
+# Shared DDL identifier escaping must not require a dependency on sql/.
+# Cover ordinary identifiers, embedded/consecutive/trailing backticks,
+# ENUM/SET values and nullable unique-index keys.
+connect (ddl_user,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+connection ddl_user;
+
+SET ob_query_timeout = 60000000;
+CREATE DATABASE ddl_identifier_quoting;
+USE ddl_identifier_quoting;
+CREATE TABLE plain_columns (id INT PRIMARY KEY, e ENUM('a','b'), s SET('x','y'), n INT);
+INSERT INTO plain_columns VALUES (1,'a','x',NULL),(2,'b','x,y',2),(3,'a','y',3);
+CREATE UNIQUE INDEX plain_types_idx ON plain_columns (e,s,n);
+SELECT id,CAST(e AS UNSIGNED) AS enum_ordinal,CAST(s AS UNSIGNED) AS set_bits,n FROM plain_columns FORCE INDEX(plain_types_idx) ORDER BY id;
+CREATE TABLE quoted_columns (id INT PRIMARY KEY, `enum``value` ENUM('a','b'), `set````value` SET('x','y'), `number``` INT);
+INSERT INTO quoted_columns VALUES (1,'a','x',NULL),(2,'b','x,y',2),(3,'a','y',3);
+CREATE UNIQUE INDEX quoted_types_idx ON quoted_columns (`enum``value`,`set````value`,`number```);
+SELECT id,CAST(`enum``value` AS UNSIGNED) AS enum_ordinal,CAST(`set````value` AS UNSIGNED) AS set_bits,`number``` AS n FROM quoted_columns FORCE INDEX(quoted_types_idx) ORDER BY id;
+USE test;
+DROP DATABASE ddl_identifier_quoting;
+
+disconnect ddl_user;
+connection default;
