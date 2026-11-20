@@ -203,6 +203,13 @@ id	v
 1	[1,0,0]
 2	[0,1,0]
 3	[0,0,1]
+CALL dbms_vector.rebuild_index('idx','c1_partition_backtick','v');
+CALL dbms_vector.rebuild_index('idx','c1_partition_backtick','v',0);
+SELECT `key``id` AS id,v FROM `c1_partition_backtick` ORDER BY `key``id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
 USE `seekdb_identifier_quoting`;
 CREATE TABLE `c1_table``quoted` (`id` INT PRIMARY KEY, v VECTOR(3),
 VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
