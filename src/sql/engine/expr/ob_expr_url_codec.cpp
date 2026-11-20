@@ -152,7 +152,7 @@ int convert_string(const ObExpr &expr, ObEvalCtx &ctx, ObString &input_str, ObSt
 {
   int ret = OB_SUCCESS;
 
-  // Oceanbase url_encode and url_decode are using RFC3986 standard.
+  // OceanBase url_encode and url_decode are using RFC3986 standard.
 
   char *res = nullptr;
   int64_t res_len = 0;
