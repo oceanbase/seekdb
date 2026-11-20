@@ -78,8 +78,12 @@ int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;
   int64_t DEFAULT_TIMEOUT_US = config::rpc_timeout(); // default is 2s
-#ifdef __APPLE__
-  // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
+#if defined(__APPLE__) || defined(_WIN32)
+  // On Mac and Windows, the system is significantly slower due to lack of O_DIRECT.
+  // During bootstrap of a fresh instance all caches are cold (plan cache, published
+  // schema, block/row cache), and a single inner SQL such as the SELECT ... FOR UPDATE
+  // on __all_core_table was observed to take 1.8s+ on a Windows VM (see #1544), which
+  // exhausts the 2s rpc_timeout budget and rolls back init_global_stat with OB_TIMEOUT.
   // Increase the default timeout to 10s to avoid bootstrap failure.
   DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL);
 #endif
