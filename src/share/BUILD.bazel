@@ -85,6 +85,17 @@ cc_library(
 )
 
 cc_library(
+    name = "ddl_identifier_escape_test_headers",
+    testonly = True,
+    hdrs = ["ob_ddl_identifier_escape.h"],
+    deps = ["//src/oblib:oblib_base"],
+    includes = ["."],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//unittest/share:__pkg__"],
+)
+
+cc_library(
     name = "ai_endpoint_interface",
     hdrs = [
         "ai_service/ob_ai_model_info.h",
