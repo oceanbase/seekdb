@@ -1,0 +1,25 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#### owner: 2397819368a-oss
+#### owner group: sql3
+#### description: 测试in列表中重复常量去重，c1 in (1,2,2)改写为c1 in (1,2)
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int, c2 int);
+insert into t1 values(1, 1);
+insert into t1 values(2, 2);
+insert into t1 values(2, -1);
+insert into t1 values(3, 3);
+insert into t1 values(null, 4);
+select * from t1 where c1 in (1,2,2) order by c1, c2;
+select * from t1 where c1 in (1,2) order by c1, c2;
+select * from t1 where c1 not in (1,2,2) order by c1, c2;
+select * from t1 where c1 not in (1,2) order by c1, c2;
+select * from t1 where c1 in (1,2,2) and c2 > 0 order by c1, c2;
+select * from t1 where c1 in (1,2) and c2 > 0 order by c1, c2;
+select count(*) as diff_cnt from t1 where not ((c1 in (1,2,2)) <=> (c1 in (1,2)));
+select count(*) as diff_cnt from t1 where not ((c1 not in (1,2,2)) <=> (c1 not in (1,2)));
+select count(*) as diff_cnt from t1 where not ((c1 in (1,2,2) and c2 > 0) <=> (c1 in (1,2) and c2 > 0));
+drop table t1;
