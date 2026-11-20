@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -350,6 +351,91 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      // #1512: the values-table rewrite is aimed at very large inlists whose values
+      // are mostly distinct. When the number of distinct values is smaller than the
+      // threshold, the duplicated list and its deduped form are semantically
+      // equivalent, but rewriting keeps the huge list out of the filter itself and
+      // changes the physical plan for the worse (e.g. a vector index scan can no
+      // longer evaluate the membership filter internally). In that case keep the
+      // original inlist form instead of rewriting.
+      // Note: literal-only lists are already deduplicated by dedup_inlist_node()
+      // before reaching here, so only the question mark form needs this counting.
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt
+          && rewrite_info.is_question_mark_ && !is_prepare_stmt && NULL != param_store) {
+        int64_t distinct_cnt = 0;
+        bool reach_threshold = false;
+        if (OB_FAIL(count_inlist_distinct_elems(in_list, row_cnt, threshold, param_store,
+                                                 distinct_cnt, reach_threshold))) {
+          // fall back to the previous behavior if the counting failed
+          LOG_WARN("failed to count distinct elements in inlist, keep rewrite decision",
+                   K(ret), K(row_cnt));
+          ret = OB_SUCCESS;
+        } else if (!reach_threshold) {
+          is_enable = false;
+          OPT_TRACE("inlist rewrite disabled since distinct element count",
+                    distinct_cnt, "is below threshold", threshold);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// Count the distinct parameter values of a question-mark inlist, early exiting once
+// `distinct_limit` distinct values are found. get_inlist_rewrite_info() has checked
+// before that all non-null elements share the same param meta, so ObObj hash and
+// null-safe equality are safe here; null values are counted as one single distinct
+// value and kept out of the hash set.
+int ObInListResolver::count_inlist_distinct_elems(const ParseNode &in_list,
+                                                  const int64_t row_cnt,
+                                                  const int64_t distinct_limit,
+                                                  const ParamStore *param_store,
+                                                  int64_t &distinct_cnt,
+                                                  bool &reach_limit)
+{
+  int ret = OB_SUCCESS;
+  distinct_cnt = 0;
+  reach_limit = false;
+  bool has_null = false;
+  common::hash::ObHashSet<ObObj> value_set;
+  // the bucket number is bounded: when distinct_limit is huge the counting can stop
+  // no later than the first row_cnt values anyway, and the hash table extends itself
+  const int64_t bucket_num = MIN(distinct_limit, MIN(row_cnt, (1LL << 16)));
+  if (OB_UNLIKELY(row_cnt <= 0 || distinct_limit <= 0) || OB_ISNULL(param_store)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(value_set.create(hash::cal_next_prime(bucket_num),
+                                      "InlistDistinct", "InlistDistinct"))) {
+    LOG_WARN("failed to create hash set for inlist distinct count", K(ret), K(distinct_limit));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && !reach_limit && i < row_cnt; ++i) {
+    const ParseNode *element = in_list.children_[i];
+    if (OB_ISNULL(element)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_UNLIKELY(element->value_ < 0 || element->value_ >= param_store->count())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid param index in inlist", K(ret), K(i), K(element->value_));
+    } else {
+      const ObObj &value = param_store->at(element->value_);
+      if (value.is_null()) {
+        if (!has_null) {
+          has_null = true;
+          if (++distinct_cnt >= distinct_limit) {
+            reach_limit = true;
+          }
+        }
+      } else if (OB_HASH_EXIST == value_set.exist_refactored(value)) {
+        // duplicate value, do nothing
+      } else if (OB_FAIL(value_set.set_refactored(value))) {
+        LOG_WARN("failed to insert value into hash set", K(ret), K(i));
+      } else if (++distinct_cnt >= distinct_limit) {
+        reach_limit = true;
+      }
+    }
+  }
+  if (value_set.created()) {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (tmp_ret = value_set.destroy())) {
+      LOG_WARN("failed to destroy hash set", K(tmp_ret));
     }
   }
   return ret;
@@ -789,6 +875,108 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
                                    enable_decimal_int,
                                    is_prepare_stmt);
     if (OB_FAIL(do_merge_inlists(alloc, helper, root_node, ret_node))) {
+    }
+  }
+  return ret;
+}
+
+// Build a duplicate-free copy of the right branch (T_EXPR_LIST) of an IN/NOT IN node
+// when all its elements are literal constant nodes and some of them are syntactically
+// equal. The comparison reuses parsenode_hash/parsenode_equal, the same primitives
+// used by try_merge_inlists, so two elements are merged only if their types, values
+// and text are all identical, which is strictly safe for the three-valued semantics
+// of IN/NOT IN. Keeping duplicate members enlarges the expression tree and may
+// wrongly trigger the values-table rewrite, changing the physical plan and
+// degrading vector index search latency (see issue #1512).
+// Elements in the question mark form are not deduplicated here on purpose: a
+// resolved plan is cached by the parameterized pattern and reused for later
+// executions whose parameter values differ, so dropping a parameter node based on
+// the values seen in the first hard parse would make the cached plan read too few
+// slots and return wrong rows. The rewrite decision for that form is gated on the
+// distinct value count instead (see check_inlist_rewrite_enable), which stays
+// correct under plan cache reuse because both candidate plan shapes keep every
+// parameter slot referenced.
+int ObInListResolver::dedup_inlist_node(ObExprResolveContext &resolve_ctx,
+                                        const ParseNode &in_list_node,
+                                        const ParseNode *&ret_node)
+{
+  int ret = OB_SUCCESS;
+  ret_node = &in_list_node;
+  const int64_t row_cnt = in_list_node.num_child_;
+  ObIAllocator &alloc = resolve_ctx.expr_factory_.get_allocator();
+  if (resolve_ctx.is_need_print_ || NULL != resolve_ctx.secondary_namespace_
+      || T_EXPR_LIST != in_list_node.type_ || row_cnt <= 1
+      || NULL == in_list_node.children_) {
+    // do nothing
+  } else {
+    bool has_non_literal = false;
+    for (int64_t i = 0; !has_non_literal && i < row_cnt; ++i) {
+      const ParseNode *element = in_list_node.children_[i];
+      has_non_literal = (NULL == element || !IS_DATATYPE_OP(element->type_));
+    }
+    if (has_non_literal) {
+      // do nothing
+    } else {
+      common::hash::ObHashSet<const ParseNode *> seen_elems;
+      ObSEArray<const ParseNode *, 16> unique_elems;
+      // bounded bucket number, the hash table extends itself on demand
+      const int64_t seen_bucket_num = MIN(row_cnt, (1LL << 16));
+      if (OB_FAIL(seen_elems.create(hash::cal_next_prime(seen_bucket_num),
+                                    "DedupInList", "DedupInList"))) {
+        LOG_WARN("failed to create hash set for inlist dedup", K(ret), K(row_cnt));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
+        const ParseNode *element = in_list_node.children_[i];
+        if (OB_HASH_EXIST == seen_elems.exist_refactored(element)) {
+          // duplicate literal element, drop it and keep the first occurrence
+        } else if (OB_FAIL(seen_elems.set_refactored(element))) {
+          LOG_WARN("failed to insert element into hash set", K(ret), K(i));
+        } else if (OB_FAIL(unique_elems.push_back(element))) {
+          LOG_WARN("failed to push back unique element", K(ret), K(i));
+        }
+      }
+      if (seen_elems.created()) {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = seen_elems.destroy())) {
+          LOG_WARN("failed to destroy hash set", K(tmp_ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (unique_elems.count() >= row_cnt) {
+        // no duplicate found, keep the original list
+      } else {
+        ParseNode *new_list = new_node(&alloc, T_EXPR_LIST, 0);
+        int parser_ret = OB_SUCCESS;
+        if (OB_ISNULL(new_list)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate new inlist node", K(ret));
+        } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, &in_list_node, new_list))) {
+          LOG_WARN("failed to deep copy inlist node base", K(ret));
+        } else {
+          new_list->num_child_ = 0;
+          new_list->value_ = 0; // reset the capacity
+          for (int64_t i = 0; OB_SUCC(ret) && i < unique_elems.count(); ++i) {
+            ParseNode *tmp_list = new_node(&alloc, T_EXPR_LIST, 1);
+            if (OB_ISNULL(tmp_list) || OB_ISNULL(tmp_list->children_)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("failed to allocate temp inlist node", K(ret), K(i));
+            } else {
+              tmp_list->children_[0] = const_cast<ParseNode *>(unique_elems.at(i));
+              ParseNode *merged = append_child(&alloc, &parser_ret, new_list, tmp_list);
+              if (OB_ISNULL(merged)) {
+                ret = OB_SUCCESS == parser_ret ? OB_ERR_UNEXPECTED : parser_ret;
+                LOG_WARN("failed to append deduped element", K(ret), K(i), K(parser_ret));
+              } else {
+                new_list = merged;
+              }
+            }
+          }
+          if (OB_SUCC(ret)) {
+            ret_node = new_list;
+            OPT_TRACE("inlist deduped from", row_cnt, "elements to", new_list->num_child_);
+          }
+        }
+      }
     }
   }
   return ret;
