@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/utility/ob_sort.h"
 
 namespace oceanbase
 {
@@ -263,6 +264,73 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+static bool get_integer_literal(const ParseNode *node,
+                                const ParamStore *param_store,
+                                ObItemType &type,
+                                int64_t &value)
+{
+  bool supported = false;
+  if (nullptr != node) {
+    type = node->type_;
+    value = node->value_;
+    if (T_QUESTIONMARK == type && nullptr != node->str_value_ && node->str_len_ > 0 &&
+        nullptr != param_store && value >= 0 && value < param_store->count()) {
+      // Automatic parameterization retains the literal text. Explicit bind
+      // markers have no str_value_, so their runtime values are not inspected.
+      const ObObjParam &param = param_store->at(value);
+      if (ObIntType == param.get_type() && !param.is_boolean()) {
+        type = T_INT;
+        value = param.get_int();
+      } else if (ObUInt64Type == param.get_type()) {
+        type = T_UINT64;
+        value = static_cast<int64_t>(param.get_uint64());
+      }
+    }
+    supported = T_INT == type || T_UINT64 == type;
+  }
+  return supported;
+}
+
+// Count only homogeneous integer literals, including automatically parameterized
+// literals. Preserve every node and parameter slot so cached plans remain valid
+// when a later execution supplies different values.
+static int count_distinct_integer_literals(const ParseNode &in_list,
+                                          const ParamStore *param_store,
+                                          bool &supported,
+                                          int64_t &distinct_count)
+{
+  int ret = OB_SUCCESS;
+  supported = false;
+  distinct_count = 0;
+  if (in_list.num_child_ > 0 && nullptr != in_list.children_ &&
+      nullptr != in_list.children_[0]) {
+    ObItemType type = T_INVALID;
+    int64_t value = 0;
+    if (get_integer_literal(in_list.children_[0], param_store, type, value)) {
+      supported = true;
+      ObSEArray<int64_t, 16> values;
+      for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_; ++i) {
+        const ParseNode *node = in_list.children_[i];
+        ObItemType cur_type = T_INVALID;
+        if (!get_integer_literal(node, param_store, cur_type, value) || type != cur_type) {
+          supported = false;
+        } else if (OB_FAIL(values.push_back(value))) {
+        }
+      }
+      if (OB_SUCC(ret) && supported) {
+        lib::ob_sort(values.begin(), values.end());
+        distinct_count = 1;
+        for (int64_t i = 1; i < values.count(); ++i) {
+          if (values.at(i) != values.at(i - 1)) {
+            ++distinct_count;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -309,6 +377,17 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       if (in_list.num_child_ < threshold) {
       } else {
         is_enable = true;
+        // Keep membership inside the ANN scan. Exact scans retain their existing
+        // VALUES strategy, which avoids repeatedly evaluating a large IN list.
+        if (T_OP_ROW != left_expr.get_expr_type() && nullptr != stmt && stmt->is_select_stmt() &&
+            static_cast<const ObSelectStmt *>(stmt)->has_approx_clause()) {
+          bool supported = false;
+          int64_t distinct_count = 0;
+          if (OB_FAIL(count_distinct_integer_literals(in_list, param_store, supported, distinct_count))) {
+          } else if (supported && distinct_count < threshold) {
+            is_enable = false;
+          }
+        }
       }
     }
   }

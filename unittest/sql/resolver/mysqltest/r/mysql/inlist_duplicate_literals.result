@@ -1,0 +1,250 @@
+SET ob_enable_plan_cache=1;
+CREATE TABLE inlist_duplicates (id INT PRIMARY KEY, c BIGINT, u BIGINT UNSIGNED, s VARCHAR(10), d DECIMAL(20,1), v VECTOR(3)) ORGANIZATION HEAP;
+INSERT INTO inlist_duplicates VALUES (1,1,1,'1',1,'[1,0,0]'),(2,2,2,'2',2,'[2,0,0]'),(3,3,3,'3',3,'[3,0,0]'),(4,4,4,'4',4,'[4,0,0]'),(5,NULL,NULL,NULL,NULL,'[5,0,0]'),(6,-1,18446744073709551615,'-1',-1,'[6,0,0]'),(7,-9223372036854775808,9223372036854775808,'min',-1,'[7,0,0]');
+CREATE VECTOR INDEX inlist_dup_hnsw ON inlist_duplicates(v) WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate);
+# Three distinct values below a four-value threshold stay inline.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+Query Plan
+==============================================================
+|ID|OPERATOR                               |NAME             |
+--------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|inlist_duplicates|
+==============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicates.id]), filter([inlist_duplicates.c IN (1, 2, 3, 1, 2, 3)]), rowset=16
+      access([inlist_duplicates.__pk_increment], [inlist_duplicates.c], [inlist_duplicates.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([inlist_duplicates.__pk_increment]), range(MIN ; MAX)always true
+# At the threshold, the existing VALUES rewrite stays enabled.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,3,4,1,2) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+Query Plan
+==================================================================
+|ID|OPERATOR                                   |NAME             |
+------------------------------------------------------------------
+|0 |TOP-N SORT                                 |                 |
+|1 |└─SUBPLAN FILTER                           |                 |
+|2 |  ├─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|inlist_duplicates|
+|3 |  └─HASH DISTINCT                          |                 |
+|4 |    └─VALUES TABLE ACCESS                  |VALUES_TABLE1    |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicates.id]), filter(nil), rowset=16
+      sort_keys([l2_distance(inlist_duplicates.v, cast('[1,0,0]', ARRAY(18, -1))), ASC]), topn(3)
+  1 - output([l2_distance(inlist_duplicates.v, cast('[1,0,0]', ARRAY(18, -1)))], [inlist_duplicates.id]), filter([inlist_duplicates.c = ANY(subquery(1))]), rowset=16
+      exec_params_(nil), onetime_exprs_(nil), init_plan_idxs_([1]), use_batch=false
+  2 - output([inlist_duplicates.c], [inlist_duplicates.id], [l2_distance(inlist_duplicates.v, cast('[1,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([inlist_duplicates.__pk_increment], [inlist_duplicates.v], [inlist_duplicates.c], [inlist_duplicates.id]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([inlist_duplicates.__pk_increment]), range(MIN ; MAX)always true
+  3 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  4 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+# Above the threshold, a unique list also keeps the VALUES rewrite.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,3,4,5,6) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+Query Plan
+==================================================================
+|ID|OPERATOR                                   |NAME             |
+------------------------------------------------------------------
+|0 |TOP-N SORT                                 |                 |
+|1 |└─SUBPLAN FILTER                           |                 |
+|2 |  ├─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|inlist_duplicates|
+|3 |  └─HASH DISTINCT                          |                 |
+|4 |    └─VALUES TABLE ACCESS                  |VALUES_TABLE1    |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicates.id]), filter(nil), rowset=16
+      sort_keys([l2_distance(inlist_duplicates.v, cast('[1,0,0]', ARRAY(18, -1))), ASC]), topn(3)
+  1 - output([l2_distance(inlist_duplicates.v, cast('[1,0,0]', ARRAY(18, -1)))], [inlist_duplicates.id]), filter([inlist_duplicates.c = ANY(subquery(1))]), rowset=16
+      exec_params_(nil), onetime_exprs_(nil), init_plan_idxs_([1]), use_batch=false
+  2 - output([inlist_duplicates.c], [inlist_duplicates.id], [l2_distance(inlist_duplicates.v, cast('[1,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([inlist_duplicates.__pk_increment], [inlist_duplicates.v], [inlist_duplicates.c], [inlist_duplicates.id]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([inlist_duplicates.__pk_increment]), range(MIN ; MAX)always true
+  3 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  4 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+# The original 3072-element reproduction at the default threshold.
+default_inlist_id
+1
+2
+3
+SET @default_inlist_plan_id=(SELECT MAX(plan_id) FROM oceanbase.__all_virtual_plan_stat WHERE query_sql LIKE 'SELECT id AS default_inlist_id%' AND is_in_pc=1);
+SELECT @default_inlist_plan_id IS NOT NULL AS default_plan_cached;
+default_plan_cached
+1
+SELECT COUNT(*) AS default_values_operators FROM oceanbase.__all_virtual_plan_cache_plan_explain WHERE plan_id=@default_inlist_plan_id AND operator LIKE '%VALUES%';
+default_values_operators
+0
+# Ordinary and exact queries preserve the existing VALUES strategy.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,3,1,2,3);
+Query Plan
+================================================
+|ID|OPERATOR                 |NAME             |
+------------------------------------------------
+|0 |HASH JOIN                |                 |
+|1 |├─SUBPLAN SCAN           |VIEW2            |
+|2 |│ └─HASH DISTINCT        |                 |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1    |
+|4 |└─TABLE FULL SCAN        |inlist_duplicates|
+================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicates.id]), filter(nil), rowset=16
+      equal_conds([inlist_duplicates.c = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([inlist_duplicates.c], [inlist_duplicates.id]), filter(nil), rowset=16
+      access([inlist_duplicates.c], [inlist_duplicates.id]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([inlist_duplicates.__pk_increment]), range(MIN ; MAX)always true
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[1,0,0]') LIMIT 3;
+Query Plan
+==================================================
+|ID|OPERATOR                   |NAME             |
+--------------------------------------------------
+|0 |TOP-N SORT                 |                 |
+|1 |└─HASH JOIN                |                 |
+|2 |  ├─SUBPLAN SCAN           |VIEW2            |
+|3 |  │ └─HASH DISTINCT        |                 |
+|4 |  │   └─VALUES TABLE ACCESS|VALUES_TABLE1    |
+|5 |  └─TABLE FULL SCAN        |inlist_duplicates|
+==================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicates.id]), filter(nil), rowset=16
+      sort_keys([l2_distance(inlist_duplicates.v, cast('[1,0,0]', ARRAY(18, -1))), ASC]), topn(3)
+  1 - output([inlist_duplicates.id], [inlist_duplicates.v]), filter(nil), rowset=16
+      equal_conds([inlist_duplicates.c = VIEW2.column_0]), other_conds(nil)
+  2 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  4 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  5 - output([inlist_duplicates.v], [inlist_duplicates.c], [inlist_duplicates.id]), filter(nil), rowset=16
+      access([inlist_duplicates.v], [inlist_duplicates.c], [inlist_duplicates.id]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([inlist_duplicates.__pk_increment]), range(MIN ; MAX)always true
+# Results and fallback types.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+2
+3
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c NOT IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+4
+6
+7
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (-1,-1,-1,-1,-1,-1) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+6
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+7
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE u IN (18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+6
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE u IN (9223372036854775808,9223372036854775808,9223372036854775808,9223372036854775808) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+7
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,NULL,1,2,NULL) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+2
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c NOT IN (1,2,NULL,1,2,NULL) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE s IN ('1','2','1','2','1','2') ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+2
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE d IN (1.0,2.0,1.0,2.0,1.0,2.0) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+2
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,'2',1,'2',1,'2') ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+2
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE u IN (1,18446744073709551615,1,18446744073709551615) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+6
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE (id,c) IN ((1,1),(2,2),(1,1),(2,2),(1,1),(2,2)) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+2
+# The cached plan for ANN SQL must also avoid the VALUES operator.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id AS cached_inlist_id FROM inlist_duplicates WHERE c IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+cached_inlist_id
+1
+2
+3
+SET @inlist_plan_id=(SELECT MAX(plan_id) FROM oceanbase.__all_virtual_plan_stat WHERE query_sql LIKE 'SELECT /*+ OPT_PARAM%id AS cached_inlist_id%' AND is_in_pc=1);
+SELECT @inlist_plan_id IS NOT NULL AS plan_cached;
+plan_cached
+1
+SELECT COUNT(*) AS values_operators FROM oceanbase.__all_virtual_plan_cache_plan_explain WHERE plan_id=@inlist_plan_id AND operator LIKE '%VALUES%';
+values_operators
+0
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id AS cached_inlist_id FROM inlist_duplicates WHERE c IN (4,4,4,4,4,4) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 3;
+cached_inlist_id
+4
+SELECT hit_count > 0 AS cache_reused FROM oceanbase.__all_virtual_plan_stat WHERE plan_id=@inlist_plan_id;
+cache_reused
+1
+# Reuse parameterized SQL with different literal values and NULLs.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,1,1,1,1,1) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (4,4,4,4,4,4) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+4
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,3,4,6,7) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+2
+3
+4
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (4,4,NULL,4,4,NULL) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+4
+# Explicit bind parameters retain all slots across executions.
+PREPARE inlist_stmt FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM inlist_duplicates WHERE c IN (?,?,?,?,?,?)';
+SET @a=1,@b=2,@c=3,@d=1,@e=2,@f=3;
+EXECUTE inlist_stmt USING @a,@b,@c,@d,@e,@f;
+ids
+1,2,3
+SET @a=4,@b=4,@c=NULL,@d=4,@e=4,@f=NULL;
+EXECUTE inlist_stmt USING @a,@b,@c,@d,@e,@f;
+ids
+4
+DEALLOCATE PREPARE inlist_stmt;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+1
+2
+3
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_duplicates WHERE c IN (4,4,4,4,4,4) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+id
+4
+CREATE TABLE inlist_ann (id INT PRIMARY KEY, c INT, v VECTOR(3)) ORGANIZATION HEAP;
+INSERT INTO inlist_ann VALUES (1,1,'[1,0,0]'),(2,2,'[0,1,0]'),(3,3,'[0,0,1]'),(4,4,'[-1,0,0]');
+CREATE VECTOR INDEX inlist_hnsw ON inlist_ann(v) WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate);
+SELECT id FROM inlist_ann WHERE c IN (1,2,3) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+id
+1
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM inlist_ann WHERE c IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 1;
+id
+1
+DROP TABLE inlist_ann;
+DROP TABLE inlist_duplicates;

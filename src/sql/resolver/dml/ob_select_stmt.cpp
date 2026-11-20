@@ -210,6 +210,7 @@ int ObSelectStmt::assign(const ObSelectStmt &other)
     check_option_ = other.check_option_;
     contain_ab_param_ = other.contain_ab_param_;
     is_select_straight_join_ = other.is_select_straight_join_;
+    has_approx_clause_ = other.has_approx_clause_;
     is_implicit_distinct_ = false; // it is a property from upper stmt, do not copy
   }
   return ret;
@@ -253,6 +254,7 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     check_option_ = other.check_option_;
     contain_ab_param_ = other.contain_ab_param_;
     is_select_straight_join_ = other.is_select_straight_join_;
+    has_approx_clause_ = other.has_approx_clause_;
     is_implicit_distinct_ = false; // it is a property from upper stmt, do not copy
     // copy insert into statement
     if (OB_SUCC(ret) && NULL != other.into_item_) {
@@ -380,6 +382,7 @@ ObSelectStmt::ObSelectStmt()
   contain_ab_param_ = false;
   is_select_straight_join_ = false;
   is_implicit_distinct_ = false;
+  has_approx_clause_ = false;
 }
 
 ObSelectStmt::~ObSelectStmt()
