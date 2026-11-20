@@ -1,0 +1,35 @@
+# issue #1489: duplicated predicates in ANN filters must be simplified
+alter system set vector_memory_limit = 0;
+drop table if exists t_issue1489_ann_filter;
+create table t_issue1489_ann_filter(
+id bigint not null,
+embedding vector(3) not null,
+category int not null,
+primary key(id),
+key idx_category(category),
+vector key idx_embedding(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+analyze table t_issue1489_ann_filter;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1489_ANN_FILTER', numrows=>200000);
+alter system flush plan cache;
+explain select id from t_issue1489_ann_filter
+where category = 1 or category = 1 or category = 1
+order by l2_distance(embedding, '[0,0,0]') approximate limit 3;
+Query Plan
+=======================================================================================================
+|ID|OPERATOR                               |NAME                                |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_issue1489_ann_filter(idx_category)|1       |7           |
+=======================================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1489_ann_filter.id]), filter([t_issue1489_ann_filter.category = 1]), rowset=16
+      access([t_issue1489_ann_filter.id], [t_issue1489_ann_filter.category]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
+      range_key([t_issue1489_ann_filter.category], [t_issue1489_ann_filter.id]), range(1,MIN ; 1,MAX)
+select id from t_issue1489_ann_filter
+where category = 1 or category = 1 or category = 1
+order by l2_distance(embedding, '[0,0,0]') approximate limit 3;
+id
+1
+drop table t_issue1489_ann_filter;
