@@ -38,6 +38,46 @@ pub trait UcaTable {
     fn page(&self, page: usize) -> Option<&[u16]>;
 }
 
+pub(crate) fn find_bound<'a>(
+    keys: &[RowkeyValue<'_>],
+    kinds: &[RowkeyKind],
+    uca: &dyn UcaTable,
+    lower_bound: bool,
+    range: crate::RowRange,
+    column_count: usize,
+    mut cell: impl FnMut(usize, usize) -> Result<Cell<'a>>,
+) -> Result<crate::RowkeyBound> {
+    if keys.is_empty() || keys.len() != kinds.len() || keys.len() > column_count {
+        return Err(Error::InvalidArgument);
+    }
+    let mut low = range.start;
+    let mut high = range.end;
+    let mut equal = false;
+    while low < high {
+        let middle = low + (high - low) / 2;
+        let mut ordering = Ordering::Equal;
+        for (index, (&query, &kind)) in keys.iter().zip(kinds).enumerate() {
+            ordering = compare_cell(query, cell(middle, index)?, kind, uca)?;
+            if ordering != Ordering::Equal {
+                break;
+            }
+        }
+        match ordering {
+            Ordering::Less => high = middle,
+            Ordering::Greater => low = middle + 1,
+            Ordering::Equal => {
+                equal = true;
+                if lower_bound {
+                    high = middle;
+                } else {
+                    low = middle + 1;
+                }
+            }
+        }
+    }
+    Ok(crate::RowkeyBound { row: low, equal })
+}
+
 pub(crate) fn compare_cell(
     query: RowkeyValue<'_>,
     stored: Cell<'_>,
@@ -389,5 +429,59 @@ mod tests {
             )
             .unwrap();
         assert_eq!((4, true), (bound.row, bound.equal));
+    }
+
+    #[test]
+    #[ignore = "requires MICRO_BLOCK_FLAT_FIXTURE_DIR with captured C++ blocks"]
+    fn locates_flat_compound_and_prefix_keys() {
+        let directory = std::path::PathBuf::from(
+            std::env::var_os("MICRO_BLOCK_FLAT_FIXTURE_DIR").unwrap(),
+        );
+        let bytes = std::fs::read(directory.join("flat0.bin")).unwrap();
+        let block = crate::FlatBlock::new(&bytes).unwrap();
+        let table = TestUca::new();
+        let kinds = [RowkeyKind::Int, RowkeyKind::UnicodeCi];
+        let range = RowRange::new(0, block.row_count()).unwrap();
+
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(-2), RowkeyValue::Bytes(b"alpha  ")],
+                &kinds,
+                &table,
+                true,
+                range,
+            )
+            .unwrap();
+        assert_eq!((0, true), (bound.row, bound.equal));
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(1), RowkeyValue::Bytes("中".as_bytes())],
+                &kinds,
+                &table,
+                true,
+                range,
+            )
+            .unwrap();
+        assert_eq!((2, true), (bound.row, bound.equal));
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(10)],
+                &kinds[..1],
+                &table,
+                false,
+                range,
+            )
+            .unwrap();
+        assert_eq!((5, true), (bound.row, bound.equal));
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(3)],
+                &kinds[..1],
+                &table,
+                true,
+                range,
+            )
+            .unwrap();
+        assert_eq!((4, false), (bound.row, bound.equal));
     }
 }

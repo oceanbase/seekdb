@@ -117,6 +117,7 @@ mod ffi {
         /// contain 256 entries and are immutable process-lifetime tables.
         unsafe fn locate_rowkey(
             block: &[u8],
+            row_store_type: u8,
             keys: Vec<InputCell>,
             key_kinds: Vec<u8>,
             uca: UcaTableDesc,
@@ -411,6 +412,7 @@ impl crate::UcaTable for CppUcaTable {
 
 fn locate_rowkey(
     block: &[u8],
+    row_store_type: u8,
     keys: Vec<ffi::InputCell>,
     key_kinds: Vec<u8>,
     desc: ffi::UcaTableDesc,
@@ -452,12 +454,25 @@ fn locate_rowkey(
                 _ => unreachable!(),
             });
         }
-        Block::new(block)?.find_rowkey_bound(
-            &values,
-            &kinds,
-            &CppUcaTable { desc },
-            lower_bound,
-            crate::RowRange::new(range_start as usize, range_end as usize)?,
-        )
+        let range = crate::RowRange::new(range_start as usize, range_end as usize)?;
+        match row_store_type {
+            crate::format::FLAT_ROW_STORE => FlatBlock::new(block)?.find_rowkey_bound(
+                &values,
+                &kinds,
+                &CppUcaTable { desc },
+                lower_bound,
+                range,
+            ),
+            crate::format::ENCODING_ROW_STORE | crate::format::SELECTIVE_ENCODING_ROW_STORE => {
+                Block::new(block)?.find_rowkey_bound(
+                    &values,
+                    &kinds,
+                    &CppUcaTable { desc },
+                    lower_bound,
+                    range,
+                )
+            }
+            _ => Err(Error::Unsupported),
+        }
     })())
 }

@@ -45,6 +45,7 @@ protected:
                          const int64_t begin_idx,
                          const int64_t end_idx,
                          const ObStorageDatumUtils &datum_utils,
+                         const ObITableReadInfo *read_info,
                          int64_t &row_idx,
                          bool &equal);
   OB_INLINE int init(const ObMicroBlockData &block_data);

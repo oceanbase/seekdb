@@ -122,15 +122,31 @@ int ObIMicroBlockFlatReader::find_bound_(
     const int64_t begin_idx,
     const int64_t end_idx,
     const ObStorageDatumUtils &datum_utils,
+    const ObITableReadInfo *read_info,
     int64_t &row_idx,
     bool &equal)
 {
   int ret = OB_SUCCESS;
+  bool located_by_rust = false;
   equal = false;
   row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
   if (OB_UNLIKELY(nullptr == data_begin_ || nullptr == index_data_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
+  } else if (OB_FAIL(try_locate_rowkey_bound(
+          reinterpret_cast<const char *>(header_),
+          header_->header_size_ + header_->data_length_,
+          header_,
+          nullptr,
+          key,
+          read_info,
+          false,
+          lower_bound,
+          begin_idx,
+          end_idx,
+          located_by_rust,
+          row_idx,
+          equal))) {
+  } else if (!located_by_rust) {
     PreciseCompare<ObRowReader> flat_compare(
         ret,
         equal,
@@ -253,7 +269,7 @@ int ObMicroBlockGetReader::locate_rowkey(const ObDatumRowkey &rowkey, int64_t &r
   } else if (need_binary_search) {
     bool is_equal = false;
     if (OB_FAIL(ObIMicroBlockFlatReader::find_bound_(rowkey, true/*lower_bound*/, 0, row_count_,
-        read_info_->get_datum_utils(), row_idx, is_equal))) {
+        read_info_->get_datum_utils(), read_info_, row_idx, is_equal))) {
     } else if (row_count_ == row_idx || !is_equal) {
       row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
       ret = OB_BEYOND_THE_RANGE;
@@ -455,6 +471,7 @@ int ObMicroBlockReader::find_bound(
           begin_idx,
           end_idx,
           *datum_utils_,
+          read_info_,
           row_idx,
           equal))) {
   }
@@ -479,6 +496,7 @@ int ObMicroBlockReader::find_bound(
           begin_idx,
           row_count_,
           *datum_utils_,
+          read_info_,
           row_idx,
           equal))) {
   }

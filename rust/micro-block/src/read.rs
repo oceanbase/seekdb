@@ -565,37 +565,16 @@ impl<'a> Block<'a> {
         lower_bound: bool,
         range: RowRange,
     ) -> Result<RowkeyBound> {
-        if keys.is_empty() || keys.len() != kinds.len() || keys.len() > self.column_count() {
-            return Err(Error::InvalidArgument);
-        }
         self.check_range(range)?;
-        let mut low = range.start;
-        let mut high = range.end;
-        let mut equal = false;
-        while low < high {
-            let middle = low + (high - low) / 2;
-            let mut ordering = core::cmp::Ordering::Equal;
-            for (index, (&query, &kind)) in keys.iter().zip(kinds).enumerate() {
-                ordering =
-                    crate::rowkey::compare_cell(query, self.cell(middle, index)?, kind, uca)?;
-                if ordering != core::cmp::Ordering::Equal {
-                    break;
-                }
-            }
-            match ordering {
-                core::cmp::Ordering::Less => high = middle,
-                core::cmp::Ordering::Greater => low = middle + 1,
-                core::cmp::Ordering::Equal => {
-                    equal = true;
-                    if lower_bound {
-                        high = middle;
-                    } else {
-                        low = middle + 1;
-                    }
-                }
-            }
-        }
-        Ok(RowkeyBound { row: low, equal })
+        crate::rowkey::find_bound(
+            keys,
+            kinds,
+            uca,
+            lower_bound,
+            range,
+            self.column_count(),
+            |row, column| self.cell(row, column),
+        )
     }
 
     fn check_range(&self, range: RowRange) -> Result<()> {

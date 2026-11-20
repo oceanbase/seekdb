@@ -227,6 +227,21 @@ public:
   const ObStorageDatumUtils *datum_utils_;
 };
 
+int try_locate_rowkey_bound(
+    const char *block_data,
+    const int64_t block_size,
+    const ObMicroBlockHeader *header,
+    const ObColumnHeader *col_header,
+    const ObDatumRowkey &rowkey,
+    const ObITableReadInfo *read_info,
+    const bool require_full_rowkey,
+    const bool lower_bound,
+    const int64_t begin_idx,
+    const int64_t end_idx,
+    bool &located_by_rust,
+    int64_t &row_idx,
+    bool &equal);
+
 class ObIMicroBlockGetReader : public ObIMicroBlockReaderInfo
 {
 public:

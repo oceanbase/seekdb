@@ -17,7 +17,7 @@ use crate::format::{
     checked_slice, header_checksum, i32_at, parse_flat_header, read_uint, stored_header_checksum,
     u16_at, u64_at, Header,
 };
-use crate::{Cell, Error, Projection, Result};
+use crate::{Cell, Error, Projection, Result, RowRange, RowkeyBound};
 
 const ROW_HEADER_SIZE: usize = 16;
 const CLUSTER_COLUMNS: usize = 32;
@@ -157,6 +157,28 @@ impl<'a> FlatBlock<'a> {
             return Ok(Cell::Nop);
         }
         parsed.cell(column)
+    }
+
+    pub fn find_rowkey_bound(
+        &self,
+        keys: &[crate::RowkeyValue<'_>],
+        kinds: &[crate::RowkeyKind],
+        uca: &dyn crate::UcaTable,
+        lower_bound: bool,
+        range: RowRange,
+    ) -> Result<RowkeyBound> {
+        if range.end > self.row_count() {
+            return Err(Error::InvalidArgument);
+        }
+        crate::rowkey::find_bound(
+            keys,
+            kinds,
+            uca,
+            lower_bound,
+            range,
+            self.column_count(),
+            |row, column| self.cell(row, column),
+        )
     }
 
     pub fn project(
