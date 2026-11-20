@@ -1,0 +1,12 @@
+id	enum_value	set_value	tail
+1	1	1	NULL
+2	2	3	20
+3	1	2	30
+id
+2
+row_count
+3
+id	value
+1	NULL
+2	NULL
+3	7
