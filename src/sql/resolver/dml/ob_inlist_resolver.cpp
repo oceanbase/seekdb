@@ -177,6 +177,106 @@ int ObInListResolver::resolve_subquery_from_values_table(ObStmtFactory *stmt_fac
   return ret;
 }
 
+namespace {
+
+// Only value lists no larger than this are deduplicated, so that the quadratic
+// comparison used below cannot turn into a regression by itself.
+const int64_t MAX_DEDUP_INLIST_SIZE = 10000;
+
+bool is_inlist_literal(const ParseNode *node)
+{
+  return NULL != node && IS_DATATYPE_OP(node->type_) && 0 == node->num_child_;
+}
+
+// A single element of an IN list is either a literal (single column) or a row of literals.
+bool is_inlist_literal_element(const ParseNode *node, const int64_t column_cnt)
+{
+  bool is_literal = true;
+  if (OB_ISNULL(node)) {
+    is_literal = false;
+  } else if (1 == column_cnt) {
+    is_literal = is_inlist_literal(node);
+  } else if (T_OP_ROW != node->type_ || node->num_child_ != column_cnt) {
+    is_literal = false;
+  } else {
+    for (int64_t i = 0; is_literal && i < column_cnt; ++i) {
+      is_literal = is_inlist_literal(node->children_[i]);
+    }
+  }
+  return is_literal;
+}
+
+bool is_same_inlist_literal(const ParseNode *left, const ParseNode *right)
+{
+  bool is_same = false;
+  if (OB_ISNULL(left) || OB_ISNULL(right) || left->type_ != right->type_) {
+    // not comparable literal nodes
+  } else if ((NULL == left->str_value_) != (NULL == right->str_value_)) {
+    // one of them has a text value while the other one does not
+  } else if (left->value_ != right->value_) {
+    // different values
+  } else if (NULL != left->str_value_
+             && (left->str_len_ != right->str_len_
+                 || 0 != MEMCMP(left->str_value_, right->str_value_, left->str_len_))) {
+    // same numeric value, but different text representations
+  } else {
+    is_same = true;
+  }
+  return is_same;
+}
+
+bool is_same_inlist_element(const ParseNode *left,
+                            const ParseNode *right,
+                            const int64_t column_cnt)
+{
+  bool is_same = true;
+  if (1 == column_cnt) {
+    is_same = is_same_inlist_literal(left, right);
+  } else {
+    for (int64_t i = 0; is_same && i < column_cnt; ++i) {
+      is_same = is_same_inlist_literal(left->children_[i], right->children_[i]);
+    }
+  }
+  return is_same;
+}
+
+}  // namespace
+
+int ObInListResolver::deduplicate_inlist_values(const ParseNode &in_list)
+{
+  int ret = OB_SUCCESS;
+  if (T_EXPR_LIST != in_list.type_ || OB_ISNULL(in_list.children_)) {
+    // not a value list, do nothing
+  } else if (in_list.num_child_ <= 1 || in_list.num_child_ > MAX_DEDUP_INLIST_SIZE) {
+    // nothing to do
+  } else {
+    const int64_t column_cnt = T_OP_ROW == in_list.children_[0]->type_
+                               ? in_list.children_[0]->num_child_ : 1;
+    bool all_literal = column_cnt > 0;
+    for (int64_t i = 0; all_literal && i < in_list.num_child_; ++i) {
+      all_literal = is_inlist_literal_element(in_list.children_[i], column_cnt);
+    }
+    // Question marks and other non-literal nodes are left untouched, because removing
+    // them would change the parameter indexes used by the values table rewrite.
+    if (all_literal) {
+      // The value list is only read while resolving, so compacting it in place is safe.
+      ParseNode &list = const_cast<ParseNode &>(in_list);
+      int64_t unique_cnt = 0;
+      for (int64_t i = 0; i < list.num_child_; ++i) {
+        bool is_dup = false;
+        for (int64_t j = 0; !is_dup && j < unique_cnt; ++j) {
+          is_dup = is_same_inlist_element(list.children_[i], list.children_[j], column_cnt);
+        }
+        if (!is_dup) {
+          list.children_[unique_cnt++] = list.children_[i];
+        }
+      }
+      list.num_child_ = static_cast<int32_t>(unique_cnt);
+    }
+  }
+  return ret;
+}
+
 // notice that if:
 // 1. rewrite_info.is_valid_as_values_table_ == false, or
 // 2. rewrite_info.is_question_mark_ == true && helper.is_prepare_stmt_ == true
