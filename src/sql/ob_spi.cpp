@@ -1680,7 +1680,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
                   for (int64_t i = 0; i < new_warnings.count(); ++i) {
                     const ObWarningBuffer::WarningItem &item = new_warnings.at(i);
                     if (USER_NOTE == item.log_level_) {
-                      wb->append_note(item.get(), item.get_code());
+                      wb->append_note(item.get(), item.get_code(), item.get_sql_state());
                     } else {
                       wb->append_warning(item.get(), item.get_code(), item.get_sql_state());
                     }
