@@ -65,6 +65,7 @@ mod ffi {
     struct LocateResult {
         code: Code,
         row: u32,
+        equal: bool,
     }
 
     struct UcaTableDesc {
@@ -107,6 +108,9 @@ mod ffi {
             keys: Vec<InputCell>,
             key_kinds: Vec<u8>,
             uca: UcaTableDesc,
+            lower_bound: bool,
+            range_start: u32,
+            range_end: u32,
         ) -> LocateResult;
     }
 }
@@ -319,19 +323,17 @@ fn filter_project_uint(
     })())
 }
 
-fn locate_result(result: Result<Option<u32>>) -> ffi::LocateResult {
+fn locate_result(result: Result<crate::RowkeyBound>) -> ffi::LocateResult {
     match result {
-        Ok(Some(row)) => ffi::LocateResult {
+        Ok(bound) => ffi::LocateResult {
             code: ffi::Code::Ok,
-            row,
-        },
-        Ok(None) => ffi::LocateResult {
-            code: ffi::Code::Ok,
-            row: u32::MAX,
+            row: bound.row as u32,
+            equal: bound.equal,
         },
         Err(error) => ffi::LocateResult {
             code: code(error),
             row: u32::MAX,
+            equal: false,
         },
     }
 }
@@ -372,6 +374,9 @@ fn locate_rowkey(
     keys: Vec<ffi::InputCell>,
     key_kinds: Vec<u8>,
     desc: ffi::UcaTableDesc,
+    lower_bound: bool,
+    range_start: u32,
+    range_end: u32,
 ) -> ffi::LocateResult {
     locate_result((|| {
         if keys.len() != key_kinds.len() {
@@ -407,6 +412,12 @@ fn locate_rowkey(
                 _ => unreachable!(),
             });
         }
-        Block::new(block)?.find_rowkey(&values, &kinds, &CppUcaTable { desc })
+        Block::new(block)?.find_rowkey_bound(
+            &values,
+            &kinds,
+            &CppUcaTable { desc },
+            lower_bound,
+            crate::RowRange::new(range_start as usize, range_end as usize)?,
+        )
     })())
 }

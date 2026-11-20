@@ -214,7 +214,7 @@ fn decode_utf8(input: &[u8]) -> Option<(u32, usize)> {
 mod tests {
     use super::*;
 
-    use crate::{Block, BlockWriter, ColumnSpec, OwnedDatum, WriterConfig};
+    use crate::{Block, BlockWriter, ColumnSpec, OwnedDatum, RowRange, WriterConfig};
 
     struct TestUca {
         lengths: [u8; 256],
@@ -339,5 +339,55 @@ mod tests {
                 )
                 .unwrap()
         );
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(1), RowkeyValue::Bytes(b"BETA  ")],
+                &kinds,
+                &table,
+                true,
+                RowRange::new(0, block.row_count()).unwrap(),
+            )
+            .unwrap();
+        assert_eq!((1, true), (bound.row, bound.equal));
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(1)],
+                &kinds[..1],
+                &table,
+                false,
+                RowRange::new(0, block.row_count()).unwrap(),
+            )
+            .unwrap();
+        assert_eq!((2, true), (bound.row, bound.equal));
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(2)],
+                &kinds[..1],
+                &table,
+                true,
+                RowRange::new(0, block.row_count()).unwrap(),
+            )
+            .unwrap();
+        assert_eq!((2, true), (bound.row, bound.equal));
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(4)],
+                &kinds[..1],
+                &table,
+                true,
+                RowRange::new(0, block.row_count()).unwrap(),
+            )
+            .unwrap();
+        assert_eq!((4, false), (bound.row, bound.equal));
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Int(3)],
+                &kinds[..1],
+                &table,
+                false,
+                RowRange::new(0, block.row_count()).unwrap(),
+            )
+            .unwrap();
+        assert_eq!((4, true), (bound.row, bound.equal));
     }
 }

@@ -246,6 +246,12 @@ public:
       const int64_t index,
       int32_t &start_key_compare_result,
       int32_t &end_key_compare_result) override;
+  virtual int find_bound(
+      const ObDatumRowkey &key,
+      const bool lower_bound,
+      const int64_t begin_idx,
+      int64_t &row_idx,
+      bool &equal) override;
   static int cache_decoders(
       char *buf,
       const int64_t size,
@@ -348,6 +354,20 @@ private:
   // use inner_reset to reuse the decoder buffer
   // the column count would not change in most cases
   void inner_reset();
+  virtual int find_bound(
+      const ObDatumRowkey &key,
+      const bool lower_bound,
+      const int64_t begin_idx,
+      const int64_t end_idx,
+      int64_t &row_idx,
+      bool &equal) override;
+  virtual int find_bound(
+      const ObDatumRange &range,
+      const int64_t begin_idx,
+      int64_t &row_idx,
+      bool &equal,
+      int64_t &end_key_begin_idx,
+      int64_t &end_key_end_idx) override;
   int do_init(const ObMicroBlockData &block_data);
   int init_decoders();
   int add_decoder(const int64_t store_idx,

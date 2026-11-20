@@ -73,6 +73,12 @@ pub struct RowRange {
     pub end: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RowkeyBound {
+    pub row: usize,
+    pub equal: bool,
+}
+
 impl RowRange {
     pub fn new(start: usize, end: usize) -> Result<Self> {
         if start > end {
@@ -533,11 +539,31 @@ impl<'a> Block<'a> {
         kinds: &[crate::RowkeyKind],
         uca: &dyn crate::UcaTable,
     ) -> Result<Option<u32>> {
+        let bound = self.find_rowkey_bound(
+            keys,
+            kinds,
+            uca,
+            true,
+            RowRange::new(0, self.row_count())?,
+        )?;
+        Ok(bound.equal.then_some(bound.row as u32))
+    }
+
+    pub fn find_rowkey_bound(
+        &self,
+        keys: &[crate::RowkeyValue<'_>],
+        kinds: &[crate::RowkeyKind],
+        uca: &dyn crate::UcaTable,
+        lower_bound: bool,
+        range: RowRange,
+    ) -> Result<RowkeyBound> {
         if keys.is_empty() || keys.len() != kinds.len() || keys.len() > self.column_count() {
             return Err(Error::InvalidArgument);
         }
-        let mut low = 0usize;
-        let mut high = self.row_count();
+        self.check_range(range)?;
+        let mut low = range.start;
+        let mut high = range.end;
+        let mut equal = false;
         while low < high {
             let middle = low + (high - low) / 2;
             let mut ordering = core::cmp::Ordering::Equal;
@@ -551,10 +577,17 @@ impl<'a> Block<'a> {
             match ordering {
                 core::cmp::Ordering::Less => high = middle,
                 core::cmp::Ordering::Greater => low = middle + 1,
-                core::cmp::Ordering::Equal => return Ok(Some(middle as u32)),
+                core::cmp::Ordering::Equal => {
+                    equal = true;
+                    if lower_bound {
+                        high = middle;
+                    } else {
+                        low = middle + 1;
+                    }
+                }
             }
         }
-        Ok(None)
+        Ok(RowkeyBound { row: low, equal })
     }
 
     fn check_range(&self, range: RowRange) -> Result<()> {

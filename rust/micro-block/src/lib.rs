@@ -22,7 +22,7 @@ mod read;
 mod rowkey;
 mod write;
 
-pub use read::{Block, Cell, Projection, RowRange};
+pub use read::{Block, Cell, Projection, RowRange, RowkeyBound};
 pub use rowkey::{compare_unicode_ci, RowkeyKind, RowkeyValue, UcaTable};
 pub use write::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig};
 
