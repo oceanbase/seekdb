@@ -1,0 +1,45 @@
+drop table if exists t_ip_ann;
+Warnings:
+Note	1051	Unknown table 'test.t_ip_ann'
+create table t_ip_ann(c1 int primary key, c2 int, c3 vector(3),
+vector index idx_ip(c3) with (distance=inner_product, type=hnsw));
+insert into t_ip_ann values(1, 1, [0,1,2]);
+insert into t_ip_ann values(2, 2, [1,1,2]);
+select * from t_ip_ann order by negative_inner_product(c3, [1,0,0]) approx limit 5;
+c1	c2	c3
+2	2	[1,1,2]
+1	1	[0,1,2]
+select * from t_ip_ann order by inner_product(c3, [1,0,0]) desc approx limit 5;
+c1	c2	c3
+2	2	[1,1,2]
+1	1	[0,1,2]
+explain select * from t_ip_ann order by inner_product(c3, [1,0,0]) desc approx limit 5;
+Query Plan
+=============================================================
+|ID|OPERATOR         |NAME            |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------
+|0 |VECTOR INDEX SCAN|t_ip_ann(idx_ip)|2       |10          |
+=============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ip_ann.c1], [t_ip_ann.c2], [t_ip_ann.c3]), filter(nil), rowset=16
+      access([t_ip_ann.c1], [t_ip_ann.c3], [t_ip_ann.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t_ip_ann.__vid_0], [t_ip_ann.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
+explain select * from t_ip_ann order by inner_product(c3, [1,0,0]) asc approx limit 5;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |TOP-N SORT       |        |2       |3           |
+|1 |└─TABLE FULL SCAN|t_ip_ann|2       |3           |
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_ip_ann.c1], [t_ip_ann.c2], [t_ip_ann.c3]), filter(nil), rowset=16
+      sort_keys([inner_product(t_ip_ann.c3, cast(array(1, 0, 0), ARRAY(18, -1))), ASC]), topn(5)
+  1 - output([t_ip_ann.c1], [t_ip_ann.c3], [t_ip_ann.c2]), filter(nil), rowset=16
+      access([t_ip_ann.c1], [t_ip_ann.c3], [t_ip_ann.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t_ip_ann.c1]), range(MIN ; MAX)always true
+drop table t_ip_ann;
