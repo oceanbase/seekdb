@@ -459,6 +459,13 @@ private:
                                ObDMLSqlSplicer &dml);
 
 private:
+  int upsert_ai_column_for_column(
+      common::ObISQLClient &sql_client,
+      const ObTableSchema &table_schema,
+      const ObColumnSchemaV2 &column_schema);
+  int batch_add_ai_columns_for_create_table(
+      common::ObISQLClient &sql_client,
+      const ObIArray<ObTableSchema> &tables);
   int log_operation_wrapper(
       ObSchemaOperation &opt,
       common::ObISQLClient &sql_client);

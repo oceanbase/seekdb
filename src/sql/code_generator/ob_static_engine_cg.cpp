@@ -45,6 +45,8 @@
 #include "sql/optimizer/ob_log_stat_collector.h"
 #include "sql/optimizer/ob_log_expand.h"
 #include "sql/engine/ob_operator_factory.h"
+#include "sql/resolver/dml/ob_dml_stmt.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/basic/ob_limit_op.h"
 #include "sql/engine/basic/ob_values_op.h"
 #include "sql/engine/sort/ob_sort_op.h"
@@ -5672,6 +5674,98 @@ int ObStaticEngineCG::set_properties_pre(const ObLogPlan &log_plan, ObPhysicalPl
   return ret;
 }
 
+namespace
+{
+int add_ai_column_ref(const ObDMLStmt &stmt,
+                      const ObColumnRefRawExpr &column_expr,
+                      ObPhysicalPlan &phy_plan)
+{
+  int ret = OB_SUCCESS;
+  const ColumnItem *column_item = stmt.get_column_item_by_id(
+      column_expr.get_table_id(), column_expr.get_column_id());
+  const TableItem *table_item = stmt.get_table_item_by_id(
+      column_expr.get_table_id());
+  if (OB_ISNULL(column_item) || OB_ISNULL(table_item)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("AI column or table item is missing", K(ret), K(column_expr),
+             KP(column_item), KP(table_item));
+  } else {
+    // base_tid_/base_cid_ on UPDATE may point at a generated column's
+    // dependency after rewrite.  For an ordinary base table, ref_id_ and the
+    // original column id identify the AI column schema directly.
+    const uint64_t table_id = table_item->is_basic_table()
+        ? table_item->ref_id_
+        : (OB_INVALID_ID == column_item->base_tid_
+            ? column_item->table_id_ : column_item->base_tid_);
+    const uint64_t column_id = table_item->is_basic_table()
+        ? column_item->column_id_
+        : (OB_INVALID_ID == column_item->base_cid_
+            ? column_item->column_id_ : column_item->base_cid_);
+    if (OB_FAIL(phy_plan.add_ai_column_ref(
+            ObAIColumnRef(table_id, column_id)))) {
+      LOG_WARN("failed to add AI column plan reference", K(ret),
+               K(table_id), K(column_id));
+    }
+  }
+  return ret;
+}
+
+int collect_ai_column_refs(const ObDMLStmt &stmt, ObPhysicalPlan &phy_plan)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> referenced_columns;
+  if (stmt.is_select_stmt()) {
+    const ObIArray<ColumnItem> &column_items = stmt.get_column_items();
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_items.count(); ++i) {
+      const ObColumnRefRawExpr *column_expr = column_items.at(i).expr_;
+      if (OB_NOT_NULL(column_expr) && column_expr->is_ai_column()
+          && OB_FAIL(add_ai_column_ref(stmt, *column_expr, phy_plan))) {
+        LOG_WARN("failed to collect SELECT AI column", K(ret), K(i));
+      }
+    }
+  } else if (stmt.is_update_stmt() || stmt.is_delete_stmt()) {
+    // DML writes add implicit AI result assignments.  Only predicates and
+    // ORDER BY expressions are reads and therefore participate in strict mode.
+    if (OB_FAIL(ObRawExprUtils::extract_column_exprs(
+            stmt.get_condition_exprs(), referenced_columns))) {
+      LOG_WARN("failed to extract DML predicate columns", K(ret));
+    }
+    const ObIArray<OrderItem> &order_items = stmt.get_order_items();
+    for (int64_t i = 0; OB_SUCC(ret) && i < order_items.count(); ++i) {
+      if (OB_FAIL(ObRawExprUtils::extract_column_exprs(
+              order_items.at(i).expr_, referenced_columns))) {
+        LOG_WARN("failed to extract DML order columns", K(ret), K(i));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < referenced_columns.count(); ++i) {
+      const ObRawExpr *raw_expr = referenced_columns.at(i);
+      if (OB_NOT_NULL(raw_expr) && raw_expr->is_column_ref_expr()
+          && static_cast<const ObColumnRefRawExpr *>(raw_expr)->is_ai_column()
+          && OB_FAIL(add_ai_column_ref(
+                 stmt, *static_cast<const ObColumnRefRawExpr *>(raw_expr),
+                 phy_plan))) {
+        LOG_WARN("failed to collect DML AI column read", K(ret), K(i));
+      }
+    }
+  }
+
+  ObSEArray<ObSelectStmt *, 8> child_stmts;
+  if (OB_SUCC(ret) && OB_FAIL(stmt.get_child_stmts(child_stmts))) {
+    LOG_WARN("failed to get child statements for AI column collection", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
+    if (OB_ISNULL(child_stmts.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("child statement is null", K(ret), K(i));
+    } else if (OB_FAIL(SMART_CALL(
+                   collect_ai_column_refs(*child_stmts.at(i), phy_plan)))) {
+      LOG_WARN("failed to collect child AI column references", K(ret), K(i));
+    }
+  }
+  return ret;
+}
+} // namespace
+
 int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan)
 {
   int ret = OB_SUCCESS;
@@ -5794,6 +5888,11 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
         plan_ctx->set_runtime_schema_version(runtime_schema_version);
       }
     }
+  }
+
+  if (OB_SUCC(ret)
+      && OB_FAIL(collect_ai_column_refs(*log_plan.get_stmt(), phy_plan))) {
+    LOG_WARN("failed to collect AI column plan references", K(ret));
   }
 
   //set user and system variables

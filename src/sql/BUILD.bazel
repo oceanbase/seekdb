@@ -260,6 +260,7 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_vector",
     ] + [
         "//src/share:_generated_inner_table_headers",
+        "//src/share:ai_column_task_notifier_interface",
         "//src/share:ai_endpoint_interface",
         "//src/share:autoincrement_runtime",
         "//src/share:cache",

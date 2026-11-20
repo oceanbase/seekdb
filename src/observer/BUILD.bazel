@@ -75,6 +75,7 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/share:_generated_inner_table_headers",
     "//src/share:_generated_local_virtual_table_headers",
     "//src/share:local_table_schema",
+    "//src/share:ai_column_task_notifier_interface",
     "//src/share:ai_endpoint_interface",
     "//src/share:admin_job_storage_interface",
     "//src/share:autoincrement_runtime",

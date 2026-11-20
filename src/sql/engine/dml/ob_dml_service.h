@@ -255,6 +255,9 @@ public:
   static int handle_after_processing_single_row(ObDMLModifyRowsList *dml_modify_rows);
   static int handle_after_processing_single_row(ObDMLModifyRowNode &modify_row);
   static int handle_after_processing_multi_row(ObDMLModifyRowsList *dml_modify_rows, ObTableModifyOp *op);
+  // Maintain AI row identity and the persistent task row after the primary
+  // DAS write succeeds, while still inside the user transaction.
+  static int process_ai_column_row(ObDMLModifyRowNode &modify_row);
   // static int handle_after_processing_batch(const ObTableModifyOp *op,
   //                                           ObDMLModifyRowsList *dml_modify_rows);
   static int handle_after_row_processing(ObTableModifyOp *op, ObDMLModifyRowsList *dml_modify_rows);

@@ -340,6 +340,7 @@ private:
   int open_cmd();
   int open_result();
   int do_open_plan(ObExecContext &ctx);
+  int check_ai_column_tasks_complete(ObPhysicalPlan *physical_plan);
   int do_close_plan(int errcode, ObExecContext &ctx);
   int deal_feedback_info(ObPhysicalPlan *physical_plan, bool is_rollback, ObExecContext &ctx);
   bool transaction_set_violation_and_retry(int &err, int64_t &retry);

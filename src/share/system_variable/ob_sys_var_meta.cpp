@@ -44,6 +44,7 @@ const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
   "_show_ddl_in_compat_mode",
   "_windowfunc_optimization_settings",
   "activate_all_roles_on_login",
+  "ai_column_strict_read",
   "auto_generate_certs",
   "auto_increment_cache_size",
   "auto_increment_increment",
@@ -765,6 +766,7 @@ const ObSysVarClassType ObSysVarMeta::SYS_VAR_IDS_SORTED_BY_NAME[] = {
   SYS_VAR__SHOW_DDL_IN_COMPAT_MODE,
   SYS_VAR__WINDOWFUNC_OPTIMIZATION_SETTINGS,
   SYS_VAR_ACTIVATE_ALL_ROLES_ON_LOGIN,
+  SYS_VAR_AI_COLUMN_STRICT_READ,
   SYS_VAR_AUTO_GENERATE_CERTS,
   SYS_VAR_AUTO_INCREMENT_CACHE_SIZE,
   SYS_VAR_AUTO_INCREMENT_INCREMENT,
@@ -2186,7 +2188,8 @@ const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[] = {
   "enable_optimizer_rowgoal",
   "ob_ivf_nprobes",
   "_push_join_predicate",
-  "ob_sparse_drop_ratio_search"
+  "ob_sparse_drop_ratio_search",
+  "ai_column_strict_read"
 };
 
 bool ObSysVarMeta::sys_var_name_case_cmp(const char *name1, const ObString &name2)
@@ -2261,6 +2264,7 @@ int ObSysVarMeta::calc_sys_var_store_idx_by_name(const common::ObString &sys_var
   int ret = OB_SUCCESS;
   ObSysVarClassType sys_var_id = find_sys_var_id_by_name(sys_var_name);
   if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
+    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_name), K(lbt()));
   }
   return ret;
 }
@@ -2275,6 +2279,7 @@ int ObSysVarMeta::get_sys_var_name_by_id(ObSysVarClassType sys_var_id, ObString 
   int ret = OB_SUCCESS;
   int64_t store_idx = -1;
   if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
+    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
   } else {
     sys_var_name = ObString::make_string(ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[store_idx]);
   }

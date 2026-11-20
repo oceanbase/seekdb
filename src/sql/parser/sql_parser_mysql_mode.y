@@ -334,7 +334,7 @@ END_P SET_VAR DELIMITER
         QUANTIFIER_TABLE QUARTER QUERY QUEUE_TIME QUICK
 
         RECOVER REDUNDANT REFRESH RELAY RELAYLOG RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMOVE
-        REPEATABLE RESET RESPECT RESTART RESTORE RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE
+        REPEATABLE RESET RESPECT RESTART RESTORE RETRY RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE
         REWRITE ROLLBACK ROLLUP ROUTINE ROW ROWID ROW_COUNT ROW_FORMAT ROWS RTREE
         RUN RECYCLEBIN REPLICATION ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS
         RANK READ_ONLY RECOVERY REJECT ROLE
@@ -395,6 +395,7 @@ END_P SET_VAR DELIMITER
 %type <node> update_asgn_list update_asgn_factor
 %type <node> update_basic_stmt delete_basic_stmt
 %type <node> table_element_list table_element column_definition column_definition_ref column_definition_list column_name_list
+%type <node> opt_ai_column_options ai_column_options ai_column_option
 %type <node> opt_generated_keyname opt_generated_option_list opt_generated_column_attribute_list generated_column_attribute opt_storage_type
 %type <node> data_type special_table_type opt_if_not_exists opt_if_exists opt_charset collation opt_collation cast_data_type
 %type <node> replace_with_opt_hint insert_with_opt_hint column_list opt_on_duplicate_key_clause opt_into opt_replace opt_temporary no_param_column_ref
@@ -402,7 +403,7 @@ END_P SET_VAR DELIMITER
 %type <node> select_with_parens select_no_parens select_clause select_into no_table_select_with_order_and_limit simple_select_with_order_and_limit select_with_parens_with_order_and_limit select_clause_set_with_order_and_limit
 %type <node> simple_select no_table_select limit_clause select_expr_list opt_approx
 %type <node> with_select with_clause with_list common_table_expr opt_column_alias_name_list alias_name_list column_alias_name
-%type <node> opt_where opt_hint_value opt_groupby opt_rollup opt_order_by order_by opt_having groupby_clause order_by_opt_null
+%type <node> opt_where opt_ai_retry_where opt_hint_value opt_groupby opt_rollup opt_order_by order_by opt_having groupby_clause order_by_opt_null
 %type <node> opt_limit_clause limit_expr opt_lock_type opt_for_update opt_for_update_wait opt_lock_in_share_mode
 %type <node> sort_list sort_key opt_asc_desc sort_list_for_group_by sort_key_for_group_by opt_asc_desc_for_group_by sort_list_opt_null sort_key_opt_null opt_asc_desc_null
 %type <node> opt_query_expression_option_list query_expression_option_list query_expression_option opt_distinct opt_distinct_or_all opt_separator projection
@@ -4848,6 +4849,18 @@ column_definition_ref data_type opt_column_attribute_list opt_column_reference o
   merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $10);
   malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $7, $9, $12, $4);
 }
+| column_definition_ref data_type AI COLUMN '(' expr ')' opt_ai_column_options opt_position_column
+{
+  ParseNode *attributes = NULL;
+  ParseNode *ai_column_node = NULL;
+  set_data_type_collation($2, attributes, false, true);
+  dup_expr_string($6, result, @6.first_column, @6.last_column);
+  malloc_non_terminal_node(ai_column_node, result->malloc_pool_, T_AI_COLUMN_DEFINITION, 2, $6, $8);
+  // Keep the first four children compatible with an ordinary column definition.
+  // AI metadata is appended at child 7 and never uses generated-column flags.
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 8,
+                           $1, $2, attributes, $9, NULL, NULL, NULL, ai_column_node);
+}
 | column_definition_ref SERIAL opt_column_attribute_list opt_position_column 
 {
   ParseNode *unsigned_bigint_type = NULL;
@@ -4873,6 +4886,35 @@ column_definition_ref data_type opt_column_attribute_list opt_column_reference o
   malloc_non_terminal_node(attributes, result->malloc_pool_, T_LINK_NODE, 2, attributes, unique_attr);
   merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, attributes);
   malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 4, $1, unsigned_bigint_type, attributes, $4);
+}
+;
+
+opt_ai_column_options:
+WITH '(' ai_column_options ')'
+{
+  merge_nodes($$, result, T_AI_COLUMN_OPTION_LIST, $3);
+}
+| /* empty */
+{
+  $$ = NULL;
+}
+;
+
+ai_column_options:
+ai_column_option
+{
+  $$ = $1;
+}
+| ai_column_options ',' ai_column_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+ai_column_option:
+relation_name COMP_EQ literal
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_OPTION, 2, $1, $3);
 }
 ;
 
@@ -12645,6 +12687,11 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
   $$->value_ = $2[0];
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS, 4, $$, $5, $6, $7);
 }
+| SHOW AI COLUMNS from_or_in relation_factor opt_from_or_in_database_clause opt_show_condition
+{
+  (void)($4);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_AI_COLUMNS, 3, $5, $6, $7);
+}
 | SHOW TABLE STATUS opt_from_or_in_database_clause opt_show_condition
 { malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_TABLE_STATUS, 2, $4, $5); }
 | SHOW PROCEDURE STATUS opt_from_or_in_database_clause opt_show_condition
@@ -14704,6 +14751,10 @@ opt_set table_option_list_space_seperated
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_COLUMN_OPTION, 1, $1);
 }
+| RETRY AI COLUMN column_name opt_ai_retry_where
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_RETRY, 2, $4, $5);
+}
 | RENAME opt_to relation_factor
 {
   (void)($2);
@@ -14739,6 +14790,20 @@ DROP CONSTRAINT constraint_name
   (void)($2);
   (void)($3);
   $$ = NULL;
+}
+;
+
+opt_ai_retry_where:
+/* EMPTY */
+{
+  $$ = NULL;
+}
+| WHERE expr
+{
+  // Preserve only the predicate text. Execution reuses the ordinary UPDATE
+  // resolver, so filtering follows normal DML semantics.
+  dup_expr_string($2, result, @2.first_column, @2.last_column);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_WHERE_CLAUSE, 1, $2);
 }
 ;
 
@@ -17914,6 +17979,7 @@ ACCOUNT
 |       RESPECT
 |       RESTART
 |       RESTORE
+|       RETRY
 |       RESUME
 |       RETURNED_SQLSTATE
 |       RETURNING

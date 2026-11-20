@@ -18,12 +18,15 @@
 #define OCEANBASE_OBSERVER_OMT_OB_AI_SERVICE_H_
 
 #include "share/ai_service/ob_ai_service_struct.h"
+#include "share/ai_service/ai_column_task_notifier.h"
 #include "share/rc/ob_server_runtime.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/container/ob_se_array.h"
 #include "sql/privilege_check/ob_ai_model_priv_util.h"
 #include "share/ob_server_struct.h"
+#include "share/ob_thread_pool.h"
 #include "lib/worker.h"
+#include "lib/lock/ob_thread_cond.h"
 
 namespace oceanbase
 {
@@ -43,21 +46,29 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAiServiceGuard);
 };
 
-class ObAiService
+class ObAiService : public share::ObThreadPool, public share::IAIColumnTaskNotifier
 {
 public:
   ObAiService();
   virtual ~ObAiService();
   static int server_module_init(ObAiService* &ai_service);
   int init();
-  int start() { return OB_SUCCESS; }
-  void stop() {};
-  void wait() {};
+  int start();
+  void stop();
+  void wait();
   void destroy();
+  // Notify workers after the user transaction that inserted AI tasks commits.
+  void wakeup() override;
 public:
   int get_ai_service_guard(ObAiServiceGuard &ai_service_guard);
+protected:
+  void run1() override;
 private:
+  int process_one_round_(bool &did_work, int64_t &next_wait_us);
+  void wait_for_work_(const int64_t wait_us);
   bool is_inited_;
+  common::ObThreadCond worker_cond_;
+  bool wakeup_pending_;
   DISALLOW_COPY_AND_ASSIGN(ObAiService);
 };
 
