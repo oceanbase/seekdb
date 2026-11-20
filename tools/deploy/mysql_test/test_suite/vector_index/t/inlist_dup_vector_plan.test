@@ -1,0 +1,66 @@
+#owner: cyaizjw
+# Regression for #1512 (vector search): a duplicate-heavy integer IN list
+# (30 entries, only 3 distinct values) must produce exactly the same plan
+# as the compact IN (1,2,3) list: a single VECTOR INDEX ADAPTIVE SCAN that
+# keeps the IN predicate inside the scan, not a VALUES TABLE ACCESS +
+# HASH DISTINCT + SUBPLAN FILTER + TOP-N SORT stack.
+alter system set vector_memory_limit = 0;
+sleep 3;
+--disable_warnings
+drop table if exists t_inlist_dup_vec;
+--enable_warnings
+create table t_inlist_dup_vec(
+  id bigint not null,
+  embedding vector(3) not null,
+  category5 int not null,
+  primary key(id),
+  vector index idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+
+--disable_query_log
+--let $row = 0
+while ($row < 100)
+{
+  eval insert into t_inlist_dup_vec values ($row, '[$row,0,0]', $row % 5 + 1);
+  --inc $row
+}
+--enable_query_log
+--disable_result_log
+analyze table t_inlist_dup_vec;
+call dbms_stats.set_table_stats('TEST', 'T_INLIST_DUP_VEC', numrows=>200000);
+--enable_result_log
+
+# 30 elements with only 3 distinct values, rewrite threshold 4.
+--let $dup_values = 1,2,3
+--let $i = 1
+while ($i < 10)
+{
+  --let $dup_values = $dup_values,1,2,3
+  --inc $i
+}
+
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup_vec
+where category5 in (1,2,3)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+eval select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup_vec
+where category5 in ($dup_values)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+
+# Both plans must consist of exactly one operator. If the duplicate list is
+# expanded into a values table again, the second plan grows to 4+ operators.
+select locate('1,2,3,1,2,3', s.statement) > 0 as is_duplicated_list,
+       count(*) as operator_cnt,
+       min(p.operator) as only_operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_inlist_dup_vec') > 0
+group by s.plan_id, locate('1,2,3,1,2,3', s.statement) > 0
+order by is_duplicated_list;
+
+drop table t_inlist_dup_vec;
+alter system set vector_memory_limit = 0;
