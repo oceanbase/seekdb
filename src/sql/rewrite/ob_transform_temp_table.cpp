@@ -615,6 +615,7 @@ int ObTransformTempTable::check_stmt_can_extract_temp_table(ObSelectStmt *first,
 {
   int ret = OB_SUCCESS;
   bool has_const_minmax_like = false;
+  bool has_different_aggr_having = false;
   is_valid = false;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
@@ -624,6 +625,12 @@ int ObTransformTempTable::check_stmt_can_extract_temp_table(ObSelectStmt *first,
   } else if (!has_const_minmax_like &&
              OB_FAIL(check_like_expr_with_const_minmax(*second, has_const_minmax_like))) {
   } else if (has_const_minmax_like) {
+    is_valid = false;
+  } else if (OB_FAIL(check_different_aggr_having(*first,
+                                                 *second,
+                                                 map_info,
+                                                 has_different_aggr_having))) {
+  } else if (has_different_aggr_having) {
     is_valid = false;
   } else if (second->is_set_stmt()) {
     is_valid = QueryRelation::QUERY_EQUAL == relation && map_info.is_order_equal_;
@@ -642,6 +649,43 @@ int ObTransformTempTable::check_stmt_can_extract_temp_table(ObSelectStmt *first,
     } else if (!is_valid) {
       // do nothing
     } else if (OB_FAIL(check_index_condition_match(*first, *second, map_info, is_valid))) {
+    }
+  }
+  return ret;
+}
+
+int ObTransformTempTable::check_different_aggr_having(const ObSelectStmt &first,
+                                                      const ObSelectStmt &second,
+                                                      const ObStmtMapInfo &map_info,
+                                                      bool &has_different_aggr_having)
+{
+  int ret = OB_SUCCESS;
+  bool first_has_aggr_having = false;
+  bool second_has_aggr_having = false;
+  has_different_aggr_having = false;
+  if (map_info.is_having_equal_) {
+    // Equal HAVING predicates can be pushed into the shared temp-table query.
+  } else if (OB_FAIL(check_aggr_having(first, first_has_aggr_having))) {
+  } else if (!first_has_aggr_having &&
+             OB_FAIL(check_aggr_having(second, second_has_aggr_having))) {
+  } else {
+    has_different_aggr_having = first_has_aggr_having || second_has_aggr_having;
+  }
+  return ret;
+}
+
+int ObTransformTempTable::check_aggr_having(const ObSelectStmt &stmt,
+                                            bool &has_aggr_having)
+{
+  int ret = OB_SUCCESS;
+  has_aggr_having = false;
+  for (int64_t i = 0; OB_SUCC(ret) && !has_aggr_having && i < stmt.get_having_expr_size(); ++i) {
+    ObRawExpr *expr = stmt.get_having_exprs().at(i);
+    if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null having expr", K(ret));
+    } else {
+      has_aggr_having = expr->has_flag(CNT_AGG);
     }
   }
   return ret;
