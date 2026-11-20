@@ -47,6 +47,51 @@ int ObShareUtil::get_server_ip(
   return ret;
 }
 
+int ObShareUtil::generate_escaped_identifier(
+    ObIAllocator &allocator,
+    const ObString &src,
+    ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const char escape_character = '`';
+  const ObString::obstr_size_t src_len = src.length();
+  ObString::obstr_size_t dst_len = src_len;
+  char *buf = nullptr;
+
+  dst.reset();
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(src_len <= 0)) {
+    dst.assign(nullptr, 0);
+  } else if (nullptr == src.find(escape_character)) {
+    dst = src;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < src_len; ++i) {
+      if (src[i] == escape_character) {
+        if (OB_UNLIKELY(dst_len == INT32_MAX)) {
+          ret = OB_SIZE_OVERFLOW;
+        } else {
+          ++dst_len;
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate escaped identifier", KR(ret), K(src_len), K(dst_len));
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; i < src_len; ++i) {
+        if (src[i] == escape_character) {
+          buf[pos++] = escape_character;
+        }
+        buf[pos++] = src[i];
+      }
+      buf[pos] = '\0';
+      dst.assign_ptr(buf, dst_len);
+    }
+  }
+  return ret;
+}
+
 int ObShareUtil::set_default_timeout_ctx(ObTimeoutCtx &ctx, const int64_t default_timeout)
 {
   int ret = OB_SUCCESS;
