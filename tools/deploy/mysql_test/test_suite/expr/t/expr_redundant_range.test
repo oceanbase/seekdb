@@ -1,0 +1,46 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#### owner: oceanbase
+#### description: redundant same-column range predicates implied by a tighter one are removed
+--echo ================ redundant range predicate ================
+--disable_warnings
+drop table if exists t_rr;
+--enable_warnings
+create table t_rr(id int primary key, a int, b int, c varchar(16));
+insert into t_rr values(1, 1, 10, 'a'), (2, 5, 20, 'b'), (3, 10, 30, 'c'), (4, 15, 40, 'd'), (5, 20, 50, 'e'), (6, NULL, 60, 'f');
+--echo ---- weaker upper bound is implied ----
+select id from t_rr where a < 10 and a < 20 and a < 655 order by id;
+select id from t_rr where a < 10 and a <= 10 and a <= 20 order by id;
+select id from t_rr where a <= 10 and a < 10 order by id;
+--echo ---- weaker lower bound is implied ----
+select id from t_rr where a > 10 and a > 5 and a >= 10 order by id;
+select id from t_rr where a >= 10 and a > 10 order by id;
+select id from t_rr where a >= 10 and a >= 9 order by id;
+--echo ---- equality implies range ----
+select id from t_rr where a = 10 and a < 20 and a >= 5 order by id;
+select id from t_rr where a = 10 and a > 20 order by id;
+--echo ---- constant on the left hand side ----
+select id from t_rr where 20 > a and 10 > a order by id;
+select id from t_rr where 5 < a and 10 < a order by id;
+--echo ---- different columns must not collapse ----
+select id from t_rr where a < 10 and b < 20 order by id;
+--echo ---- different constant types must not collapse ----
+select id from t_rr where a < 10 and a < 10.5 order by id;
+--echo ---- duplicated conjunct must not disappear completely ----
+select id from t_rr where a < 10 and a < 10 order by id;
+select id from t_rr where a < 10 and a < 5 + 5 order by id;
+--echo ---- null values never satisfy a comparison ----
+select id from t_rr where a < 655 and a < 1000 order by id;
+--echo ---- contradictory predicates stay empty ----
+select id from t_rr where a < 10 and a > 100 order by id;
+--echo ---- string column ----
+select id from t_rr where c < 'm' and c < 'z' order by id;
+select id from t_rr where c > 'a' and c >= 'a' and c > 'aa' order by id;
+--echo ---- nested under or ----
+select id from t_rr where a < 10 and a < 20 or id = 5 order by id;
+--echo ---- many conjuncts ----
+select id from t_rr where a < 10 and a < 15 and a < 20 and a < 25 and a < 30 and a < 35 and a < 40 and a < 45 and a < 50 and a < 55 and a < 60 and a < 65 and a < 70 and a < 75 and a < 80 and a < 85 and a < 90 and a < 95 and a < 100 and a < 655 order by id;
+--disable_warnings
+drop table if exists t_rr;
+--enable_warnings
