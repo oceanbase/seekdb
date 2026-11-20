@@ -575,3 +575,5 @@ cd ~/seekdb
 ## 📄 许可证
 
 seekdb 由 [OceanBase](https://en.oceanbase.com/) 团队打造 — 与支付宝、淘宝、滴滴、小米等生产环境中运行的数据库同源同核。完全开源，采用 [Apache License, Version 2.0](LICENSE) 许可证。
+
+OB-P:_nTQ0GiQfyNccdr7eBEM2A
