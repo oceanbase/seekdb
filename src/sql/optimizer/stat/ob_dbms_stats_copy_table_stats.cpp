@@ -376,7 +376,7 @@ int ObDbmsStatsCopyTableStats::copy_tab_col_stats(sql::ObExecContext &ctx,
     ObMySQLTransaction trans;
     //begin trans
     if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
-    } else if (OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, table_stat_param, ObTimeUtility::current_time()))) {
+    } else if (OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, table_stat_param))) {
     } else if (OB_FAIL(ObDbmsStatsUtils::split_batch_write(ctx, trans.get_connection(), table_stats, column_stats))) {
     } else {/*do nothing*/}
     //end trans

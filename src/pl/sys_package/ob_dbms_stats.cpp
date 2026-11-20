@@ -2373,13 +2373,14 @@ int ObDbmsStats::get_stats_history_availability(sql::ObExecContext &ctx,
   } else if (OB_FAIL(ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ctx, false, result))) {
   } else if (result.is_null()) {
     //do nothing
-  } else if (!result.is_datetime()) {
+  } else if (!result.is_mysql_datetime()) {
     ObObj dest_obj;
     ObCastCtx cast_ctx(&ctx.get_allocator(), NULL, CM_NONE, ObCharset::get_system_collation());
     cast_ctx.dtc_params_ = ctx.get_my_session()->get_dtc_params();
-    if (OB_FAIL(ObObjCaster::to_type(ObDateTimeType, cast_ctx, result, dest_obj))) {
+    if (OB_FAIL(ObObjCaster::to_type(ObMySQLDateTimeType, cast_ctx, result, dest_obj))) {
     } else {
       result = dest_obj;
+      result.set_scale(DEFAULT_SCALE_FOR_FRACTIONAL_SECONDS);
     }
   } else {/*do nothing*/}
   return ret;
