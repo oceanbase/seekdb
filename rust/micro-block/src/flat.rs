@@ -486,6 +486,7 @@ impl<'a> Cluster<'a> {
 #[cfg(test)]
 mod tests {
     use super::{FlatBlock, FlatRow};
+    use crate::flat_write::{encode_row, FlatDatum};
     use crate::Cell;
     use std::path::PathBuf;
 
@@ -530,6 +531,39 @@ mod tests {
         let mut cluster = vec![255, 1, 7, b'x', b'y', 2, 3, 3, 3, 0x34, 0x02];
         cluster[9] = 0xf4;
         assert!(FlatRow::parse(&row_with_cluster(&cluster, 4)).is_err());
+    }
+
+    #[test]
+    #[ignore = "requires MICRO_BLOCK_FLAT_FIXTURE_DIR with captured C++ blocks"]
+    fn reencodes_every_captured_cpp_row_byte_for_byte() {
+        let directory = PathBuf::from(std::env::var_os("MICRO_BLOCK_FLAT_FIXTURE_DIR").unwrap());
+        for name in ["flat0.bin", "flat1.bin", "flat2.bin", "flat3.bin", "wide.bin"] {
+            let bytes = std::fs::read(directory.join(name)).unwrap();
+            let block = FlatBlock::new(&bytes).unwrap();
+            for row_index in 0..block.row_count() {
+                let row = block.row(row_index).unwrap();
+                let mut integers = Vec::new();
+                integers.resize(block.column_count(), None);
+                for column in 0..block.column_count() {
+                    if let Cell::UInt(value) = row.cell(column).unwrap() {
+                        integers[column] = Some(value);
+                    }
+                }
+                let integer_bytes: Vec<[u8; 8]> = integers
+                    .into_iter()
+                    .map(|value| value.unwrap_or(0).to_le_bytes())
+                    .collect();
+                let cells: Vec<FlatDatum<'_>> = (0..block.column_count())
+                    .map(|column| match row.cell(column).unwrap() {
+                        Cell::Bytes(bytes) => FlatDatum::Bytes(bytes),
+                        Cell::UInt(_) => FlatDatum::Bytes(&integer_bytes[column]),
+                        Cell::Null => FlatDatum::Null,
+                        Cell::Nop => FlatDatum::Nop,
+                    })
+                    .collect();
+                assert_eq!(row.bytes, encode_row(&cells, row.info).unwrap(), "{name} row {row_index}");
+            }
+        }
     }
 
     #[test]
