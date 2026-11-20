@@ -22,7 +22,7 @@ class SrsDataImporter:
         self.old_result_cnt = [0, 0]
         self.new_result_cnt = [0, 0]
         self.print_srs_sql = False
-        print("host:{0} port:{1} pwd:{2} file:{3}".format(self.host, self.port, self.pwd, self.file_name))
+        print("host:{0} port:{1} file:{2}".format(self.host, self.port, self.file_name))
 
     def generate_sql(self):
         self.sql_list = []
