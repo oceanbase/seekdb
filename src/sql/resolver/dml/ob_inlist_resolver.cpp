@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "lib/hash/ob_hashmap.h"
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -263,6 +265,95 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+static int check_small_distinct_integer_inlist(const ParseNode &in_list,
+                                               const ParamStore *param_store,
+                                               const int64_t threshold,
+                                               bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  is_small = false;
+  bool all_integers = true;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> distinct_values;
+  if (OB_ISNULL(in_list.children_) || in_list.num_child_ <= 0 || threshold <= 1) {
+  } else if (OB_FAIL(distinct_values.create(threshold, "InListDistinct", "InListDistinct"))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && all_integers && distinct_values.size() < threshold
+                        && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      int64_t value = 0;
+      if (OB_ISNULL(node)) {
+        all_integers = false;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_QUESTIONMARK == node->type_ && OB_NOT_NULL(param_store)
+                 && node->value_ >= 0 && node->value_ < param_store->count()
+                 && ObIntType == param_store->at(node->value_).get_type()) {
+        value = param_store->at(node->value_).get_int();
+      } else {
+        all_integers = false;
+      }
+      if (all_integers) {
+        const int hash_ret = distinct_values.set_refactored(value, 0);
+        if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
+          ret = hash_ret;
+        }
+      }
+    }
+    is_small = OB_SUCC(ret) && all_integers && distinct_values.size() < threshold;
+  }
+  return ret;
+}
+
+int ObInListResolver::deduplicate_integer_inlist(ObRawExpr &right_expr,
+                                                  ObQueryCtx &query_ctx)
+{
+  int ret = OB_SUCCESS;
+  bool supported = true;
+  hash::ObHashMap<int64_t, ObRawExpr *, hash::NoPthreadDefendMode> representatives;
+  ObSEArray<ObRawExpr *, 16> unique_exprs;
+  ObQuestionmarkEqualCtx cmp_ctx(false);
+  if (OB_FAIL(representatives.create(right_expr.get_param_count(),
+                                     "InListDistinct", "InListDistinct"))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && supported && i < right_expr.get_param_count(); ++i) {
+      ObRawExpr *expr = right_expr.get_param_expr(i);
+      if (OB_ISNULL(expr) || !expr->is_const_raw_expr()) {
+        supported = false;
+      } else {
+        ObConstRawExpr *constant = static_cast<ObConstRawExpr *>(expr);
+        const ObObj &value = T_QUESTIONMARK == expr->get_expr_type()
+                             ? constant->get_param() : constant->get_value();
+        if (ObIntType != value.get_type()) {
+          supported = false;
+        } else {
+          ObRawExpr *representative = NULL;
+          const int hash_ret = representatives.get_refactored(value.get_int(), representative);
+          if (OB_HASH_NOT_EXIST == hash_ret) {
+            if (OB_FAIL(representatives.set_refactored(value.get_int(), expr))) {
+            } else if (OB_FAIL(unique_exprs.push_back(expr))) {
+            }
+          } else if (OB_SUCCESS == hash_ret) {
+            const bool equal = expr->same_as(*representative, &cmp_ctx);
+            if (OB_SUCCESS != cmp_ctx.err_code_) {
+              ret = cmp_ctx.err_code_;
+            } else if (!equal) {
+              supported = false;
+            }
+          } else {
+            ret = hash_ret;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && supported) {
+      if (OB_FAIL(append(query_ctx.all_equal_param_constraints_, cmp_ctx.equal_pairs_))) {
+      } else if (OB_FAIL(static_cast<ObOpRawExpr &>(right_expr).set_param_exprs(unique_exprs))) {
+      }
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -275,10 +366,12 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObStmt *stmt,
                                                   ObIAllocator &alloc,
                                                   bool &is_question_mark,
-                                                  bool &is_enable)
+                                                  bool &is_enable,
+                                                  bool &deduplicate)
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  deduplicate = false;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -347,6 +440,20 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
           ret = OB_ERR_UNEXPECTED;
         } else if (ob_is_enum_or_set_type(rewrite_info.param_types_.at(j).obj_type_)) {
           is_enable = false;
+        }
+      }
+      if (OB_SUCC(ret) && is_enable && T_OP_IN == op_type && 1 == column_cnt
+          && !is_prepare_stmt && OB_NOT_NULL(stmt) && threshold > 1
+          && 1 == rewrite_info.param_types_.count()
+          && ObIntType == rewrite_info.param_types_.at(0).obj_type_) {
+        bool is_small = false;
+        const int tmp_ret = check_small_distinct_integer_inlist(in_list, param_store, threshold, is_small);
+        if (OB_SUCCESS != tmp_ret) {
+          // This is only a cost check, so keep the original rewrite decision on failure.
+          LOG_WARN("failed to count distinct integer IN values", K(tmp_ret));
+        } else if (is_small) {
+          is_enable = false;
+          deduplicate = true;
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;

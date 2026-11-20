@@ -1,0 +1,118 @@
+DROP TABLE IF EXISTS inlist_duplicate_rewrite;
+CREATE TABLE inlist_duplicate_rewrite (id INT PRIMARY KEY, c INT);
+INSERT INTO inlist_duplicate_rewrite VALUES (1,1),(2,2),(3,3),(4,4),(5,NULL);
+# Two distinct values stay below a four-value rewrite threshold.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,1,2,1,2);
+Query Plan
+=============================================
+|ID|OPERATOR       |NAME                    |
+---------------------------------------------
+|0 |TABLE FULL SCAN|inlist_duplicate_rewrite|
+=============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicate_rewrite.id]), filter([inlist_duplicate_rewrite.c IN (1, 2)]), rowset=16
+      access([inlist_duplicate_rewrite.id], [inlist_duplicate_rewrite.c]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([inlist_duplicate_rewrite.id]), range(MIN ; MAX)always true
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,1,2,1,2) ORDER BY id;
+id
+1
+2
+# Four distinct values still reach the rewrite threshold.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,3,4,1,2);
+Query Plan
+=======================================================
+|ID|OPERATOR                 |NAME                    |
+-------------------------------------------------------
+|0 |HASH JOIN                |                        |
+|1 |├─SUBPLAN SCAN           |VIEW2                   |
+|2 |│ └─HASH DISTINCT        |                        |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1           |
+|4 |└─TABLE FULL SCAN        |inlist_duplicate_rewrite|
+=======================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicate_rewrite.id]), filter(nil), rowset=16
+      equal_conds([inlist_duplicate_rewrite.c = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([inlist_duplicate_rewrite.id], [inlist_duplicate_rewrite.c]), filter(nil), rowset=16
+      access([inlist_duplicate_rewrite.id], [inlist_duplicate_rewrite.c]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([inlist_duplicate_rewrite.id]), range(MIN ; MAX)always true
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,3,4,1,2) ORDER BY id;
+id
+1
+2
+3
+4
+# NULL and NOT IN retain three-valued logic.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,1,NULL,NULL,1,1) ORDER BY id;
+id
+1
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c NOT IN (1,1,NULL,NULL,1,1) ORDER BY id;
+id
+# A cached statement keeps every original parameter position.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,1,2,1,2) ORDER BY id;
+id
+1
+2
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1,2,3,4,3,4) ORDER BY id;
+id
+1
+2
+3
+4
+# Prepared statements may execute with different duplicate patterns.
+PREPARE stmt FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (?,?,?,?,?,?) ORDER BY id';
+SET @a=1,@b=2,@c=1,@d=2,@e=1,@f=2;
+EXECUTE stmt USING @a,@b,@c,@d,@e,@f;
+id
+1
+2
+SET @c=3,@d=4,@e=3,@f=4;
+EXECUTE stmt USING @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+4
+DEALLOCATE PREPARE stmt;
+# Expression operands use the same deduplicated IN list.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c + 0 IN (1,2,1,2,1,2);
+Query Plan
+=============================================
+|ID|OPERATOR       |NAME                    |
+---------------------------------------------
+|0 |TABLE FULL SCAN|inlist_duplicate_rewrite|
+=============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicate_rewrite.id]), filter([inlist_duplicate_rewrite.c + 0 IN (1, 2)]), rowset=16
+      access([inlist_duplicate_rewrite.id], [inlist_duplicate_rewrite.c]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([inlist_duplicate_rewrite.id]), range(MIN ; MAX)always true
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c + 0 IN (1,2,1,2,1,2) ORDER BY id;
+id
+1
+2
+# Numeric and string parameters preserve their comparison semantics.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE c IN (1.0,2.0,1.0,2.0,1.0,2.0) ORDER BY id;
+id
+1
+2
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE CAST(c AS CHAR) IN ('1','2','1','2','1','2') ORDER BY id;
+id
+1
+2
+# Row-valued IN lists retain the existing rewrite path.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_duplicate_rewrite WHERE (id,c) IN ((1,1),(2,2),(1,1),(2,2)) ORDER BY id;
+id
+1
+2
+DROP TABLE inlist_duplicate_rewrite;
