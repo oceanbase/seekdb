@@ -449,6 +449,7 @@ psmall_test=[
 'vector_index.all_virtual_vector_index_info',
 'vector_index.create_table_with_vector_index',
 'vector_index.drop_vector_index',
+'vector_index.ddl_identifier_layering',
 'vector_index.fix_rebuild_or_post_create_hung',
 'vector_index.rebuild_vector_index',
 'vector_index.vector_calc_gbk_mysql',

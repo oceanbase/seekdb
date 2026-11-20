@@ -80,6 +80,34 @@ int ObSqlString::append(const ObString &str)
   return append(str.ptr(), str.length());
 }
 
+int ObSqlString::append_escaped_identifier(const ObString &identifier)
+{
+  int ret = OB_SUCCESS;
+  const int64_t len = identifier.length();
+  if (len < 0 || (len > 0 && OB_ISNULL(identifier.ptr()))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (len > 0) {
+    // Stage the escaped bytes so that the input may refer to this string and an
+    // allocation failure does not leave a partially appended identifier.
+    ObSqlString escaped;
+    if (OB_FAIL(escaped.reserve(2 * len))) {
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; i < len; ++i) {
+        const char ch = identifier.ptr()[i];
+        escaped.ptr()[pos++] = ch;
+        if ('`' == ch) {
+          escaped.ptr()[pos++] = ch;
+        }
+      }
+      if (OB_FAIL(escaped.set_length(pos))) {
+      } else if (OB_FAIL(append(escaped.string()))) {
+      }
+    }
+  }
+  return ret;
+}
+
 int ObSqlString::append_fmt(const char *fmt, ...)
 {
   int ret = OB_SUCCESS;
