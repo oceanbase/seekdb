@@ -163,6 +163,11 @@ private:
   int canonicalize_conditions(ObDMLStmt *stmt, bool &trans_happened);
   int recursive_canonicalize_join_conditions(ObDMLStmt *stmt, TableItem *table, bool &trans_happened);
   int do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
+  int convert_or_equalities_to_in(ObDMLStmt *stmt, bool &trans_happened);
+  int try_convert_or_equalities_to_in(ObRawExpr *&expr, bool &trans_happened);
+  int extract_or_branch_equality(ObRawExpr *branch,
+                                 ObRawExpr *&column_side,
+                                 ObRawExpr *&const_side);
   int push_not(ObIArray<ObRawExpr*> &conditions,
                bool &trans_happened);
   int recursive_push_not(ObRawExpr *&expr,

@@ -1,0 +1,127 @@
+drop table if exists t_or_in;
+create table t_or_in(id int primary key, age int, name varchar(8));
+insert into t_or_in values(1,1,'a'),(2,2,'b'),(3,3,'c'),(4,4,'d'),(5,5,'e');
+insert into t_or_in values(6,6,'f'),(7,7,'g'),(8,8,'h'),(9,9,'i'),(10,10,'j');
+insert into t_or_in values(11,11,'k'),(12,12,'l'),(13,13,'m'),(14,14,'n'),(15,15,'o');
+insert into t_or_in values(16,16,'p'),(17,17,'q'),(18,18,'r'),(19,19,'s'),(20,20,'t');
+insert into t_or_in values(21,null,'u'),(22,100,'v');
+insert into t_or_in values(23,-3,'w'),(24,-2,'x'),(25,-1,'y'),(26,0,'z');
+# a dense chain in a scrambled order selects the same rows as the equivalent list
+select id from t_or_in where age = 9 or age = 7 or age = 12 or age = 5 or age = 11 or age = 6 or age = 10 or age = 8 order by id;
+id
+5
+6
+7
+8
+9
+10
+11
+12
+select id from t_or_in where age in (5,6,7,8,9,10,11,12) order by id;
+id
+5
+6
+7
+8
+9
+10
+11
+12
+# a chain with a gap selects the same rows as before the rewrite
+select id from t_or_in where age = 5 or age = 6 or age = 7 or age = 9 or age = 10 or age = 11 or age = 12 or age = 13 order by id;
+id
+5
+6
+7
+9
+10
+11
+12
+13
+select id from t_or_in where age in (5,6,7,9,10,11,12,13) order by id;
+id
+5
+6
+7
+9
+10
+11
+12
+13
+# a repeated value does not change the result
+select id from t_or_in where age = 5 or age = 5 or age = 6 or age = 7 or age = 8 or age = 9 or age = 10 or age = 11 order by id;
+id
+5
+6
+7
+8
+9
+10
+11
+# the column may be compared on either side of the equality
+select id from t_or_in where 5 = age or 6 = age or 7 = age or 8 = age or 9 = age or 10 = age or 11 = age or 12 = age order by id;
+id
+5
+6
+7
+8
+9
+10
+11
+12
+# the chain may be nested inside a conjunction
+select id from t_or_in where id > 0 and (age = 5 or age = 6 or age = 7 or age = 8 or age = 9 or age = 10 or age = 11 or age = 12) order by id;
+id
+5
+6
+7
+8
+9
+10
+11
+12
+# negative values are handled as well
+select id from t_or_in where age = -3 or age = -2 or age = -1 or age = 0 or age = 1 or age = 2 or age = 3 or age = 4 order by id;
+id
+1
+2
+3
+4
+23
+24
+25
+26
+# branches on different columns are not folded
+select id from t_or_in where age = 5 or age = 6 or age = 7 or age = 8 or age = 9 or age = 10 or age = 11 or id = 21 order by id;
+id
+5
+6
+7
+8
+9
+10
+11
+21
+# a nullable column keeps NULL semantics: the NULL row matches no branch
+select id from t_or_in where age = 1 or age = 2 or age = 3 or age = 4 or age = 5 or age = 6 or age = 7 or age = 8 order by id;
+id
+1
+2
+3
+4
+5
+6
+7
+8
+# non integer columns keep the original predicate
+select id from t_or_in where name = 'a' or name = 'b' or name = 'c' or name = 'd' or name = 'e' or name = 'f' or name = 'g' or name = 'h' order by id;
+id
+1
+2
+3
+4
+5
+6
+7
+8
+drop table t_or_in;
