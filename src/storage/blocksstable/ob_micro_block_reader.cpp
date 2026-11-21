@@ -658,6 +658,13 @@ int ObMicroBlockReader::get_multi_version_info(
   return ret;
 }
 
+struct ObIMicroBlockFlatReader::RustFlatBatch
+{
+  std::vector<uint32_t> rows;
+  std::vector<uint32_t> columns;
+  std::optional<micro_block::BatchResult> result;
+};
+
 int ObMicroBlockReader::filter_pushdown_filter(
     const sql::ObPushdownFilterExecutor *parent,
     sql::ObPushdownFilterExecutor &filter,
@@ -788,31 +795,62 @@ int ObMicroBlockReader::filter_truncate_evaluator(
         new (datum_buf + i) ObStorageDatum();
       }
     }
+    std::vector<int32_t> row_ids;
+    std::vector<int32_t> result_offsets;
+    row_ids.reserve(count);
+    result_offsets.reserve(count);
     for (int64_t offset = 0; OB_SUCC(ret) && offset < count; ++offset) {
-      const int64_t row_idx = offset + start;
       if (nullptr != candidate_rows && !candidate_rows->test(offset)) {
-        continue;
       } else {
-        ObStorageDatum tmp_datum; // used for deep copy decimalint
-        for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
-          ObStorageDatum &datum = datum_buf[i];
-          const int64_t column_index = evaluator.referenced_column(i);
-          datum.reuse();
-          tmp_datum.reuse();
-          if (OB_UNLIKELY(column_index < 0 || column_index >= cols_desc.count())) {
-            ret = OB_INDEX_OUT_OF_RANGE;
-          } else if (OB_FAIL(flat_row_reader_.read_column(
-                         data_begin_ + index_data_[row_idx],
-                         index_data_[row_idx + 1] - index_data_[row_idx],
-                         column_index,
-                         tmp_datum))) {
-          } else if (OB_UNLIKELY(header_->is_trans_version_column_idx(column_index))) {
-            datum.set_int(-tmp_datum.get_int());
-          } else {
-            const ObObjType obj_type = cols_desc.at(column_index).col_type_.get_type();
-            const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
-            if (OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
-            }
+        row_ids.push_back(static_cast<int32_t>(start + offset));
+        result_offsets.push_back(static_cast<int32_t>(offset));
+      }
+    }
+    RustFlatBatch rust_batch;
+    bool read_by_rust = false;
+    if (OB_SUCC(ret) && !row_ids.empty()) {
+      rust_batch.columns.reserve(column_count);
+      for (int64_t i = 0; i < column_count; ++i) {
+        const int64_t column_index = evaluator.referenced_column(i);
+        if (OB_UNLIKELY(column_index < 0 || column_index >= cols_desc.count())) {
+          ret = OB_INDEX_OUT_OF_RANGE;
+          break;
+        }
+        rust_batch.columns.push_back(static_cast<uint32_t>(column_index));
+      }
+      if (OB_SUCC(ret)) {
+        ret = try_project_rust(row_ids.data(), row_ids.size(), rust_batch);
+        if (OB_NOT_SUPPORTED == ret) {
+          ret = OB_SUCCESS;
+        } else if (OB_SUCC(ret)) {
+          read_by_rust = true;
+        }
+      }
+    }
+    for (int64_t row = 0; OB_SUCC(ret) && row < row_ids.size(); ++row) {
+      ObStorageDatum tmp_datum; // used for deep copy decimalint
+      for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
+        ObStorageDatum &datum = datum_buf[i];
+        const int64_t column_index = evaluator.referenced_column(i);
+        datum.reuse();
+        tmp_datum.reuse();
+        if (read_by_rust) {
+          ret = read_rust_cell(rust_batch, row, i, tmp_datum);
+        } else {
+          const int64_t row_idx = row_ids[row];
+          ret = flat_row_reader_.read_column(
+              data_begin_ + index_data_[row_idx],
+              index_data_[row_idx + 1] - index_data_[row_idx],
+              column_index,
+              tmp_datum);
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_UNLIKELY(header_->is_trans_version_column_idx(column_index))) {
+          datum.set_int(-tmp_datum.get_int());
+        } else {
+          const ObObjType obj_type = cols_desc.at(column_index).col_type_.get_type();
+          const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
+          if (OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
           }
         }
       }
@@ -820,7 +858,7 @@ int ObMicroBlockReader::filter_truncate_evaluator(
         bool filtered = false;
         if (OB_FAIL(evaluator.filter_projected(datum_buf, column_count, filtered))) {
         } else if (!filtered) {
-          if (OB_FAIL(result_bitmap.set(offset))) {
+          if (OB_FAIL(result_bitmap.set(result_offsets[row]))) {
           }
         }
       }
@@ -830,13 +868,6 @@ int ObMicroBlockReader::filter_truncate_evaluator(
   }
   return ret;
 }
-
-struct ObIMicroBlockFlatReader::RustFlatBatch
-{
-  std::vector<uint32_t> rows;
-  std::vector<uint32_t> columns;
-  std::optional<micro_block::BatchResult> result;
-};
 
 int ObIMicroBlockFlatReader::read_row(
     const ObITableReadInfo *read_info,
