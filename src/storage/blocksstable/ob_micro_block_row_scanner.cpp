@@ -634,34 +634,34 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
                 sstable_->is_major_sstable(),
                 bitmap))) {
     }
-  } else if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
-    if (filter->is_semistruct_filter_node()) {
+  } else if (filter->is_semistruct_filter_node()) {
+    if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
       sql::ObPhysicalFilterExecutor *physical_filter = static_cast<sql::ObPhysicalFilterExecutor *>(filter);
       if (OB_FAIL(decoder_->filter_pushdown_filter(parent,
                                                    *physical_filter,
                                                    pd_filter_info,
                                                    bitmap))) {
       }
-    } else if (filter->is_filter_black_node()) {
-      sql::ObBlackFilterExecutor *black_filter = static_cast<sql::ObBlackFilterExecutor *>(filter);
-      if (OB_FAIL(apply_black_filter_batch(
-                  parent,
-                  *black_filter,
-                  pd_filter_info,
-                  bitmap))) {
-      }
     } else {
-      if (OB_FAIL(apply_white_filter(
+      if (OB_FAIL(flat_reader_->filter_pushdown_filter(
                   parent,
-                  *static_cast<sql::ObWhiteFilterExecutor *>(filter),
+                  *filter,
                   pd_filter_info,
                   bitmap))) {
       }
     }
-  } else {
-    if (OB_FAIL(flat_reader_->filter_pushdown_filter(
+  } else if (filter->is_filter_black_node()) {
+    sql::ObBlackFilterExecutor *black_filter = static_cast<sql::ObBlackFilterExecutor *>(filter);
+    if (OB_FAIL(apply_black_filter_batch(
                 parent,
-                *filter,
+                *black_filter,
+                pd_filter_info,
+                bitmap))) {
+    }
+  } else {
+    if (OB_FAIL(apply_white_filter(
+                parent,
+                *static_cast<sql::ObWhiteFilterExecutor *>(filter),
                 pd_filter_info,
                 bitmap))) {
     }
