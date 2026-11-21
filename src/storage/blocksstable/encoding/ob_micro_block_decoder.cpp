@@ -1274,16 +1274,33 @@ OB_INLINE int ObMicroBlockDecoder::get_row_impl(int64_t index, ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(index >= row_count_ || !row.is_valid())) {
+  } else if (OB_UNLIKELY(index < 0 || index >= row_count_ || !row.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (row.get_capacity() < request_cnt_) {
+    ret = OB_BUF_NOT_ENOUGH;
   } else {
-    int64_t row_len = 0;
-    const char *row_data = NULL;
-    if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
-    } else if (row.get_capacity() < request_cnt_) {
-      ret = OB_BUF_NOT_ENOUGH;
-    } else if (OB_FAIL(decode_cells(index, row_len, row_data, 0, request_cnt_, row.storage_datums_))) {
+    ObSEArray<int32_t, 16> cols;
+    ObSEArray<ObSqlDatumInfo, 16> datum_infos;
+    const int32_t row_id = static_cast<int32_t>(index);
+    for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) {
+      row.storage_datums_[i].reuse();
+      if (OB_FAIL(cols.push_back(static_cast<int32_t>(i)))) {
+      } else {
+        ret = datum_infos.push_back(ObSqlDatumInfo(row.storage_datums_ + i, nullptr));
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_NOT_SUPPORTED != (ret = try_get_rows_rust(
+            cols, &row_id, 1, datum_infos, 0, true))) {
     } else {
+      int64_t row_len = 0;
+      const char *row_data = nullptr;
+      ret = row_index_->get(index, row_data, row_len);
+      if (OB_SUCC(ret)) {
+        ret = decode_cells(index, row_len, row_data, 0, request_cnt_, row.storage_datums_);
+      }
+    }
+    if (OB_SUCC(ret)) {
       row.row_flag_.reset();
       row.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
       row.count_ = request_cnt_;
@@ -1305,25 +1322,46 @@ int ObMicroBlockDecoder::compare_rowkey(const ObDatumRowkey &rowkey, const int64
 {
   int ret = OB_SUCCESS;
   compare_result = 0;
-  int64_t row_len = 0;
-  const char *row_data = nullptr;
-  if (OB_UNLIKELY(index  >= row_count_ || nullptr == datum_utils_)) {
+  if (OB_UNLIKELY(index < 0 || index >= row_count_ || nullptr == datum_utils_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
   } else {
     const ObStorageDatumUtils &datum_utils = *datum_utils_;
-    ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
-    int64_t compare_column_count = rowkey.get_datum_cnt();
+    const int64_t compare_column_count = rowkey.get_datum_cnt();
     if (OB_UNLIKELY(datum_utils.get_rowkey_count() < compare_column_count)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected datum utils to compare rowkey", K(ret), K(compare_column_count), K(datum_utils));
     } else {
-      ObStorageDatum store_datum;
+      ObSEArray<int32_t, 16> cols;
+      ObSEArray<ObStorageDatum, 16> store_datums;
+      ObSEArray<ObSqlDatumInfo, 16> datum_infos;
+      const int32_t row_id = static_cast<int32_t>(index);
+      if (OB_FAIL(store_datums.prepare_allocate(compare_column_count))) {
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < compare_column_count; ++i) {
+        if (OB_FAIL(cols.push_back(static_cast<int32_t>(i)))) {
+        } else {
+          ret = datum_infos.push_back(ObSqlDatumInfo(&store_datums.at(i), nullptr));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_NOT_SUPPORTED != (ret = try_get_rows_rust(
+              cols, &row_id, 1, datum_infos, 0))) {
+      } else {
+        int64_t row_len = 0;
+        const char *row_data = nullptr;
+        ret = row_index_->get(index, row_data, row_len);
+        if (OB_SUCC(ret)) {
+          ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
+          for (int64_t i = 0; OB_SUCC(ret) && i < compare_column_count; ++i) {
+            store_datums.at(i).reuse();
+            if (OB_FAIL(decoders_[i].decode(store_datums.at(i), index, bs, row_data, row_len))) {
+            }
+          }
+        }
+      }
       for (int64_t i = 0; OB_SUCC(ret) && i < compare_column_count && 0 == compare_result; ++i) {
-        // before calling decode, datum ptr should point to the local buffer
-        store_datum.reuse();
-        if (OB_FAIL((decoders_ + i)->decode(store_datum, index, bs, row_data, row_len))) {
-        } else if (OB_FAIL(datum_utils.get_cmp_funcs().at(i).compare(store_datum, rowkey.datums_[i], compare_result))) {
+        if (OB_FAIL(datum_utils.get_cmp_funcs().at(i).compare(
+                store_datums.at(i), rowkey.datums_[i], compare_result))) {
         }
       }
     }
@@ -1339,33 +1377,51 @@ int ObMicroBlockDecoder::compare_rowkey(const ObDatumRange &range,
   int ret = OB_SUCCESS;
   start_key_compare_result = 0;
   end_key_compare_result = 0;
-  int64_t row_len = 0;
-  const char *row_data = nullptr;
   const ObDatumRowkey &start_rowkey = range.get_start_key();
   const ObDatumRowkey &end_rowkey = range.get_end_key();
-  if (OB_UNLIKELY(index >= row_count_ || nullptr == datum_utils_)) {
+  if (OB_UNLIKELY(index < 0 || index >= row_count_ || nullptr == datum_utils_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
   } else {
     const ObStorageDatumUtils &datum_utils = *datum_utils_;
-    ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
-    int64_t compare_column_count = start_rowkey.get_datum_cnt();
+    const int64_t compare_column_count = start_rowkey.get_datum_cnt();
     if (OB_UNLIKELY(datum_utils.get_rowkey_count() < compare_column_count)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected datum utils to compare rowkey", K(ret), K(compare_column_count), K(datum_utils));
     } else {
-      ObStorageDatum store_datum;
-      for (int64_t i = 0; OB_SUCC(ret) && i < compare_column_count && 0 == start_key_compare_result; ++i) {
-        // before calling decode, datum ptr should point to the local buffer
-        store_datum.reuse();
-        if (OB_FAIL((decoders_ + i)->decode(store_datum, index, bs, row_data, row_len))) {
-        } else if (OB_FAIL(datum_utils.get_cmp_funcs().at(i).compare(
-                store_datum, start_rowkey.datums_[i], start_key_compare_result))) {
+      ObSEArray<int32_t, 16> cols;
+      ObSEArray<ObStorageDatum, 16> store_datums;
+      ObSEArray<ObSqlDatumInfo, 16> datum_infos;
+      const int32_t row_id = static_cast<int32_t>(index);
+      if (OB_FAIL(store_datums.prepare_allocate(compare_column_count))) {
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < compare_column_count; ++i) {
+        if (OB_FAIL(cols.push_back(static_cast<int32_t>(i)))) {
         } else {
-          if (start_key_compare_result >= 0 && 0 == end_key_compare_result) {
-            if (OB_FAIL(datum_utils.get_cmp_funcs().at(i).compare(
-                    store_datum, end_rowkey.datums_[i], end_key_compare_result))) {
+          ret = datum_infos.push_back(ObSqlDatumInfo(&store_datums.at(i), nullptr));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_NOT_SUPPORTED != (ret = try_get_rows_rust(
+              cols, &row_id, 1, datum_infos, 0))) {
+      } else {
+        int64_t row_len = 0;
+        const char *row_data = nullptr;
+        ret = row_index_->get(index, row_data, row_len);
+        if (OB_SUCC(ret)) {
+          ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
+          for (int64_t i = 0; OB_SUCC(ret) && i < compare_column_count; ++i) {
+            store_datums.at(i).reuse();
+            if (OB_FAIL(decoders_[i].decode(store_datums.at(i), index, bs, row_data, row_len))) {
             }
+          }
+        }
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < compare_column_count && 0 == start_key_compare_result; ++i) {
+        if (OB_FAIL(datum_utils.get_cmp_funcs().at(i).compare(
+                store_datums.at(i), start_rowkey.datums_[i], start_key_compare_result))) {
+        } else if (start_key_compare_result >= 0 && 0 == end_key_compare_result) {
+          if (OB_FAIL(datum_utils.get_cmp_funcs().at(i).compare(
+                  store_datums.at(i), end_rowkey.datums_[i], end_key_compare_result))) {
           }
         }
       }
@@ -1607,7 +1663,8 @@ int ObMicroBlockDecoder::try_get_rows_rust(
     const int32_t *row_ids,
     const int64_t row_cap,
     common::ObIArray<ObSqlDatumInfo> &datum_infos,
-    const int64_t datum_offset)
+    const int64_t datum_offset,
+    const bool preserve_nop)
 {
   int ret = OB_NOT_SUPPORTED;
   if (row_cap < 0 || row_cap > UINT32_MAX || cols.count() <= 0
@@ -1695,8 +1752,12 @@ int ObMicroBlockDecoder::try_get_rows_rust(
       const micro_block::CellDesc &cell = result.cells[row_idx * cols.count() + col_idx];
       common::ObDatum &datum = datums[row_idx];
       if (1 == cell.kind || 2 == cell.kind) {
-        datum.set_null();
-        datum.len_ = 0;
+        if (preserve_nop && 2 == cell.kind) {
+          datum.set_ext();
+          const_cast<ObObj *>(datum.extend_obj_)->set_ext(ObActionFlag::OP_NOP);
+        } else {
+          datum.set_null();
+        }
       } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size_)
                  || cell.length > static_cast<uint64_t>(block_size_) - cell.offset) {
         ret = OB_INVALID_DATA;
@@ -1818,20 +1879,16 @@ int ObMicroBlockDecoder::get_column_datum(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(col_offset >= header_->column_count_ || row_index >= row_count_)) {
+  } else if (OB_UNLIKELY(col_offset < 0 || col_offset >= header_->column_count_
+             || row_index < 0 || row_index >= row_count_ || row_index > INT32_MAX)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    int64_t row_len = 0;
-    const char *row_data = NULL;
-    const int row_header_size = ObRowHeader::get_serialized_size();
-    if (OB_FAIL(row_index_->get(row_index, row_data, row_len))) {
-    } else {
-      ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
-      datum.reuse();
-      if (OB_FAIL(decoders_[col_offset].decode(datum, row_index, bs, row_data, row_len))) {
-      } else if (col_param.get_meta_type().is_lob_storage() && !datum.is_null() && !datum.get_lob_data().in_row_) {
-        if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
-        }
+    const int32_t row_id = static_cast<int32_t>(row_index);
+    const char *cell_data = nullptr;
+    datum.reuse();
+    if (OB_FAIL(get_col_datums(col_offset, &row_id, &cell_data, 1, &datum))) {
+    } else if (col_param.get_meta_type().is_lob_storage() && !datum.is_null() && !datum.get_lob_data().in_row_) {
+      if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
       }
     }
   }

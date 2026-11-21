@@ -348,7 +348,8 @@ private:
       const int32_t *row_ids,
       const int64_t row_cap,
       common::ObIArray<ObSqlDatumInfo> &datum_infos,
-      const int64_t datum_offset);
+      const int64_t datum_offset,
+      const bool preserve_nop = false);
   int get_row_impl(int64_t index, ObDatumRow &row);
   OB_INLINE static const ObRowHeader &get_major_store_row_header()
   {
