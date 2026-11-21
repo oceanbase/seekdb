@@ -73,68 +73,7 @@ public:
 
   bool is_inited() const { return NULL != meta_header_; }
 
-  virtual int pushdown_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObWhiteFilterExecutor &filter,
-      const char* meta_data,
-      const ObIRowIndex* row_index,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const override;
-
 private:
-  int nu_nn_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  int eq_ne_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  int comparison_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  int bt_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  template <typename ObFilterExecutor>
-  int in_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const ObFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  int cmp_ref_and_set_res(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const int64_t dict_ref,
-      const sql::ObWhiteFilterOperatorType cmp_op,
-      bool flag,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  int set_res_with_bitset(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObBitVector *ref_bitset,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
   template <typename T>
   int extract_ref_and_null_count(
       const int32_t *row_ids,

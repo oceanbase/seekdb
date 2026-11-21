@@ -60,15 +60,6 @@ public:
       const char **cell_datas,
       const int64_t row_cap,
       common::ObDatum *datums) const override;
-  virtual int pushdown_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObWhiteFilterExecutor &filter,
-      const char* meta_data,
-      const ObIRowIndex* row_index,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const override;
-
   virtual int get_null_count(
       const ObColumnDecoderCtx &ctx,
       const ObIRowIndex *row_index,
@@ -92,42 +83,6 @@ private:
     STORAGE_LOG(WARN, "Undefined delta calculation", K(ret));
     return ret;
   }
-
-  int comparison_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const unsigned char* col_data,
-      const sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  int bt_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const unsigned char* col_data,
-      const sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  int in_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const unsigned char* col_data,
-      const sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  int traverse_all_data(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const unsigned char* col_data,
-      const sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap,
-      int (*lambda)(
-          const ObDatum &cur_datum,
-          const sql::ObWhiteFilterExecutor &filter,
-          bool &result)) const;
 
 private:
   const ObIntegerBaseDiffHeader *header_;

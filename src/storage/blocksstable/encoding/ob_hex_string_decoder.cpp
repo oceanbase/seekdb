@@ -209,51 +209,5 @@ int ObHexStringDecoder::batch_decode(
   return ret;
 }
 
-int ObHexStringDecoder::pushdown_operator(
-    const sql::ObPushdownFilterExecutor *parent,
-    const ObColumnDecoderCtx &col_ctx,
-    const sql::ObWhiteFilterExecutor &filter,
-    const char* meta_data,
-    const ObIRowIndex* row_index,
-    const sql::PushdownFilterInfo &pd_filter_info,
-    ObBitmap &result_bitmap) const
-{
-  // No enough meta data to improve comparison operation, so only implement is null, not null operator here
-  // Other pushdown operators will retrograde to row-wise decode and compare
-  UNUSEDx(parent, meta_data);
-  int ret = OB_SUCCESS;
-  const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
-  const char *col_data = reinterpret_cast<const char *>(header_) + col_ctx.col_header_->length_;
-  const unsigned char *col_u_data = reinterpret_cast<const unsigned char*>(col_data);
-  if (OB_UNLIKELY(op_type >= sql::WHITE_OP_MAX)
-      || OB_ISNULL(row_index)
-      || OB_ISNULL(col_data)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (col_ctx.is_fix_length() || col_ctx.is_bit_packing()) {
-    if (OB_FAIL(get_is_null_bitmap_from_fixed_column(col_ctx, col_u_data, pd_filter_info, result_bitmap))) {
-    }
-  } else {
-    if (OB_FAIL(get_is_null_bitmap_from_var_column(col_ctx, row_index, pd_filter_info, result_bitmap))) {
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    switch (op_type) {
-      case sql::WHITE_OP_NU: {
-        break;
-      }
-      case sql::WHITE_OP_NN: {
-        if (OB_FAIL(result_bitmap.bit_not())) {
-        }
-        break;
-      }
-      default: {
-        ret = OB_NOT_SUPPORTED;
-      }
-    }
-  }
-  return ret;
-}
-
 } // end namespace blocksstable
 } // end namespace oceanbase

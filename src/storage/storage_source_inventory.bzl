@@ -178,8 +178,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/encoding/ob_rle_decoder.cpp",
             "src/storage/blocksstable/encoding/ob_string_diff_decoder.cpp",
             "src/storage/blocksstable/encoding/ob_string_prefix_decoder.cpp",
-            "src/storage/blocksstable/encoding/neon/ob_dict_decoder_neon.cpp",
-            "src/storage/blocksstable/encoding/neon/ob_raw_decoder_neon.cpp",
         ],
     ),
     struct(
@@ -890,17 +888,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx/ob_tx_print_time_guard.cpp",
             "src/storage/tx/ob_tx_timestamp_waiter.cpp",
             "src/storage/ddl/ob_tablet_copy_util.cpp",
-        ],
-    ),
-]
-
-STORAGE_SIMD_UNITY_GROUPS = [
-    struct(
-        name = "ob_storage_simd_common_0",
-        language = "c++",
-        srcs = [
-            "src/storage/blocksstable/encoding/ob_raw_decoder_simd.cpp",
-            "src/storage/blocksstable/encoding/ob_dict_decoder_simd.cpp",
         ],
     ),
 ]

@@ -145,33 +145,6 @@ public:
     return common::OB_NOT_SUPPORTED;
   }
 
-  virtual int pushdown_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObWhiteFilterExecutor &filter,
-      const char* meta_data,
-      const ObIRowIndex* row_index,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const
-  {
-    UNUSEDx(parent, col_ctx, filter, meta_data, row_index, pd_filter_info, result_bitmap);
-    return common::OB_NOT_SUPPORTED;
-  }
-
-  virtual int pushdown_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      sql::ObBlackFilterExecutor &filter,
-      const char* meta_data,
-      const ObIRowIndex* row_index,
-      sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap,
-      bool &filter_applied) const
-  {
-    UNUSEDx(parent, col_ctx, filter, meta_data, row_index, pd_filter_info, result_bitmap, filter_applied);
-    return common::OB_NOT_SUPPORTED;
-  }
-
   OB_INLINE virtual int locate_row_data(
       const ObColumnDecoderCtx &col_ctx,
       const ObIRowIndex* row_index,
@@ -186,18 +159,6 @@ public:
       const int64_t row_cap,
       const char **row_datas,
       common::ObDatum *datums) const;
-
-  virtual int get_is_null_bitmap_from_fixed_column(
-      const ObColumnDecoderCtx &col_ctx,
-      const unsigned char* col_data,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
-  virtual int get_is_null_bitmap_from_var_column(
-      const ObColumnDecoderCtx &col_ctx,
-      const ObIRowIndex* row_index,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
 
   virtual int set_null_datums_from_fixed_column(
       const ObColumnDecoderCtx &ctx,

@@ -241,17 +241,6 @@ public:
       sql::ObPhysicalFilterExecutor &filter,
       const sql::PushdownFilterInfo &pd_filter_info,
       common::ObBitmap &result_bitmap) override;
-  virtual int filter_pushdown_filter(
-      const sql::ObPushdownFilterExecutor *parent,
-      sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      common::ObBitmap &result_bitmap) override;
-  virtual int filter_black_filter_batch(
-      const sql::ObPushdownFilterExecutor *parent,
-      sql::ObBlackFilterExecutor &filter,
-      sql::PushdownFilterInfo &pd_filter_info,
-      common::ObBitmap &result_bitmap,
-      bool &filter_applied) override;
   virtual int filter_truncate_evaluator(
       storage::ObTruncateFilterEvaluator &evaluator,
       const int64_t start,
@@ -300,12 +289,6 @@ public:
   virtual void reserve_reader_memory(bool reserve) override
   {
     decoder_allocator_.set_reserve_memory(reserve);
-  }
-  virtual bool can_apply_black(const common::ObIArray<int32_t> &col_offsets) const override
-  {
-    return 1 == col_offsets.count() &&
-        (decoders_[col_offsets.at(0)].decoder_->is_new_column() || ObColumnHeader::DICT == decoders_[col_offsets.at(0)].ctx_->col_header_->type_) &&
-        header_->all_lob_in_row_;
   }
   virtual int get_distinct_count(const int32_t group_by_col, int64_t &distinct_cnt) const override;
   virtual int read_distinct(
@@ -391,15 +374,6 @@ private:
       const ObIColumnDecoder *&decoder);
   int acquire(const int64_t store_idx, int64_t &decoders_buf_pos, const ObIColumnDecoder *&decoder);
   int alloc_decoders_buf(const bool by_read_info, int64_t &decoders_buf_pos);
-  int filter_pushdown_retro(
-      const sql::ObPushdownFilterExecutor *parent,
-      sql::ObWhiteFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      const int32_t col_offset,
-      const share::schema::ObColumnParam *col_param,
-      ObStorageDatum &decoded_datum,
-      common::ObBitmap &result_bitmap);
-
 private:
   const ObMicroBlockHeader *header_;
   int64_t request_cnt_; // request column count

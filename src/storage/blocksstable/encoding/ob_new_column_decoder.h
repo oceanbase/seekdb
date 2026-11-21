@@ -43,15 +43,6 @@ public:
       common::ObDatum *datums) const;
 
 
-  int pushdown_operator(
-      const sql::ObWhiteFilterExecutor &filter,
-      ObBitmap &result_bitmap) const;
-
-  int pushdown_operator(
-      sql::ObBlackFilterExecutor &filter,
-      sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const;
-
   int get_null_count(
       const ObColumnParam *col_param,
       const int64_t row_cap,
@@ -99,34 +90,6 @@ public:
     return common_decoder_.batch_decode(ctx.col_param_, ctx.allocator_, row_cap, datums);
   }
 
-
-  virtual int pushdown_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      const sql::ObWhiteFilterExecutor &filter,
-      const char* meta_data,
-      const ObIRowIndex* row_index,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap) const override
-  {
-    UNUSEDx(parent, col_ctx, meta_data, row_index, pd_filter_info);
-    return common_decoder_.pushdown_operator(filter, result_bitmap);
-  }
-
-  virtual int pushdown_operator(
-      const sql::ObPushdownFilterExecutor *parent,
-      const ObColumnDecoderCtx &col_ctx,
-      sql::ObBlackFilterExecutor &filter,
-      const char* meta_data,
-      const ObIRowIndex* row_index,
-      sql::PushdownFilterInfo &pd_filter_info,
-      ObBitmap &result_bitmap,
-      bool &filter_applied) const override
-  {
-    UNUSEDx(parent, col_ctx, meta_data, row_index);
-    filter_applied = true;
-    return common_decoder_.pushdown_operator(filter, pd_filter_info, result_bitmap);
-  }
 
   virtual int get_null_count(
       const ObColumnDecoderCtx &ctx,

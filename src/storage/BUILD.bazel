@@ -2,14 +2,12 @@ load("//bazel:compile_config.bzl", "RELEASE_LOCAL_DEFINES")
 load(
     "//bazel:defs.bzl",
     "MODULE_CXX_COPTS",
-    "X86_SIMD_COPTS",
     "unity_cc_library",
     "grouped_unity_cc_library",
     "cc_library",
 )
 load(
     ":storage_source_inventory.bzl",
-    "STORAGE_SIMD_UNITY_GROUPS",
     "STORAGE_TABLET_AUTOINCREMENT_STATE_SOURCES",
     "STORAGE_UNITY_GROUPS",
 )
@@ -514,36 +512,10 @@ grouped_unity_cc_library(
     tags = ["manual"],
 )
 
-grouped_unity_cc_library(
-    name = "storage_runtime_simd",
-    unity_groups = STORAGE_SIMD_UNITY_GROUPS,
-    split_unity_groups = True,
-    implementation_deps = [
-        ":storage_runtime_interface",
-        ":storage_runtime_internal_headers",
-    ] + _STORAGE_EXACT_HEADER_DEPS + _STORAGE_RUNTIME_NON_OBLIB_DEPS + [
-        "//src/oblib:common_sql_mode",
-        "//src/oblib:oblib_base",
-        "//src/oblib:oblib_collections_primitives",
-        "//src/oblib:oblib_common",
-        "//src/oblib:oblib_compression",
-        "//src/oblib:oblib_concurrency_primitives",
-        "//src/oblib:oblib_db_meta",
-        "//src/oblib:oblib_foundation",
-    ],
-    copts = select({
-        "@platforms//cpu:x86_64": X86_SIMD_COPTS,
-        "//conditions:default": [],
-    }) + MODULE_CXX_COPTS,
-    features = ["layering_check"],
-    tags = ["manual"],
-)
-
 cc_library(
     name = "storage_static",
     implementation_deps = [
         ":storage_runtime",
-        ":storage_runtime_simd",
         ":tablet_autoincrement_state",
     ],
     tags = ["manual"],

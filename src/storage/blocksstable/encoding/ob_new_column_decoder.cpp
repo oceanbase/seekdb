@@ -65,38 +65,6 @@ int ObNewColumnCommonDecoder::batch_decode(
   return ret;
 }
 
-int ObNewColumnCommonDecoder::pushdown_operator(
-    const sql::ObWhiteFilterExecutor &filter,
-    ObBitmap &result_bitmap) const
-{
-  int ret = OB_SUCCESS;
-  bool filtered = false;
-  ObStorageDatum *default_datum = const_cast<ObStorageDatum *>(&filter.get_default_datums().at(0));
-  if (OB_FAIL(filter.filter_datum(*default_datum, filtered))) {
-  } else if (!filtered) {
-    result_bitmap.bit_not();
-  }
-  LOG_DEBUG("[NEW_COLUMN_DECODE] pushdown white filter", KPC(default_datum), K(filtered), K(lbt()));
-  return ret;
-}
-
-int ObNewColumnCommonDecoder::pushdown_operator(
-    sql::ObBlackFilterExecutor &filter,
-    sql::PushdownFilterInfo &pd_filter_info,
-    ObBitmap &result_bitmap) const
-{
-  int ret = OB_SUCCESS;
-  bool filtered = false;
-  sql::ObPhysicalFilterExecutor *black_filter = static_cast<sql::ObPhysicalFilterExecutor *>(&filter);
-  ObStorageDatum *default_datum = const_cast<ObStorageDatum *>(&filter.get_default_datums().at(0));
-  if (OB_FAIL(black_filter->filter(default_datum, black_filter->get_col_count(), *pd_filter_info.skip_bit_, filtered))) {
-  } else if (!filtered) {
-    result_bitmap.bit_not();
-  }
-  LOG_DEBUG("[NEW_COLUMN_DECODE] pushdown black filter", KPC(default_datum), K(filtered), K(lbt()));
-  return ret;
-}
-
 int ObNewColumnCommonDecoder::get_null_count(
     const ObColumnParam *col_param,
     const int64_t row_cap,
