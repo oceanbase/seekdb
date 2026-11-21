@@ -25,6 +25,11 @@ use crate::{Error, Result};
 const RAW: u8 = 0;
 const CONST: u8 = 3;
 
+#[cfg(test)]
+thread_local! {
+    static FAIL_NEXT_ROW_RESERVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OwnedDatum {
     Null,
@@ -193,6 +198,10 @@ impl BlockWriter {
                 accepted_rows: self.rows.len(),
                 is_full: true,
             });
+        }
+        #[cfg(test)]
+        if FAIL_NEXT_ROW_RESERVE.with(|fail| fail.replace(false)) {
+            return Err(Error::SizeOverflow);
         }
         self.rows.try_reserve(1).map_err(|_| Error::SizeOverflow)?;
         self.rows.push(row.to_vec());
@@ -836,7 +845,10 @@ fn write_uint(bytes: &mut [u8], offset: usize, width: usize, value: usize) -> Re
 
 #[cfg(test)]
 mod tests {
-    use super::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig};
+    use super::{
+        AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig,
+        FAIL_NEXT_ROW_RESERVE,
+    };
     use crate::{Block, Cell, Error};
 
     fn specs() -> Vec<ColumnSpec> {
@@ -934,6 +946,60 @@ mod tests {
             1
         );
         assert_eq!(writer.finish().unwrap_err(), Error::Frozen);
+    }
+
+    #[test]
+    fn allocation_failure_is_transactional_and_retryable() {
+        let config = WriterConfig::new(vec![ColumnSpec::fixed(5, 8)], 1);
+        let mut writer = BlockWriter::new(config).unwrap();
+        writer.append_row(&[OwnedDatum::UInt(1)]).unwrap();
+        FAIL_NEXT_ROW_RESERVE.with(|fail| fail.set(true));
+        assert_eq!(
+            writer.append_row(&[OwnedDatum::UInt(2)]),
+            Err(Error::SizeOverflow)
+        );
+        assert_eq!(writer.row_count(), 1);
+        let outcome = writer.append_row(&[OwnedDatum::UInt(2)]).unwrap();
+        assert_eq!(outcome.accepted_rows, 2);
+        assert!(!outcome.is_full);
+        let bytes = writer.finish().unwrap();
+        let block = Block::new(&bytes).unwrap();
+        assert_eq!(block.cell(0, 0).unwrap().as_u64().unwrap(), 1);
+        assert_eq!(block.cell(1, 0).unwrap().as_u64().unwrap(), 2);
+    }
+
+    #[test]
+    fn retries_the_unaccepted_row_in_the_next_block() {
+        let mut config = WriterConfig::new(vec![ColumnSpec::fixed(5, 8)], 1);
+        config.block_size_limit = 220;
+        let mut next_row = 0u64;
+        let mut block_count = 0;
+        let mut full_count = 0;
+        let mut actual = Vec::new();
+        while next_row < 64 {
+            let mut writer = BlockWriter::new(config.clone()).unwrap();
+            loop {
+                let outcome = writer.append_row(&[OwnedDatum::UInt(next_row)]).unwrap();
+                if outcome.is_full {
+                    assert_eq!(outcome.accepted_rows, writer.row_count());
+                    full_count += 1;
+                    break;
+                }
+                next_row += 1;
+                if next_row == 64 {
+                    break;
+                }
+            }
+            let bytes = writer.finish().unwrap();
+            let block = Block::new(&bytes).unwrap();
+            for row in 0..block.row_count() {
+                actual.push(block.cell(row, 0).unwrap().as_u64().unwrap());
+            }
+            block_count += 1;
+        }
+        assert!(block_count > 1);
+        assert_eq!(full_count, block_count - 1);
+        assert_eq!(actual, (0..64).collect::<Vec<_>>());
     }
 
     #[test]

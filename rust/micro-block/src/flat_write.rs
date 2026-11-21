@@ -34,6 +34,11 @@ const VAL_NOP: u8 = 2;
 const VAL_NULL: u8 = 3;
 const VAL_ENCODING_NORMAL: u8 = 4;
 
+#[cfg(test)]
+thread_local! {
+    static FAIL_NEXT_ROW_RESERVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FlatDatum<'a> {
     Bytes(&'a [u8]),
@@ -155,6 +160,10 @@ impl FlatWriter {
                 accepted_rows,
                 is_full: true,
             });
+        }
+        #[cfg(test)]
+        if FAIL_NEXT_ROW_RESERVE.with(|fail| fail.replace(false)) {
+            return Err(Error::SizeOverflow);
         }
         self.row_data
             .try_reserve(encoded.len())
@@ -519,8 +528,12 @@ fn append_uint(row: &mut Vec<u8>, value: u64, width: usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::{FlatDatum, FlatFinishOptions, FlatWriter, FlatWriterConfig};
-    use crate::{FlatBlock, FlatRowInfo};
+    use super::{
+        FlatDatum, FlatFinishOptions, FlatWriter, FlatWriterConfig, FAIL_NEXT_ROW_RESERVE,
+    };
+    use crate::checksum::crc32c;
+    use crate::format::{header_checksum, parse_flat_header, write_u16, write_u32, write_u64};
+    use crate::{Error, FlatBlock, FlatRowInfo};
 
     fn info(column_count: usize, rowkey_column_count: usize) -> FlatRowInfo {
         FlatRowInfo {
@@ -597,6 +610,54 @@ mod tests {
             .unwrap()
     }
 
+    fn reseal(bytes: &mut [u8]) {
+        let header = parse_flat_header(bytes).unwrap();
+        let checksum = crc32c(0, &bytes[header.header_size..]);
+        write_u64(bytes, 48, checksum).unwrap();
+        let header = parse_flat_header(bytes).unwrap();
+        let checksum = header_checksum(bytes, &header);
+        write_u16(bytes, 8, checksum).unwrap();
+    }
+
+    #[test]
+    fn rejects_truncation_checksum_failures_and_invalid_row_offsets() {
+        let cells = [
+            FlatDatum::Bytes(&7u64.to_le_bytes()),
+            FlatDatum::Null,
+            FlatDatum::Nop,
+            FlatDatum::Bytes(b"xy"),
+        ];
+        let bytes = write_single(&cells, 1);
+        for end in 0..bytes.len() {
+            assert!(FlatBlock::new(&bytes[..end]).is_err(), "prefix {end}");
+        }
+
+        let mut bad_header = bytes.clone();
+        write_u16(&mut bad_header, 12, 0).unwrap();
+        assert!(matches!(FlatBlock::new(&bad_header), Err(Error::ChecksumMismatch)));
+
+        let mut bad_payload = bytes.clone();
+        let last = bad_payload.len() - 1;
+        bad_payload[last] ^= 1;
+        assert!(matches!(FlatBlock::new(&bad_payload), Err(Error::ChecksumMismatch)));
+
+        let header = parse_flat_header(&bytes).unwrap();
+        let mut bad_offset = bytes.clone();
+        write_u32(&mut bad_offset, header.row_data_offset, 1).unwrap();
+        reseal(&mut bad_offset);
+        assert!(matches!(FlatBlock::new(&bad_offset), Err(Error::InvalidData)));
+
+        let mut negative_offset = bytes.clone();
+        write_u32(&mut negative_offset, header.row_data_offset, u32::MAX).unwrap();
+        reseal(&mut negative_offset);
+        assert!(matches!(FlatBlock::new(&negative_offset), Err(Error::InvalidData)));
+
+        let mut bad_row = bytes;
+        bad_row[header.header_size] = 1;
+        reseal(&mut bad_row);
+        assert!(matches!(FlatBlock::new(&bad_row), Err(Error::InvalidData)));
+    }
+
     #[test]
     fn block_full_is_transactional() {
         let cells = [FlatDatum::Bytes(b"row")];
@@ -632,6 +693,52 @@ mod tests {
         let parsed = FlatBlock::new(&block).unwrap();
         assert_eq!(1, parsed.row_count());
         assert_eq!(crate::Cell::Bytes(b"row"), parsed.cell(0, 0).unwrap());
+    }
+
+    #[test]
+    fn allocation_failure_is_transactional_and_retryable() {
+        let config = FlatWriterConfig {
+            column_count: 1,
+            rowkey_column_count: 1,
+            micro_block_size_limit: 1024,
+            block_size_upper_bound: 1024,
+            need_column_checksums: false,
+        };
+        let mut writer = FlatWriter::new(config).unwrap();
+        writer
+            .append_row(&[FlatDatum::Bytes(b"first")], info(1, 1), 0)
+            .unwrap();
+        FAIL_NEXT_ROW_RESERVE.with(|fail| fail.set(true));
+        assert_eq!(
+            writer.append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 0),
+            Err(Error::SizeOverflow)
+        );
+        assert_eq!(writer.row_count(), 1);
+        let outcome = writer
+            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 0)
+            .unwrap();
+        assert_eq!(outcome.accepted_rows, 2);
+        assert!(!outcome.is_full);
+        let block = writer
+            .finish(
+                FlatFinishOptions {
+                    single_version_rows: false,
+                    contain_uncommitted_rows: false,
+                    is_last_row_last_flag: false,
+                    has_string_out_row: false,
+                    all_lob_in_row: true,
+                    has_min_merged_trans_version: true,
+                    min_merged_trans_version: 0,
+                    max_merged_trans_version: 0,
+                },
+                &[],
+                &[],
+            )
+            .unwrap();
+        let parsed = FlatBlock::new(&block).unwrap();
+        assert_eq!(parsed.row_count(), 2);
+        assert_eq!(parsed.cell(0, 0).unwrap(), crate::Cell::Bytes(b"first"));
+        assert_eq!(parsed.cell(1, 0).unwrap(), crate::Cell::Bytes(b"second"));
     }
 
     #[test]

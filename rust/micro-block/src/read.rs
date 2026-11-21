@@ -618,13 +618,154 @@ fn read_bits(bytes: &[u8], bit_offset: usize, width: usize) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::{Block, Cell, RowRange};
-    use crate::format::{header_checksum, parse_header, write_u16, write_u32};
-    use crate::{BlockWriter, ColumnSpec, OwnedDatum, WriterConfig};
+    use crate::checksum::crc32c;
+    use crate::format::{
+        header_checksum, parse_header, write_u16, write_u32, write_u64, COLUMN_HEADER_SIZE,
+    };
+    use crate::{BlockWriter, ColumnSpec, Error, OwnedDatum, WriterConfig};
     use std::path::PathBuf;
+    use std::sync::Barrier;
 
     fn fixture(name: &str) -> Option<Vec<u8>> {
         let directory = std::env::var_os("MICRO_BLOCK_FIXTURE_DIR")?;
         std::fs::read(PathBuf::from(directory).join(name)).ok()
+    }
+
+    fn encoded_block(row_count: u64) -> Vec<u8> {
+        let mut key = ColumnSpec::fixed(5, 8);
+        key.enable_bit_packing = true;
+        let config = WriterConfig::new(
+            vec![
+                key,
+                ColumnSpec::fixed(5, 2),
+                ColumnSpec::variable(22),
+                ColumnSpec::variable(22),
+            ],
+            1,
+        );
+        let mut writer = BlockWriter::new(config).unwrap();
+        for row in 0..row_count {
+            let value = match row % 3 {
+                0 => OwnedDatum::Null,
+                1 => OwnedDatum::Nop,
+                _ => OwnedDatum::Bytes(format!("value-{row:03}").into_bytes()),
+            };
+            writer
+                .append_row(&[
+                    OwnedDatum::UInt(row),
+                    OwnedDatum::Bytes((row as u16).to_le_bytes().to_vec()),
+                    value,
+                    OwnedDatum::Bytes(b"constant".to_vec()),
+                ])
+                .unwrap();
+        }
+        writer.finish().unwrap()
+    }
+
+    fn reseal(bytes: &mut [u8]) {
+        let header = parse_header(bytes).unwrap();
+        let checksum = crc32c(0, &bytes[header.header_size..]);
+        write_u64(bytes, 48, checksum).unwrap();
+        let header = parse_header(bytes).unwrap();
+        let checksum = header_checksum(bytes, &header);
+        write_u16(bytes, 8, checksum).unwrap();
+    }
+
+    #[test]
+    fn rejects_checksum_failures_and_invalid_column_layouts() {
+        let bytes = encoded_block(16);
+        let header = parse_header(&bytes).unwrap();
+
+        let mut bad_header = bytes.clone();
+        write_u16(&mut bad_header, 12, 0).unwrap();
+        assert!(matches!(Block::new(&bad_header), Err(Error::ChecksumMismatch)));
+
+        let mut bad_payload = bytes.clone();
+        let last = bad_payload.len() - 1;
+        bad_payload[last] ^= 1;
+        assert!(matches!(Block::new(&bad_payload), Err(Error::ChecksumMismatch)));
+
+        let meta_len = header.row_data_offset
+            - header.header_size
+            - header.column_count * COLUMN_HEADER_SIZE;
+        let mut bad_offset = bytes.clone();
+        let second_column = header.header_size + COLUMN_HEADER_SIZE;
+        write_u32(&mut bad_offset, second_column + 8, (meta_len + 1) as u32).unwrap();
+        reseal(&mut bad_offset);
+        assert!(matches!(Block::new(&bad_offset), Err(Error::InvalidData)));
+
+        let mut bad_width = bytes.clone();
+        write_u32(&mut bad_width, header.header_size + 12, 65).unwrap();
+        reseal(&mut bad_width);
+        assert!(matches!(Block::new(&bad_width), Err(Error::InvalidData)));
+
+        let mut bad_ordinal = bytes.clone();
+        let variable_column = header.header_size + 2 * COLUMN_HEADER_SIZE;
+        write_u32(
+            &mut bad_ordinal,
+            variable_column + 12,
+            header.var_column_count as u32,
+        )
+        .unwrap();
+        reseal(&mut bad_ordinal);
+        assert!(matches!(Block::new(&bad_ordinal), Err(Error::InvalidData)));
+    }
+
+    #[test]
+    fn rejects_invalid_row_indexes_after_validating_checksums() {
+        let bytes = encoded_block(16);
+        let header = parse_header(&bytes).unwrap();
+        let index_width = header.row_index_byte();
+        assert!(matches!(index_width, 1 | 2 | 4));
+        let index_offset = bytes.len() - (header.row_count + 1) * index_width;
+        let mut bad_index = bytes;
+        match index_width {
+            1 => bad_index[index_offset] = 1,
+            2 => write_u16(&mut bad_index, index_offset, 1).unwrap(),
+            4 => write_u32(&mut bad_index, index_offset, 1).unwrap(),
+            _ => unreachable!(),
+        }
+        reseal(&mut bad_index);
+        assert!(matches!(Block::new(&bad_index), Err(Error::InvalidData)));
+    }
+
+    #[test]
+    fn concurrent_projections_share_an_immutable_block() {
+        let bytes = encoded_block(64);
+        let block = Block::new(&bytes).unwrap();
+        let rows: Vec<u32> = (0..block.row_count() as u32).collect();
+        let barrier = Barrier::new(8);
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                let block = &block;
+                let rows = &rows;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+                    for _ in 0..128 {
+                        let projection = block.project(rows, &[0, 2, 3]).unwrap();
+                        for row in 0..projection.row_count() {
+                            assert_eq!(
+                                projection.get(row, 0).unwrap().as_u64().unwrap(),
+                                row as u64
+                            );
+                            match row % 3 {
+                                0 => assert_eq!(projection.get(row, 1).unwrap(), Cell::Null),
+                                1 => assert_eq!(projection.get(row, 1).unwrap(), Cell::Nop),
+                                _ => assert_eq!(
+                                    projection.get(row, 1).unwrap().bytes().unwrap(),
+                                    format!("value-{row:03}").as_bytes()
+                                ),
+                            }
+                            assert_eq!(
+                                projection.get(row, 2).unwrap().bytes().unwrap(),
+                                b"constant"
+                            );
+                        }
+                    }
+                });
+            }
+        });
     }
 
     #[test]
