@@ -1,0 +1,50 @@
+--echo # Issue 1534: redundant range filters in adaptive vector scans
+USE test;
+
+--disable_result_log
+DROP TABLE IF EXISTS t_vec_redundant_filter;
+CREATE TABLE t_vec_redundant_filter (
+  id INT PRIMARY KEY,
+  age INT NOT NULL,
+  embedding VECTOR(3),
+  INDEX idx_age (age),
+  VECTOR INDEX idx_embedding (embedding)
+    WITH (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=32, sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO t_vec_redundant_filter VALUES
+  (1, 5, '[0.1,0.2,0.3]'),
+  (2, 9, '[0.2,0.3,0.4]'),
+  (3, 15, '[0.3,0.4,0.5]'),
+  (4, 25, '[0.4,0.5,0.6]'),
+  (5, 40, '[0.5,0.6,0.7]');
+ANALYZE TABLE t_vec_redundant_filter;
+--enable_result_log
+
+SELECT id FROM t_vec_redundant_filter WHERE age < 10
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 10;
+SELECT id FROM t_vec_redundant_filter WHERE age < 10 AND age < 20 AND age < 25
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 10;
+
+# The three same-column upper bounds must leave only the tightest filter in the scan plan.
+EXPLAIN SELECT id FROM t_vec_redundant_filter
+  WHERE age < 10 AND age < 20 AND age < 25
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 2;
+
+# A plan compiled for one set of literal values must not be reused after the tightest bound changes.
+SELECT id FROM t_vec_redundant_filter WHERE age < 10 AND age < 20
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 10;
+SELECT id FROM t_vec_redundant_filter WHERE age < 30 AND age < 20
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 10;
+
+# Bound parameters are evaluated at execution time and are not simplified using their prepare-time values.
+PREPARE vec_redundant_filter_stmt FROM
+  'SELECT id FROM t_vec_redundant_filter WHERE age < ? AND age < ? ORDER BY l2_distance(embedding, ''[0.1,0.2,0.3]'') APPROXIMATE LIMIT 10';
+SET @vec_filter_a = 10, @vec_filter_b = 20;
+EXECUTE vec_redundant_filter_stmt USING @vec_filter_a, @vec_filter_b;
+SET @vec_filter_a = 30, @vec_filter_b = 20;
+EXECUTE vec_redundant_filter_stmt USING @vec_filter_a, @vec_filter_b;
+DEALLOCATE PREPARE vec_redundant_filter_stmt;
+
+--disable_result_log
+DROP TABLE t_vec_redundant_filter;
+--enable_result_log
