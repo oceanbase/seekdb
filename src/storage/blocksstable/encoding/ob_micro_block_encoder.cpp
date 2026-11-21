@@ -428,6 +428,9 @@ int ObMicroBlockEncoder::pivot()
       ObColDatums &c = *all_col_datums_.at(i);
       if (OB_FAIL(c.resize(datum_rows_.count()))) {
       } else {
+        ObColumnEncodingCtx &col_ctx = col_ctxs_.at(i);
+        col_ctx.col_datums_ = &c;
+        col_ctx.null_cnt_ = 0;
         int64_t pos = 0;
         for (; pos + 8 <= datum_rows_.count(); pos += 8) {
           c.at(pos + 0) = datum_rows_.at(pos + 0).get_datum(i);
@@ -441,6 +444,9 @@ int ObMicroBlockEncoder::pivot()
         }
         for (; pos < datum_rows_.count(); ++pos) {
           c.at(pos) = datum_rows_.at(pos).get_datum(i);
+        }
+        for (int64_t row_idx = 0; row_idx < c.count(); ++row_idx) {
+          col_ctx.null_cnt_ += c.at(row_idx).is_null() ? 1 : 0;
         }
       }
     }
@@ -544,6 +550,7 @@ int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
     ret = OB_ERR_UNEXPECTED;
   } else if (FALSE_IT(encoder_freezed_ = true)) {
   } else if (OB_FAIL(set_datum_rows_ptr())) {
+  } else if (OB_FAIL(pivot())) {
   } else if (OB_FAIL(try_build_rust_block(buf, size))) {
     if (OB_NOT_SUPPORTED == ret) {
       ret = build_cpp_block(buf, size);
@@ -703,8 +710,7 @@ int ObMicroBlockEncoder::build_cpp_block(char *&buf, int64_t &size)
   int64_t encoders_need_size = 0;
   const int64_t col_header_size = ctx_.column_cnt_ * (sizeof(ObColumnHeader));
   char *encoding_meta_buf = nullptr;
-  if (OB_FAIL(pivot())) {
-  } else if (OB_FAIL(row_indexs_.reserve(datum_rows_.count()))) {
+  if (OB_FAIL(row_indexs_.reserve(datum_rows_.count()))) {
   } else if (OB_FAIL(encoder_detection(encoders_need_size))) {
   } else if (OB_FAIL(data_buffer_.ensure_space(col_header_size + encoders_need_size))) {
   } else if (OB_ISNULL(encoding_meta_buf = static_cast<char *>(encoding_meta_allocator_.alloc(encoders_need_size)))) {
