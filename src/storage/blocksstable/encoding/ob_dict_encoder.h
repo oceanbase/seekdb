@@ -22,7 +22,6 @@
 #include "lib/container/ob_array_iterator.h"
 #include "ob_encoding_util.h"
 #include "ob_bit_stream.h"
-#include "ob_encoding_hash_util.h"
 
 namespace oceanbase
 {

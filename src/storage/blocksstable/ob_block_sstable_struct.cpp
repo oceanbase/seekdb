@@ -59,25 +59,9 @@ bool ObMicroBlockEncodingCtx::is_valid() const
 {
   return macro_block_size_ > 0 && micro_block_size_ > 0 && rowkey_column_cnt_ >= 0
       && column_cnt_ >= rowkey_column_cnt_ && NULL != col_descs_
-      && encoder_opt_.is_valid()
       && (FLAT_ROW_STORE != row_store_type_ &&  MAX_ROW_STORE != row_store_type_)
       && compressor_type_ != ObCompressorType::INVALID_COMPRESSOR
       && compressor_type_ != ObCompressorType::MAX_COMPRESSOR;
-}
-
-//======================ObPreviousEncodingArray========================
-
-template<int64_t max_size>
-int64_t ObPreviousEncodingArray<max_size>::contain(const ObPreviousEncoding &prev)
-{
-  int64_t ret = -1;
-  for (int64_t i = 0; i < size_; ++i) {
-    if (prev_encodings_[i] == prev) {
-      ret = i;
-      break;
-    }
-  }
-  return ret;
 }
 
 ObMacroBlockSchemaInfo::ObMacroBlockSchemaInfo()

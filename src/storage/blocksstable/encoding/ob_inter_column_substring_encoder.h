@@ -18,7 +18,6 @@
 #define OCEANBASE_ENCODING_OB_INTER_COLUMN_SUBSTR_ENCODER_H_
 
 #include "lib/allocator/ob_allocator.h"
-#include "ob_encoding_hash_util.h"
 #include "common/object/ob_object.h"
 #include "ob_encoding_bitset.h"
 
@@ -96,7 +95,7 @@ public:
   virtual int64_t get_ref_col_idx() const override;
   virtual void reuse() override;
   virtual int store_fix_data(ObBufferWriter &buf_writer) override;
-  INHERIT_TO_STRING_KV("ObIColumnEncoder", ObIColumnEncoder, K_(ref_col_idx), KPC_(ref_ctx),
+  INHERIT_TO_STRING_KV("ObIColumnEncoder", ObIColumnEncoder, K_(ref_col_idx),
       K_(same_start_pos), K_(fix_data_size), K_(start_pos_byte), K_(val_len_byte));
 
 private:

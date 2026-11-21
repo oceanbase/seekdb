@@ -230,24 +230,16 @@ private:
 
 template <typename T, int64_t MAX_COUNT, int64_t BLOCK_SIZE>
 class ObPodFix2dArray;
-class ObEncodingHashTable;
 
 struct ObMicroDataPreAggParam
 {
   ObMicroDataPreAggParam() { reset(); }
   void reset() { memset(this, 0, sizeof(*this)); }
-  bool use_encoding_ht() const { return is_pax_encoding_ && nullptr != encoding_ht_; }
   bool is_all_null_column() const { OB_ASSERT(nullptr != col_datums_); return null_cnt_ == col_datums_->count(); }
-  TO_STRING_KV(KP_(col_datums), KP_(encoding_ht), K_(null_cnt), K_(min_integer), K_(max_integer),
-      K_(is_integer_aggregated), K_(is_pax_encoding));
+  TO_STRING_KV(KP_(col_datums), K_(null_cnt));
 
   const ObPodFix2dArray<ObDatum, 1 << 20, common::OB_MALLOC_NORMAL_BLOCK_SIZE> *col_datums_;
-  const ObEncodingHashTable *encoding_ht_;
   uint64_t null_cnt_;
-  uint64_t min_integer_;
-  uint64_t max_integer_;
-  bool is_integer_aggregated_;
-  bool is_pax_encoding_;
 };
 
 class ObIMultiColAggregator
@@ -390,15 +382,6 @@ public:
   int eval(const ObDatumRow &datum_row);
   int eval(const ObIMicroBlockWriter &data_micro_writer);
 private:
-  bool can_agg_with_dict(const ObSkipIndexColType idx_type)
-  {
-    return ObSkipIndexColType::SK_IDX_MIN == idx_type || ObSkipIndexColType::SK_IDX_MAX == idx_type;
-  }
-  bool can_use_pre_agg_integer(const ObSkipIndexColMeta &col_meta);
-  int do_col_agg_with_pre_agg_integer(
-      const int64_t agg_idx,
-      const ObSkipIndexColMeta &col_meta,
-      const ObMicroDataPreAggParam &agg_param);
   template<typename IterParamType>
   int do_col_agg(const int64_t agg_idx, const IterParamType &iter_param);
   DISALLOW_COPY_AND_ASSIGN(ObSkipIndexDataAggregator);

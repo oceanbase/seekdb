@@ -35,7 +35,6 @@ int64_t size_array [] = {                \
   sizeof(ObInterColSubStr##Item),        \
 }                                        \
 
-DEF_SIZE_ARRAY(Encoder, encoder_sizes);
 DEF_SIZE_ARRAY(Decoder, decoder_sizes);
 
 int64_t MAX_DECODER_SIZE =  *(std::max_element(decoder_sizes,

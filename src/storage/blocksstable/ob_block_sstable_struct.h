@@ -39,11 +39,10 @@ namespace oceanbase
 namespace blocksstable
 {
 
-class ObEncodingHashTable;
-class ObMultiPrefixTree;
-
 extern const char *BLOCK_SSTBALE_DIR_NAME;
 extern const char *BLOCK_SSTBALE_FILE_NAME;
+
+typedef common::ObArray<ObConstDatumRow> ObConstDatumRowArray;
 
 //block sstable header magic number;
 const int64_t MICRO_BLOCK_HEADER_MAGIC = 1005;
@@ -280,184 +279,38 @@ struct ObMicroBlockEncoderOpt
 // CONST macro from minwindef.h (#define CONST const) is permanently suppressed.
 // C++ code uses 'const' directly; the CONST macro alias is not needed.
 
-struct ObPreviousEncoding
-{
-  ObColumnHeader::Type type_;
-  int64_t ref_col_idx_; // referenced column index for rules between columns.
-  int64_t last_prefix_length_;
-
-  ObPreviousEncoding() { MEMSET(this, 0, sizeof(*this)); }
-  ObPreviousEncoding(const ObColumnHeader::Type type, const int64_t ref_col_idx)
-      : type_(type), ref_col_idx_(ref_col_idx), last_prefix_length_(0) {}
-
-  bool operator ==(const ObPreviousEncoding &other) const
-  {
-    return type_ == other.type_ && ref_col_idx_ == other.ref_col_idx_ && last_prefix_length_ == other.last_prefix_length_;
-  }
-
-  bool operator !=(const ObPreviousEncoding &other) const
-  {
-    return type_ != other.type_ || ref_col_idx_ != other.ref_col_idx_ || last_prefix_length_ != other.last_prefix_length_;
-  }
-
-  TO_STRING_KV(K_(type), K_(ref_col_idx), K_(last_prefix_length));
-};
-
-template<int64_t max_size>
-struct ObPreviousEncodingArray
-{
-  ObPreviousEncoding prev_encodings_[max_size];
-  int64_t last_pos_;
-  int64_t size_;
-
-  ObPreviousEncodingArray() : last_pos_(0), size_(0) {}
-
-  int64_t contain(const ObPreviousEncoding &prev);
-  void reuse() { size_ = 0; }
-
-  TO_STRING_KV(K_(prev_encodings), K_(last_pos), K_(size));
-};
-
-template<>
-struct ObPreviousEncodingArray<2>
-{
-  ObPreviousEncoding prev_encodings_[2];
-  int64_t last_pos_;
-  int64_t size_;
-
-  ObPreviousEncodingArray() : last_pos_(0), size_(0) {}
-
-  OB_INLINE int put(const ObPreviousEncoding &prev)
-  {
-    int ret = common::OB_SUCCESS;
-    if (0 == size_ || prev != prev_encodings_[last_pos_]) {
-      if (2 == size_) {
-        last_pos_ = (last_pos_ == 1) ? 0 : last_pos_ + 1;
-        prev_encodings_[last_pos_] = prev;
-      } else if (2 > size_) {
-        last_pos_ = size_;
-        prev_encodings_[last_pos_] = prev;
-        ++size_;
-      } else {
-        ret = common::OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "unexpected size", K_(size));
-      }
-    }
-    return ret;
-  }
-  void reuse() { size_ = 0; }
-
-  TO_STRING_KV(K_(last_pos), K_(size), "prev_encoding0", prev_encodings_[0],
-      "prev_encoding1", prev_encodings_[1]);
-};
-
-template<>
-struct ObPreviousEncodingArray<1>
-{
-  ObPreviousEncoding prev_encodings_[1];
-  int64_t last_pos_;
-  int64_t size_;
-
-  ObPreviousEncodingArray() : last_pos_(0), size_(0) {}
-
-  OB_INLINE int put(const ObPreviousEncoding &prev)
-  {
-    int ret = common::OB_SUCCESS;
-    prev_encodings_[0] = prev;
-    return ret;
-  }
-
-  TO_STRING_KV(K_(prev_encodings));
-};
-
 struct ObMicroBlockEncodingCtx
 {
-  static const int64_t MAX_PREV_ENCODING_COUNT = 2;
   int64_t macro_block_size_;
   int64_t micro_block_size_;
   int64_t rowkey_column_cnt_;
   int64_t column_cnt_;
   const common::ObIArray<share::schema::ObColDesc> *col_descs_;
-  ObMicroBlockEncoderOpt encoder_opt_;
-
   mutable int64_t estimate_block_size_;
   mutable int64_t real_block_size_;
-  mutable int64_t micro_block_cnt_; // build micro block count
-  mutable common::ObArray<ObPreviousEncodingArray<MAX_PREV_ENCODING_COUNT> > previous_encodings_;
-
-  int64_t *column_encodings_;
+  mutable int64_t micro_block_cnt_;
   common::ObRowStoreType row_store_type_;
   bool need_calc_column_chksum_;
   ObCompressorType compressor_type_;
   uint64_t encoding_granularity_;
   uint64_t minimum_rows_;
-  share::schema::ObSemiStructEncodingType semistruct_encoding_type_;
 
   ObMicroBlockEncodingCtx() : macro_block_size_(0), micro_block_size_(0),
     rowkey_column_cnt_(0), column_cnt_(0), col_descs_(nullptr),
-    encoder_opt_(), estimate_block_size_(0),
-    real_block_size_(0), micro_block_cnt_(0),
-    previous_encodings_(),
-    column_encodings_(nullptr),
+    estimate_block_size_(0), real_block_size_(0), micro_block_cnt_(0),
     row_store_type_(ENCODING_ROW_STORE), need_calc_column_chksum_(false),
     compressor_type_(INVALID_COMPRESSOR), encoding_granularity_(UINT64_MAX),
-    minimum_rows_(1),
-    semistruct_encoding_type_()
-  {
-    previous_encodings_.set_attr(ObMemAttr("MicroEncodeCtx"));
-  }
+    minimum_rows_(1)
+  {}
   bool is_valid() const;
-  bool is_enable_semistruct_encoding() const { return semistruct_encoding_type_.is_enable_semistruct_encoding();}
   TO_STRING_KV(K_(macro_block_size), K_(micro_block_size), K_(rowkey_column_cnt),
       K_(column_cnt), KP_(col_descs), K_(estimate_block_size), K_(real_block_size),
-      K_(micro_block_cnt), K_(encoder_opt), K_(previous_encodings), KP_(column_encodings),
-      K_(row_store_type), K_(need_calc_column_chksum),
-      K_(compressor_type), K_(encoding_granularity), K_(minimum_rows), K_(semistruct_encoding_type));
+      K_(micro_block_cnt), K_(row_store_type), K_(need_calc_column_chksum),
+      K_(compressor_type), K_(encoding_granularity), K_(minimum_rows));
 };
 
 template <typename T, int64_t MAX_COUNT, int64_t BLOCK_SIZE>
 class ObPodFix2dArray;
-
-struct ObColumnEncodingCtx
-{
-  int64_t null_cnt_;
-  int64_t nope_cnt_;
-  uint64_t max_integer_;
-  int64_t var_data_size_;
-  int64_t dict_var_data_size_;
-  int64_t fix_data_size_;
-  int64_t max_string_size_;
-  int64_t extend_value_bit_;
-  const ObPodFix2dArray<ObDatum, 1 << 20, common::OB_MALLOC_NORMAL_BLOCK_SIZE> *col_datums_;
-  ObEncodingHashTable *ht_;
-  ObMultiPrefixTree *prefix_tree_;
-  const ObMicroBlockEncodingCtx *encoding_ctx_;
-  bool detected_encoders_[ObColumnHeader::MAX_TYPE];
-  mutable int64_t last_prefix_length_;
-  bool only_raw_encoding_;
-  bool is_refed_;
-  bool need_sort_;
-
-  ObColumnEncodingCtx() { reset(); }
-  void reset() { memset(this, 0, sizeof(*this)); }
-  void try_set_need_sort(const ObColumnHeader::Type type, const int64_t column_index)
-  {
-    ObObjTypeClass col_tc = encoding_ctx_->col_descs_->at(column_index).col_type_.get_type_class();
-    ObObjTypeStoreClass col_sc = get_store_class_map()[col_tc];
-    const bool encoding_type_need_sort = type == ObColumnHeader::DICT;
-    need_sort_ = encoding_type_need_sort && !store_class_might_contain_lob_locator(col_sc);
-  }
-
-  TO_STRING_KV(K_(null_cnt), K_(nope_cnt), K_(max_integer), K_(var_data_size),
-      K_(dict_var_data_size), K_(fix_data_size),
-      K_(extend_value_bit), KP_(col_datums), KP_(ht), KP_(prefix_tree),
-      K_(*encoding_ctx), K_(detected_encoders),
-      K_(last_prefix_length), K_(max_string_size), K_(only_raw_encoding),
-      K_(is_refed), K_(need_sort));
-};
-
-class ObBufferReader;
-class ObBufferWriter;
 
 struct ObMacroBlockSchemaInfo final
 {

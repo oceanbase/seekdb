@@ -83,7 +83,6 @@ mod ffi {
     struct BuildResult {
         code: Code,
         block: Vec<u8>,
-        column_types: Vec<u8>,
         accepted_rows: usize,
     }
 
@@ -303,7 +302,6 @@ fn finish_flat_writer(
         Ok(block) => ffi::BuildResult {
             code: ffi::Code::Ok,
             block,
-            column_types: Vec::new(),
             accepted_rows,
         },
         Err(error) => build_result(Err(error)),
@@ -344,13 +342,11 @@ fn build_result(result: Result<BuildSuccess>) -> ffi::BuildResult {
         Ok(success) => ffi::BuildResult {
             code: ffi::Code::Ok,
             block: success.block,
-            column_types: success.column_types,
             accepted_rows: success.accepted_rows,
         },
         Err(error) => ffi::BuildResult {
             code: code(error),
             block: Vec::new(),
-            column_types: Vec::new(),
             accepted_rows: 0,
         },
     }
@@ -358,7 +354,6 @@ fn build_result(result: Result<BuildSuccess>) -> ffi::BuildResult {
 
 struct BuildSuccess {
     block: Vec<u8>,
-    column_types: Vec<u8>,
     accepted_rows: usize,
 }
 
@@ -451,15 +446,9 @@ unsafe fn build_pax_block_impl(
     }
     let accepted_rows = writer.row_count();
     let block = writer.finish_with_column_checksums(column_checksums)?;
-    let parsed = Block::new(&block)?;
-    let column_types = (0..parsed.column_count())
-        .map(|column| {
-            block[parsed.header.header_size + column * crate::format::COLUMN_HEADER_SIZE + 1]
-        })
-        .collect();
+    Block::new(&block)?;
     Ok(BuildSuccess {
         block,
-        column_types,
         accepted_rows,
     })
 }

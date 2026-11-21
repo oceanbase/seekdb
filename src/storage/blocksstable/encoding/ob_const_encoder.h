@@ -27,6 +27,7 @@ namespace blocksstable
 {
 
 class ObEncodingHashTable;
+class ObEncodingHashNode;
 struct ObEncodingHashNodeList;
 
 struct ObConstMetaHeader

@@ -18,7 +18,6 @@
 
 #include "ob_index_block_aggregator.h"
 #include "storage/blocksstable/ob_data_store_desc.h"
-#include "storage/blocksstable/encoding/ob_encoding_hash_util.h"
 #include "storage/blocksstable/encoding/ob_column_datum_iter.h"
 #include "query/engine/expr/ob_expr_bm25.h"
 #include "query/engine/expr/ob_expr_util.h"
@@ -1557,20 +1556,6 @@ int ObSkipIndexDataAggregator::eval(const ObIMicroBlockWriter &data_micro_writer
           ObSkipIndexDatumAttr agg_datum_attr;
           if (OB_FAIL(col_aggs_.at(single_col_agg_idx)->eval(tmp_result, agg_datum_attr))) {
           }
-        } else if (can_use_pre_agg_integer(idx_col_meta) && pre_agg_param.is_integer_aggregated_) {
-          if (OB_FAIL(do_col_agg_with_pre_agg_integer(single_col_agg_idx, idx_col_meta, pre_agg_param))) {
-          }
-        } else if (can_agg_with_dict(static_cast<ObSkipIndexColType>(idx_col_meta.col_type_))) {
-          // try aggregate with dict
-          if (pre_agg_param.is_all_null_column()) {
-            tmp_result.set_null();
-            if (OB_FAIL(col_aggs_.at(single_col_agg_idx)->eval(tmp_result, false))) {
-            }
-          } else if (pre_agg_param.use_encoding_ht()) {
-            if (OB_FAIL(do_col_agg(single_col_agg_idx, *pre_agg_param.encoding_ht_))) {
-            }
-          } else if (OB_FAIL(do_col_agg(single_col_agg_idx, *pre_agg_param.col_datums_))) {
-          }
         } else if (OB_FAIL(do_col_agg(single_col_agg_idx, *pre_agg_param.col_datums_))) {
         }
       }
@@ -1588,79 +1573,9 @@ int ObSkipIndexDataAggregator::eval(const ObIMicroBlockWriter &data_micro_writer
   return ret;
 }
 
-bool ObSkipIndexDataAggregator::can_use_pre_agg_integer(const ObSkipIndexColMeta &col_meta)
-{
-  const ObObjTypeClass type_class = full_col_descs_->at(col_meta.col_idx_).col_type_.get_type_class();
-  const ObSkipIndexColType idx_type = static_cast<ObSkipIndexColType>(col_meta.col_type_);
-
-  const bool data_type_valid = (ObIntTC == type_class || ObUIntTC == type_class);
-  const bool idx_type_valid = (SK_IDX_MIN == idx_type || SK_IDX_MAX == idx_type);
-
-  return data_type_valid && idx_type_valid;
-}
-
-int ObSkipIndexDataAggregator::do_col_agg_with_pre_agg_integer(
-    const int64_t agg_idx,
-    const ObSkipIndexColMeta &col_meta,
-    const ObMicroDataPreAggParam &agg_param)
-{
-  int ret = OB_SUCCESS;
-  uint64_t pre_agg_result = 0;
-  const ObObjTypeClass type_class = full_col_descs_->at(col_meta.col_idx_).col_type_.get_type_class();
-  const ObSkipIndexColType idx_type = static_cast<ObSkipIndexColType>(col_meta.col_type_);
-  const ObObjDatumMapType datum_type =
-      ObDatum::get_obj_datum_map_type(full_col_descs_->at(col_meta.col_idx_).col_type_.get_type());
-  ObStorageDatum tmp_result;
-  if (SK_IDX_MIN == idx_type) {
-    pre_agg_result = agg_param.min_integer_;
-  } else if (SK_IDX_MAX == idx_type) {
-    pre_agg_result = agg_param.max_integer_;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (agg_param.is_all_null_column()) {
-    tmp_result.set_null();
-  } else if (type_class == ObIntTC) {
-    switch (datum_type) {
-      case OBJ_DATUM_8BYTE_DATA: {
-        tmp_result.set_int(static_cast<int64_t>(pre_agg_result));
-        break;
-      }
-      case OBJ_DATUM_4BYTE_DATA: {
-        tmp_result.set_int32(static_cast<int32_t>(pre_agg_result));
-        break;
-      }
-      default:
-        ret = OB_ERR_UNEXPECTED;
-    }
-  } else if (type_class == ObUIntTC) {
-    switch (datum_type) {
-      case OBJ_DATUM_8BYTE_DATA: {
-        tmp_result.set_uint(pre_agg_result);
-        break;
-      }
-      case OBJ_DATUM_4BYTE_DATA: {
-        tmp_result.set_uint32(static_cast<uint32_t>(pre_agg_result));
-        break;
-      }
-      default:
-        ret = OB_ERR_UNEXPECTED;
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  ObSkipIndexDatumAttr agg_datum_attr;
-  if (FAILEDx(col_aggs_.at(agg_idx)->eval(tmp_result, agg_datum_attr))) {
-  }
-  return ret;
-}
-
 template <typename IterParamType>
 struct SkipIndexDatumIterTypeTrait { typedef void IterType; };
 template<> struct SkipIndexDatumIterTypeTrait<ObPodFix2dArray<ObDatum, 1 << 20, common::OB_MALLOC_NORMAL_BLOCK_SIZE>> { typedef ObColumnDatumIter IterType; };
-template<> struct SkipIndexDatumIterTypeTrait<ObEncodingHashTable> { typedef ObEncodingHashTableDatumIter IterType; };
 
 template<typename IterParamType>
 int ObSkipIndexDataAggregator::do_col_agg(const int64_t agg_idx, const IterParamType &iter_param)

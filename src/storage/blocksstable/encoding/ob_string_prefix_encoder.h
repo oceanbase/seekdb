@@ -18,7 +18,6 @@
 #define OCEANBASE_ENCODING_OB_STRING_PREFIX_ENCODER_H_
 
 #include "lib/allocator/ob_allocator.h"
-#include "ob_encoding_hash_util.h"
 #include "ob_icolumn_encoder.h"
 #include "common/object/ob_object.h"
 #include "ob_hex_string_encoder.h"

@@ -21,16 +21,6 @@
 #include "lib/list/ob_dlink_node.h"
 #include "lib/list/ob_dlist.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
-#include "ob_raw_encoder.h"
-#include "ob_dict_encoder.h"
-#include "ob_rle_encoder.h"
-#include "ob_const_encoder.h"
-#include "ob_integer_base_diff_encoder.h"
-#include "ob_string_diff_encoder.h"
-#include "ob_hex_string_encoder.h"
-#include "ob_string_prefix_encoder.h"
-#include "ob_column_equal_encoder.h"
-#include "ob_inter_column_substring_encoder.h"
 #include "ob_raw_decoder.h"
 #include "ob_dict_decoder.h"
 #include "ob_rle_decoder.h"
@@ -63,7 +53,6 @@ struct ObEncodingPool
   common::ObPool<common::ObMalloc, common::ObNullLock> pool_;
 };
 
-extern int64_t encoder_sizes[];
 extern int64_t decoder_sizes[];
 extern int64_t MAX_DECODER_SIZE;
 
@@ -98,8 +87,6 @@ private:
 };
 
 #include "ob_encoding_allocator.ipp"
-
-typedef ObEncodingAllocator<ObIColumnEncoder> ObEncoderAllocator;
 
 }//end namespace blocksstable
 }//end namespace oceanbase

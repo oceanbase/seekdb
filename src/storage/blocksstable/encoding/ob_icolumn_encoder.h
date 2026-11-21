@@ -38,6 +38,7 @@ typedef ObPodFix2dArray<
 */
 
 class ObBitStream;
+struct ObColumnEncodingCtx;
 
 class ObIColumnEncoder
 {
@@ -136,14 +137,6 @@ public:
     bits_size += desc_.bit_packing_length_ * row_cnt;
     bits_size = (bits_size + CHAR_BIT - 1) / CHAR_BIT;
     fix_data_size = bits_size + desc_.fix_data_length_ * row_cnt;
-  }
-
-  //Only for encoding pre-allocated space
-  inline int64_t calc_encoding_fix_data_need_space()
-  {
-    int64_t bits_size = 0, fix_data_size = 0;
-    calc_fix_data_size(ctx_->col_datums_->count(), bits_size, fix_data_size);
-    return fix_data_size + sizeof(uint64_t) + 2 /* max extend_value_bit */ * ctx_->col_datums_->count();;
   }
 
   virtual int store_fix_data(ObBufferWriter &buf_writer) = 0;

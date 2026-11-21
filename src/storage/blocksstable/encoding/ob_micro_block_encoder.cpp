@@ -31,59 +31,13 @@ namespace blocksstable
 {
 using namespace common;
 
-template<typename T>
-T *ObMicroBlockEncoder::alloc_encoder()
-{
-  T *encoder = NULL;
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(encoder_allocator_.alloc(encoder))) {
-  }
-  return encoder;
-}
-
-void ObMicroBlockEncoder::free_encoder(ObIColumnEncoder *encoder)
-{
-  if (OB_NOT_NULL(encoder)) {
-    encoder_allocator_.free(encoder);
-  }
-}
-
-template <typename T>
-int ObMicroBlockEncoder::try_encoder(ObIColumnEncoder *&encoder, const int64_t column_index)
-{
-  int ret = OB_SUCCESS;
-  encoder = NULL;
-  bool suitable = false;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(column_index < 0 || column_index > ctx_.column_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (ctx_.encoder_opt_.enable<T>()) {
-    T *e = alloc_encoder<T>();
-    if (NULL == e) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (FALSE_IT(col_ctxs_.at(column_index).try_set_need_sort(e->get_type(), column_index))) {
-    } else if (OB_FAIL(e->init(col_ctxs_.at(column_index), column_index, datum_rows_))) {
-    } else if (OB_FAIL(e->traverse(suitable))) {
-    }
-    if (NULL != e && (OB_FAIL(ret) || !suitable)) {
-      free_encoder(e);
-      e = NULL;
-    } else {
-      encoder = e;
-    }
-  }
-  return ret;
-}
-
 #define MICRO_BLOCK_PAGE_ALLOCATOR ModulePageAllocator(common::ObModIds::OB_ENCODER_ALLOCATOR)
 struct ObMicroBlockEncoder::RustBlockBuffer
 {
   rust::Vec<uint8_t> bytes;
 };
 
-ObMicroBlockEncoder::ObMicroBlockEncoder() : ctx_(), header_(NULL),
-    encoding_meta_allocator_(),
+ObMicroBlockEncoder::ObMicroBlockEncoder() : ctx_(),
     data_buffer_(),
     rust_block_(),
     datum_rows_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
@@ -92,32 +46,18 @@ ObMicroBlockEncoder::ObMicroBlockEncoder() : ctx_(), header_(NULL),
     estimate_size_(0), estimate_size_limit_(0),
     header_size_(0), expand_pct_(DEFAULT_ESTIMATE_REAL_SIZE_PCT),
     row_buf_holder_(),
-    encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
-    fix_data_encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
-    var_data_encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
-    encoder_allocator_(encoder_sizes, ObMemAttr(common::ObModIds::OB_ENCODER_ALLOCATOR)),
-    row_indexs_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
-    hashtables_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
-    multi_prefix_trees_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     deep_copy_indexes_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
-    string_col_cnt_(0), estimate_base_store_size_(0),
-    col_ctxs_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
+    estimate_base_store_size_(0),
+    pre_agg_columns_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     length_(0),
     encoder_freezed_(false),
     is_inited_(false),
     block_generated_(false)
 {
-  encoding_meta_allocator_.set_attr(ObMemAttr("MicroBlkEncoder"));
   datum_rows_.set_attr(ObMemAttr("MicroBlkEncoder"));
   all_col_datums_.set_attr(ObMemAttr("MicroBlkEncoder"));
-  encoders_.set_attr(ObMemAttr("MicroBlkEncoder"));
-  fix_data_encoders_.set_attr(ObMemAttr("MicroBlkEncoder"));
-  var_data_encoders_.set_attr(ObMemAttr("MicroBlkEncoder"));
-  row_indexs_.set_attr(ObMemAttr("MicroBlkEncoder"));
-  hashtables_.set_attr(ObMemAttr("MicroBlkEncoder"));
-  multi_prefix_trees_.set_attr(ObMemAttr("MicroBlkEncoder"));
   deep_copy_indexes_.set_attr(ObMemAttr("MicroBlkEncoder"));
-  col_ctxs_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  pre_agg_columns_.set_attr(ObMemAttr("MicroBlkEncoder"));
 }
 #undef MICRO_BLOCK_PAGE_ALLOCATOR
 
@@ -128,7 +68,6 @@ ObMicroBlockEncoder::~ObMicroBlockEncoder()
 
 int ObMicroBlockEncoder::init(const ObMicroBlockEncodingCtx &ctx)
 {
-  // can be init twice
   int ret = OB_SUCCESS;
   if (is_inited_) {
     reuse();
@@ -137,15 +76,10 @@ int ObMicroBlockEncoder::init(const ObMicroBlockEncodingCtx &ctx)
 
   if (OB_UNLIKELY(!ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(encoders_.reserve(ctx.column_cnt_))) {
-  } else if (OB_FAIL(encoder_allocator_.init())) {
-  } else if (OB_FAIL(hashtables_.reserve(ctx.column_cnt_))) {
-  } else if (OB_FAIL(multi_prefix_trees_.reserve(ctx.column_cnt_))) {
-  } else if (OB_FAIL(col_ctxs_.reserve(ctx.column_cnt_))) {
+  } else if (OB_FAIL(pre_agg_columns_.reserve(ctx.column_cnt_))) {
   } else if (OB_FAIL(init_all_col_values(ctx))) {
   } else if (OB_FAIL(checksum_helper_.init(ctx.col_descs_, true/*need_opt_row_checksum*/))) {
   } else {
-    // TODO bin.lb: shrink all_col_values_ size
     estimate_base_store_size_ = 0;
     for (int64_t i = 0; i < ctx.column_cnt_; ++i) {
       estimate_base_store_size_
@@ -191,8 +125,6 @@ void ObMicroBlockEncoder::reset()
   rust_block_.reset();
   is_inited_ = false;
   encoder_freezed_ = false;
-  //ctx_
-  encoding_meta_allocator_.reset();
   data_buffer_.reset();
   datum_rows_.reset();
   FOREACH(cv, all_col_datums_) {
@@ -210,16 +142,8 @@ void ObMicroBlockEncoder::reset()
   expand_pct_ = DEFAULT_ESTIMATE_REAL_SIZE_PCT;
   estimate_base_store_size_ = 0;
   row_buf_holder_.reset();
-  fix_data_encoders_.reset();
-  var_data_encoders_.reset();
-  free_encoders();
-  encoders_.reset();
-  hashtables_.reset();
-  multi_prefix_trees_.reset();
-  row_indexs_.reset();
   deep_copy_indexes_.reset();
-  col_ctxs_.reset();
-  string_col_cnt_ = 0;
+  pre_agg_columns_.reset();
   length_ = 0;
   block_generated_ = false;
 }
@@ -230,30 +154,15 @@ void ObMicroBlockEncoder::reuse()
   if (rust_block_) {
     rust_block_->bytes = rust::Vec<uint8_t>();
   }
-  // is_inited_
-  // ctx_
-  encoding_meta_allocator_.reuse();
   data_buffer_.reuse();
   datum_rows_.reuse();
   FOREACH(c, all_col_datums_) {
     (*c)->reuse();
   }
-  // pivot_allocator_  pivot array memory is cached until encoder reset()
   row_buf_holder_.reuse();
   estimate_size_ = 0;
-  // estimate_size_limit_
-  // header_size_
-  // expand_pct_
-  // estimate_base_store_size_ should only recalculate with initialization
-  fix_data_encoders_.reuse();
-  var_data_encoders_.reuse();
-  free_encoders();
-  encoders_.reuse();
-  hashtables_.reuse();
-  multi_prefix_trees_.reuse();
-  row_indexs_.reuse();
-  col_ctxs_.reuse();
-  string_col_cnt_ = 0;
+  deep_copy_indexes_.reuse();
+  pre_agg_columns_.reuse();
   length_ = 0;
   encoder_freezed_ = false;
   block_generated_ = false;
@@ -324,13 +233,7 @@ void ObMicroBlockEncoder::print_micro_block_encoder_status() const
 {
   FLOG_INFO("Build micro block failed, print encoder status: ", K_(ctx),
     K_(estimate_size), K_(estimate_size_limit), K_(header_size),
-      K_(expand_pct), K_(string_col_cnt), K_(estimate_base_store_size), K_(length),
-      K(get_row_count()));
-  int64_t idx = 0;
-  FOREACH(e, encoders_) {
-    FLOG_INFO("Print column encoder: ", K(idx), KPC(*e));
-    ++idx;
-  }
+    K_(expand_pct), K_(estimate_base_store_size), K_(length), K(get_row_count()));
 }
 
 void ObMicroBlockEncoder::update_estimate_size_limit(const ObMicroBlockEncodingCtx &ctx)
@@ -383,7 +286,7 @@ int ObMicroBlockEncoder::append_row(const ObDatumRow &row)
   } else if (OB_FAIL(inner_init())) {
   } else {
     if (datum_rows_.empty()) {
-      if (OB_FAIL(init_column_ctxs())) {
+      if (OB_FAIL(init_pre_agg_columns())) {
       }
     }
   }
@@ -428,9 +331,9 @@ int ObMicroBlockEncoder::pivot()
       ObColDatums &c = *all_col_datums_.at(i);
       if (OB_FAIL(c.resize(datum_rows_.count()))) {
       } else {
-        ObColumnEncodingCtx &col_ctx = col_ctxs_.at(i);
-        col_ctx.col_datums_ = &c;
-        col_ctx.null_cnt_ = 0;
+        PreAggColumn &pre_agg = pre_agg_columns_.at(i);
+        pre_agg.col_datums_ = &c;
+        pre_agg.null_cnt_ = 0;
         int64_t pos = 0;
         for (; pos + 8 <= datum_rows_.count(); pos += 8) {
           c.at(pos + 0) = datum_rows_.at(pos + 0).get_datum(i);
@@ -446,7 +349,7 @@ int ObMicroBlockEncoder::pivot()
           c.at(pos) = datum_rows_.at(pos).get_datum(i);
         }
         for (int64_t row_idx = 0; row_idx < c.count(); ++row_idx) {
-          col_ctx.null_cnt_ += c.at(row_idx).is_null() ? 1 : 0;
+          pre_agg.null_cnt_ += c.at(row_idx).is_null() ? 1 : 0;
         }
       }
     }
@@ -480,65 +383,6 @@ int ObMicroBlockEncoder::reserve_header(const ObMicroBlockEncodingCtx &ctx)
   }
   return ret;
 }
-int ObMicroBlockEncoder::store_encoding_meta_and_fix_cols(ObBufferWriter &buf_writer, int64_t &encoding_meta_offset)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    ObMicroBlockHeader *header = get_header(data_buffer_);
-    // detect extend value bit
-    header->extend_value_bit_ = 0;
-    FOREACH(e, encoders_) {
-      ObIColumnEncoder::EncoderDesc &desc = (*e)->get_desc();
-      if (desc.has_null_ || desc.has_nope_) {
-        header->extend_value_bit_ = 1;
-        if (desc.has_nope_) {
-          header->extend_value_bit_ = 2;
-          break;
-        }
-      }
-    }
-    FOREACH(e, encoders_) {
-      ((*e))->set_extend_value_bit(header->extend_value_bit_);
-    }
-
-    const int64_t header_size = data_buffer_.length();
-    const int64_t col_header_size = ctx_.column_cnt_ * (sizeof(ObColumnHeader));
-    encoding_meta_offset = header_size + col_header_size;
-
-    if (OB_FAIL(data_buffer_.write_nop(col_header_size))) {
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < encoders_.count(); ++i) {
-        int64_t pos_bak = buf_writer.length();
-        ObIColumnEncoder::EncoderDesc &desc = encoders_.at(i)->get_desc();
-        if (OB_FAIL(encoders_.at(i)->store_meta(buf_writer))) {
-        } else {
-          ObColumnHeader &ch = encoders_.at(i)->get_column_header();
-          if (buf_writer.length() > pos_bak) {
-            ch.offset_ = static_cast<uint32_t>(pos_bak);
-            ch.length_ = static_cast<uint32_t>(buf_writer.length() - pos_bak);
-          } else if (ObColumnHeader::RAW == encoders_.at(i)->get_type()) {
-            // column header offset records the start pos of the fix data, if needed
-            ch.offset_ = static_cast<uint32_t>(pos_bak);
-          }
-          ch.obj_type_ = static_cast<uint8_t>(encoders_.at(i)->get_obj_type());
-        }
-
-        if (OB_SUCC(ret) && !desc.is_var_data_ && desc.need_data_store_) {
-          if (OB_FAIL(encoders_.at(i)->store_fix_data(buf_writer))) {
-          }
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      get_header(data_buffer_)->row_data_offset_ = static_cast<int32_t>(encoding_meta_offset + buf_writer.length());
-    }
-  }
-  return ret;
-}
-
 int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
 {
   int ret = OB_SUCCESS;
@@ -551,15 +395,12 @@ int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
   } else if (FALSE_IT(encoder_freezed_ = true)) {
   } else if (OB_FAIL(set_datum_rows_ptr())) {
   } else if (OB_FAIL(pivot())) {
-  } else if (OB_FAIL(try_build_rust_block(buf, size))) {
-    if (OB_NOT_SUPPORTED == ret) {
-      ret = build_cpp_block(buf, size);
-    }
+  } else if (OB_FAIL(build_rust_block(buf, size))) {
   }
   return ret;
 }
 
-int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
+int ObMicroBlockEncoder::build_rust_block(char *&buf, int64_t &size)
 {
   int ret = OB_SUCCESS;
   rust::Vec<micro_block::BridgeColumn> columns;
@@ -579,34 +420,19 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
   }
   for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < ctx_.column_cnt_; ++col_idx) {
     const ObObjType type = ctx_.col_descs_->at(col_idx).col_type_.get_type();
-    const ObObjTypeStoreClass store_class = get_store_class_map()[ob_obj_type_class(type)];
-    switch (store_class) {
-      case ObIntSC:
-      case ObUIntSC:
-      case ObNumberSC:
-      case ObDecimalIntSC:
-      case ObStringSC:
-      case ObTextSC:
-      case ObJsonSC:
-      case ObGeometrySC: {
-        const int64_t fixed_length = get_type_size_map()[type];
-        micro_block::BridgeColumn column;
-        column.obj_type = static_cast<uint8_t>(type);
-        column.fixed_length = fixed_length > 0 ? static_cast<uint32_t>(fixed_length) : 0;
-        column.enable_bit_packing = false;
-        columns.push_back(column);
-        break;
-      }
-      default:
-        ret = OB_NOT_SUPPORTED;
-    }
+    const int64_t fixed_length = get_type_size_map()[type];
+    micro_block::BridgeColumn column;
+    column.obj_type = static_cast<uint8_t>(type);
+    column.fixed_length = fixed_length > 0 ? static_cast<uint32_t>(fixed_length) : 0;
+    column.enable_bit_packing = false;
+    columns.push_back(column);
   }
   for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < datum_rows_.count(); ++row_idx) {
     for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < ctx_.column_cnt_; ++col_idx) {
       const ObDatum &datum = datum_rows_.at(row_idx).get_datum(col_idx);
       micro_block::InputCell cell;
       if (OB_UNLIKELY(!datum.is_null() && !datum.is_nop()
-                             && datum.len_ > 0 && nullptr == datum.ptr_)) {
+                      && datum.len_ > 0 && nullptr == datum.ptr_)) {
         ret = OB_INVALID_DATA;
       } else {
         cell.kind = datum.is_null() ? 1 : (datum.is_nop() ? 2 : 0);
@@ -616,9 +442,7 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
         if (0 == cell.kind && fixed_length > 0 && datum.len_ > fixed_length) {
           cell.length = fixed_length;
         }
-        if (OB_SUCC(ret)) {
-          cells.push_back(cell);
-        }
+        cells.push_back(cell);
       }
     }
   }
@@ -666,7 +490,6 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
     if (OB_SUCC(ret)) {
       const int64_t metadata_size = header_size_;
       if (OB_UNLIKELY(result.accepted_rows != static_cast<std::size_t>(datum_rows_.count())
-                      || result.column_types.size() != static_cast<std::size_t>(ctx_.column_cnt_)
                       || result.block.size() > static_cast<std::size_t>(INT64_MAX)
                       || result.block.size() < static_cast<std::size_t>(metadata_size))) {
         ret = OB_INVALID_DATA;
@@ -674,20 +497,6 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
         ctx_.estimate_block_size_ += estimate_size_;
         ctx_.real_block_size_ += result.block.size() - metadata_size;
         ctx_.micro_block_cnt_++;
-        for (int64_t idx = 0; OB_SUCC(ret) && idx < ctx_.column_cnt_; ++idx) {
-          const ObPreviousEncoding pe(static_cast<ObColumnHeader::Type>(result.column_types[idx]), 0);
-          if (idx < ctx_.previous_encodings_.count()) {
-            ret = ctx_.previous_encodings_.at(idx).put(pe);
-          } else {
-            ObPreviousEncodingArray<ObMicroBlockEncodingCtx::MAX_PREV_ENCODING_COUNT> pe_array;
-            if (OB_FAIL(pe_array.put(pe))) {
-            } else {
-              ret = ctx_.previous_encodings_.push_back(pe_array);
-            }
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
         rust_block_->bytes = std::move(result.block);
         buf = reinterpret_cast<char *>(rust_block_->bytes.data());
         size = static_cast<int64_t>(rust_block_->bytes.size());
@@ -704,325 +513,15 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
   return ret;
 }
 
-int ObMicroBlockEncoder::build_cpp_block(char *&buf, int64_t &size)
-{
-  int ret = OB_SUCCESS;
-  int64_t encoders_need_size = 0;
-  const int64_t col_header_size = ctx_.column_cnt_ * (sizeof(ObColumnHeader));
-  char *encoding_meta_buf = nullptr;
-  if (OB_FAIL(row_indexs_.reserve(datum_rows_.count()))) {
-  } else if (OB_FAIL(encoder_detection(encoders_need_size))) {
-  } else if (OB_FAIL(data_buffer_.ensure_space(col_header_size + encoders_need_size))) {
-  } else if (OB_ISNULL(encoding_meta_buf = static_cast<char *>(encoding_meta_allocator_.alloc(encoders_need_size)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    STORAGE_LOG(WARN, "fail to alloc fix header buf", K(ret), K(encoders_need_size));
-  } else {
-    STORAGE_LOG(DEBUG, "[debug] build micro block", K_(estimate_size), K_(header_size), K_(expand_pct),
-        K(datum_rows_.count()), K(ctx_));
-
-    // <1> store encoding metas and fix cols data in encoding_meta_buffer
-    int64_t encoding_meta_offset = 0;
-    int64_t encoding_meta_size = 0;
-    ObBufferWriter meta_buf_writer(encoding_meta_buf, encoders_need_size, 0);
-    if (OB_FAIL(store_encoding_meta_and_fix_cols(meta_buf_writer, encoding_meta_offset))) {
-    } else if (FALSE_IT(encoding_meta_size = meta_buf_writer.length())) {
-    } else if (OB_FAIL(data_buffer_.write_nop(encoding_meta_size))) {
-    }
-
-    // <2> set row data store offset
-    int64_t fix_data_size = 0;
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(set_row_data_pos(fix_data_size))) {
-      } else {
-        get_header(data_buffer_)->var_column_count_ = static_cast<uint16_t>(var_data_encoders_.count());
-      }
-    }
-
-    // <3> fill row data (i.e. var data)
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(fill_row_data(fix_data_size))) {
-      }
-    }
-
-    // <4> fill row index
-    if (OB_SUCC(ret)) {
-      if (var_data_encoders_.empty()) {
-        get_header(data_buffer_)->row_index_byte_ = 0;
-      } else {
-        get_header(data_buffer_)->row_index_byte_ = 2;
-        if (row_indexs_.at(row_indexs_.count() - 1) > UINT16_MAX) {
-          get_header(data_buffer_)->row_index_byte_ = 4;
-        }
-        ObIntegerArrayGenerator gen;
-        const int64_t row_index_size = row_indexs_.count() * get_header(data_buffer_)->row_index_byte_;
-        if (OB_FAIL(data_buffer_.ensure_space(row_index_size))) {
-        } else if (OB_FAIL(gen.init(data_buffer_.data() + data_buffer_.length(), get_header(data_buffer_)->row_index_byte_))) {
-        } else if (OB_FAIL(data_buffer_.write_nop(row_index_size))) {
-        } else {
-          for (int64_t idx = 0; idx < row_indexs_.count(); ++idx) {
-            gen.get_array().set(idx, row_indexs_.at(idx));
-          }
-        }
-      }
-    }
-
-    // <5> fill header, encoding_meta and fix cols data
-    if (OB_SUCC(ret)) {
-      get_header(data_buffer_)->row_count_ = static_cast<uint32_t>(datum_rows_.count());
-      get_header(data_buffer_)->has_string_out_row_ = has_string_out_row_;
-      get_header(data_buffer_)->all_lob_in_row_ = !has_lob_out_row_;
-      get_header(data_buffer_)->max_merged_trans_version_ = max_merged_trans_version_;
-      const int64_t header_size = get_header(data_buffer_)->header_size_;
-      char *data = data_buffer_.data() + header_size;
-      FOREACH(e, encoders_) {
-        MEMCPY(data, &(*e)->get_column_header(), sizeof(ObColumnHeader));
-        data += sizeof(ObColumnHeader);
-      }
-      // fill encoding meta and fix cols data
-      MEMCPY(data_buffer_.data() + encoding_meta_offset, encoding_meta_buf, encoding_meta_size);
-    }
-
-    if (OB_SUCC(ret)) {
-      // update encoding context
-      ctx_.estimate_block_size_ += estimate_size_;
-      ctx_.real_block_size_ += data_buffer_.length() - encoding_meta_offset;
-      ctx_.micro_block_cnt_++;
-      ObPreviousEncoding pe;
-      for (int64_t idx = 0; OB_SUCC(ret) && idx < encoders_.count(); ++idx) {
-        ObIColumnEncoder *e = encoders_.at(idx);
-        pe.type_ = static_cast<ObColumnHeader::Type>(e->get_column_header().type_);
-        if (ObColumnHeader::is_inter_column_encoder(pe.type_)) {
-          pe.ref_col_idx_ = static_cast<ObSpanColumnEncoder *>(e)->get_ref_col_idx();
-        } else {
-          pe.ref_col_idx_ = 0;
-        }
-        if (ObColumnHeader::STRING_PREFIX == pe.type_) {
-          pe.last_prefix_length_ = col_ctxs_.at(idx).last_prefix_length_;
-        }
-        if (idx < ctx_.previous_encodings_.count()) {
-          if (OB_FAIL(ctx_.previous_encodings_.at(idx).put(pe))) {
-          }
-
-          //if (ctx_->previous_encodings_.at(idx).last_1 != pe.type_) {
-            //LOG_DEBUG("encoder changing", K(idx),
-                //"previous type", ctx_->previous_encodings_.at(idx).last_,
-                //"current type", pe);
-          //}
-        } else {
-          ObPreviousEncodingArray<ObMicroBlockEncodingCtx::MAX_PREV_ENCODING_COUNT> pe_array;
-          if (OB_FAIL(pe_array.put(pe))) {
-          } else if (OB_FAIL(ctx_.previous_encodings_.push_back(pe_array))) {
-          }
-        }
-      }
-    } else {
-      // Print status of current encoders for debugging
-      print_micro_block_encoder_status();
-      if (OB_BUF_NOT_ENOUGH == ret) {
-        // buffer not enough when building a block with pivoted rows, probably caused by estimate
-        // maximum block size after encoding failed, rewrite errno with OB_ENCODING_EST_SIZE_OVERFLOW
-        // to force compaction task retry with flat row store type.
-        ret = OB_ENCODING_EST_SIZE_OVERFLOW;
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      buf = data_buffer_.data();
-      size = data_buffer_.length();
-      block_generated_ = true;
-    }
-  }
-
-  return ret;
-}
-
-int ObMicroBlockEncoder::set_row_data_pos(int64_t &fix_data_size)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(datum_rows_.empty())) {
-    ret = OB_INNER_STAT_ERROR;
-  } else {
-
-    // detect extend value bit size and dispatch encoders.
-    int64_t ext_bit_size = 0;
-    ObMicroBlockHeader *header = get_header(data_buffer_);
-    FOREACH_X(e, encoders_, OB_SUCC(ret)) {
-      ObIColumnEncoder::EncoderDesc &desc = (*e)->get_desc();
-      if (desc.need_data_store_ && desc.is_var_data_) {
-        if (OB_FAIL(var_data_encoders_.push_back(*e))) {
-        } else if (desc.need_extend_value_bit_store_) {
-          (*e)->get_column_header().extend_value_index_ = static_cast<int16_t>(ext_bit_size);
-          ext_bit_size += header->extend_value_bit_;
-        }
-      }
-    }
-    fix_data_size = (ext_bit_size + CHAR_BIT - 1) / CHAR_BIT;
-
-    // set var data position
-    for (int64_t i = 0; OB_SUCC(ret) && i < var_data_encoders_.count(); ++i) {
-      var_data_encoders_.at(i)->get_desc().row_offset_ = fix_data_size;
-      var_data_encoders_.at(i)->get_desc().row_length_ = i;
-      if (OB_FAIL(var_data_encoders_.at(i)->set_data_pos(fix_data_size, i))) {
-      }
-    }
-    if (OB_SUCC(ret) && !var_data_encoders_.empty()) {
-      ObColumnHeader &ch = var_data_encoders_.at(var_data_encoders_.count() - 1)
-          ->get_column_header();
-      ch.attr_ |= ObColumnHeader::LAST_VAR_FIELD;
-    }
-  }
-  return ret;
-}
-
-OB_INLINE int ObMicroBlockEncoder::store_data(ObIColumnEncoder &e,
-    const int64_t row_id, ObBitStream &bs, char *buf, const int64_t len)
-{
-  // performance critical, do not check parameters
-  /* use switch case and inline
-  int ret = OB_SUCCESS;
-  switch (e.get_column_header().type_) {
-    case ObColumnHeader::RAW: {
-      ret = static_cast<ObRawEncoder &>(e).ObRawEncoder::store_data(row_id, bs, buf, len);
-      break;
-    };
-    case ObColumnHeader::DICT: {
-      ret = static_cast<ObDictEncoder &>(e).ObDictEncoder::store_data(row_id, bs, buf, len);
-      break;
-    };
-    case ObColumnHeader::RLE: {
-      ret = static_cast<ObRLEEncoder &>(e).ObRLEEncoder::store_data(row_id, bs, buf, len);
-      break;
-    };
-    case ObColumnHeader::CONST: {
-      ret = static_cast<ObConstEncoder &>(e).ObConstEncoder::store_data(row_id, bs, buf, len);
-      break;
-    };
-    case ObColumnHeader::INTEGER_BASE_DIFF: {
-      ret = static_cast<ObIntegerBaseDiffEncoder &>(e).ObIntegerBaseDiffEncoder::store_data(row_id, bs, buf, len);
-      break;
-    };
-    case ObColumnHeader::STRING_DIFF: {
-      ret = static_cast<ObStringDiffEncoder &>(e).ObStringDiffEncoder::store_data(row_id, bs, buf, len);
-      break;
-    };
-    case ObColumnHeader::HEX_PACKING: {
-      ret = static_cast<ObHexStringEncoder &>(e).ObHexStringEncoder::store_data(row_id, bs, buf, len);
-      break;
-    };
-    default:
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected type", K(ret), "type", e.get_column_header().type_);
-  }
-  return ret;
-  */
-
-  // use c++ virtual function mechanism
-  return e.store_data(row_id, bs, buf, len);
-}
-
-int ObMicroBlockEncoder::fill_row_data(const int64_t fix_data_size)
-{
-  int ret = OB_SUCCESS;
-  ObArray<int64_t> var_lengths;
-  var_lengths.set_attr(ObMemAttr("MicroBlkEncoder"));
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(datum_rows_.empty())) {
-    ret = OB_INNER_STAT_ERROR;
-  } else if (OB_FAIL(var_lengths.reserve(var_data_encoders_.count()))) {
-  } else if (OB_FAIL(row_indexs_.push_back(0))) {
-  } else {
-    const int64_t row_data_offset = get_header(data_buffer_)->row_data_offset_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < var_data_encoders_.count(); ++i) {
-      if (OB_FAIL(var_lengths.push_back(0))) {
-      }
-    }
-
-    for (int64_t row_id = 0; OB_SUCC(ret) && row_id < datum_rows_.count(); ++row_id) {
-      int64_t var_data_size = 0;
-      int64_t column_index_byte = 0;
-      int64_t row_size = 0;
-      // detect column index byte
-      if (var_data_encoders_.count() > 0) {
-        for (int64_t i = 0; OB_SUCC(ret) && i < var_data_encoders_.count(); ++i) {
-          int64_t length = 0;
-          if (OB_FAIL(var_data_encoders_.at(i)->get_var_length(row_id, length))) {
-          } else {
-            var_lengths.at(i) = length;
-            if (i > 0 && i == var_data_encoders_.count() - 1) {
-              column_index_byte = var_data_size <= UINT8_MAX ? 1 : 2;
-              if (OB_UNLIKELY(var_data_size > UINT16_MAX)) {
-                column_index_byte = 4;
-              }
-            }
-            var_data_size += length;
-          }
-        }
-      }
-
-      // fill var data
-      row_size = fix_data_size + var_data_size + (column_index_byte > 0 ? 1 : 0)
-          + column_index_byte * (var_data_encoders_.count() - 1);
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(data_buffer_.ensure_space(row_size))) {
-      } else {
-        char *data = data_buffer_.current();
-        ObBitStream bs;
-        if (OB_FAIL(data_buffer_.write_nop(row_size))) {
-        } else if (OB_FAIL(bs.init(reinterpret_cast<unsigned char *>(data), fix_data_size))) {
-        } else {
-          MEMSET(data, 0, row_size);
-          char *column_index_byte_ptr = data + fix_data_size;
-
-          ObIntegerArrayGenerator gen;
-          if (OB_SUCC(ret) && column_index_byte > 0) {
-            if (OB_FAIL(gen.init(data + fix_data_size + 1, column_index_byte))) {
-            }
-          }
-          if (OB_SUCC(ret) && !var_data_encoders_.empty()) {
-            char *var_data = column_index_byte_ptr;
-            if (column_index_byte > 0) {
-              *column_index_byte_ptr = static_cast<int8_t>(column_index_byte);
-              var_data +=  1 + column_index_byte * (var_data_encoders_.count() - 1);
-            }
-            int64_t offset = 0;
-            for (int64_t i = 0; OB_SUCC(ret) && i < var_data_encoders_.count(); ++i) {
-              if (i > 0) {
-                gen.get_array().set(i - 1, offset);
-              }
-              const int64_t length = var_lengths.at(i);
-              if (OB_FAIL(store_data(*var_data_encoders_.at(i),
-                  row_id, bs, var_data + offset, length))) {
-              }
-              offset += length;
-            }
-          }
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(row_indexs_.push_back(data_buffer_.length() - row_data_offset))) {
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObMicroBlockEncoder::init_column_ctxs()
+int ObMicroBlockEncoder::init_pre_agg_columns()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    ObColumnEncodingCtx cc;
+    PreAggColumn column;
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_; ++i) {
-      cc.reset();
-      cc.encoding_ctx_ = &ctx_;
-      if (OB_FAIL(col_ctxs_.push_back(cc))) {
+      if (OB_FAIL(pre_agg_columns_.push_back(column))) {
       }
     }
   }
@@ -1049,7 +548,7 @@ int ObMicroBlockEncoder::process_out_row_columns(const ObDatumRow &row)
   // make sure in&out row status of all values in a column are same
   int ret = OB_SUCCESS;
   if (!need_check_lob_) {
-  } else if (OB_UNLIKELY(row.get_column_count() != col_ctxs_.count())) {
+  } else if (OB_UNLIKELY(row.get_column_count() != pre_agg_columns_.count())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!has_lob_out_row_) {
     for (int64_t i = 0; !has_lob_out_row_ && OB_SUCC(ret) && i < row.get_column_count(); ++i) {
@@ -1271,626 +770,6 @@ int64_t ObMicroBlockEncoder::calc_datum_row_size(const ObDatumRow &src, int64_t 
   return need_size;
 }
 
-int ObMicroBlockEncoder::prescan(const int64_t column_index)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    const ObColDesc &col_desc = ctx_.col_descs_->at(column_index);
-    const ObObjMeta column_type = col_desc.col_type_;
-    const ObObjTypeStoreClass store_class =
-        get_store_class_map()[ob_obj_type_class(column_type.get_type())];
-    int64_t type_store_size = get_type_size_map()[column_type.get_type()];
-    ObColumnEncodingCtx &col_ctx = col_ctxs_.at(column_index);
-    col_ctx.col_datums_ = all_col_datums_.at(column_index);
-
-    // build hashtable
-    ObEncodingHashTable *ht = nullptr;
-    ObEncodingHashTableBuilder *builder = nullptr;
-    ObMultiPrefixTree *prefix_tree = nullptr;
-    // next power of 2
-    uint64_t bucket_num = datum_rows_.count() * 2;
-    if (0 != (bucket_num & (bucket_num - 1))) {
-      while (0 != (bucket_num & (bucket_num - 1))) {
-        bucket_num = bucket_num & (bucket_num - 1);
-      }
-      bucket_num = bucket_num * 2;
-    }
-    const int64_t node_num = datum_rows_.count();
-    if (OB_FAIL(hashtable_factory_.create(bucket_num, node_num, ht))) {
-    } else if (OB_FAIL(multi_prefix_tree_factory_.create(node_num, bucket_num, prefix_tree))) {
-    } else if (FALSE_IT(builder = static_cast<ObEncodingHashTableBuilder *>(ht))) {
-    } else if (OB_FAIL(builder->build(*col_ctx.col_datums_, col_desc))) {
-    }
-
-    if (OB_SUCC(ret)) {
-      col_ctx.prefix_tree_ = prefix_tree;
-      if (OB_FAIL(build_column_encoding_ctx(ht, store_class, type_store_size, col_ctx))) {
-      } else if (OB_FAIL(hashtables_.push_back(ht))) {
-      } else if (OB_FAIL(multi_prefix_trees_.push_back(prefix_tree))) {
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-      // avoid overwirte ret
-      int temp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (temp_ret = hashtable_factory_.recycle(false, ht))) {
-      }
-      if (OB_SUCCESS != (temp_ret = multi_prefix_tree_factory_.recycle(prefix_tree))) {
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockEncoder::encoder_detection(int64_t &encoders_need_size)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_; ++i) {
-      if (OB_FAIL(prescan(i))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      int64_t extend_value_bit = 1;
-      FOREACH(c, col_ctxs_) {
-        if (c->nope_cnt_ > 0) {
-          extend_value_bit = 2;
-          break;
-        }
-      }
-      FOREACH(c, col_ctxs_) {
-        c->extend_value_bit_ = extend_value_bit;
-      }
-    }
-    encoders_need_size = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i <ctx_.column_cnt_; ++i) {
-      if (OB_FAIL(fast_encoder_detect(i, col_ctxs_.at(i)))) {
-      } else {
-        if (encoders_.count() <= i) {
-          if (col_ctxs_.at(i).only_raw_encoding_) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(choose_encoder(i, col_ctxs_.at(i)))) {
-          }
-        }
-      }
-      int64_t need_size = 0;
-      int64_t encoder_cnt = encoders_.count();
-      if (OB_FAIL(ret)) {
-      } else if (OB_UNLIKELY(encoder_cnt <= i)) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "unexpected encoder cnt", K(ret), K(encoder_cnt), K(i));
-      } else if (OB_FAIL(encoders_.at(encoder_cnt - 1)->get_encoding_store_meta_need_space(need_size))) {
-      } else {
-        need_size += encoders_.at(encoder_cnt - 1)->calc_encoding_fix_data_need_space();
-        encoders_need_size += need_size;
-      }
-    }
-    if (OB_FAIL(ret)) {
-      free_encoders();
-    }
-  }
-
-  return ret;
-}
-
-int ObMicroBlockEncoder::fast_encoder_detect(
-    const int64_t column_idx, const ObColumnEncodingCtx &cc)
-{
-  int ret = OB_SUCCESS;
-  ObIColumnEncoder *e = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(column_idx < 0 || column_idx >= ctx_.column_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (nullptr != ctx_.column_encodings_
-      && ctx_.column_encodings_[column_idx] > 0
-      && ctx_.column_encodings_[column_idx] < ObColumnHeader::Type::MAX_TYPE) {
-    LOG_INFO("specified encoding", K(column_idx), K(ctx_.column_encodings_[column_idx]));
-    if (OB_FAIL(try_encoder(e, column_idx,
-        static_cast<ObColumnHeader::Type>(ctx_.column_encodings_[column_idx]), 0, -1))) {
-    } else if (OB_ISNULL(e)) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-  } else if (cc.only_raw_encoding_) {
-    if (OB_FAIL(force_raw_encoding(column_idx, true, e))) {
-    } else if (OB_ISNULL(e)) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-  } else if (cc.ht_->distinct_cnt() <= 1) {
-    if (OB_FAIL(try_encoder<ObConstEncoder>(e, column_idx))) {
-    }
-  }
-  if (OB_SUCC(ret) && NULL != e) {
-    LOG_DEBUG("used encoder (fast)", K(column_idx),
-        "column_header", e->get_column_header(),
-        "data_desc", e->get_desc());
-    if (OB_FAIL(encoders_.push_back(e))) {
-      free_encoder(e);
-      e = NULL;
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockEncoder::try_previous_encoder(ObIColumnEncoder *&e,
-    const int64_t column_index, const ObPreviousEncoding &previous)
-{
-  return try_encoder(e, column_index, previous.type_,
-      previous.last_prefix_length_, previous.ref_col_idx_);
-}
-
-int ObMicroBlockEncoder::try_encoder(ObIColumnEncoder *&e, const int64_t column_index,
-      const ObColumnHeader::Type type, const int64_t last_prefix_length,
-      const int64_t ref_col_idx)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(column_index < 0 || column_index > ctx_.column_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    switch (type) {
-      case ObColumnHeader::RAW: {
-        ret = try_encoder<ObRawEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::DICT: {
-        ret = try_encoder<ObDictEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::RLE: {
-        ret = try_encoder<ObRLEEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::CONST: {
-        ret = try_encoder<ObConstEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::INTEGER_BASE_DIFF: {
-        ret = try_encoder<ObIntegerBaseDiffEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::STRING_DIFF: {
-        ret = try_encoder<ObStringDiffEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::HEX_PACKING: {
-        ret = try_encoder<ObHexStringEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::STRING_PREFIX: {
-        col_ctxs_.at(column_index).last_prefix_length_ = last_prefix_length;
-        ret = try_encoder<ObStringPrefixEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::COLUMN_EQUAL: {
-        ret = ref_col_idx >= 0
-              ? try_span_column_encoder<ObColumnEqualEncoder>(e, column_index, ref_col_idx)
-              : try_span_column_encoder<ObColumnEqualEncoder>(e, column_index);
-        break;
-      }
-      case ObColumnHeader::COLUMN_SUBSTR: {
-        ret = ref_col_idx >= 0
-              ? try_span_column_encoder<ObInterColSubStrEncoder>(e, column_index, ref_col_idx)
-              : try_span_column_encoder<ObInterColSubStrEncoder>(e, column_index);
-        break;
-      }
-      default:
-        ret = OB_ERR_UNEXPECTED;
-    }
-
-    if (OB_FAIL(ret)) {
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockEncoder::try_previous_encoder(ObIColumnEncoder *&choose,
-    const int64_t column_index, const int64_t acceptable_size, bool &try_more)
-{
-  int ret = OB_SUCCESS;
-  ObIColumnEncoder *e = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(column_index < 0 || column_index > ctx_.column_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    bool need_calc = false;
-    int64_t cycle_cnt = 0;
-    if (32 < ctx_.micro_block_cnt_) {
-      cycle_cnt = 16;
-    } else if (16 < ctx_.micro_block_cnt_) {
-      cycle_cnt = 8;
-    } else {
-      cycle_cnt = 4;
-    }
-    need_calc = (0 == ctx_.micro_block_cnt_ % cycle_cnt);
-
-    if (column_index < ctx_.previous_encodings_.count()) {
-      int64_t pos = ctx_.previous_encodings_.at(column_index).last_pos_;
-      ObPreviousEncoding *prev = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.previous_encodings_.at(column_index).size_; ++i) {
-        prev = &ctx_.previous_encodings_.at(column_index).prev_encodings_[pos];
-        if (!col_ctxs_.at(column_index).detected_encoders_[prev->type_]) {
-          col_ctxs_.at(column_index).detected_encoders_[prev->type_] = true;
-          if (OB_FAIL(try_previous_encoder(e, column_index, *prev))) {
-          } else if (NULL != e) {
-            if (e->calc_size() <= choose->calc_size()) {
-              free_encoder(choose);
-              choose = e;
-              if (!need_calc || choose->calc_size() <= acceptable_size) {
-                try_more = false;
-                LOG_DEBUG("choose encoding by previous micro block encoding", K(column_index),
-                    "previous encoding array", ctx_.previous_encodings_.at(column_index));
-              }
-            } else {
-              free_encoder(e);
-              e = NULL;
-            }
-          }
-        }
-        pos = (pos == ctx_.previous_encodings_.at(column_index).size_ - 1) ? 0 : pos + 1;
-      }
-    }
-  }
-  return ret;
-}
-
-template <typename T>
-int ObMicroBlockEncoder::try_span_column_encoder(ObIColumnEncoder *&e,
-    const int64_t column_index)
-{
-  int ret = OB_SUCCESS;
-  e = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(column_index < 0 || column_index > ctx_.column_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (ctx_.encoder_opt_.enable<T>() && !col_ctxs_.at(column_index).is_refed_) {
-    bool suitable = false;
-    T *encoder = alloc_encoder<T>();
-    if (NULL == encoder) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_ && !suitable; ++i) {
-        if (column_index == i) {
-        } else if (i < column_index && ObColumnHeader::is_inter_column_encoder(encoders_.at(i)->get_type())) {
-          // column i refes others, continue
-        } else if (ctx_.col_descs_->at(i).col_type_ == ctx_.col_descs_->at(column_index).col_type_) {
-          encoder->reuse();
-          if (OB_FAIL(try_span_column_encoder(encoder, column_index, i, suitable))) {
-          } else if (suitable) {
-            col_ctxs_.at(i).is_refed_ = true;
-          }
-        }
-      }
-    }
-
-    if (OB_SUCC(ret) && suitable) {
-      e = encoder;
-    } else if (NULL != encoder) {
-      free_encoder(encoder);
-      encoder = NULL;
-    }
-  }
-  return ret;
-}
-
-template <typename T>
-int ObMicroBlockEncoder::try_span_column_encoder(ObIColumnEncoder *&e,
-    const int64_t column_index, const int64_t ref_column_index)
-{
-  int ret = OB_SUCCESS;
-  e = NULL;
-  bool suitable = false;
-  if (ctx_.encoder_opt_.enable<T>() && !col_ctxs_.at(column_index).is_refed_) {
-    if (ref_column_index < column_index
-        && ObColumnHeader::is_inter_column_encoder(encoders_[ref_column_index]->get_type())) {
-    } else {
-      T *encoder = alloc_encoder<T>();
-      if (NULL == encoder) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(try_span_column_encoder(encoder, column_index, ref_column_index, suitable))) {
-      }
-
-      if (OB_SUCC(ret) && suitable) {
-        e = encoder;
-      } else if (NULL != encoder) {
-        free_encoder(encoder);
-        encoder = NULL;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockEncoder::try_span_column_encoder(ObSpanColumnEncoder *encoder,
-    const int64_t column_index, const int64_t ref_column_index,
-    bool &suitable)
-{
-  int ret = OB_SUCCESS;
-  suitable = false;
-  if (OB_UNLIKELY(
-      nullptr == encoder
-      || column_index < 0
-      || ref_column_index < 0
-      || ref_column_index > ctx_.column_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (ref_column_index > UINT16_MAX) {
-    // not suitable
-  } else if (FALSE_IT(col_ctxs_.at(column_index).try_set_need_sort(encoder->get_type(), column_index))) {
-  } else if (OB_FAIL(encoder->init(col_ctxs_[column_index], column_index, datum_rows_))) {
-  } else if (OB_FAIL(encoder->set_ref_col_idx(ref_column_index,
-      col_ctxs_[ref_column_index]))) {
-  } else if (OB_FAIL(encoder->traverse(suitable))) {
-  }
-  return ret;
-}
-
-int ObMicroBlockEncoder::choose_encoder(const int64_t column_idx,
-                                        ObColumnEncodingCtx &cc)
-{
-  int ret = OB_SUCCESS;
-  ObIColumnEncoder *e = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(column_idx < 0 || column_idx >= ctx_.column_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(try_encoder<ObRawEncoder>(e, column_idx))) {
-  } else if (NULL == e) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    bool try_more = true;
-    ObIColumnEncoder *choose = e;
-    int64_t acceptable_size = choose->calc_size() / 4;
-    if (OB_FAIL(try_encoder<ObDictEncoder>(e, column_idx))) {
-    } else if (NULL != e) {
-      if (e->calc_size() < choose->calc_size()) {
-        free_encoder(choose);
-        choose = e;
-      } else {
-        free_encoder(e);
-        e = NULL;
-      }
-    }
-
-    // try previous micro block encoding
-    if (OB_SUCC(ret) && try_more) {
-      if (OB_FAIL(try_previous_encoder(choose, column_idx, acceptable_size, try_more))) {
-      }
-    }
-
-    // try column equal
-    if (OB_SUCC(ret) && try_more && !cc.is_refed_ /* not refed by other */) {
-      if (cc.detected_encoders_[ObColumnEqualEncoder::type_]) {
-      } else if (OB_FAIL(try_span_column_encoder<ObColumnEqualEncoder>(e, column_idx))) {
-      } else if (NULL != e) {
-        if (e->calc_size() < choose->calc_size()) {
-          free_encoder(choose);
-          choose = e;
-          if (choose->calc_size() <= acceptable_size) {
-            try_more = false;
-          }
-        } else {
-          free_encoder(e);
-          e = NULL;
-        }
-      }
-    }
-
-    // try inter column substring
-    const ObObjTypeClass tc = ob_obj_type_class(ctx_.col_descs_->at(column_idx).col_type_.get_type());
-    const ObObjTypeStoreClass sc = get_store_class_map()[tc];
-    if (OB_SUCC(ret) && try_more && !cc.is_refed_ /* not refed by other*/) {
-      if (is_string_encoding_valid(sc)) {
-        if (cc.detected_encoders_[ObInterColSubStrEncoder::type_]) {
-        } else if (OB_FAIL(try_span_column_encoder<ObInterColSubStrEncoder>(e, column_idx))) {
-        } else if (NULL != e) {
-          if (e->calc_size() < choose->calc_size()) {
-            free_encoder(choose);
-            choose = e;
-            if (choose->calc_size() <= acceptable_size) {
-              try_more = false;
-            }
-          } else {
-            free_encoder(e);
-            e = NULL;
-          }
-        }
-      }
-    }
-
-    // try rle and const
-    if (OB_SUCC(ret) && try_more && cc.ht_->distinct_cnt() <= datum_rows_.count() / 2) {
-      if (cc.detected_encoders_[ObRLEEncoder::type_]) {
-      } else if (OB_FAIL(try_encoder<ObRLEEncoder>(e, column_idx))) {
-      } else if (NULL != e) {
-        if (e->calc_size() < choose->calc_size()) {
-          free_encoder(choose);
-          choose = e;
-        } else {
-          free_encoder(e);
-          e = NULL;
-        }
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (cc.detected_encoders_[ObConstEncoder::type_]) {
-      } else if (OB_FAIL(try_encoder<ObConstEncoder>(e, column_idx))) {
-      } else if (NULL != e) {
-        if (e->calc_size() < choose->calc_size()) {
-          free_encoder(choose);
-          choose = e;
-        } else {
-          free_encoder(e);
-          e = NULL;
-        }
-      }
-    }
-
-    if (OB_SUCC(ret) && try_more && choose->calc_size() <= acceptable_size) {
-      try_more = false;
-    }
-
-    if (OB_SUCC(ret) && try_more) {
-      // if ((ObIntSC == sc || ObUIntSC == sc) && ObFloatTC != tc && ObDoubleTC != tc) {
-      if ((ObIntSC == sc || ObUIntSC == sc)) {
-        if (cc.detected_encoders_[ObIntegerBaseDiffEncoder::type_]) {
-        } else if (OB_FAIL(try_encoder<ObIntegerBaseDiffEncoder>(e, column_idx))) {
-        } else if (NULL != e) {
-          int64_t size = e->calc_size();
-          if (size < choose->calc_size()) {
-            free_encoder(choose);
-            choose = e;
-            try_more = size <= acceptable_size;
-          } else {
-            free_encoder(e);
-            e = NULL;
-          }
-        }
-      }
-    }
-
-    bool string_diff_suitable = false;
-    if (OB_SUCC(ret) && try_more) {
-      if (is_string_encoding_valid(sc) && cc.fix_data_size_ > 0) {
-        if (cc.detected_encoders_[ObStringDiffEncoder::type_]) {
-        } else if (OB_FAIL(try_encoder<ObStringDiffEncoder>(e, column_idx))) {
-        } else if (NULL != e) {
-          int64_t size = e->calc_size();
-          if (size < choose->calc_size()) {
-            free_encoder(choose);
-            choose = e;
-            try_more = size <= acceptable_size;
-            string_diff_suitable = true;
-          } else {
-            free_encoder(e);
-            e = NULL;
-          }
-        }
-      }
-    }
-
-    bool string_prefix_suitable = false;
-    if (OB_SUCC(ret) && try_more) {
-      if (is_string_encoding_valid(sc)) {
-        if (cc.detected_encoders_[ObStringPrefixEncoder::type_]) {
-        } else if (OB_FAIL(try_encoder<ObStringPrefixEncoder>(e, column_idx))) {
-        } else if (NULL != e) {
-          int64_t size = e->calc_size();
-          if (size < choose->calc_size()) {
-            free_encoder(choose);
-            choose = e;
-            try_more = size <= acceptable_size;
-            string_prefix_suitable = true;
-          } else {
-            free_encoder(e);
-            e = NULL;
-          }
-        }
-      }
-    }
-
-    if (OB_SUCC(ret) && try_more && !string_diff_suitable && !string_prefix_suitable) {
-      if (is_string_encoding_valid(sc)) {
-        if (cc.detected_encoders_[ObHexStringEncoder::type_]) {
-        } else if (OB_FAIL(try_encoder<ObHexStringEncoder>(e, column_idx))) {
-        } else if (NULL != e) {
-          int64_t size = e->calc_size();
-          if (size < choose->calc_size()) {
-            free_encoder(choose);
-            choose = e;
-            try_more = size <= acceptable_size;
-          } else {
-            free_encoder(e);
-            e = NULL;
-          }
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      LOG_DEBUG("used encoder", K(column_idx),
-          "column_header", choose->get_column_header(),
-          "data_desc", choose->get_desc());
-      if (ObColumnHeader::is_inter_column_encoder(choose->get_type())) {
-        const int64_t ref_col_idx = static_cast<ObSpanColumnEncoder *>(choose)->get_ref_col_idx();
-        col_ctxs_.at(ref_col_idx).is_refed_ = true;
-      }
-      if (OB_FAIL(encoders_.push_back(choose))) {
-      }
-    }
-    if (OB_FAIL(ret)) {
-      if (NULL != choose) {
-        free_encoder(choose);
-        choose = NULL;
-      }
-    }
-  }
-  return ret;
-}
-
-void ObMicroBlockEncoder::free_encoders()
-{
-  int ret = OB_SUCCESS;
-  FOREACH(e, encoders_) {
-    free_encoder(*e);
-  }
-  FOREACH(ht, hashtables_) {
-    // should continue even fail
-    if (OB_FAIL(hashtable_factory_.recycle(false, *ht))) {
-    }
-  }
-  FOREACH(pt, multi_prefix_trees_) {
-    // should continue even fail
-    if (OB_FAIL(multi_prefix_tree_factory_.recycle(*pt))) {
-    }
-  }
-  encoders_.reuse();
-  hashtables_.reuse();
-  multi_prefix_trees_.reuse();
-}
-
-
-int ObMicroBlockEncoder::force_raw_encoding(const int64_t column_idx,
-    const bool force_var_store, ObIColumnEncoder *&encoder)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(column_idx < 0 || column_idx >= ctx_.column_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    bool suitable = false;
-    ObRawEncoder *e = alloc_encoder<ObRawEncoder>();
-    if (NULL == e) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(e->init(col_ctxs_.at(column_idx), column_idx, datum_rows_))) {
-    } else if (OB_FAIL(e->traverse(force_var_store, suitable))) {
-    }
-
-    if (OB_SUCC(ret)) {
-      if (!suitable) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        e->set_extend_value_bit(get_header(data_buffer_)->extend_value_bit_);
-      }
-    }
-
-    if (NULL != e && OB_FAIL(ret)) {
-      free_encoder(e);
-      e = NULL;
-    } else {
-      encoder = e;
-    }
-  }
-  return ret;
-}
-
 int ObMicroBlockEncoder::get_pre_agg_param(const int64_t col_idx, ObMicroDataPreAggParam &pre_agg_param) const
 {
   int ret = OB_SUCCESS;
@@ -1902,12 +781,9 @@ int ObMicroBlockEncoder::get_pre_agg_param(const int64_t col_idx, ObMicroDataPre
     ret = OB_INVALID_ARGUMENT;
   } else {
     pre_agg_param.reset();
-    const ObColumnEncodingCtx &col_ctx = col_ctxs_.at(col_idx);
-    pre_agg_param.null_cnt_ = col_ctx.null_cnt_;
-    pre_agg_param.col_datums_ = col_ctx.col_datums_;
-    pre_agg_param.encoding_ht_ = col_ctx.ht_;
-    pre_agg_param.is_pax_encoding_ = true;
-    pre_agg_param.is_integer_aggregated_ = false;
+    const PreAggColumn &pre_agg = pre_agg_columns_.at(col_idx);
+    pre_agg_param.null_cnt_ = pre_agg.null_cnt_;
+    pre_agg_param.col_datums_ = pre_agg.col_datums_;
   }
   return ret;
 }

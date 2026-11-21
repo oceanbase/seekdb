@@ -2176,14 +2176,11 @@ int ObMacroBlockWriter::build_micro_writer(const ObDataStoreDesc *data_store_des
     encoding_ctx.column_cnt_ = data_store_desc->get_row_column_count();
     encoding_ctx.rowkey_column_cnt_ = data_store_desc->get_rowkey_column_count();
     encoding_ctx.col_descs_ = &data_store_desc->get_full_stored_col_descs();
-    encoding_ctx.encoder_opt_ = data_store_desc->encoder_opt_;
-    encoding_ctx.column_encodings_ = nullptr;
     encoding_ctx.row_store_type_ = data_store_desc->get_row_store_type();
     encoding_ctx.need_calc_column_chksum_ = data_store_desc->is_major_merge_type();
     encoding_ctx.compressor_type_ = data_store_desc->get_compressor_type();
     encoding_ctx.encoding_granularity_ = data_store_desc->static_desc_->encoding_granularity_ > 0 ?
                     data_store_desc->static_desc_->encoding_granularity_ : UINT64_MAX;
-    encoding_ctx.semistruct_encoding_type_ = data_store_desc->get_semistruct_encoding_type();
     if (data_store_desc->is_for_index_or_meta()) {
       /* single row index micro block will cause infinite recursion when building index tree and meta tree */
       encoding_ctx.minimum_rows_ = 2;

@@ -16,7 +16,6 @@
 #ifndef OCEANBASE_ENCODING_OB_COLUMN_DATUM_ITER_H_
 #define OCEANBASE_ENCODING_OB_COLUMN_DATUM_ITER_H_
 
-#include "storage/blocksstable/encoding/ob_encoding_hash_util.h"
 #include "storage/blocksstable/encoding/ob_encoding_util.h"
 
 namespace oceanbase
@@ -47,21 +46,6 @@ public:
 private:
   const ObColDatums &col_datums_;
   int64_t idx_;
-};
-
-class ObEncodingHashTableDatumIter final : public ObIDatumIter
-{
-public:
-  explicit ObEncodingHashTableDatumIter(const ObEncodingHashTable &hash_table)
-      : hash_table_(hash_table), iter_(hash_table_.begin())
-  {}
-  int get_next(const ObDatum *&datum) override;
-  int64_t size() const override { return hash_table_.size(); }
-  void reset() override { iter_ = hash_table_.begin(); }
-
-private:
-  const ObEncodingHashTable &hash_table_;
-  ObEncodingHashTable::ConstIterator iter_;
 };
 
 } // namespace blocksstable
