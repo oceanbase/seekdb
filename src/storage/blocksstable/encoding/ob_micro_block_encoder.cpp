@@ -557,9 +557,8 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
   int ret = OB_SUCCESS;
   rust::Vec<micro_block::BridgeColumn> columns;
   rust::Vec<micro_block::InputCell> cells;
-  if ((ENCODING_ROW_STORE != ctx_.row_store_type_
-       && SELECTIVE_ENCODING_ROW_STORE != ctx_.row_store_type_)
-      || has_string_out_row_) {
+  if (ENCODING_ROW_STORE != ctx_.row_store_type_
+      && SELECTIVE_ENCODING_ROW_STORE != ctx_.row_store_type_) {
     ret = OB_NOT_SUPPORTED;
   } else if (!rust_block_) {
     rust_block_.reset(new (std::nothrow) RustBlockBuffer());
@@ -599,9 +598,7 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
     for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < ctx_.column_cnt_; ++col_idx) {
       const ObDatum &datum = datum_rows_.at(row_idx).get_datum(col_idx);
       micro_block::InputCell cell;
-      if (datum.is_outrow()) {
-        ret = OB_NOT_SUPPORTED;
-      } else if (OB_UNLIKELY(!datum.is_null() && !datum.is_nop()
+      if (OB_UNLIKELY(!datum.is_null() && !datum.is_nop()
                              && datum.len_ > 0 && nullptr == datum.ptr_)) {
         ret = OB_INVALID_DATA;
       } else {
@@ -609,12 +606,8 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
         cell.pointer = reinterpret_cast<std::size_t>(datum.ptr_);
         cell.length = datum.len_;
         const uint32_t fixed_length = columns[col_idx].fixed_length;
-        if (0 == cell.kind && fixed_length > 0 && datum.len_ != fixed_length) {
-          if (datum.len_ < fixed_length) {
-            ret = OB_NOT_SUPPORTED;
-          } else {
-            cell.length = fixed_length;
-          }
+        if (0 == cell.kind && fixed_length > 0 && datum.len_ > fixed_length) {
+          cell.length = fixed_length;
         }
         if (OB_SUCC(ret)) {
           cells.push_back(cell);

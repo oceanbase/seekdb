@@ -208,7 +208,7 @@ impl BlockWriter {
     fn validate_datum(&self, datum: &OwnedDatum, column: &ColumnSpec) -> Result<()> {
         match (datum, column.fixed_length) {
             (OwnedDatum::Null | OwnedDatum::Nop, _) => Ok(()),
-            (OwnedDatum::Bytes(bytes), Some(length)) if bytes.len() == length => Ok(()),
+            (OwnedDatum::Bytes(bytes), Some(length)) if bytes.len() <= length => Ok(()),
             (OwnedDatum::Bytes(_), None) => Ok(()),
             (OwnedDatum::UInt(value), Some(length @ (1 | 2 | 4))) => {
                 if *value < (1u64 << (length * 8)) {
@@ -745,7 +745,11 @@ fn extend_value(datum: &OwnedDatum) -> u64 {
 fn datum_len(datum: &OwnedDatum, spec: &ColumnSpec) -> Result<usize> {
     match datum {
         OwnedDatum::Null | OwnedDatum::Nop => Ok(0),
-        OwnedDatum::Bytes(bytes) => Ok(bytes.len()),
+        OwnedDatum::Bytes(bytes) => match spec.fixed_length {
+            Some(length) if bytes.len() <= length => Ok(length),
+            Some(_) => Err(Error::InvalidArgument),
+            None => Ok(bytes.len()),
+        },
         OwnedDatum::UInt(_) => spec.fixed_length.ok_or(Error::InvalidArgument),
     }
 }
@@ -754,7 +758,13 @@ fn append_datum_bytes(datum: &OwnedDatum, spec: &ColumnSpec, output: &mut Vec<u8
     match datum {
         OwnedDatum::Null | OwnedDatum::Nop => Ok(()),
         OwnedDatum::Bytes(bytes) => {
+            if spec.fixed_length.is_some_and(|length| bytes.len() > length) {
+                return Err(Error::InvalidArgument);
+            }
             output.extend_from_slice(bytes);
+            if let Some(length) = spec.fixed_length {
+                output.resize(output.len() + length - bytes.len(), 0);
+            }
             Ok(())
         }
         OwnedDatum::UInt(value) => {
@@ -972,6 +982,34 @@ mod tests {
         assert_eq!(writer.row_count(), 1);
         let bytes = writer.finish_with_column_checksums(&[42]).unwrap();
         assert_eq!(Block::new(&bytes).unwrap().cell(0, 0).unwrap(), Cell::Nop);
+    }
+
+    #[test]
+    fn pads_short_fixed_width_byte_values() {
+        for row_count in 1..=2 {
+            let config = WriterConfig::new(vec![ColumnSpec::fixed(5, 8)], 1);
+            let mut writer = BlockWriter::new(config).unwrap();
+            writer
+                .append_row(&[OwnedDatum::Bytes(vec![0x34, 0x12])])
+                .unwrap();
+            if row_count == 2 {
+                writer
+                    .append_row(&[OwnedDatum::Bytes(vec![0x78, 0x56, 0x34])])
+                    .unwrap();
+            }
+            let bytes = writer.finish().unwrap();
+            let block = Block::new(&bytes).unwrap();
+            assert_eq!(
+                block.cell(0, 0).unwrap().bytes().unwrap(),
+                &[0x34, 0x12, 0, 0, 0, 0, 0, 0]
+            );
+            if row_count == 2 {
+                assert_eq!(
+                    block.cell(1, 0).unwrap().bytes().unwrap(),
+                    &[0x78, 0x56, 0x34, 0, 0, 0, 0, 0]
+                );
+            }
+        }
     }
 
     #[test]
