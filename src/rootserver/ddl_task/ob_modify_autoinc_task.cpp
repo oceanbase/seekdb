@@ -18,7 +18,7 @@
 #include "ob_modify_autoinc_task.h"
 #include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_local_management_service.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
@@ -412,7 +412,7 @@ int ObModifyAutoincTask::set_schema_available()
 
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
             *GCTX.schema_service_, object_id_, rpc_timeout))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
     }
   }
   return ret;
@@ -437,7 +437,7 @@ int ObModifyAutoincTask::rollback_schema()
         alter_table_arg.alter_table_schema_.reset_column_info();
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                 *GCTX.schema_service_, object_id_, rpc_timeout))) {
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
+        } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
         }
       }
     }

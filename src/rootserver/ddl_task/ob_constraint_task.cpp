@@ -18,7 +18,7 @@
 #include "ob_constraint_task.h"
 #include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/ddl/ob_ddl_lock.h"
@@ -1024,12 +1024,12 @@ int ObConstraintTask::set_foreign_key_constraint_validated()
         ObSArray<uint64_t> unused_ids;
         alter_table_arg.ddl_task_type_ = share::MODIFY_FOREIGN_KEY_STATE_TASK;
         alter_table_arg.hidden_table_id_ = object_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg, unused_ids); }))) {
+        if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg, unused_ids); }))) {
         }
       } else {
         if (OB_FAIL(ObDDLUtil::refresh_alter_table_arg(
                 *GCTX.schema_service_, object_id_, target_object_id_, alter_table_arg))) {
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->            alter_table(alter_table_arg, res); }))) {
+        } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->            alter_table(alter_table_arg, res); }))) {
         }
       }
     }
@@ -1104,7 +1104,7 @@ int ObConstraintTask::set_check_constraint_validated()
             ObSArray<uint64_t> unused_ids;
             alter_table_arg.ddl_task_type_ = share::MODIFY_NOT_NULL_COLUMN_STATE_TASK;
             alter_table_arg.hidden_table_id_ = object_id_;
-            if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg, unused_ids); }))) {
+            if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg, unused_ids); }))) {
               if (OB_TABLE_NOT_EXIST == ret) {
                 ret = OB_NO_NEED_UPDATE;
               }
@@ -1155,7 +1155,7 @@ int ObConstraintTask::set_check_constraint_validated()
             }
             DEBUG_SYNC(CONSTRAINT_BEFORE_SET_CHECK_CONSTRAINT_VALIDATED_BEFORE_ALTER_TABLE);
             if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                alter_table(alter_table_arg, res); }))) {
+            } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                alter_table(alter_table_arg, res); }))) {
             }
             if (OB_NO_NEED_UPDATE == ret) {
               ret = OB_SUCCESS;
@@ -1211,7 +1211,7 @@ int ObConstraintTask::set_new_not_null_column_validate()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                      *GCTX.schema_service_, object_id_, rpc_timeout))) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->alter_table(alter_table_arg, res); }))) {
+      } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->alter_table(alter_table_arg, res); }))) {
       } else {
       }
     }
@@ -1300,7 +1300,7 @@ int ObConstraintTask::rollback_failed_check_constraint()
       if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
               *GCTX.schema_service_, object_id_, rpc_timeout))) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->          alter_table(alter_table_arg, tmp_res); }))) {
+      } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->          alter_table(alter_table_arg, tmp_res); }))) {
         if (OB_TABLE_NOT_EXIST == ret || OB_ERR_CANT_DROP_FIELD_OR_KEY == ret || OB_ERR_CONTRAINT_NOT_FOUND == ret) {
           ret = OB_NO_NEED_UPDATE;
         }
@@ -1444,7 +1444,7 @@ int ObConstraintTask::rollback_failed_add_not_null_columns()
       } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                      *GCTX.schema_service_, object_id_, rpc_timeout))) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->            execute_ddl_task(alter_table_arg, objs); }))) {
+      } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->            execute_ddl_task(alter_table_arg, objs); }))) {
         if (OB_TABLE_NOT_EXIST == ret || OB_ERR_CANT_DROP_FIELD_OR_KEY == ret) {
           ret = OB_SUCCESS;
         }

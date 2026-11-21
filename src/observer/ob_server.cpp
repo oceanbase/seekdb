@@ -45,7 +45,7 @@
 #include "share/ob_freeze_info_proxy.h"
 namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
@@ -2857,7 +2857,7 @@ int ObServer::clean_up_invalid_tables()
           } else if (FALSE_IT(table_item.database_name_ = database_schema->get_database_name_str())) {
             //impossible
           } else if (OB_FAIL(drop_table_arg.tables_.push_back(table_item))) {
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{
+          } else if (OB_FAIL(share::local_ddl_serial_call([&]{
                        return ::oceanbase::share::server_service<
                            ::oceanbase::rootserver::ObLocalManagementService>()
                            ->drop_table(drop_table_arg, res);

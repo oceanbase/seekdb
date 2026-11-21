@@ -47,7 +47,7 @@
 #include "share/ob_ddl_common.h" // for ObDDLUtil
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "parallel_ddl/ob_create_table_helper.h" // ObCreateTableHelper
 #include "parallel_ddl/ob_create_table_like_helper.h" // ObCreateTableLikeHelper
 #include "rootserver/parallel_ddl/ob_create_view_helper.h"  // ObCreateViewHelper
@@ -2945,7 +2945,7 @@ int rebuild_vector_index(
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = common::OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
                  [&] {
                    return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->rebuild_vec_index(
                        arg, res);

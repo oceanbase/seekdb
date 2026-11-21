@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_dcl_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -144,7 +144,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
         [&]{ return ctx.root_command_service().grant(arg); }))) {
     }
   }
@@ -204,7 +204,7 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt, ObExecContext &ctx)
   if (is_role) {
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); ++i) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(query::serialize_root_service_call(
+      if (OB_FAIL(share::local_ddl_serial_call(
           [&]{ return ctx.root_command_service().revoke_user(arg); }))) {
       }
     }
@@ -215,7 +215,7 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt, ObExecContext &ctx)
     arg.priv_set_ = stmt.get_priv_set();
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(query::serialize_root_service_call(
+      if (OB_FAIL(share::local_ddl_serial_call(
           [&]{ return ctx.root_command_service().revoke_user(arg); }))) {
       }
     }
@@ -236,7 +236,7 @@ int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt, ObExecContext &ctx)
   } else {
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(query::serialize_root_service_call(
+      if (OB_FAIL(share::local_ddl_serial_call(
           [&]{ return ctx.root_command_service().revoke_database(arg); }))) {
       }
     }
@@ -304,7 +304,7 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
         DEBUG_SYNC(BEFORE_REVOKE_TABLE);
-        if (OB_FAIL(query::serialize_root_service_call(
+        if (OB_FAIL(share::local_ddl_serial_call(
             [&]{ return ctx.root_command_service().revoke_table(arg); }))) {
         }
       }
@@ -356,7 +356,7 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(query::serialize_root_service_call(
+        if (OB_FAIL(share::local_ddl_serial_call(
             [&]{ return ctx.root_command_service().revoke_routine(arg); }))) {
         }
       }

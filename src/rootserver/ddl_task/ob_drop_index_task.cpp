@@ -18,7 +18,7 @@
 
 #include "ob_drop_index_task.h"
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_local_management_service.h"
@@ -141,7 +141,7 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
             *GCTX.schema_service_, table_id, ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_INDEX_STATUS_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
     } else {
       LOG_INFO("notify index status changed finish", K(new_status), K(target_object_id_));
     }
@@ -228,7 +228,7 @@ int ObDropIndexTask::drop_index_impl()
     drop_index_arg.is_hidden_         = drop_index_arg_.is_hidden_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
     }
     LOG_INFO("drop index", K(ret), K(drop_index_sql.ptr()), K(drop_index_arg));
   }
