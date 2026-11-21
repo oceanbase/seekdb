@@ -635,8 +635,7 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
                 bitmap))) {
     }
   } else if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
-    if ((param_->has_lob_column_out() && reader_->has_lob_out_row())
-        || filter->is_semistruct_filter_node()) {
+    if (filter->is_semistruct_filter_node()) {
       sql::ObPhysicalFilterExecutor *physical_filter = static_cast<sql::ObPhysicalFilterExecutor *>(filter);
       if (OB_FAIL(decoder_->filter_pushdown_filter(parent,
                                                    *physical_filter,
