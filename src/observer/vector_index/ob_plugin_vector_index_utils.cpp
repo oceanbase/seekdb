@@ -334,7 +334,7 @@ int ObPluginVectorIndexUtils::get_extra_column_count(
   } else if (OB_FAIL(schema_guard.get_table_schema( adapter.get_inc_table_id(), delta_buffer_schema))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( adapter.get_data_table_id(), table_schema))) {
   } else if (OB_ISNULL(delta_buffer_schema) || OB_ISNULL(table_schema)) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = OB_TABLE_NOT_EXIST;
   } else if (OB_FAIL(adapter.get_extra_info_actual_size(extra_info_actual_size))) {
   } else if (extra_info_actual_size > 0) {
     ObSEArray<uint64_t, 4> extra_column_ids;
@@ -365,7 +365,7 @@ int ObPluginVectorIndexUtils::get_data_table_out_column_id(
   } else if (OB_FAIL(schema_guard.get_table_schema( incr_index_table_id, delta_buffer_schema))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, table_schema))) {
   } else if (OB_ISNULL(delta_buffer_schema) || OB_ISNULL(table_schema)) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = OB_TABLE_NOT_EXIST;
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*table_schema, *delta_buffer_schema, vector_column_ids))) {
   } else if (vector_column_ids.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
@@ -1081,7 +1081,7 @@ int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& 
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(get_special_index_aux_table_column_count(type,
                                                                 table_id, col_cnt, scan_param))) {
-      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get vector scan columns", KR(ret), K(table_id), K(type));
     }
   }
 
