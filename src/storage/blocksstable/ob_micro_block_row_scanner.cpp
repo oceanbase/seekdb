@@ -625,6 +625,7 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
     common::ObBitmap &bitmap)
 {
   int ret = OB_SUCCESS;
+  UNUSED(can_use_vectorize);
   if (OB_UNLIKELY(nullptr == reader_ || nullptr == filter || !filter->is_filter_node())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (filter->is_sample_node()) {
@@ -644,14 +645,7 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
       }
     } else if (filter->is_filter_black_node()) {
       sql::ObBlackFilterExecutor *black_filter = static_cast<sql::ObBlackFilterExecutor *>(filter);
-      if (can_use_vectorize && black_filter->can_vectorized()) {
-        if (OB_FAIL(apply_black_filter_batch(
-                    parent,
-                    *black_filter,
-                    pd_filter_info,
-                    bitmap))) {
-        }
-      } else if (OB_FAIL(decoder_->filter_pushdown_filter(
+      if (OB_FAIL(apply_black_filter_batch(
                   parent,
                   *black_filter,
                   pd_filter_info,
