@@ -2180,6 +2180,18 @@ int ObMicroBlockDecoder::get_col_datums(
     common::ObDatum *col_datums)
 {
   int ret = OB_SUCCESS;
+  ObSEArray<int32_t, 1> rust_cols;
+  ObSEArray<ObSqlDatumInfo, 1> rust_infos;
+  if (OB_FAIL(rust_cols.push_back(col_id))) {
+  } else if (OB_FAIL(rust_infos.push_back(ObSqlDatumInfo(col_datums, nullptr)))) {
+  } else {
+    ret = try_get_rows_rust(rust_cols, row_ids, row_cap, rust_infos, 0);
+  }
+  if (OB_NOT_SUPPORTED == ret) {
+    ret = OB_SUCCESS;
+  } else {
+    return ret;
+  }
   if (!decoders_[col_id].decoder_->can_vectorized()) {
     // normal path
     common::ObObj cell;
