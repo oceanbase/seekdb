@@ -189,6 +189,7 @@ struct ManifestWriter {
 struct State {
     directory: PathBuf,
     manifest_writer: Option<ManifestWriter>,
+    append_file: Option<(u64, File)>,
     manifest: Manifest,
     records: BTreeMap<u64, RecordMeta>,
     segment_lengths: BTreeMap<u64, u64>,
@@ -255,6 +256,7 @@ impl Stream {
         let state = result.unwrap_or_else(|error| State {
             directory: PathBuf::new(),
             manifest_writer: None,
+            append_file: None,
             manifest: Manifest {
                 base_lsn: 0,
                 previous: BaseInfo {
@@ -530,6 +532,13 @@ impl Stream {
         state.publish_manifest(&manifest)?;
         state.manifest = manifest;
         let minimum_block = block_id(lsn);
+        if state
+            .append_file
+            .as_ref()
+            .is_some_and(|(id, _)| *id < minimum_block)
+        {
+            state.append_file = None;
+        }
         let old_blocks: Vec<u64> = state
             .segment_lengths
             .range(..minimum_block)
@@ -1129,14 +1138,21 @@ impl State {
         let mut new_segment = false;
         while index < records.len() {
             let id = block_id(records[index].lsn);
-            let path = segment_path(&self.directory, id);
             let create = !self.segment_lengths.contains_key(&id);
-            let mut file = OpenOptions::new()
-                .create(true)
-                .truncate(false)
-                .read(true)
-                .write(true)
-                .open(path)?;
+            if self
+                .append_file
+                .as_ref()
+                .is_none_or(|(open_id, _)| *open_id != id)
+            {
+                let file = OpenOptions::new()
+                    .create(true)
+                    .truncate(false)
+                    .read(true)
+                    .write(true)
+                    .open(segment_path(&self.directory, id))?;
+                self.append_file = Some((id, file));
+            }
+            let file = &mut self.append_file.as_mut().ok_or(Error::Io)?.1;
             if create {
                 file.write_all(&encode_segment_header(id)?)?;
                 new_segment = true;
@@ -1257,6 +1273,7 @@ fn create_state(
     Ok(State {
         directory: directory.to_path_buf(),
         manifest_writer: Some(manifest_writer),
+        append_file: None,
         end_lsn: base.curr_lsn,
         end_scn: base.prev_scn,
         next_log_id: base.prev_log_id.checked_add(1).ok_or(Error::Invalid)?,
@@ -1397,6 +1414,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         .next_back()
         .map(|record| block_id(record.lsn));
     let mut removed_segment = false;
+    let mut append_file = None;
     for id in ids {
         if Some(id) == last_required {
             let valid_length = if id == block_id(committed.end_lsn) {
@@ -1405,10 +1423,11 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
                 PHYSICAL_BLOCK_SIZE
             };
             let path = segment_path(directory, id);
-            OpenOptions::new()
+            let file = OpenOptions::new()
                 .write(true)
-                .open(&path)?
-                .set_len(valid_length)?;
+                .open(&path)?;
+            file.set_len(valid_length)?;
+            append_file = Some((id, file));
             segment_lengths.insert(id, valid_length);
         } else if last_required.is_none_or(|last| id > last) {
             fs::remove_file(segment_path(directory, id))?;
@@ -1421,6 +1440,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
     Ok(State {
         directory: directory.to_path_buf(),
         manifest_writer: Some(manifest_writer),
+        append_file,
         manifest,
         records,
         segment_lengths,
@@ -1763,6 +1783,56 @@ mod tests {
         let reopened = Stream::open(&path, 0);
         assert_eq!(reopened.progress().unwrap().base_lsn, checkpoint);
         assert_eq!(reopened.base_info(checkpoint).unwrap().curr_lsn, checkpoint);
+    }
+
+    #[test]
+    fn checkpoint_at_confirmed_tail_releases_segment_before_next_append() {
+        const MAX_GROUP_LEN: u64 =
+            (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE + MAX_LOG_BODY_SIZE) as u64;
+
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        while stream.progress().unwrap().end_lsn < BLOCK_SIZE {
+            let remaining = BLOCK_SIZE - stream.progress().unwrap().end_lsn;
+            let group_len = if remaining > MAX_GROUP_LEN && remaining < 2 * MAX_GROUP_LEN {
+                remaining / 2
+            } else {
+                remaining.min(MAX_GROUP_LEN)
+            };
+            let payload_len =
+                (group_len - GROUP_HEADER_SIZE as u64 - ENTRY_HEADER_SIZE as u64) as usize;
+            stream.append(&vec![7; payload_len], 10).unwrap();
+        }
+        assert_eq!(stream.progress().unwrap().end_lsn, BLOCK_SIZE);
+        assert_eq!(
+            stream
+                .inner
+                .state
+                .lock()
+                .unwrap()
+                .append_file
+                .as_ref()
+                .map(|(id, _)| *id),
+            Some(0)
+        );
+
+        stream.set_base_lsn(BLOCK_SIZE).unwrap();
+        assert!(stream.inner.state.lock().unwrap().append_file.is_none());
+        assert!(!segment_path(&directory.0, 0).exists());
+
+        let appended = stream.append(b"after-checkpoint", 11).unwrap();
+        assert_eq!(block_id(appended.lsn), 1);
+        drop(stream);
+
+        let reopened = Stream::open(&path, 0);
+        assert_eq!(reopened.status(), Ok(true));
+        assert_eq!(reopened.progress().unwrap().base_lsn, BLOCK_SIZE);
+        assert_eq!(reopened.progress().unwrap().end_lsn, appended.end_lsn);
+        let mut cursor = reopened.cursor(BLOCK_SIZE, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"after-checkpoint");
+        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
     }
 
     #[test]
