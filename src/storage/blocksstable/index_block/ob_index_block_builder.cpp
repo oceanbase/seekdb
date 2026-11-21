@@ -2451,7 +2451,8 @@ int ObDataIndexBlockBuilder::append_row(const ObMicroBlockDesc &micro_block_desc
     } else {
       // only update these two variables when succeeded to append data micro
       // block
-      estimate_leaf_block_size_ = micro_writer_->get_original_size();
+      estimate_leaf_block_size_ = FLAT_ROW_STORE == data_store_desc_->get_row_store_type()
+          ? micro_writer_->get_block_size() : micro_writer_->get_original_size();
       estimate_meta_block_size_ = estimate_meta_block_size;
     }
   }

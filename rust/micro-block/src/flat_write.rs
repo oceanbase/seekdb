@@ -116,8 +116,12 @@ impl FlatWriter {
         self.row_offsets.len() - 1
     }
 
-    pub fn original_size(&self) -> usize {
-        self.row_data.len()
+    pub fn original_size(&self, hash_index_size: usize) -> Result<usize> {
+        if 0 == self.row_count() {
+            Ok(0)
+        } else {
+            Ok(self.block_size(hash_index_size)? - header_size(self.config)?)
+        }
     }
 
     pub fn block_size(&self, hash_index_size: usize) -> Result<usize> {
@@ -127,6 +131,14 @@ impl FlatWriter {
             self.row_count(),
             hash_index_size,
         )
+    }
+
+    pub fn set_block_size_upper_bound(&mut self, block_size_upper_bound: usize) -> Result<()> {
+        if 0 == block_size_upper_bound {
+            return Err(Error::InvalidArgument);
+        }
+        self.config.block_size_upper_bound = block_size_upper_bound;
+        Ok(())
     }
 
     pub fn append_row(
@@ -771,5 +783,46 @@ mod tests {
             .unwrap();
         let parsed = FlatBlock::new(&block).unwrap();
         assert_eq!(crate::Cell::Bytes(b"row"), parsed.cell(0, 0).unwrap());
+    }
+
+    #[test]
+    fn original_size_covers_the_complete_uncompressed_payload() {
+        let config = FlatWriterConfig {
+            column_count: 1,
+            rowkey_column_count: 1,
+            micro_block_size_limit: 1024,
+            block_size_upper_bound: 1024,
+            need_column_checksums: false,
+        };
+        let mut writer = FlatWriter::new(config).unwrap();
+        assert_eq!(0, writer.original_size(0).unwrap());
+        writer.append_row(&[FlatDatum::Bytes(b"first")], info(1, 1), 3).unwrap();
+        writer.append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 3).unwrap();
+        assert_eq!(writer.row_data.len() + 15, writer.original_size(3).unwrap());
+        assert_eq!(
+            writer.block_size(3).unwrap() - 64,
+            writer.original_size(3).unwrap()
+        );
+    }
+
+    #[test]
+    fn dynamic_upper_bound_is_honored_and_retryable() {
+        let config = FlatWriterConfig {
+            column_count: 1,
+            rowkey_column_count: 1,
+            micro_block_size_limit: 1024,
+            block_size_upper_bound: 1024,
+            need_column_checksums: false,
+        };
+        let mut writer = FlatWriter::new(config).unwrap();
+        writer.append_row(&[FlatDatum::Bytes(b"first")], info(1, 1), 0).unwrap();
+        writer.set_block_size_upper_bound(writer.block_size(0).unwrap()).unwrap();
+        let full = writer.append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 0).unwrap();
+        assert!(full.is_full);
+        assert_eq!(1, full.accepted_rows);
+        writer.set_block_size_upper_bound(1024).unwrap();
+        let retry = writer.append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 0).unwrap();
+        assert!(!retry.is_full);
+        assert_eq!(2, retry.accepted_rows);
     }
 }

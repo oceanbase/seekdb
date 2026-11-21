@@ -258,7 +258,8 @@ int ObMicroBlockWriter::append_row(const ObDatumRow &row)
     const rust::Slice<const micro_block::InputCell> input(cells.begin(), cells.count());
     micro_block::FlatAppendResult result = micro_block::append_flat_row(
         *rust_block_->writer, input, row_meta,
-        static_cast<uint32_t>(rowkey_column_count_), hash_index_size);
+        static_cast<uint32_t>(rowkey_column_count_), hash_index_size,
+        static_cast<uint64_t>(block_size_upper_bound_));
     if (OB_FAIL(rust_code_to_ret(result.code))) {
     } else if (OB_UNLIKELY(result.accepted_rows != static_cast<std::size_t>(row_count_)
                            + (result.is_full ? 0 : 1))) {
@@ -398,7 +399,11 @@ int64_t ObMicroBlockWriter::get_original_size() const
 {
   int64_t size = 0;
   if (rust_block_) {
-    const micro_block::FlatStatsResult stats = micro_block::flat_writer_stats(*rust_block_->writer, 0);
+    const std::size_t hash_index_size = index_buffer_.length() > 0
+        ? index_buffer_.length()
+        : (hash_index_builder_.is_valid() ? hash_index_builder_.estimate_size() : 0);
+    const micro_block::FlatStatsResult stats = micro_block::flat_writer_stats(
+        *rust_block_->writer, hash_index_size);
     if (micro_block::Code::Ok == stats.code && stats.original_size <= static_cast<uint64_t>(INT64_MAX)) {
       size = stats.original_size;
     }

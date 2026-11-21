@@ -132,6 +132,7 @@ mod ffi {
             row_meta: FlatRowMeta,
             rowkey_column_count: u32,
             hash_index_size: usize,
+            block_size_upper_bound: u64,
         ) -> FlatAppendResult;
 
         /// The returned block owns its storage. C++ keeps it alive until the
@@ -232,8 +233,12 @@ unsafe fn append_flat_row(
     row_meta: ffi::FlatRowMeta,
     rowkey_column_count: u32,
     hash_index_size: usize,
+    block_size_upper_bound: u64,
 ) -> ffi::FlatAppendResult {
     let result = (|| {
+        writer.set_block_size_upper_bound(
+            usize::try_from(block_size_upper_bound).map_err(|_| Error::SizeOverflow)?,
+        )?;
         let mut datums = Vec::new();
         datums
             .try_reserve_exact(cells.len())
@@ -316,11 +321,15 @@ fn finish_flat_writer(
 }
 
 fn flat_writer_stats(writer: &FlatWriter, hash_index_size: usize) -> ffi::FlatStatsResult {
-    match writer.block_size(hash_index_size) {
-        Ok(block_size) => ffi::FlatStatsResult {
+    match writer.block_size(hash_index_size).and_then(|block_size| {
+        writer
+            .original_size(hash_index_size)
+            .map(|original_size| (block_size, original_size))
+    }) {
+        Ok((block_size, original_size)) => ffi::FlatStatsResult {
             code: ffi::Code::Ok,
             block_size: block_size as u64,
-            original_size: writer.original_size() as u64,
+            original_size: original_size as u64,
             row_count: writer.row_count() as u64,
         },
         Err(error) => ffi::FlatStatsResult {
