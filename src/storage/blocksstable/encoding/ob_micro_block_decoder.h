@@ -328,6 +328,7 @@ private:
   int try_get_rows_rust(
       const common::ObIArray<int32_t> &cols,
       const int32_t *row_ids,
+      const char **cell_datas,
       const int64_t row_cap,
       common::ObIArray<ObSqlDatumInfo> &datum_infos,
       const int64_t datum_offset,

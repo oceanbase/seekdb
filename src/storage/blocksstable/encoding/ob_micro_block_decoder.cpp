@@ -1291,7 +1291,7 @@ OB_INLINE int ObMicroBlockDecoder::get_row_impl(int64_t index, ObDatumRow &row)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_SUPPORTED != (ret = try_get_rows_rust(
-            cols, &row_id, 1, datum_infos, 0, true))) {
+            cols, &row_id, nullptr, 1, datum_infos, 0, true))) {
     } else {
       int64_t row_len = 0;
       const char *row_data = nullptr;
@@ -1345,7 +1345,7 @@ int ObMicroBlockDecoder::compare_rowkey(const ObDatumRowkey &rowkey, const int64
       }
       if (OB_FAIL(ret)) {
       } else if (OB_NOT_SUPPORTED != (ret = try_get_rows_rust(
-              cols, &row_id, 1, datum_infos, 0))) {
+              cols, &row_id, nullptr, 1, datum_infos, 0))) {
       } else {
         int64_t row_len = 0;
         const char *row_data = nullptr;
@@ -1402,7 +1402,7 @@ int ObMicroBlockDecoder::compare_rowkey(const ObDatumRange &range,
       }
       if (OB_FAIL(ret)) {
       } else if (OB_NOT_SUPPORTED != (ret = try_get_rows_rust(
-              cols, &row_id, 1, datum_infos, 0))) {
+              cols, &row_id, nullptr, 1, datum_infos, 0))) {
       } else {
         int64_t row_len = 0;
         const char *row_data = nullptr;
@@ -1632,7 +1632,7 @@ int ObMicroBlockDecoder::get_rows(
                          cols.count() != datum_infos.count())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ret = try_get_rows_rust(cols, row_ids, row_cap, datum_infos, datum_offset);
+    ret = try_get_rows_rust(cols, row_ids, cell_datas, row_cap, datum_infos, datum_offset);
     if (OB_NOT_SUPPORTED == ret) {
       ret = OB_SUCCESS;
       for (int64_t i = 0; OB_SUCC(ret) && i < cols.count(); i++) {
@@ -1661,6 +1661,7 @@ int ObMicroBlockDecoder::get_rows(
 int ObMicroBlockDecoder::try_get_rows_rust(
     const common::ObIArray<int32_t> &cols,
     const int32_t *row_ids,
+    const char **cell_datas,
     const int64_t row_cap,
     common::ObIArray<ObSqlDatumInfo> &datum_infos,
     const int64_t datum_offset,
@@ -1671,8 +1672,17 @@ int ObMicroBlockDecoder::try_get_rows_rust(
       || block_size_ <= 0 || nullptr == block_data_) {
     return ret;
   }
+  const char *null_cell_data = nullptr;
+  if (nullptr == cell_datas) {
+    if (1 != row_cap) {
+      return ret;
+    }
+    cell_datas = &null_cell_data;
+  }
   std::vector<uint32_t> rust_rows;
   std::vector<uint32_t> rust_columns;
+  std::vector<uint32_t> rust_result_columns(cols.count(), UINT32_MAX);
+  std::vector<ObObjType> rust_obj_types(cols.count(), ObNullType);
   rust_rows.reserve(row_cap);
   rust_columns.reserve(cols.count());
   for (int64_t i = 0; i < row_cap; ++i) {
@@ -1688,7 +1698,7 @@ int ObMicroBlockDecoder::try_get_rows_rust(
     }
     const ObColumnHeader *column = decoders_[col_id].ctx_->col_header_;
     if (nullptr == column) {
-      return ret;
+      continue;
     }
     const int64_t store_idx = column - col_header_;
     if (store_idx < 0 || store_idx >= header_->column_count_) {
@@ -1696,7 +1706,7 @@ int ObMicroBlockDecoder::try_get_rows_rust(
     }
     if ((ObColumnHeader::RAW != column->type_ && ObColumnHeader::CONST != column->type_)
         || column->is_bit_packing()) {
-      return ret;
+      continue;
     }
     switch (get_store_class_map()[ob_obj_type_class(column->get_store_obj_type())]) {
       case ObIntSC:
@@ -1709,9 +1719,14 @@ int ObMicroBlockDecoder::try_get_rows_rust(
       case ObGeometrySC:
         break;
       default:
-        return ret;
+        continue;
     }
+    rust_result_columns[i] = rust_columns.size();
+    rust_obj_types[i] = column->get_store_obj_type();
     rust_columns.push_back(static_cast<uint32_t>(store_idx));
+  }
+  if (rust_columns.empty()) {
+    return ret;
   }
 
   const rust::Slice<const uint8_t> block(
@@ -1742,14 +1757,17 @@ int ObMicroBlockDecoder::try_get_rows_rust(
     return OB_INVALID_DATA;
   }
   for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < cols.count(); ++col_idx) {
+    if (UINT32_MAX == rust_result_columns[col_idx]) {
+      continue;
+    }
     common::ObDatum *datums = datum_infos.at(col_idx).datum_ptr_ + datum_offset;
-    const ObObjType obj_type = decoders_[cols.at(col_idx)].ctx_->col_header_->get_store_obj_type();
+    const ObObjType obj_type = rust_obj_types[col_idx];
     int64_t integer_mask = 0;
     if (ObIntTC == ob_obj_type_class(obj_type)) {
       integer_mask = ~INTEGER_MASK_TABLE[get_type_size_map()[obj_type]];
     }
     for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < row_cap; ++row_idx) {
-      const micro_block::CellDesc &cell = result.cells[row_idx * cols.count() + col_idx];
+      const micro_block::CellDesc &cell = result.cells[row_idx * rust_columns.size() + rust_result_columns[col_idx]];
       common::ObDatum &datum = datums[row_idx];
       if (1 == cell.kind || 2 == cell.kind) {
         if (preserve_nop && 2 == cell.kind) {
@@ -1765,6 +1783,13 @@ int ObMicroBlockDecoder::try_get_rows_rust(
         const char *data = block_data_ + cell.offset;
         if (OB_FAIL(load_data_to_datum(obj_type, data, cell.length, integer_mask, datum))) {
         }
+      }
+    }
+  }
+  for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < cols.count(); ++col_idx) {
+    if (UINT32_MAX == rust_result_columns[col_idx]) {
+      common::ObDatum *datums = datum_infos.at(col_idx).datum_ptr_ + datum_offset;
+      if (OB_FAIL(get_col_datums(cols.at(col_idx), row_ids, cell_datas, row_cap, datums))) {
       }
     }
   }
@@ -1885,7 +1910,7 @@ int ObMicroBlockDecoder::get_col_datums(
   if (OB_FAIL(rust_cols.push_back(col_id))) {
   } else if (OB_FAIL(rust_infos.push_back(ObSqlDatumInfo(col_datums, nullptr)))) {
   } else {
-    ret = try_get_rows_rust(rust_cols, row_ids, row_cap, rust_infos, 0);
+    ret = try_get_rows_rust(rust_cols, row_ids, cell_datas, row_cap, rust_infos, 0);
   }
   if (OB_NOT_SUPPORTED == ret) {
     ret = OB_SUCCESS;
