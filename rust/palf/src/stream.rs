@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
 const MANIFEST_FILE_SIZE: usize = MANIFEST_SIZE * 2;
-const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN4";
+const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN3";
 const THROTTLE_CHECK_INTERVAL: Duration = Duration::from_millis(30);
 const APPEND_BATCH_WINDOW: Duration = Duration::from_micros(50);
 const MAX_APPEND_BATCH_REQUESTS: usize = 32;
@@ -163,11 +163,20 @@ struct BatchCheckpoint {
     accumulated_checksum: u64,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct CommittedTail {
+    end_lsn: u64,
+    end_scn: u64,
+    log_id: i64,
+    accumulated_checksum: u64,
+}
+
 #[derive(Clone, Debug)]
 struct Manifest {
     base_lsn: u64,
     previous: BaseInfo,
     ref_scn: u64,
+    committed: CommittedTail,
 }
 
 struct ManifestWriter {
@@ -250,6 +259,12 @@ impl Stream {
                     prev_accumulated_checksum: 0,
                 },
                 ref_scn: 0,
+                committed: CommittedTail {
+                    end_lsn: 0,
+                    end_scn: 0,
+                    log_id: 0,
+                    accumulated_checksum: 0,
+                },
             },
             records: BTreeMap::new(),
             segment_lengths: BTreeMap::new(),
@@ -401,9 +416,7 @@ impl Stream {
             return Err(Error::Invalid);
         }
         let write_size = groups.iter().try_fold(0u64, |total, group| {
-            total
-                .checked_add(group.bytes.len() as u64)
-                .ok_or(Error::Invalid)
+            total.checked_add(group.bytes.len() as u64).ok_or(Error::Invalid)
         })?;
         let mut state = self.lock_for_write(write_size)?;
         let mut plan = AppendBatch::new(&state);
@@ -1026,6 +1039,21 @@ impl State {
 
     fn persist_append_batch(&mut self, plan: &AppendBatch) -> Result<()> {
         self.write_planned_records(&plan.records)?;
+        let committed = plan
+            .records
+            .iter()
+            .rev()
+            .find_map(|record| record.meta.as_ref())
+            .ok_or(Error::Invalid)?;
+        let mut manifest = self.manifest.clone();
+        manifest.committed = CommittedTail {
+            end_lsn: plan.end_lsn,
+            end_scn: plan.end_scn,
+            log_id: committed.header.log_id,
+            accumulated_checksum: committed.header.accumulated_checksum,
+        };
+        self.publish_manifest(&manifest)?;
+        self.manifest = manifest;
         self.segment_lengths = plan.segment_lengths.clone();
         self.end_lsn = plan.end_lsn;
         self.end_scn = plan.end_scn;
@@ -1160,6 +1188,12 @@ fn create_state(
         base_lsn: base.curr_lsn,
         previous: base,
         ref_scn,
+        committed: CommittedTail {
+            end_lsn: base.curr_lsn,
+            end_scn: base.prev_scn,
+            log_id: base.prev_log_id,
+            accumulated_checksum: base.prev_accumulated_checksum,
+        },
     };
     let manifest_writer = ManifestWriter::create(directory, &manifest)?;
     sync_directory(directory)?;
@@ -1189,6 +1223,10 @@ fn create_state(
 fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
     disk_policy.validate()?;
     let (manifest, manifest_writer) = ManifestWriter::open(directory)?;
+    let committed = manifest.committed;
+    if committed.end_lsn < manifest.base_lsn {
+        return Err(Error::Corrupt);
+    }
     let mut records = BTreeMap::new();
     let mut segment_lengths = BTreeMap::new();
     let mut ids = Vec::new();
@@ -1219,8 +1257,10 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         .checked_add(1)
         .ok_or(Error::Corrupt)?;
     let mut accumulated_checksum = manifest.previous.prev_accumulated_checksum;
-    let mut truncate_tail = false;
-    for (index, id) in ids.iter().copied().enumerate() {
+    for id in ids.iter().copied() {
+        if end_lsn == committed.end_lsn {
+            break;
+        }
         if id != block_id(end_lsn) {
             return Err(Error::Corrupt);
         }
@@ -1234,92 +1274,44 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         file.read_exact(&mut segment_header)?;
         validate_segment_header(&segment_header, id)?;
         segment_lengths.insert(id, length);
-        while block_id(end_lsn) == id {
+        while end_lsn < committed.end_lsn && block_id(end_lsn) == id {
             let lsn = end_lsn;
             let remaining = BLOCK_SIZE - block_offset(lsn);
             if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64 {
                 if physical_offset(lsn) + remaining > length {
-                    if index + 1 == ids.len() {
-                        truncate_tail = true;
-                        break;
-                    }
                     return Err(Error::Corrupt);
                 }
                 let mut padding = zeroed_bytes(remaining as usize)?;
                 file.seek(SeekFrom::Start(physical_offset(lsn)))?;
                 file.read_exact(&mut padding)?;
                 if padding.iter().any(|byte| *byte != 0) {
-                    if index + 1 == ids.len() {
-                        truncate_tail = true;
-                        break;
-                    }
                     return Err(Error::Corrupt);
                 }
                 end_lsn += remaining;
                 continue;
             }
-            if physical_offset(lsn) >= length {
-                if index + 1 == ids.len() {
-                    break;
-                }
-                return Err(Error::Corrupt);
-            }
             if physical_offset(lsn) + GROUP_HEADER_SIZE as u64 > length {
-                if index + 1 == ids.len() {
-                    truncate_tail = true;
-                    break;
-                }
                 return Err(Error::Corrupt);
             }
             file.seek(SeekFrom::Start(physical_offset(lsn)))?;
             let mut header_bytes = zeroed_bytes(GROUP_HEADER_SIZE)?;
             file.read_exact(&mut header_bytes)?;
             if header_bytes.iter().all(|byte| *byte == 0) {
-                if index + 1 == ids.len() {
-                    truncate_tail = true;
-                    break;
-                }
                 return Err(Error::Corrupt);
             }
-            let header = match decode_group_header(&header_bytes) {
-                Ok(header) => header,
-                Err(Error::UnknownVersion) => return Err(Error::UnknownVersion),
-                Err(_)
-                    if index + 1 == ids.len()
-                        && !has_valid_group_header_after(&mut file, lsn, length)? =>
-                {
-                    truncate_tail = true;
-                    break;
-                }
-                Err(error) => return Err(error),
-            };
+            let header = decode_group_header(&header_bytes)?;
             let record_len = GROUP_HEADER_SIZE as u64 + header.data_len as u64;
             let record_end = lsn.checked_add(record_len).ok_or(Error::Corrupt)?;
-            if block_offset(lsn) + record_len > BLOCK_SIZE {
-                return Err(Error::Corrupt);
-            }
-            if physical_offset(lsn) + record_len > length {
-                if index + 1 == ids.len() {
-                    truncate_tail = true;
-                    break;
-                }
+            if block_offset(lsn) + record_len > BLOCK_SIZE
+                || record_end > committed.end_lsn
+                || physical_offset(lsn) + record_len > length
+            {
                 return Err(Error::Corrupt);
             }
             let mut bytes = zeroed_bytes(record_len as usize)?;
             file.seek(SeekFrom::Start(physical_offset(lsn)))?;
             file.read_exact(&mut bytes)?;
-            let header = match validate_group(&bytes, lsn) {
-                Ok(header) => header,
-                Err(Error::UnknownVersion) => return Err(Error::UnknownVersion),
-                Err(_)
-                    if index + 1 == ids.len()
-                        && !has_valid_group_header_after(&mut file, lsn, length)? =>
-                {
-                    truncate_tail = true;
-                    break;
-                }
-                Err(error) => return Err(error),
-            };
+            let header = validate_group(&bytes, lsn)?;
             if header.committed_end_lsn != lsn
                 || header.log_id != next_log_id
                 || header.accumulated_checksum
@@ -1338,12 +1330,16 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
             next_log_id = header.log_id.checked_add(1).ok_or(Error::Corrupt)?;
             accumulated_checksum = header.accumulated_checksum;
         }
-        if truncate_tail {
-            break;
-        }
-        if block_id(end_lsn) == id && index + 1 != ids.len() {
+        if end_lsn != committed.end_lsn.min((id + 1) * BLOCK_SIZE) {
             return Err(Error::Corrupt);
         }
+    }
+    if end_lsn != committed.end_lsn
+        || end_scn != committed.end_scn
+        || next_log_id != committed.log_id.checked_add(1).ok_or(Error::Corrupt)?
+        || accumulated_checksum != committed.accumulated_checksum
+    {
+        return Err(Error::Corrupt);
     }
     let last_required = records
         .values()
@@ -1352,8 +1348,8 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
     let mut removed_segment = false;
     for id in ids {
         if Some(id) == last_required {
-            let valid_length = if id == block_id(end_lsn) {
-                physical_offset(end_lsn)
+            let valid_length = if id == block_id(committed.end_lsn) {
+                physical_offset(committed.end_lsn)
             } else {
                 PHYSICAL_BLOCK_SIZE
             };
@@ -1392,29 +1388,6 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         gather_appends: false,
         append_results: BTreeMap::new(),
     })
-}
-
-fn has_valid_group_header_after(file: &mut File, lsn: u64, length: u64) -> Result<bool> {
-    let mut offset = physical_offset(lsn).checked_add(1).ok_or(Error::Corrupt)?;
-    let mut window = zeroed_bytes(64 * 1024 + GROUP_HEADER_SIZE - 1)?;
-    while offset < length {
-        let read_len = (length - offset).min(window.len() as u64) as usize;
-        file.seek(SeekFrom::Start(offset))?;
-        file.read_exact(&mut window[..read_len])?;
-        if read_len >= GROUP_HEADER_SIZE {
-            for index in 0..=read_len - GROUP_HEADER_SIZE {
-                if decode_group_header(&window[index..index + GROUP_HEADER_SIZE]).is_ok() {
-                    return Ok(true);
-                }
-            }
-        }
-        let advance = read_len.saturating_sub(GROUP_HEADER_SIZE - 1);
-        if advance == 0 {
-            break;
-        }
-        offset += advance as u64;
-    }
-    Ok(false)
 }
 
 impl ManifestWriter {
@@ -1494,9 +1467,13 @@ impl ManifestWriter {
         bytes[32..40].copy_from_slice(&manifest.previous.prev_log_id.to_le_bytes());
         bytes[40..48].copy_from_slice(&manifest.previous.prev_accumulated_checksum.to_le_bytes());
         bytes[48..56].copy_from_slice(&manifest.ref_scn.to_le_bytes());
-        bytes[56..64].copy_from_slice(&generation.to_le_bytes());
-        let checksum = crc64(&bytes[..64]);
-        bytes[64..72].copy_from_slice(&checksum.to_le_bytes());
+        bytes[56..64].copy_from_slice(&manifest.committed.end_lsn.to_le_bytes());
+        bytes[64..72].copy_from_slice(&manifest.committed.end_scn.to_le_bytes());
+        bytes[72..80].copy_from_slice(&manifest.committed.log_id.to_le_bytes());
+        bytes[80..88].copy_from_slice(&manifest.committed.accumulated_checksum.to_le_bytes());
+        bytes[88..96].copy_from_slice(&generation.to_le_bytes());
+        let checksum = crc64(&bytes[..96]);
+        bytes[96..104].copy_from_slice(&checksum.to_le_bytes());
         bytes
     }
 
@@ -1504,9 +1481,9 @@ impl ManifestWriter {
         if bytes.len() != MANIFEST_SIZE || bytes.get(..8) != Some(MANIFEST_MAGIC) {
             return None;
         }
-        let generation = u64::from_le_bytes(bytes[56..64].try_into().unwrap());
-        let checksum = u64::from_le_bytes(bytes[64..72].try_into().unwrap());
-        if crc64(&bytes[..64]) != checksum {
+        let generation = u64::from_le_bytes(bytes[88..96].try_into().unwrap());
+        let checksum = u64::from_le_bytes(bytes[96..104].try_into().unwrap());
+        if crc64(&bytes[..96]) != checksum {
             return None;
         }
         let number =
@@ -1527,6 +1504,12 @@ impl ManifestWriter {
                 base_lsn,
                 previous,
                 ref_scn: number(48),
+                committed: CommittedTail {
+                    end_lsn: number(56),
+                    end_scn: number(64),
+                    log_id: signed(72),
+                    accumulated_checksum: number(80),
+                },
             },
         ))
     }
@@ -1618,12 +1601,11 @@ mod tests {
     }
 
     #[test]
-    fn complete_valid_tail_is_recovered_without_a_manifest_update() {
+    fn complete_but_unconfirmed_group_is_removed() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0, 0);
         let confirmed = stream.append(b"confirmed", 10).unwrap();
-        let valid_tail_end: u64;
         {
             let mut state = stream.inner.state.lock().unwrap();
             let lsn = state.end_lsn;
@@ -1644,27 +1626,24 @@ mod tests {
             file.seek(SeekFrom::Start(physical_offset(lsn))).unwrap();
             file.write_all(&group).unwrap();
             file.sync_data().unwrap();
-            valid_tail_end = lsn + group.len() as u64;
             let length = file.metadata().unwrap().len();
             state.segment_lengths.insert(block_id(lsn), length);
         }
         drop(stream);
 
         let reopened = Stream::open(&path, 0);
-        assert_eq!(reopened.progress().unwrap().end_lsn, valid_tail_end);
-        reopened.append(b"next", 12).unwrap();
+        assert_eq!(reopened.progress().unwrap().end_lsn, confirmed.end_lsn);
+        reopened.append(b"next", 11).unwrap();
         let mut cursor = reopened.cursor(confirmed.lsn, false);
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"confirmed");
-        cursor.next(u64::MAX).unwrap();
-        assert_eq!(cursor.payload(), b"unconfirmed");
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"next");
         assert_eq!(cursor.next(u64::MAX), Err(Error::End));
     }
 
     #[test]
-    fn non_tail_corruption_is_not_truncated() {
+    fn confirmed_corruption_is_not_truncated() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0, 0);
@@ -1688,36 +1667,6 @@ mod tests {
             fs::metadata(segment_path(&directory.0, 0)).unwrap().len(),
             physical_offset(second.end_lsn)
         );
-    }
-
-    #[test]
-    fn damaged_last_group_is_truncated_as_a_crash_tail() {
-        let directory = Directory::new();
-        let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
-        let first = stream.append(b"one", 10).unwrap();
-        let second = stream.append(b"two", 11).unwrap();
-        drop(stream);
-        let segment = segment_path(&directory.0, 0);
-        let mut file = OpenOptions::new().write(true).open(&segment).unwrap();
-        file.seek(SeekFrom::Start(
-            physical_offset(second.lsn) + ENTRY_HEADER_SIZE as u64,
-        ))
-        .unwrap();
-        file.write_all(b"X").unwrap();
-        file.sync_all().unwrap();
-        drop(file);
-
-        let reopened = Stream::open(&path, 0);
-        assert_eq!(reopened.progress().unwrap().end_lsn, first.end_lsn);
-        assert_eq!(
-            fs::metadata(segment).unwrap().len(),
-            physical_offset(first.end_lsn)
-        );
-        let mut cursor = reopened.cursor(first.lsn, false);
-        cursor.next(u64::MAX).unwrap();
-        assert_eq!(cursor.payload(), b"one");
-        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
     }
 
     #[test]
@@ -1835,7 +1784,7 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .generation,
-            1
+            3
         );
         drop(stream);
 
@@ -1845,7 +1794,7 @@ mod tests {
             .write(true)
             .open(manifest_path)
             .unwrap();
-        file.seek(SeekFrom::Start((MANIFEST_SIZE + 56) as u64))
+        file.seek(SeekFrom::Start((MANIFEST_SIZE + 88) as u64))
             .unwrap();
         file.write_all(&4u64.to_le_bytes()).unwrap();
         file.sync_all().unwrap();
@@ -1897,7 +1846,10 @@ mod tests {
         let mut corrupted = bytes.clone();
         let last = corrupted.len() - 1;
         corrupted[last] ^= 1;
-        assert_eq!(import(&target, 0, 10, &corrupted), Err(Error::Corrupt));
+        assert_eq!(
+            import(&target, 0, 10, &corrupted),
+            Err(Error::Corrupt)
+        );
         import(&target, 0, 10, &bytes).unwrap();
         assert_eq!(import(&target, 0, 10, &bytes), Err(Error::Duplicate));
         let header = validate_group(&bytes, 0).unwrap();
@@ -2022,12 +1974,19 @@ mod tests {
         }
         let largest = vec![5; MAX_LOG_BODY_SIZE];
         let accepted = stream.append(&largest, 30).unwrap();
-        assert_eq!(accepted.lsn, target_group_lsn + GROUP_HEADER_SIZE as u64);
+        assert_eq!(
+            accepted.lsn,
+            target_group_lsn + GROUP_HEADER_SIZE as u64
+        );
         assert_eq!(accepted.end_lsn, BLOCK_SIZE);
         expected.push((accepted.lsn, accepted.scn, largest));
         let next_segment = stream.append(b"next-segment", 31).unwrap();
         assert_eq!(next_segment.lsn, BLOCK_SIZE + GROUP_HEADER_SIZE as u64);
-        expected.push((next_segment.lsn, next_segment.scn, b"next-segment".to_vec()));
+        expected.push((
+            next_segment.lsn,
+            next_segment.scn,
+            b"next-segment".to_vec(),
+        ));
 
         assert_eq!(
             stream.append(&vec![6; MAX_LOG_BODY_SIZE + 1], 32),
