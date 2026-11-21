@@ -759,3 +759,76 @@ drop table if exists articles;
 --enable_warnings
 
 drop database fts;
+# Regression: score-only candidate truncation must not lose rows needed by secondary keys.
+--result_format 1
+--disable_query_log
+--disable_warnings
+DROP DATABASE IF EXISTS fts_topk_secondary;
+--enable_warnings
+CREATE DATABASE fts_topk_secondary;
+USE fts_topk_secondary;
+CREATE TABLE ties(id INT PRIMARY KEY, tag INT, content VARCHAR(100), FULLTEXT INDEX ft(content));
+INSERT INTO ties VALUES (50,0,'alpha beta'),(40,1,'alpha beta'),(30,NULL,'alpha beta'),(20,1,'alpha beta'),(10,0,'alpha beta'),(60,0,NULL);
+--echo # complete-order-control
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id;
+--echo # first-boundary-tie
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT 1;
+--echo # offset-boundary-tie
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT 1,1;
+--echo # two-boundary-ties
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT 2;
+--echo # offset-two-ties
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT 1,2;
+--echo # descending-secondary
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id DESC LIMIT 2;
+--echo # three-keys-null-secondary
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC,tag,id LIMIT 3;
+--echo # expression-secondary
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id + 0 LIMIT 2;
+--echo # multi-token
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha beta') ORDER BY MATCH(content) AGAINST('alpha beta') DESC, id LIMIT 1;
+--echo # boolean-mode
+SELECT id FROM ties WHERE MATCH(content) AGAINST('+alpha +beta' IN BOOLEAN MODE) ORDER BY MATCH(content) AGAINST('+alpha +beta' IN BOOLEAN MODE) DESC, id LIMIT 1;
+--echo # zero-limit
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT 0;
+--echo # offset-past-end
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT 10,2;
+--echo # no-matches
+SELECT id FROM ties WHERE MATCH(content) AGAINST('unmatchedtoken') ORDER BY MATCH(content) AGAINST('unmatchedtoken') DESC, id LIMIT 2;
+--echo # metadata-filter-control
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') AND tag=1 ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT 2;
+--echo # score-only-fast-path-control
+SELECT COUNT(*) AS n FROM (SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC LIMIT 2) q;
+PREPARE ps FROM "SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT ?,?";
+SET @offset=0,@n=1;
+--echo # prepared-first-execution
+EXECUTE ps USING @offset,@n;
+SET @offset=1,@n=2;
+--echo # prepared-reused-parameters
+EXECUTE ps USING @offset,@n;
+DEALLOCATE PREPARE ps;
+CREATE TABLE heap_ties(id INT, content VARCHAR(100),FULLTEXT INDEX ft(content)) ORGANIZATION=HEAP;
+INSERT INTO heap_ties VALUES(50,'alpha'),(40,'alpha'),(30,'alpha'),(20,'alpha'),(10,'alpha');
+--echo # heap-hidden-rowkey
+SELECT id FROM heap_ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC,id LIMIT 1;
+CREATE TABLE partition_ties(id INT PRIMARY KEY, content VARCHAR(100),FULLTEXT INDEX ft(content)) PARTITION BY HASH(id) PARTITIONS 2;
+INSERT INTO partition_ties VALUES(50,'alpha'),(40,'alpha'),(30,'alpha'),(20,'alpha'),(10,'alpha'),(9,'alpha'),(7,'alpha');
+--echo # partition-local-boundary-ties
+SELECT id FROM partition_ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC,id LIMIT 3;
+CREATE TABLE batch_ties(id INT PRIMARY KEY,content VARCHAR(100),FULLTEXT INDEX ft(content));
+INSERT INTO batch_ties VALUES (40,'alpha'),(39,'alpha'),(38,'alpha'),(37,'alpha'),(36,'alpha'),(35,'alpha'),(34,'alpha'),(33,'alpha'),(32,'alpha'),(31,'alpha'),(30,'alpha'),(29,'alpha'),(28,'alpha'),(27,'alpha'),(26,'alpha'),(25,'alpha'),(24,'alpha'),(23,'alpha'),(22,'alpha'),(21,'alpha'),(20,'alpha'),(19,'alpha'),(18,'alpha'),(17,'alpha'),(16,'alpha'),(15,'alpha'),(14,'alpha'),(13,'alpha'),(12,'alpha'),(11,'alpha'),(10,'alpha'),(9,'alpha'),(8,'alpha'),(7,'alpha'),(6,'alpha'),(5,'alpha'),(4,'alpha'),(3,'alpha'),(2,'alpha'),(1,'alpha');
+--echo # batch-boundary
+SELECT id FROM batch_ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC,id LIMIT 17,3;
+INSERT INTO ties VALUES(5,0,'alpha beta');
+UPDATE ties SET content='omega' WHERE id=50;
+DELETE FROM ties WHERE id=10;
+--echo # dml-maintains-secondary-order
+SELECT id FROM ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC, id LIMIT 3;
+CREATE TABLE mixed_ties(id INT PRIMARY KEY,content VARCHAR(100),FULLTEXT INDEX ft(content));
+INSERT INTO mixed_ties VALUES(30,'alpha alpha alpha'),(20,'alpha'),(10,'alpha alpha alpha'),(40,'beta gamma delta');
+--echo # different-scores-with-boundary-ties
+SELECT id FROM mixed_ties WHERE MATCH(content) AGAINST('alpha') ORDER BY MATCH(content) AGAINST('alpha') DESC,id LIMIT 1;
+USE test;
+DROP DATABASE fts_topk_secondary;
+--enable_query_log
+--result_format 4
