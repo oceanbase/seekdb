@@ -54,7 +54,6 @@ LATCH_DEF(ALLOC_OBJECT_LOCK, 57, "object set lock", LATCH_READ_PREFER, 1, 0, tru
 LATCH_DEF(ALLOC_BLOCK_LOCK, 58, "block set lock", LATCH_READ_PREFER, 1, 0, true)
 LATCH_DEF(TRACE_RECORDER_LOCK, 59, "normal trace recorder lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SESSION_TRACE_RECORDER_LOCK, 60, "session trace recorder lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(TRANS_TRACE_RECORDER_LOCK, 61, "trans trace recorder lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(ALLOC_CHUNK_LOCK, 64, "allocate chunk lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(BANDWIDTH_THROTTLE_LOCK, 69, "bandwidth throttle lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MANAGEMENT_EVENT_TS_LOCK, 70, "management event timestamp lock", LATCH_FIFO, 2000, 0, true)
