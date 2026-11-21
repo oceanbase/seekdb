@@ -29,7 +29,8 @@ use std::time::{Duration, Instant};
 
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
-const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN2";
+const MANIFEST_FILE_SIZE: usize = MANIFEST_SIZE * 2;
+const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN3";
 const THROTTLE_CHECK_INTERVAL: Duration = Duration::from_millis(30);
 const APPEND_BATCH_WINDOW: Duration = Duration::from_micros(50);
 const MAX_APPEND_BATCH_REQUESTS: usize = 32;
@@ -178,8 +179,16 @@ struct Manifest {
     committed: CommittedTail,
 }
 
+struct ManifestWriter {
+    file: File,
+    generation: u64,
+    #[cfg(test)]
+    fail_writes: bool,
+}
+
 struct State {
     directory: PathBuf,
+    manifest_writer: Option<ManifestWriter>,
     manifest: Manifest,
     records: BTreeMap<u64, RecordMeta>,
     segment_lengths: BTreeMap<u64, u64>,
@@ -238,6 +247,7 @@ impl Stream {
     fn from_result(result: Result<State>) -> Self {
         let state = result.unwrap_or_else(|error| State {
             directory: PathBuf::new(),
+            manifest_writer: None,
             manifest: Manifest {
                 base_lsn: 0,
                 previous: BaseInfo {
@@ -474,7 +484,7 @@ impl Stream {
             curr_lsn: lsn,
             ..previous
         };
-        write_manifest(&state.directory, &manifest)?;
+        state.publish_manifest(&manifest)?;
         state.manifest = manifest;
         let minimum_block = block_id(lsn);
         let old_blocks: Vec<u64> = state
@@ -927,6 +937,13 @@ impl State {
         }
     }
 
+    fn publish_manifest(&mut self, manifest: &Manifest) -> Result<()> {
+        self.manifest_writer
+            .as_mut()
+            .ok_or(Error::Io)?
+            .write(manifest)
+    }
+
     fn check_writable(&self) -> Result<()> {
         self.check_open()
     }
@@ -1032,7 +1049,7 @@ impl State {
             log_id: committed.header.log_id,
             accumulated_checksum: committed.header.accumulated_checksum,
         };
-        write_manifest(&self.directory, &manifest)?;
+        self.publish_manifest(&manifest)?;
         self.manifest = manifest;
         self.segment_lengths = plan.segment_lengths.clone();
         self.end_lsn = plan.end_lsn;
@@ -1175,10 +1192,11 @@ fn create_state(
             accumulated_checksum: base.prev_accumulated_checksum,
         },
     };
-    write_manifest(directory, &manifest)?;
+    let manifest_writer = ManifestWriter::create(directory, &manifest)?;
     sync_directory(directory)?;
     Ok(State {
         directory: directory.to_path_buf(),
+        manifest_writer: Some(manifest_writer),
         end_lsn: base.curr_lsn,
         end_scn: base.prev_scn,
         next_log_id: base.prev_log_id.checked_add(1).ok_or(Error::Invalid)?,
@@ -1200,7 +1218,7 @@ fn create_state(
 
 fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
     disk_policy.validate()?;
-    let manifest = read_manifest(directory)?;
+    let (manifest, manifest_writer) = ManifestWriter::open(directory)?;
     let committed = manifest.committed;
     if committed.end_lsn < manifest.base_lsn {
         return Err(Error::Corrupt);
@@ -1347,6 +1365,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
     }
     Ok(State {
         directory: directory.to_path_buf(),
+        manifest_writer: Some(manifest_writer),
         manifest,
         records,
         segment_lengths,
@@ -1366,65 +1385,129 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
     })
 }
 
-fn write_manifest(directory: &Path, manifest: &Manifest) -> Result<()> {
-    let mut bytes = zeroed_bytes(MANIFEST_SIZE)?;
-    bytes[..8].copy_from_slice(MANIFEST_MAGIC);
-    bytes[8..16].copy_from_slice(&manifest.base_lsn.to_le_bytes());
-    bytes[16..24].copy_from_slice(&manifest.previous.prev_lsn.to_le_bytes());
-    bytes[24..32].copy_from_slice(&manifest.previous.prev_scn.to_le_bytes());
-    bytes[32..40].copy_from_slice(&manifest.previous.prev_log_id.to_le_bytes());
-    bytes[40..48].copy_from_slice(&manifest.previous.prev_accumulated_checksum.to_le_bytes());
-    bytes[48..56].copy_from_slice(&manifest.ref_scn.to_le_bytes());
-    bytes[56..64].copy_from_slice(&manifest.committed.end_lsn.to_le_bytes());
-    bytes[64..72].copy_from_slice(&manifest.committed.end_scn.to_le_bytes());
-    bytes[72..80].copy_from_slice(&manifest.committed.log_id.to_le_bytes());
-    bytes[80..88].copy_from_slice(&manifest.committed.accumulated_checksum.to_le_bytes());
-    let checksum = crc64(&bytes[..88]);
-    bytes[88..96].copy_from_slice(&checksum.to_le_bytes());
-    let temporary = directory.join("manifest.tmp");
-    let mut file = File::create(&temporary)?;
-    file.write_all(&bytes)?;
-    file.sync_all()?;
-    fs::rename(temporary, directory.join(MANIFEST_FILE))?;
-    sync_directory(directory)?;
-    Ok(())
-}
-
-fn read_manifest(directory: &Path) -> Result<Manifest> {
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve_exact(MANIFEST_SIZE + 1)
-        .map_err(|_| Error::NoMemory)?;
-    File::open(directory.join(MANIFEST_FILE))?
-        .take((MANIFEST_SIZE + 1) as u64)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() != MANIFEST_SIZE
-        || bytes.get(..8) != Some(MANIFEST_MAGIC)
-        || crc64(&bytes[..88]) != u64::from_le_bytes(bytes[88..96].try_into().unwrap())
-    {
-        return Err(Error::Corrupt);
+impl ManifestWriter {
+    fn create(directory: &Path, manifest: &Manifest) -> Result<Self> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(directory.join(MANIFEST_FILE))?;
+        file.set_len(MANIFEST_FILE_SIZE as u64)?;
+        let mut writer = Self {
+            file,
+            generation: 0,
+            #[cfg(test)]
+            fail_writes: false,
+        };
+        writer.write(manifest)?;
+        Ok(writer)
     }
-    let number = |offset: usize| u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
-    let signed = |offset: usize| i64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
-    let base_lsn = number(8);
-    let previous = BaseInfo {
-        curr_lsn: base_lsn,
-        prev_lsn: number(16),
-        prev_scn: number(24),
-        prev_log_id: signed(32),
-        prev_accumulated_checksum: number(40),
-    };
-    Ok(Manifest {
-        base_lsn,
-        previous,
-        ref_scn: number(48),
-        committed: CommittedTail {
-            end_lsn: number(56),
-            end_scn: number(64),
-            log_id: signed(72),
-            accumulated_checksum: number(80),
-        },
-    })
+
+    fn open(directory: &Path) -> Result<(Manifest, Self)> {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(directory.join(MANIFEST_FILE))?;
+        if file.metadata()?.len() != MANIFEST_FILE_SIZE as u64 {
+            return Err(Error::Corrupt);
+        }
+        let mut bytes = [0; MANIFEST_FILE_SIZE];
+        file.read_exact(&mut bytes)?;
+        let first = Self::decode_slot(&bytes[..MANIFEST_SIZE]);
+        let second = Self::decode_slot(&bytes[MANIFEST_SIZE..]);
+        let (generation, manifest) = match (first, second) {
+            (Some(first), Some(second)) => {
+                if first.0 >= second.0 {
+                    first
+                } else {
+                    second
+                }
+            }
+            (Some(slot), None) | (None, Some(slot)) => slot,
+            (None, None) => return Err(Error::Corrupt),
+        };
+        Ok((
+            manifest,
+            Self {
+                file,
+                generation,
+                #[cfg(test)]
+                fail_writes: false,
+            },
+        ))
+    }
+
+    fn write(&mut self, manifest: &Manifest) -> Result<()> {
+        #[cfg(test)]
+        if self.fail_writes {
+            return Err(Error::Io);
+        }
+        let generation = self.generation.checked_add(1).ok_or(Error::Invalid)?;
+        let bytes = Self::encode_slot(manifest, generation);
+        let slot = self.generation % 2;
+        self.file
+            .seek(SeekFrom::Start(slot * MANIFEST_SIZE as u64))?;
+        self.file.write_all(&bytes)?;
+        self.file.sync_data()?;
+        self.generation = generation;
+        Ok(())
+    }
+
+    fn encode_slot(manifest: &Manifest, generation: u64) -> [u8; MANIFEST_SIZE] {
+        let mut bytes = [0; MANIFEST_SIZE];
+        bytes[..8].copy_from_slice(MANIFEST_MAGIC);
+        bytes[8..16].copy_from_slice(&manifest.base_lsn.to_le_bytes());
+        bytes[16..24].copy_from_slice(&manifest.previous.prev_lsn.to_le_bytes());
+        bytes[24..32].copy_from_slice(&manifest.previous.prev_scn.to_le_bytes());
+        bytes[32..40].copy_from_slice(&manifest.previous.prev_log_id.to_le_bytes());
+        bytes[40..48].copy_from_slice(&manifest.previous.prev_accumulated_checksum.to_le_bytes());
+        bytes[48..56].copy_from_slice(&manifest.ref_scn.to_le_bytes());
+        bytes[56..64].copy_from_slice(&manifest.committed.end_lsn.to_le_bytes());
+        bytes[64..72].copy_from_slice(&manifest.committed.end_scn.to_le_bytes());
+        bytes[72..80].copy_from_slice(&manifest.committed.log_id.to_le_bytes());
+        bytes[80..88].copy_from_slice(&manifest.committed.accumulated_checksum.to_le_bytes());
+        bytes[88..96].copy_from_slice(&generation.to_le_bytes());
+        let checksum = crc64(&bytes[..96]);
+        bytes[96..104].copy_from_slice(&checksum.to_le_bytes());
+        bytes
+    }
+
+    fn decode_slot(bytes: &[u8]) -> Option<(u64, Manifest)> {
+        if bytes.len() != MANIFEST_SIZE || bytes.get(..8) != Some(MANIFEST_MAGIC) {
+            return None;
+        }
+        let generation = u64::from_le_bytes(bytes[88..96].try_into().unwrap());
+        let checksum = u64::from_le_bytes(bytes[96..104].try_into().unwrap());
+        if crc64(&bytes[..96]) != checksum {
+            return None;
+        }
+        let number =
+            |offset: usize| u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
+        let signed =
+            |offset: usize| i64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
+        let base_lsn = number(8);
+        let previous = BaseInfo {
+            curr_lsn: base_lsn,
+            prev_lsn: number(16),
+            prev_scn: number(24),
+            prev_log_id: signed(32),
+            prev_accumulated_checksum: number(40),
+        };
+        Some((
+            generation,
+            Manifest {
+                base_lsn,
+                previous,
+                ref_scn: number(48),
+                committed: CommittedTail {
+                    end_lsn: number(56),
+                    end_scn: number(64),
+                    log_id: signed(72),
+                    accumulated_checksum: number(80),
+                },
+            },
+        ))
+    }
 }
 
 #[cfg(unix)]
@@ -1641,12 +1724,27 @@ mod tests {
         for index in 0..70 {
             stream.append(&large, index + 1).unwrap();
         }
-        let temporary = directory.0.join("manifest.tmp");
-        fs::create_dir(&temporary).unwrap();
+        stream
+            .inner
+            .state
+            .lock()
+            .unwrap()
+            .manifest_writer
+            .as_mut()
+            .unwrap()
+            .fail_writes = true;
         assert!(matches!(stream.set_base_lsn(BLOCK_SIZE), Err(Error::Io)));
         assert_eq!(stream.progress().unwrap().base_lsn, 0);
         assert!(segment_path(&directory.0, 0).exists());
-        fs::remove_dir(&temporary).unwrap();
+        stream
+            .inner
+            .state
+            .lock()
+            .unwrap()
+            .manifest_writer
+            .as_mut()
+            .unwrap()
+            .fail_writes = false;
         stream.set_base_lsn(BLOCK_SIZE).unwrap();
         assert!(!segment_path(&directory.0, 0).exists());
         assert_eq!(
@@ -1658,6 +1756,54 @@ mod tests {
             Stream::open(&path, 0).progress().unwrap().base_lsn,
             BLOCK_SIZE
         );
+    }
+
+    #[test]
+    fn manifest_reopen_uses_latest_intact_generation() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        stream.append(b"one", 10).unwrap();
+        let second = stream.append(b"two", 11).unwrap();
+        drop(stream);
+
+        let stream = Stream::open(&path, 0);
+        assert_eq!(stream.progress().unwrap().end_lsn, second.end_lsn);
+        assert_eq!(
+            stream
+                .inner
+                .state
+                .lock()
+                .unwrap()
+                .manifest_writer
+                .as_ref()
+                .unwrap()
+                .generation,
+            3
+        );
+        drop(stream);
+
+        let manifest_path = directory.0.join(MANIFEST_FILE);
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(manifest_path)
+            .unwrap();
+        file.seek(SeekFrom::Start((MANIFEST_SIZE + 88) as u64))
+            .unwrap();
+        file.write_all(&4u64.to_le_bytes()).unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+
+        let stream = Stream::open(&path, 0);
+        assert_eq!(stream.status(), Ok(true));
+        assert_eq!(stream.progress().unwrap().end_lsn, second.end_lsn);
+        let mut cursor = stream.cursor(0, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"one");
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"two");
+        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
     }
 
     #[test]
