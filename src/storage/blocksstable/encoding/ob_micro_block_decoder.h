@@ -179,6 +179,7 @@ protected:
       const int64_t row_id,
       ObDatumRow &row);
 private:
+  int try_get_all_columns_rust(const int64_t row_id, ObDatumRow &row);
   int init_by_read_info(
       const ObMicroBlockData &block_data,
       const storage::ObITableReadInfo &read_info);

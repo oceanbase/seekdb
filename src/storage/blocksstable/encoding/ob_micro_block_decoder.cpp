@@ -577,15 +577,103 @@ int ObEncodeBlockGetReader::get_all_columns(
     const int64_t row_id,
     ObDatumRow &row)
 {
-  int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row.get_capacity() < request_cnt_)) {
-    ret = OB_BUF_NOT_ENOUGH;
-  } else {
-    ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
-    for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) {
-      row.storage_datums_[i].reuse();
-      if (OB_FAIL(decoders_[i].decode(row.storage_datums_[i], row_id, bs, row_data, row_len))) {
+    return OB_BUF_NOT_ENOUGH;
+  }
+  int ret = try_get_all_columns_rust(row_id, row);
+  if (OB_NOT_SUPPORTED != ret) {
+    return ret;
+  }
+  ret = OB_SUCCESS;
+  ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
+  for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) {
+    row.storage_datums_[i].reuse();
+    if (OB_FAIL(decoders_[i].decode(row.storage_datums_[i], row_id, bs, row_data, row_len))) {
+    }
+  }
+  return ret;
+}
+
+int ObEncodeBlockGetReader::try_get_all_columns_rust(const int64_t row_id, ObDatumRow &row)
+{
+  int ret = OB_NOT_SUPPORTED;
+  if (row_id < 0 || row_id >= header_->row_count_ || row_id > UINT32_MAX
+      || request_cnt_ <= 0 || nullptr == block_data_ || block_size_ <= 0) {
+    return ret;
+  }
+  std::vector<uint32_t> columns;
+  columns.reserve(request_cnt_);
+  for (int64_t i = 0; i < request_cnt_; ++i) {
+    const int64_t store_idx = store_id_array_[i];
+    if (store_idx < 0 || store_idx >= header_->column_count_) {
+      return ret;
+    }
+    const ObColumnHeader &column = col_header_[store_idx];
+    if ((ObColumnHeader::RAW != column.type_ && ObColumnHeader::CONST != column.type_)
+        || column.is_bit_packing()) {
+      return ret;
+    }
+    switch (get_store_class_map()[ob_obj_type_class(column.get_store_obj_type())]) {
+      case ObIntSC:
+      case ObUIntSC:
+      case ObNumberSC:
+      case ObDecimalIntSC:
+      case ObStringSC:
+      case ObTextSC:
+      case ObJsonSC:
+      case ObGeometrySC:
+        break;
+      default:
+        return ret;
+    }
+    columns.push_back(static_cast<uint32_t>(store_idx));
+  }
+  const uint32_t rust_row = static_cast<uint32_t>(row_id);
+  const rust::Slice<const uint8_t> block(
+      reinterpret_cast<const uint8_t *>(block_data_), static_cast<std::size_t>(block_size_));
+  const rust::Slice<const uint32_t> rows(&rust_row, 1);
+  const rust::Slice<const uint32_t> rust_columns(columns.data(), columns.size());
+  micro_block::BatchResult result = micro_block::project_pax_block(block, rows, rust_columns);
+  switch (result.code) {
+    case micro_block::Code::Ok:
+      ret = OB_SUCCESS;
+      break;
+    case micro_block::Code::Unsupported:
+      return OB_NOT_SUPPORTED;
+    case micro_block::Code::InvalidArgument:
+      return OB_INVALID_ARGUMENT;
+    case micro_block::Code::InvalidData:
+      return OB_INVALID_DATA;
+    case micro_block::Code::ChecksumMismatch:
+      return OB_CHECKSUM_ERROR;
+    case micro_block::Code::OutputTooSmall:
+      return OB_BUF_NOT_ENOUGH;
+    case micro_block::Code::SizeOverflow:
+      return OB_SIZE_OVERFLOW;
+    default:
+      return OB_ERR_UNEXPECTED;
+  }
+  if (result.cells.size() != columns.size()) {
+    return OB_INVALID_DATA;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) {
+    const micro_block::CellDesc &cell = result.cells[i];
+    ObStorageDatum &datum = row.storage_datums_[i];
+    datum.reuse();
+    if (1 == cell.kind) {
+      datum.set_null();
+    } else if (2 == cell.kind) {
+      datum.set_nop();
+    } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size_)
+               || cell.length > static_cast<uint64_t>(block_size_) - cell.offset) {
+      ret = OB_INVALID_DATA;
+    } else {
+      const ObObjType obj_type = col_header_[columns[i]].get_store_obj_type();
+      int64_t integer_mask = 0;
+      if (ObIntTC == ob_obj_type_class(obj_type)) {
+        integer_mask = ~INTEGER_MASK_TABLE[get_type_size_map()[obj_type]];
       }
+      ret = load_data_to_datum(obj_type, block_data_ + cell.offset, cell.length, integer_mask, datum);
     }
   }
   return ret;
