@@ -200,6 +200,10 @@ struct State {
     integrity: bool,
     closed: bool,
     failed: Option<Error>,
+}
+
+#[derive(Default)]
+struct AppendQueue {
     next_append_id: u64,
     pending_appends: Vec<PendingAppend>,
     pending_append_bytes: usize,
@@ -210,7 +214,9 @@ struct State {
 
 struct StreamInner {
     state: Mutex<State>,
+    appends: Mutex<AppendQueue>,
     changed: Condvar,
+    append_changed: Condvar,
     append_callers: AtomicUsize,
 }
 
@@ -276,17 +282,13 @@ impl Stream {
             integrity: false,
             closed: false,
             failed: Some(error),
-            next_append_id: 0,
-            pending_appends: Vec::new(),
-            pending_append_bytes: 0,
-            append_leader: false,
-            gather_appends: false,
-            append_results: BTreeMap::new(),
         });
         Self {
             inner: Arc::new(StreamInner {
                 state: Mutex::new(state),
+                appends: Mutex::new(AppendQueue::default()),
                 changed: Condvar::new(),
+                append_changed: Condvar::new(),
                 append_callers: AtomicUsize::new(0),
             }),
         }
@@ -315,6 +317,10 @@ impl Stream {
 
     fn lock(&self) -> Result<MutexGuard<'_, State>> {
         self.inner.state.lock().map_err(|_| Error::Io)
+    }
+
+    fn lock_appends(&self) -> Result<MutexGuard<'_, AppendQueue>> {
+        self.inner.appends.lock().map_err(|_| Error::Io)
     }
 
     fn lock_for_write(&self, write_size: u64) -> Result<MutexGuard<'_, State>> {
@@ -357,58 +363,93 @@ impl Stream {
         }
         self.inner.append_callers.fetch_add(1, Ordering::Relaxed);
         let _call_guard = AppendCallGuard(&self.inner.append_callers);
-        let mut state = self.lock_for_write(payload.len() as u64)?;
-        let id = state.next_append_id;
-        state.next_append_id = state.next_append_id.checked_add(1).ok_or(Error::Invalid)?;
-        let mut request = Some(PendingAppend {
-            id,
-            payload: copied_bytes(payload)?,
-            ref_scn,
-        });
+        let mut queue = self.lock_appends()?;
+        let id = queue.next_append_id;
+        queue.next_append_id = queue.next_append_id.checked_add(1).ok_or(Error::Invalid)?;
+        let mut queued = false;
         loop {
-            if let Some(result) = state.append_results.remove(&id) {
+            if let Some(result) = queue.append_results.remove(&id) {
                 return result;
             }
-            state.check_writable()?;
-            if let Some(pending) = request.as_ref() {
-                if state.can_queue_append(pending.payload.len()) {
-                    state.enqueue_append(request.take().unwrap());
-                    self.inner.changed.notify_all();
+            if !queued {
+                if queue.can_queue_append(payload.len()) {
+                    queue.enqueue_append(PendingAppend {
+                        id,
+                        payload: copied_bytes(payload)?,
+                        ref_scn,
+                    });
+                    queued = true;
+                    self.inner.append_changed.notify_all();
+                } else {
+                    queue = self
+                        .inner
+                        .append_changed
+                        .wait(queue)
+                        .map_err(|_| Error::Io)?;
+                    continue;
                 }
             }
-            if !state.append_leader && !state.pending_appends.is_empty() {
-                state.append_leader = true;
-                if self.inner.append_callers.load(Ordering::Relaxed) > 1 || state.gather_appends {
+            if !queue.append_leader && !queue.pending_appends.is_empty() {
+                queue.append_leader = true;
+                if self.inner.append_callers.load(Ordering::Relaxed) > 1 || queue.gather_appends {
                     let deadline = Instant::now() + APPEND_BATCH_WINDOW;
-                    while state.append_batch_has_capacity()
-                        && !state.closed
-                        && state.failed.is_none()
-                    {
+                    while queue.append_batch_has_capacity() {
                         let now = Instant::now();
                         if now >= deadline {
                             break;
                         }
                         let (next, timeout) = self
                             .inner
-                            .changed
-                            .wait_timeout(state, deadline - now)
+                            .append_changed
+                            .wait_timeout(queue, deadline - now)
                             .map_err(|_| Error::Io)?;
-                        state = next;
+                        queue = next;
                         if timeout.timed_out() {
                             break;
                         }
                     }
                 }
-                let requests = state.take_append_batch();
-                let (results, retry) = state.execute_append_batch(requests);
-                state.requeue_appends(retry);
-                state.append_results.extend(results);
-                state.append_leader = false;
-                self.inner.changed.notify_all();
+                let requests = queue.take_append_batch();
+                queue.gather_appends = requests.len() > 1;
+                drop(queue);
+                let (results, retry) = self.execute_append_batch(requests);
+                queue = self.lock_appends()?;
+                queue.requeue_appends(retry);
+                queue.append_results.extend(results);
+                queue.append_leader = false;
+                self.inner.append_changed.notify_all();
             } else {
-                state = self.inner.changed.wait(state).map_err(|_| Error::Io)?;
+                queue = self
+                    .inner
+                    .append_changed
+                    .wait(queue)
+                    .map_err(|_| Error::Io)?;
             }
         }
+    }
+
+    fn execute_append_batch(
+        &self,
+        requests: Vec<PendingAppend>,
+    ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
+        let write_size = requests.iter().try_fold(0u64, |total, request| {
+            total
+                .checked_add(request.payload.len() as u64)
+                .ok_or(Error::Invalid)
+        });
+        let mut state = match write_size.and_then(|write_size| self.lock_for_write(write_size)) {
+            Ok(state) => state,
+            Err(error) => {
+                return (
+                    requests
+                        .into_iter()
+                        .map(|request| (request.id, Err(error)))
+                        .collect(),
+                    Vec::new(),
+                );
+            }
+        };
+        state.execute_append_batch(requests)
     }
 
     pub fn append_imported(&self, groups: &[ImportedGroup]) -> Result<AppendResult> {
@@ -555,6 +596,7 @@ impl Stream {
         let mut state = self.lock()?;
         state.closed = true;
         self.inner.changed.notify_all();
+        self.inner.append_changed.notify_all();
         Ok(())
     }
 
@@ -928,6 +970,52 @@ impl AppendBatch {
     }
 }
 
+impl AppendQueue {
+    fn can_queue_append(&self, payload_len: usize) -> bool {
+        self.pending_appends.len() < MAX_APPEND_BATCH_REQUESTS
+            && (self.pending_appends.is_empty()
+                || self.pending_append_bytes.saturating_add(payload_len) <= MAX_APPEND_BATCH_BYTES)
+    }
+
+    fn append_batch_has_capacity(&self) -> bool {
+        self.pending_appends.len() < MAX_APPEND_BATCH_REQUESTS
+            && self.pending_append_bytes < MAX_APPEND_BATCH_BYTES
+    }
+
+    fn enqueue_append(&mut self, request: PendingAppend) {
+        self.pending_append_bytes = self
+            .pending_append_bytes
+            .saturating_add(request.payload.len());
+        self.pending_appends.push(request);
+    }
+
+    fn take_append_batch(&mut self) -> Vec<PendingAppend> {
+        let mut count = 0;
+        let mut bytes = 0usize;
+        for request in &self.pending_appends {
+            if count == MAX_APPEND_BATCH_REQUESTS
+                || (count > 0
+                    && bytes.saturating_add(request.payload.len()) > MAX_APPEND_BATCH_BYTES)
+            {
+                break;
+            }
+            count += 1;
+            bytes = bytes.saturating_add(request.payload.len());
+        }
+        self.pending_append_bytes = self.pending_append_bytes.saturating_sub(bytes);
+        self.pending_appends.drain(..count).collect()
+    }
+
+    fn requeue_appends(&mut self, requests: Vec<PendingAppend>) {
+        let mut requests = requests;
+        requests.append(&mut self.pending_appends);
+        self.pending_append_bytes = requests.iter().fold(0usize, |bytes, request| {
+            bytes.saturating_add(request.payload.len())
+        });
+        self.pending_appends = requests;
+    }
+}
+
 impl State {
     fn check_open(&self) -> Result<()> {
         if self.closed {
@@ -950,41 +1038,10 @@ impl State {
         self.check_open()
     }
 
-    fn can_queue_append(&self, payload_len: usize) -> bool {
-        self.pending_appends.len() < MAX_APPEND_BATCH_REQUESTS
-            && (self.pending_appends.is_empty()
-                || self.pending_append_bytes.saturating_add(payload_len) <= MAX_APPEND_BATCH_BYTES)
-    }
-
-    fn append_batch_has_capacity(&self) -> bool {
-        self.pending_appends.len() < MAX_APPEND_BATCH_REQUESTS
-            && self.pending_append_bytes < MAX_APPEND_BATCH_BYTES
-    }
-
-    fn enqueue_append(&mut self, request: PendingAppend) {
-        self.pending_append_bytes = self
-            .pending_append_bytes
-            .saturating_add(request.payload.len());
-        self.pending_appends.push(request);
-    }
-
-    fn take_append_batch(&mut self) -> Vec<PendingAppend> {
-        self.pending_append_bytes = 0;
-        std::mem::take(&mut self.pending_appends)
-    }
-
-    fn requeue_appends(&mut self, requests: Vec<PendingAppend>) {
-        self.pending_append_bytes = requests.iter().fold(0usize, |bytes, request| {
-            bytes.saturating_add(request.payload.len())
-        });
-        self.pending_appends = requests;
-    }
-
     fn execute_append_batch(
         &mut self,
         requests: Vec<PendingAppend>,
     ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
-        self.gather_appends = requests.len() > 1;
         if let Err(error) = self.check_writable() {
             return (
                 requests
@@ -1211,12 +1268,6 @@ fn create_state(
         integrity: true,
         closed: false,
         failed: None,
-        next_append_id: 0,
-        pending_appends: Vec::new(),
-        pending_append_bytes: 0,
-        append_leader: false,
-        gather_appends: false,
-        append_results: BTreeMap::new(),
     })
 }
 
@@ -1381,12 +1432,6 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         integrity: true,
         closed: false,
         failed: None,
-        next_append_id: 0,
-        pending_appends: Vec::new(),
-        pending_append_bytes: 0,
-        append_leader: false,
-        gather_appends: false,
-        append_results: BTreeMap::new(),
     })
 }
 
