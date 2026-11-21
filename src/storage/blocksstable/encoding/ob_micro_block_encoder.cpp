@@ -599,7 +599,7 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
     for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < ctx_.column_cnt_; ++col_idx) {
       const ObDatum &datum = datum_rows_.at(row_idx).get_datum(col_idx);
       micro_block::InputCell cell;
-      if (datum.is_outrow() || (ctx_.need_calc_column_chksum_ && datum.is_nop())) {
+      if (datum.is_outrow()) {
         ret = OB_NOT_SUPPORTED;
       } else if (OB_UNLIKELY(!datum.is_null() && !datum.is_nop()
                              && datum.len_ > 0 && nullptr == datum.ptr_)) {
@@ -623,12 +623,19 @@ int ObMicroBlockEncoder::try_build_rust_block(char *&buf, int64_t &size)
     }
   }
   if (OB_SUCC(ret)) {
+    static const uint64_t empty_checksum = 0;
+    const ObMicroBlockHeader *header = get_header(data_buffer_);
+    const uint64_t *column_checksums = ctx_.need_calc_column_chksum_
+        ? reinterpret_cast<const uint64_t *>(header->column_checksums_) : &empty_checksum;
+    const std::size_t column_checksum_count = ctx_.need_calc_column_chksum_
+        ? static_cast<std::size_t>(ctx_.column_cnt_) : 0;
     micro_block::BuildResult result = micro_block::build_pax_block(
         std::move(columns),
         std::move(cells),
         static_cast<uint32_t>(ctx_.rowkey_column_cnt_),
         static_cast<uint8_t>(ctx_.row_store_type_),
         ctx_.need_calc_column_chksum_,
+        rust::Slice<const uint64_t>(column_checksums, column_checksum_count),
         !has_lob_out_row_,
         static_cast<uint64_t>(estimate_size_),
         max_merged_trans_version_);

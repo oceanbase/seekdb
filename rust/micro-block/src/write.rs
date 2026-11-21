@@ -173,9 +173,6 @@ impl BlockWriter {
         let mut row_size = 0usize;
         for (datum, column) in row.iter().zip(&self.config.columns) {
             self.validate_datum(datum, column)?;
-            if self.config.need_column_checksums && matches!(datum, OwnedDatum::Nop) {
-                return Err(Error::Unsupported);
-            }
             let datum_size = datum_len(datum, column)?;
             row_size = row_size
                 .checked_add(datum_size)
@@ -242,10 +239,24 @@ impl BlockWriter {
     }
 
     pub fn finish(&mut self) -> Result<Vec<u8>> {
+        self.finish_inner(None)
+    }
+
+    pub fn finish_with_column_checksums(&mut self, column_checksums: &[u64]) -> Result<Vec<u8>> {
+        self.finish_inner(Some(column_checksums))
+    }
+
+    fn finish_inner(&mut self, column_checksums: Option<&[u64]>) -> Result<Vec<u8>> {
         if self.frozen {
             return Err(Error::Frozen);
         }
-        if self.rows.is_empty() {
+        if self.rows.is_empty()
+            || column_checksums.is_some_and(|checksums| {
+                (self.config.need_column_checksums
+                    && checksums.len() != self.config.columns.len())
+                    || (!self.config.need_column_checksums && !checksums.is_empty())
+            })
+        {
             return Err(Error::InvalidArgument);
         }
         let extend_width = self.extend_width();
@@ -272,6 +283,7 @@ impl BlockWriter {
             row_index_byte,
             var_column_count,
             extend_width,
+            column_checksums,
         )
     }
 
@@ -592,6 +604,7 @@ impl BlockWriter {
         row_index_byte: usize,
         var_column_count: usize,
         extend_width: usize,
+        column_checksums: Option<&[u64]>,
     ) -> Result<Vec<u8>> {
         let header_size = FIXED_HEADER_SIZE
             + if self.config.need_column_checksums {
@@ -669,7 +682,10 @@ impl BlockWriter {
         )?;
         if self.config.need_column_checksums {
             for column in 0..columns.len() {
-                let checksum = self.column_checksum(column)?;
+                let checksum = match column_checksums {
+                    Some(checksums) => checksums[column],
+                    None => self.column_checksum(column)?,
+                };
                 write_u64(&mut block, FIXED_HEADER_SIZE + column * 8, checksum)?;
             }
         }
@@ -915,6 +931,47 @@ mod tests {
         let block = Block::new(&bytes).unwrap();
         assert_eq!(block.find_uint(0, 8).unwrap(), Some(1));
         assert_eq!(block.cell(1, 1).unwrap().bytes().unwrap(), b"same");
+    }
+
+    #[test]
+    fn accepts_external_column_checksums_with_nop() {
+        let mut config = WriterConfig::new(
+            vec![ColumnSpec::fixed(5, 8), ColumnSpec::variable(22)],
+            1,
+        );
+        config.need_column_checksums = true;
+        let checksums = [0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210];
+        let mut writer = BlockWriter::new(config).unwrap();
+        writer
+            .append_row(&[OwnedDatum::UInt(7), OwnedDatum::Nop])
+            .unwrap();
+        writer
+            .append_row(&[OwnedDatum::UInt(8), OwnedDatum::Bytes(b"value".to_vec())])
+            .unwrap();
+        let bytes = writer.finish_with_column_checksums(&checksums).unwrap();
+        let block = Block::new(&bytes).unwrap();
+        assert_eq!(block.cell(0, 1).unwrap(), Cell::Nop);
+        assert_eq!(block.cell(1, 1).unwrap().bytes().unwrap(), b"value");
+        for (column, checksum) in checksums.iter().enumerate() {
+            assert_eq!(
+                crate::format::u64_at(&bytes, crate::format::FIXED_HEADER_SIZE + column * 8)
+                    .unwrap(),
+                *checksum
+            );
+        }
+
+        let mut config = WriterConfig::new(vec![ColumnSpec::variable(22)], 1);
+        config.need_column_checksums = true;
+        let mut writer = BlockWriter::new(config).unwrap();
+        writer.append_row(&[OwnedDatum::Nop]).unwrap();
+        assert_eq!(writer.finish().unwrap_err(), Error::Unsupported);
+        assert_eq!(
+            writer.finish_with_column_checksums(&[]).unwrap_err(),
+            Error::InvalidArgument
+        );
+        assert_eq!(writer.row_count(), 1);
+        let bytes = writer.finish_with_column_checksums(&[42]).unwrap();
+        assert_eq!(Block::new(&bytes).unwrap().cell(0, 0).unwrap(), Cell::Nop);
     }
 
     #[test]

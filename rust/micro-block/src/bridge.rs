@@ -150,6 +150,7 @@ mod ffi {
             rowkey_column_count: u32,
             row_store_type: u8,
             need_column_checksums: bool,
+            column_checksums: &[u64],
             all_lob_in_row: bool,
             original_size: u64,
             max_merged_trans_version: i64,
@@ -367,6 +368,7 @@ unsafe fn build_pax_block(
     rowkey_column_count: u32,
     row_store_type: u8,
     need_column_checksums: bool,
+    column_checksums: &[u64],
     all_lob_in_row: bool,
     original_size: u64,
     max_merged_trans_version: i64,
@@ -377,6 +379,7 @@ unsafe fn build_pax_block(
         rowkey_column_count,
         row_store_type,
         need_column_checksums,
+        column_checksums,
         all_lob_in_row,
         original_size,
         max_merged_trans_version,
@@ -389,6 +392,7 @@ unsafe fn build_pax_block_impl(
     rowkey_column_count: u32,
     row_store_type: u8,
     need_column_checksums: bool,
+    column_checksums: &[u64],
     all_lob_in_row: bool,
     original_size: u64,
     max_merged_trans_version: i64,
@@ -446,7 +450,7 @@ unsafe fn build_pax_block_impl(
         }
     }
     let accepted_rows = writer.row_count();
-    let block = writer.finish()?;
+    let block = writer.finish_with_column_checksums(column_checksums)?;
     let parsed = Block::new(&block)?;
     let column_types = (0..parsed.column_count())
         .map(|column| {
