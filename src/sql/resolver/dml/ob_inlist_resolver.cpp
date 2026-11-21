@@ -275,10 +275,12 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObStmt *stmt,
                                                   ObIAllocator &alloc,
                                                   bool &is_question_mark,
-                                                  bool &is_enable)
+                                                  bool &is_enable,
+                                                  const ParseNode *&compact_in_list)
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  compact_in_list = &in_list;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -350,6 +352,91 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && column_cnt == 1 && !is_prepare_stmt) {
+        if (OB_FAIL(try_compact_integer_inlist(in_list, threshold, param_store,
+                                             NULL == stmt ? NULL : stmt->get_query_ctx(),
+                                             alloc, compact_in_list))) {
+        } else if (compact_in_list != &in_list) {
+          is_enable = false;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// Keep duplicate-heavy integer lists below the values-table rewrite threshold.
+// Compare exact integer values only: removing other types here could change
+// comparison coercions, collations, or warning behavior.
+int ObInListResolver::try_compact_integer_inlist(const ParseNode &in_list,
+                                                const int64_t threshold,
+                                                const ParamStore *param_store,
+                                                ObQueryCtx *query_ctx,
+                                                ObIAllocator &alloc,
+                                                const ParseNode *&compact_in_list)
+{
+  int ret = OB_SUCCESS;
+  compact_in_list = &in_list;
+  hash::ObHashMap<int64_t, int64_t, hash::NoPthreadDefendMode> first_values;
+  ObSEArray<ParseNode *, 8> unique_nodes;
+  ObSEArray<ObPCParamEqualInfo, 8> equal_params;
+  bool can_compact = threshold > 1;
+  if (can_compact && OB_FAIL(first_values.create(threshold, ObModIds::OB_SQL_HASH_SET))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && can_compact && i < in_list.num_child_; ++i) {
+    ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+    int64_t first_idx = -1;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (node->type_ != in_list.children_[0]->type_) {
+      can_compact = false;
+    } else if (T_INT == node->type_) {
+      value = node->value_;
+    } else if (T_QUESTIONMARK == node->type_
+               && NULL != param_store && NULL != query_ctx
+               && node->value_ >= 0 && node->value_ < param_store->count()
+               && param_store->at(node->value_).get_type() == ObIntType
+               && param_store->at(node->value_).get_param_meta().get_type() == ObIntType) {
+      value = param_store->at(node->value_).get_int();
+    } else {
+      can_compact = false;
+    }
+    if (OB_FAIL(ret) || !can_compact) {
+    } else if (OB_FAIL(first_values.get_refactored(value, first_idx))) {
+      if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
+        if (OB_FAIL(first_values.set_refactored(value, i))) {
+        } else if (OB_FAIL(unique_nodes.push_back(node))) {
+        } else if (unique_nodes.count() >= threshold) {
+          can_compact = false;
+        }
+      }
+    } else if (T_QUESTIONMARK == node->type_) {
+      // A cached plan may remove a parameter only while it equals the retained
+      // parameter. Re-execution with a different duplicate pattern must replan.
+      ObPCParamEqualInfo equal_info;
+      equal_info.first_param_idx_ = in_list.children_[first_idx]->value_;
+      equal_info.second_param_idx_ = node->value_;
+      if (OB_FAIL(equal_params.push_back(equal_info))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret) && can_compact && unique_nodes.count() < in_list.num_child_) {
+    ParseNode *new_list = NULL;
+    ParseNode **children = NULL;
+    if (OB_ISNULL(new_list = static_cast<ParseNode *>(alloc.alloc(sizeof(ParseNode))))
+        || OB_ISNULL(children = static_cast<ParseNode **>(
+                        alloc.alloc(sizeof(ParseNode *) * unique_nodes.count())))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (NULL != query_ctx
+               && OB_FAIL(append(query_ctx->all_equal_param_constraints_, equal_params))) {
+    } else {
+      MEMCPY(new_list, &in_list, sizeof(ParseNode));
+      MEMCPY(children, unique_nodes.get_data(), sizeof(ParseNode *) * unique_nodes.count());
+      new_list->children_ = children;
+      new_list->num_child_ = unique_nodes.count();
+      compact_in_list = new_list;
     }
   }
   return ret;
