@@ -18,8 +18,6 @@
 
 #include "ob_new_column_decoder.h"
 #include "data_plane/lob/ob_lob_value.h"
-#include "storage/access/ob_aggregate_base.h"
-#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {
@@ -77,32 +75,6 @@ int ObNewColumnCommonDecoder::get_null_count(
     null_count = 0;
   }
   LOG_DEBUG("[NEW_COLUMN_DECODE] get null count", K(col_param->get_orig_default_value()), K(null_count), K(lbt()));
-  return ret;
-}
-
-int ObNewColumnCommonDecoder::read_distinct(
-    const ObColumnParam *col_param,
-    storage::ObGroupByCellBase &group_by_cell) const
-{
-  int ret = OB_SUCCESS;
-  common::ObDatum *datums = group_by_cell.get_group_by_col_datums_to_fill();
-  if (OB_FAIL(datums[0].from_obj(col_param->get_orig_default_value(), ObDatum::get_obj_datum_map_type(col_param->get_orig_default_value().get_type())))) {
-  } else {
-    group_by_cell.set_distinct_cnt(1);
-  }
-  LOG_DEBUG("[NEW_COLUMN_DECODE] read distinct", K(group_by_cell.get_group_by_col_offset()), KPC(datums), K(lbt()));
-  return ret;
-}    
-
-int ObNewColumnCommonDecoder::read_reference(
-    const int64_t row_cap,
-    storage::ObGroupByCellBase &group_by_cell) const
-{
-  int ret = OB_SUCCESS;
-  uint32_t *ref_buf = group_by_cell.get_refs_buf();
-  MEMSET(ref_buf, 0, sizeof(uint32_t) * row_cap);
-  group_by_cell.set_ref_cnt(row_cap);
-  LOG_DEBUG("[NEW_COLUMN_DECODE] read refrence", K(row_cap), K(group_by_cell.get_group_by_col_offset()), K(lbt()));
   return ret;
 }
 

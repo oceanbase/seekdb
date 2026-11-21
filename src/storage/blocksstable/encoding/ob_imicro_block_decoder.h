@@ -64,13 +64,6 @@ protected:
 
   virtual int find_bound(const ObDatumRowkey &key, const bool lower_bound, const int64_t begin_idx,
     const int64_t end_idx, int64_t &row_idx, bool &equal) override;
-
-  #define FOREACH_ADD_DECODER(col_param) \
-  for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) { \
-    if (OB_FAIL(add_decoder(cols_index.at(i),  cols_desc.at(i).col_type_, (col_param), decoders_buf_pos, decoders_[i]))) { \
-      LOG_WARN("add_decoder failed", K(ret), "request_idx", i); \
-    } \
-  }
 };
 
 }  // namespace blocksstable

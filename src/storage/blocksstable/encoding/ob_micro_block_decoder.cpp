@@ -33,138 +33,13 @@ using namespace common;
 using namespace storage;
 namespace blocksstable
 {
-ObNoneExistColumnDecoder ObMicroBlockDecoder::none_exist_column_decoder_;
-ObColumnDecoderCtx ObMicroBlockDecoder::none_exist_column_decoder_ctx_;
-ObNewColumnDecoder ObMicroBlockDecoder::new_column_decoder_;
-
-// performance critical, do not check parameters
-int ObColumnDecoder::decode(common::ObDatum &datum, const int64_t row_id,
-    const ObBitStream &bs, const char *data, const int64_t len)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(decoder_->decode(*ctx_, datum, row_id, bs, data, len))) {
-  }
-  return ret;
-}
-
-int ObColumnDecoder::batch_decode(
-    const ObIRowIndex *row_index,
-    const int32_t *row_ids,
-    const char **cell_datas,
-    const int64_t row_cap,
-    common::ObDatum *datums)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == row_index
-                  || nullptr == row_ids
-                  || nullptr == cell_datas
-                  || nullptr == datums
-                  || 0 >= row_cap)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(!decoder_->can_vectorized())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(decoder_->batch_decode(
-              *ctx_, row_index, row_ids, cell_datas, row_cap, datums))) {
-  } else if (OB_UNLIKELY(ctx_->is_trans_version_col()) &&
-             OB_FAIL(storage::reverse_trans_version_val(datums, row_cap))) {
-  }
-
-  LOG_DEBUG("[Batch decode] Batch decoded datums: ",
-      K(ret), K(row_cap), K(*ctx_), K(ObArrayWrap<int32_t>(row_ids, row_cap)),
-      K(ObArrayWrap<ObDatum>(datums, row_cap)));
-  return ret;
-}
-
-int ObColumnDecoder::get_row_count(
-    const ObIRowIndex *row_index,
-    const int32_t *row_ids,
-    const int64_t row_cap,
-    const bool contains_null,
-    int64_t &count)
-{
-  int ret = OB_SUCCESS;
-  int64_t null_count = 0;
-  if (contains_null) {
-    count = row_cap;
-  } else if (OB_FAIL(decoder_->get_null_count(*ctx_, row_index, row_ids, row_cap, null_count))) {
-  } else {
-    count = row_cap - null_count;
-  }
-  return ret;
-}
-
-// performance critical, do not check parameters
-int ObColumnDecoder::quick_compare(const ObStorageDatum &left, const ObStorageDatumCmpFunc &cmp_func, const int64_t row_id,
-    const ObBitStream &bs, const char *data, const int64_t len, int32_t &cmp_ret)
-{
-  int ret = OB_SUCCESS;
-  ObStorageDatum right_datum;
-  cmp_ret = 0;
-  if (OB_FAIL(decoder_->decode(*ctx_, right_datum, row_id, bs, data, len))) {
-  } else if (OB_FAIL(cmp_func.compare(left, right_datum, cmp_ret))) {
-  }
-  return ret;
-}
-
-typedef int (*new_decoder_func)(char *buf,
-                                const ObMicroBlockHeader &header,
-                                const ObColumnHeader &col_header,
-                                const char *meta_data,
-                                const ObIColumnDecoder *&decoder);
-
-static new_decoder_func new_decoder_funcs_[ObColumnHeader::MAX_TYPE] =
-{
-    new_decoder_with_allocated_buf<ObRawDecoder>,
-    new_decoder_with_allocated_buf<ObDictDecoder>,
-    new_decoder_with_allocated_buf<ObRLEDecoder>,
-    new_decoder_with_allocated_buf<ObConstDecoder>,
-    new_decoder_with_allocated_buf<ObIntegerBaseDiffDecoder>,
-    new_decoder_with_allocated_buf<ObStringDiffDecoder>,
-    new_decoder_with_allocated_buf<ObHexStringDecoder>,
-    new_decoder_with_allocated_buf<ObStringPrefixDecoder>,
-    new_decoder_with_allocated_buf<ObColumnEqualDecoder>,
-    new_decoder_with_allocated_buf<ObInterColSubStrDecoder>
-};
-
-
-template <class Decoder>
-int new_decoder_with_allocated_buf(char *buf,
-                                   const ObMicroBlockHeader &header,
-                                   const ObColumnHeader &col_header,
-                                   const char *meta_data,
-                                   const ObIColumnDecoder *&decoder)
-{
-  int ret = OB_SUCCESS;
-  Decoder *d = nullptr;
-  if (OB_UNLIKELY(!col_header.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(d = new(buf) Decoder())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-  } else {
-    decoder = d;
-  }
-  return ret;
-}
-
 //////////////////////////ObIEncodeBlockGetReader/////////////////////////
-ObNoneExistColumnDecoder ObIEncodeBlockReader::none_exist_column_decoder_;
-ObColumnDecoderCtx ObIEncodeBlockReader::none_exist_column_decoder_ctx_;
 ObIEncodeBlockReader::ObIEncodeBlockReader()
   : request_cnt_(0),
-    header_(NULL), col_header_(NULL), meta_data_(NULL), row_data_(NULL),
+    header_(NULL), col_header_(NULL),
     block_data_(NULL), block_size_(0),
-    var_row_index_(), fix_row_index_(), row_index_(&var_row_index_),
-    decoders_(nullptr),
-    default_decoders_(),
-    ctxs_(NULL),
     decoder_allocator_(ObMemAttr(common::ObModIds::OB_DECODER_CTX), OB_MALLOC_NORMAL_BLOCK_SIZE),
-    buf_allocator_(ObMemAttr("OB_IENB_READER"), OB_MALLOC_NORMAL_BLOCK_SIZE),
-    allocated_decoders_buf_(nullptr),
-    allocated_decoders_buf_size_(0),
-    store_id_array_(NULL), column_type_array_(NULL),
-    default_store_ids_(), default_column_types_(),
-    need_cast_(false)
+    store_id_array_(NULL), default_store_ids_()
 {}
 
 ObIEncodeBlockReader::~ObIEncodeBlockReader()
@@ -175,16 +50,10 @@ void ObIEncodeBlockReader::reuse()
 {
   header_ = nullptr;
   request_cnt_ = 0;
-  decoders_ = nullptr;
-  need_cast_ = false;
   col_header_ = nullptr;
-  meta_data_ = nullptr;
-  row_data_ = nullptr;
   block_data_ = nullptr;
   block_size_ = 0;
-  ctxs_ = nullptr;
   store_id_array_ = nullptr;
-  column_type_array_ = nullptr;
   decoder_allocator_.reuse();
 }
 
@@ -192,20 +61,11 @@ void ObIEncodeBlockReader::reset()
 {
   header_ = NULL;
   request_cnt_ = 0;
-  decoders_ = nullptr;
-  need_cast_ = false;
   col_header_ = NULL;
-  meta_data_ = NULL;
-  row_data_ = NULL;
   block_data_ = NULL;
   block_size_ = 0;
-  ctxs_ = NULL;
   store_id_array_ = NULL;
-  column_type_array_ = NULL;
   decoder_allocator_.reset();
-  buf_allocator_.reset();
-  allocated_decoders_buf_ = nullptr;
-  allocated_decoders_buf_size_ = 0;
 }
 
 int ObIEncodeBlockReader::prepare(const int64_t column_cnt)
@@ -213,22 +73,16 @@ int ObIEncodeBlockReader::prepare(const int64_t column_cnt)
   int ret = OB_SUCCESS;
   if (column_cnt > DEFAULT_DECODER_CNT) {
     const int64_t store_ids_size = sizeof(store_id_array_[0]) * column_cnt;
-    const int64_t column_types_size = ALIGN_UP(sizeof(ObObjMeta) * column_cnt, 8);
-    const int64_t col_decoder_size = sizeof(ObColumnDecoder) * column_cnt;
     char *buf = nullptr;
     if (nullptr
         == (buf = reinterpret_cast<char*>(decoder_allocator_.alloc(
-          store_ids_size + column_types_size + col_decoder_size)))) {
+          store_ids_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       store_id_array_ = reinterpret_cast<int64_t *>(buf);
-      column_type_array_ = reinterpret_cast<ObObjMeta *>(buf + store_ids_size);
-      decoders_ =  reinterpret_cast<ObColumnDecoder *>(buf + store_ids_size + column_types_size);
     }
   } else {
     store_id_array_ = &default_store_ids_[0];
-    column_type_array_ = &default_column_types_[0];
-    decoders_ = &default_decoders_[0];
   }
   return ret;
 }
@@ -244,26 +98,9 @@ int ObIEncodeBlockReader::do_init(
     request_cnt_ = request_cnt;
     block_data_ = block_data.get_buf();
     block_size_ = block_data.get_buf_size();
-    row_data_ = block_data.get_buf() + header_->row_data_offset_;
-    const int64_t row_data_len = block_data.get_buf_size() - header_->row_data_offset_;
-
-    if (header_->row_index_byte_ > 0) {
-      if (OB_FAIL(var_row_index_.init(row_data_, row_data_len,
-          header_->row_count_, header_->row_index_byte_))) {
-      }
-      row_index_ = &var_row_index_;
-    } else {
-      if (OB_FAIL(fix_row_index_.init(row_data_, row_data_len, header_->row_count_))) {
-      }
-      row_index_ = &fix_row_index_;
-    }
-
-    if (OB_SUCC(ret)) {
-      if (OB_UNLIKELY(!header_->is_valid())) {
-        ret = OB_INNER_STAT_ERROR;
-        LOG_ERROR("invalid micro_block_header", K(ret), "header", *header_);
-      } else if (OB_FAIL(init_decoders())) {
-      }
+    if (OB_UNLIKELY(!header_->is_valid())) {
+      ret = OB_INNER_STAT_ERROR;
+      LOG_ERROR("invalid micro_block_header", K(ret), "header", *header_);
     }
   }
   if (OB_FAIL(ret)) {
@@ -272,152 +109,24 @@ int ObIEncodeBlockReader::do_init(
   return ret;
 }
 
-int ObIEncodeBlockReader::init_decoders()
-{
-  int ret = OB_SUCCESS;
-  int64_t decoders_buf_pos = 0;
-
-  if (OB_UNLIKELY(NULL == store_id_array_ || NULL == column_type_array_
-      || nullptr == decoders_ || NULL == header_ || NULL == col_header_)) {
-    ret = OB_INNER_STAT_ERROR;
-  } else if (OB_FAIL(alloc_decoders_buf(decoders_buf_pos))) {
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) {
-      if (OB_FAIL(add_decoder(store_id_array_[i], column_type_array_[i], decoders_buf_pos, decoders_[i]))) {
-      }
-    }
-  }
-  return ret;
-}
-
 int ObIEncodeBlockReader::get_micro_metas(const ObMicroBlockHeader *&header,
-    const ObColumnHeader *&col_header, const char *&meta_data,
+    const ObColumnHeader *&col_header,
     const char *block, const int64_t block_size)
 {
   int ret = OB_SUCCESS;
-  if (NULL == block || block_size <= 0) {
+  if (NULL == block || block_size < static_cast<int64_t>(sizeof(ObMicroBlockHeader))) {
 
     ret = OB_INVALID_ARGUMENT;
   } else {
     header = reinterpret_cast<const ObMicroBlockHeader *>(block);
-    block += header->header_size_;
-    col_header = reinterpret_cast<const ObColumnHeader *>(block);
-    meta_data = block + sizeof(*col_header) * header->column_count_;
-    if (meta_data - block > block_size
+    if (header->header_size_ < sizeof(ObMicroBlockHeader)
+        || header->header_size_ > block_size
+        || header->column_count_ > (block_size - header->header_size_) / sizeof(*col_header)
         || header->row_data_offset_ > block_size) {
       ret = OB_INVALID_ARGUMENT;
-    }
-  }
-  return ret;
-}
-
-int ObIEncodeBlockReader::add_decoder(
-    const int64_t store_idx, const ObObjMeta &obj_meta,
-    int64_t &decoders_buf_pos, ObColumnDecoder &dest)
-{
-  int ret = OB_SUCCESS;
-  if (store_idx >= 0 && !obj_meta.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (store_idx < 0 || store_idx >= header_->column_count_) { // non exist column
-      dest.decoder_ = &none_exist_column_decoder_;
-      dest.ctx_ = &none_exist_column_decoder_ctx_;
     } else {
-      const ObIColumnDecoder *decoder = nullptr;
-      const ObIColumnDecoder *ref_decoder = nullptr;
-      if (OB_FAIL(acquire(store_idx, decoders_buf_pos, decoder))) {
-      } else {
-        dest.decoder_ = decoder;
-        dest.ctx_ = &ctxs_[store_idx];
-        dest.ctx_->fill(obj_meta, header_, &col_header_[store_idx], &decoder_allocator_, store_idx);
-
-        int64_t ref_col_idx = -1;
-        if (OB_FAIL(decoder->get_ref_col_idx(ref_col_idx))) {
-        }
-        if (OB_SUCC(ret) && ref_col_idx >= 0) {
-          if (OB_FAIL(acquire(ref_col_idx, decoders_buf_pos, ref_decoder))) {
-          } else {
-            dest.ctx_->ref_decoder_ = ref_decoder;
-            dest.ctx_->ref_ctx_ = &ctxs_[ref_col_idx];
-            dest.ctx_->ref_ctx_->fill(obj_meta, header_, &col_header_[ref_col_idx], &decoder_allocator_, ref_col_idx);
-          }
-        }
-      }
+      col_header = reinterpret_cast<const ObColumnHeader *>(block + header->header_size_);
     }
-  }
-  return ret;
-}
-
-// called before inited
-// performance critical, do not check parameters
-int ObIEncodeBlockReader::acquire(const int64_t store_idx,
-                                  int64_t &decoders_buf_pos,
-                                  const ObIColumnDecoder *&decoder)
-{
-  int ret = OB_SUCCESS;
-  const int64_t decoder_size = decoder_sizes[col_header_[store_idx].type_];
-  if (OB_UNLIKELY(decoders_buf_pos + decoder_size > allocated_decoders_buf_size_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("decoders buf not enough", K(ret), K(decoders_buf_pos),
-        K(decoder_size), K(allocated_decoders_buf_size_), K(store_idx));
-  } else if (OB_FAIL(new_decoder_funcs_[col_header_[store_idx].type_](
-      allocated_decoders_buf_ + decoders_buf_pos,
-      *header_, col_header_[store_idx], meta_data_, decoder))) {
-  } else {
-    decoders_buf_pos += decoder_size;
-  }
-  return ret;
-}
-
-int ObIEncodeBlockReader::alloc_decoders_buf(int64_t &decoders_buf_pos)
-{
-  int ret = OB_SUCCESS;
-  int64_t size = 0;
-  const int64_t decoder_ctx_cnt = MAX(request_cnt_, header_->column_count_);
-  size += sizeof(ObColumnDecoderCtx) * decoder_ctx_cnt; 
-
-  for (int64_t i = 0; i < request_cnt_; ++i) {
-    const int64_t store_idx = store_id_array_[i];
-    if (store_idx < 0 || store_idx >= header_->column_count_) {
-      // non exist column
-    } else {
-      size += decoder_sizes[col_header_[store_idx].type_];
-      if (col_header_[store_idx].type_ == ObColumnHeader::COLUMN_EQUAL ||
-          col_header_[store_idx].type_ == ObColumnHeader::COLUMN_SUBSTR) {
-        // for decoder which has ref deocoder, we don't know the exact type of ref decoder,
-        // so use the maximum size.
-        size += MAX_DECODER_SIZE;
-      }
-    }
-  }
-
-  if (size > allocated_decoders_buf_size_) {
-    if (allocated_decoders_buf_size_ > 0) {
-      allocated_decoders_buf_ = nullptr;
-      allocated_decoders_buf_size_ = 0;
-      buf_allocator_.reuse();
-    }
-    if (OB_ISNULL(allocated_decoders_buf_ = (char*)buf_allocator_.alloc(size))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      allocated_decoders_buf_size_ = size;
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ctxs_ = reinterpret_cast<ObColumnDecoderCtx*>(allocated_decoders_buf_);
-    decoders_buf_pos = sizeof(ObColumnDecoderCtx) * decoder_ctx_cnt; 
-  }
-
-  return ret;
-}
-
-int ObIEncodeBlockReader::setup_row(const uint64_t row_id, int64_t &row_len, const char *&row_data)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == header_ || row_id >= header_->row_count_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(row_index_->get(row_id, row_data, row_len))) {
   }
   return ret;
 }
@@ -440,27 +149,20 @@ int ObEncodeBlockGetReader::init_by_read_info(
   } else {
     const int64_t request_cnt = read_info.get_request_count();
     if (OB_FAIL(prepare(request_cnt))) {
-    } else if (OB_FAIL(get_micro_metas(header_, col_header_, meta_data_,
+    } else if (OB_FAIL(get_micro_metas(header_, col_header_,
         block_data.get_buf(), block_data.get_buf_size()))) {
     } else if (typeid(ObRowkeyReadInfo) == typeid(read_info)) {
-      ObObjMeta col_type;
       int64_t i = 0;
       for (; i < header_->column_count_; ++i) {
-        col_type.set_type(static_cast<ObObjType>(col_header_[i].obj_type_));
         store_id_array_[i] = i;
-        column_type_array_[i] = col_type;
       }
       for (; i < request_cnt; ++i) {
-        col_type.set_type(ObNullType);
         store_id_array_[i] = i;
-        column_type_array_[i] = col_type;
       }
     } else {
-      const ObColDescIArray &cols_desc = read_info.get_columns_desc();
       const ObColumnIndexArray &cols_index = read_info.get_columns_index();
       for (int64_t idx = 0; idx < request_cnt; idx++) {
         store_id_array_[idx] = cols_index.at(idx);
-        column_type_array_[idx] = cols_desc.at(idx).col_type_;
       }
     }
 
@@ -482,18 +184,16 @@ int ObEncodeBlockGetReader::get_row(
 {
   int ret = OB_SUCCESS;
   bool found = false;
-  const char *row_data = NULL;
-  int64_t row_len = 0;
   int64_t row_id = -1;
 
   reuse();
   if (OB_FAIL(init_by_read_info(block_data, read_info))) {
-  } else if (OB_FAIL(locate_row(rowkey, read_info, row_data, row_len, row_id, found))) {
+  } else if (OB_FAIL(locate_row(rowkey, read_info, row_id, found))) {
   } else {
     row.row_flag_.reset();
     row.mvcc_row_flag_.reset();
     if (found) {
-      if (OB_FAIL(get_all_columns(row_data, row_len, row_id, row))) {
+      if (OB_FAIL(get_all_columns(row_id, row))) {
       } else {
         row.count_ = request_cnt_;
         row.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
@@ -508,12 +208,9 @@ int ObEncodeBlockGetReader::get_row(
 }
 
 int ObEncodeBlockGetReader::get_all_columns(
-    const char *row_data,
-    const int64_t row_len,
     const int64_t row_id,
     ObDatumRow &row)
 {
-  UNUSEDx(row_data, row_len);
   if (OB_UNLIKELY(row.get_capacity() < request_cnt_)) {
     return OB_BUF_NOT_ENOUGH;
   }
@@ -614,8 +311,6 @@ int ObEncodeBlockGetReader::get_columns_rust(
 int ObEncodeBlockGetReader::locate_row(
     const ObDatumRowkey &rowkey,
     const ObITableReadInfo &read_info,
-    const char *&row_data,
-    int64_t &row_len,
     int64_t &row_id,
     bool &found)
 {
@@ -627,8 +322,6 @@ int ObEncodeBlockGetReader::locate_row(
     STORAGE_LOG(WARN, "Invalid argument to locate row", K(ret), K(rowkey), K(datum_utils));
   } else {
     found = false;
-    row_data = NULL;
-    row_len = 0;
     row_id = -1;
     const int64_t rowkey_cnt = rowkey.get_datum_cnt();
     const ObStorageDatum *datums = rowkey.datums_;
@@ -643,7 +336,6 @@ int ObEncodeBlockGetReader::locate_row(
             true, true, 0, header_->row_count_, located_by_rust, row_id, equal))) {
     } else if (located_by_rust && equal) {
       found = true;
-      ret = setup_row(row_id, row_len, row_data);
     }
     //binary search
     int32_t high = header_->row_count_ - 1;
@@ -670,7 +362,6 @@ int ObEncodeBlockGetReader::locate_row(
           } else {
             found = true;
             row_id = middle;
-            ret = setup_row(row_id, row_len, row_data);
             break;
           }
         }
@@ -688,18 +379,17 @@ int ObEncodeBlockGetReader::init_by_columns_desc(
     const int64_t request_cnt)
 {
   int ret = OB_SUCCESS;
+  UNUSED(cols_desc);
   if (OB_FAIL(prepare(MAX(schema_rowkey_cnt, request_cnt)))) {
   } else {
     int64_t idx = 0;
     for (idx = 0; idx < schema_rowkey_cnt; idx++) {
       store_id_array_[idx] = idx;
-      column_type_array_[idx] = cols_desc.at(idx).col_type_;
     }
     for (; idx < request_cnt; ++idx) {
       store_id_array_[idx] = idx;
-      column_type_array_[idx] = cols_desc.at(idx).col_type_;
     }
-    if (OB_FAIL(get_micro_metas(header_, col_header_, meta_data_,
+    if (OB_FAIL(get_micro_metas(header_, col_header_,
         block_data.get_buf(), block_data.get_buf_size()))) {
     } else if (OB_FAIL(do_init(block_data, request_cnt))) {
     }
@@ -717,8 +407,6 @@ int ObEncodeBlockGetReader::exist_row(
   int ret = OB_SUCCESS;
   found = false;
   exist = false;
-  const char *row_data = NULL;
-  int64_t row_len = 0;
   int64_t row_id = -1;
   const int64_t rowkey_cnt = rowkey.get_datum_cnt();
 
@@ -730,7 +418,7 @@ int ObEncodeBlockGetReader::exist_row(
               read_info.get_schema_rowkey_count(),
               read_info.get_columns_desc(),
               rowkey_cnt))) {
-  } else if (OB_FAIL(locate_row(rowkey, read_info, row_data, row_len, row_id, found))) {
+  } else if (OB_FAIL(locate_row(rowkey, read_info, row_id, found))) {
   } else if (found) {
     exist = true;
   }
@@ -744,16 +432,13 @@ int ObEncodeBlockGetReader::get_row(
     ObDatumRow &row)
 {
   int ret = OB_SUCCESS;
-  const char *row_data = NULL;
-  int64_t row_len = 0;
 
   reuse();
   if (OB_FAIL(init_by_read_info(block_data, read_info))) {
-  } else if (OB_FAIL(setup_row(row_idx, row_len, row_data))) {
   } else {
     row.row_flag_.reset();
     row.mvcc_row_flag_.reset();
-    if (OB_FAIL(get_all_columns(row_data, row_len, row_idx, row))) {
+    if (OB_FAIL(get_all_columns(row_idx, row))) {
     } else {
       row.count_ = request_cnt_;
       row.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
@@ -770,14 +455,12 @@ int ObEncodeBlockGetReader::get_row_id(
 {
   int ret = OB_SUCCESS;
   bool found = false;
-  const char *row_data = NULL;
-  int64_t row_len = 0;
 
   reuse();
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(init_by_read_info(block_data, read_info))) {
-  } else if (OB_FAIL(locate_row(rowkey, read_info, row_data, row_len, row_id, found))) {
+  } else if (OB_FAIL(locate_row(rowkey, read_info, row_id, found))) {
   } else if (!found) {
     ret = OB_BEYOND_THE_RANGE;
   }
@@ -790,20 +473,14 @@ ObMicroBlockDecoder::ObMicroBlockDecoder()
   : header_(nullptr),
     request_cnt_(0),
     col_header_(nullptr),
-    meta_data_(nullptr),
-    row_data_(nullptr),
     block_data_(nullptr),
     block_size_(0),
-    var_row_index_(),
-    fix_row_index_(),
-    row_index_(&var_row_index_),
-    decoders_(nullptr),
+    columns_(nullptr),
     flat_row_reader_(),
-    ctxs_(nullptr),
     decoder_allocator_(ObModIds::OB_DECODER_CTX),
     buf_allocator_(ObMemAttr("OB_MICB_DECODER"), OB_MALLOC_NORMAL_BLOCK_SIZE),
-    allocated_decoders_buf_(nullptr),
-    allocated_decoders_buf_size_(0)
+    column_buf_(nullptr),
+    column_buf_size_(0)
 {
   reader_type_ = Decoder;
 }
@@ -813,215 +490,16 @@ ObMicroBlockDecoder::~ObMicroBlockDecoder()
   reset();
 }
 
-template <typename Allocator>
-int ObMicroBlockDecoder::acquire(
-    Allocator &allocator,
-    const ObMicroBlockHeader &header,
-    const ObColumnHeader &col_header,
-    const char *meta_data,
-    const ObIColumnDecoder *&decoder)
-{
-  int ret = OB_SUCCESS;
-  decoder = NULL;
-  if (OB_UNLIKELY(!col_header.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    switch (col_header.type_)
-    {
-      case ObColumnHeader::RAW: {
-        ObRawDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-        } else {
-          decoder = d;
-        }
-        break;
-      }
-      case ObColumnHeader::DICT: {
-        ObDictDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else {
-          if (OB_FAIL(d->init(header, col_header, meta_data))) {
-          } else {
-            decoder = d;
-          }
-        }
-        break;
-      }
-      case ObColumnHeader::INTEGER_BASE_DIFF: {
-        ObIntegerBaseDiffDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else {
-          if (OB_FAIL(d->init(header, col_header, meta_data))) {
-          } else {
-            decoder = d;
-          }
-        }
-        break;
-      }
-      case ObColumnHeader::STRING_DIFF: {
-        ObStringDiffDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-        } else {
-          decoder = d;
-        }
-        break;
-      }
-      case ObColumnHeader::HEX_PACKING: {
-        ObHexStringDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-        } else {
-          decoder = d;
-        }
-        break;
-      }
-      case ObColumnHeader::RLE: {
-        ObRLEDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-        } else {
-          decoder = d;
-        }
-        break;
-      }
-      case ObColumnHeader::CONST: {
-        ObConstDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-        } else {
-          decoder = d;
-        }
-        break;
-      }
-      case ObColumnHeader::STRING_PREFIX: {
-        ObStringPrefixDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-        } else {
-          decoder = d;
-        }
-        break;
-      }
-      case ObColumnHeader::COLUMN_EQUAL: {
-        ObColumnEqualDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-        } else {
-          decoder = d;
-        }
-        break;
-      }
-      case ObColumnHeader::COLUMN_SUBSTR: {
-        ObInterColSubStrDecoder *d = NULL;
-        if (OB_FAIL(allocator.alloc(d))) {
-        } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
-        } else {
-          decoder = d;
-        }
-        break;
-      }
-      default:
-        ret = OB_INNER_STAT_ERROR;
-    }
-  }
-  if (OB_FAIL(ret) && NULL != decoder) {
-    allocator.free(const_cast<ObIColumnDecoder *>(decoder));
-    decoder = NULL;
-  }
-  return ret;
-}
-
-// called before inited
-// performance critical, do not check parameters
-int ObMicroBlockDecoder::acquire(const int64_t store_idx,
-                                 int64_t &decoders_buf_pos,
-                                 const ObIColumnDecoder *&decoder)
-{
-  int ret = OB_SUCCESS;
-  decoder = nullptr;
-  const int64_t decoder_size = decoder_sizes[col_header_[store_idx].type_];
-  if (OB_UNLIKELY(decoders_buf_pos + decoder_size > allocated_decoders_buf_size_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("decoders buf not enough", K(ret), K(decoders_buf_pos),
-        K(decoder_size), K(allocated_decoders_buf_size_));
-  } else if (OB_FAIL(new_decoder_funcs_[col_header_[store_idx].type_](
-      allocated_decoders_buf_ + decoders_buf_pos,
-      *header_, col_header_[store_idx], meta_data_, decoder))) {
-  } else {
-    decoders_buf_pos += decoder_size;
-  }
-  return ret;
-}
-
-int ObMicroBlockDecoder::alloc_decoders_buf(const bool by_read_info, int64_t &decoders_buf_pos)
-{
-  int ret = OB_SUCCESS;
-  int64_t size = 0;
-  decoders_buf_pos = 0;
-
-  if (OB_UNLIKELY(by_read_info && read_info_ == nullptr)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    size += request_cnt_ * sizeof(ObColumnDecoder); // for decoders_
-
-    int64_t decoder_ctx_cnt = nullptr == read_info_ ? header_->column_count_ : MAX(header_->column_count_, 
-        read_info_->get_schema_column_count() + storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt());
-
-    size += sizeof(ObColumnDecoderCtx) * decoder_ctx_cnt;  // for decoder ctxs
-
-    const ObColumnIndexArray *cols_index = by_read_info ? &(read_info_->get_columns_index()) : nullptr;
-    int64_t decoders_cnt = by_read_info ? request_cnt_ : header_->column_count_;
-    for (int64_t i = 0; i < decoders_cnt; ++i) {
-      const int64_t store_idx = by_read_info ? cols_index->at(i) : i;
-      if (store_idx < 0 || store_idx >= header_->column_count_) {
-        // non exist column
-      } else {
-        size += decoder_sizes[col_header_[store_idx].type_];
-        if (col_header_[store_idx].type_ == ObColumnHeader::COLUMN_EQUAL ||
-            col_header_[store_idx].type_ == ObColumnHeader::COLUMN_SUBSTR) {
-          // for decoder which has ref deocoder, we don't know the exact type of ref decoder,
-          // so use the maximum size.
-          size += MAX_DECODER_SIZE;
-        }
-      }
-    }
-    if (size > allocated_decoders_buf_size_) {
-      if (allocated_decoders_buf_size_ > 0) {
-        allocated_decoders_buf_ = nullptr;
-        allocated_decoders_buf_size_ = 0;
-        buf_allocator_.reuse();
-      }
-      if (OB_ISNULL(allocated_decoders_buf_ = (char*)buf_allocator_.alloc(size))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        allocated_decoders_buf_size_ = size;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      decoders_ = reinterpret_cast<ObColumnDecoder *>(allocated_decoders_buf_);
-      decoders_buf_pos = request_cnt_ * sizeof(ObColumnDecoder);
-
-      ctxs_ = reinterpret_cast<ObColumnDecoderCtx*>(allocated_decoders_buf_ + decoders_buf_pos);
-      decoders_buf_pos += sizeof(ObColumnDecoderCtx) * decoder_ctx_cnt; 
-    }
-  }
-  return ret;
-}
-
 void ObMicroBlockDecoder::inner_reset()
 {
   header_ = NULL;
   col_header_ = NULL;
-  meta_data_ = NULL;
-  row_data_ = NULL;
   block_data_ = NULL;
   block_size_ = 0;
   ObIMicroBlockReader::reset();
   decoder_allocator_.reuse();
   flat_row_reader_.reset();
-  ctxs_ = nullptr;
+  columns_ = nullptr;
 }
 
 void ObMicroBlockDecoder::reset()
@@ -1030,97 +508,53 @@ void ObMicroBlockDecoder::reset()
   request_cnt_ = 0;
   buf_allocator_.reset();
   decoder_allocator_.reset();
-  allocated_decoders_buf_ = nullptr;
-  allocated_decoders_buf_size_ = 0;
+  column_buf_ = nullptr;
+  column_buf_size_ = 0;
 }
 
-int ObMicroBlockDecoder::init_decoders()
+int ObMicroBlockDecoder::init_columns()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == header_ || NULL == col_header_ ||
-     (NULL != read_info_ && !read_info_->is_valid()))) {
+  if (OB_UNLIKELY(nullptr == header_ || nullptr == col_header_
+      || (nullptr != read_info_ && !read_info_->is_valid()))) {
     ret = OB_INNER_STAT_ERROR;
   } else {
-    // perfetch meta data
-    /*
-    const int64_t meta_len = row_data_ - meta_data_;
-    for (int64_t i = 0; i < meta_len - CPU_CACHE_LINE_SIZE; i += CPU_CACHE_LINE_SIZE) {
-      __builtin_prefetch(meta_data_ + i);
-    }
-    */
-    int64_t decoders_buf_pos = 0;
-    if (OB_ISNULL(read_info_) || typeid(ObRowkeyReadInfo) == typeid(*read_info_)) {
-      ObObjMeta col_type;
-      if (OB_UNLIKELY((header_->column_count_ < request_cnt_ && nullptr == read_info_) ||
-                      (header_->column_count_ > request_cnt_))) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(alloc_decoders_buf(false/*by_read_info*/, decoders_buf_pos))) {
+    const int64_t size = request_cnt_ * sizeof(ColumnReadInfo);
+    if (size > column_buf_size_) {
+      buf_allocator_.reuse();
+      column_buf_ = nullptr;
+      column_buf_size_ = 0;
+      if (OB_ISNULL(column_buf_ = static_cast<char *>(buf_allocator_.alloc(size)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        int64_t i = 0;
-        for ( ; OB_SUCC(ret) && i < header_->column_count_; ++i) {
-          col_type.set_type(static_cast<ObObjType>(col_header_[i].obj_type_));
-          if (OB_FAIL(add_decoder(i, col_type, nullptr, decoders_buf_pos, decoders_[i]))) {
-          }
-        }
-        for ( ; OB_SUCC(ret) && i < request_cnt_; ++i) { // add nop decoder for not-exist col
-          decoders_[i].decoder_ = &none_exist_column_decoder_;
-          decoders_[i].ctx_ = &none_exist_column_decoder_ctx_;
-        }
-      }
-    } else if (OB_FAIL(alloc_decoders_buf(true/*by_read_info*/, decoders_buf_pos))) {
-    } else {
-      const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
-      const ObColDescIArray &cols_desc = read_info_->get_columns_desc();
-
-      if (nullptr == read_info_->get_columns() || read_info_->get_columns()->count() < 1) {
-        FOREACH_ADD_DECODER(nullptr)
-      } else {
-        const ObColumnParamIArray *cols_param = read_info_->get_columns();
-        FOREACH_ADD_DECODER(cols_param->at(i))
+        column_buf_size_ = size;
       }
     }
+    columns_ = reinterpret_cast<ColumnReadInfo *>(column_buf_);
   }
-  return ret;
-}
-
-int ObMicroBlockDecoder::add_decoder(
-    const int64_t store_idx, 
-    const ObObjMeta &obj_meta, 
-    const ObColumnParam *col_param, 
-    int64_t &decoders_buf_pos,
-    ObColumnDecoder &dest)
-{
-  int ret = OB_SUCCESS;
-  if (store_idx < header_->column_count_ && !obj_meta.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
+  if (OB_FAIL(ret)) {
+  } else if (nullptr == read_info_ || typeid(ObRowkeyReadInfo) == typeid(*read_info_)) {
+    if (OB_UNLIKELY((header_->column_count_ < request_cnt_ && nullptr == read_info_)
+        || header_->column_count_ > request_cnt_)) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) {
+      columns_[i].col_header_ = i < header_->column_count_ ? &col_header_[i] : nullptr;
+      columns_[i].col_param_ = nullptr;
+    }
   } else {
-    if (store_idx < 0) {
-      dest.decoder_ = &none_exist_column_decoder_;
-      dest.ctx_ = &none_exist_column_decoder_ctx_;
-    } else if (store_idx >= header_->column_count_) { // new added column
-      dest.decoder_ = &new_column_decoder_;
-      dest.ctx_ = &ctxs_[store_idx];
-      dest.ctx_->fill_for_new_column(col_param, &decoder_allocator_.get_inner_allocator());
-    } else {
-      const ObIColumnDecoder *decoder = NULL;
-      if (OB_FAIL(acquire(store_idx, decoders_buf_pos, decoder))) {
+    const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
+    const ObColumnParamIArray *cols_param = read_info_->get_columns();
+    const bool has_params = nullptr != cols_param && cols_param->count() > 0;
+    for (int64_t i = 0; i < request_cnt_; ++i) {
+      const int64_t store_idx = cols_index.at(i);
+      columns_[i].col_header_ = nullptr;
+      columns_[i].col_param_ = nullptr;
+      if (store_idx < 0) {
+      } else if (store_idx >= header_->column_count_) {
+        columns_[i].col_param_ = has_params ? cols_param->at(i) : nullptr;
       } else {
-        dest.decoder_ = decoder;
-        dest.ctx_ = &ctxs_[store_idx];
-        dest.ctx_->fill(obj_meta, header_, &col_header_[store_idx], &decoder_allocator_.get_inner_allocator(), store_idx);
-
-        int64_t ref_col_idx = -1;
-        if (OB_FAIL(decoder->get_ref_col_idx(ref_col_idx))) {
-        }
-
-        if (OB_SUCC(ret) && ref_col_idx >= 0) {
-          if (OB_FAIL(acquire(ref_col_idx, decoders_buf_pos, decoder))) {
-          } else {
-            dest.ctx_->ref_decoder_ = decoder;
-            dest.ctx_->ref_ctx_ = &ctxs_[ref_col_idx];
-            dest.ctx_->ref_ctx_->fill(obj_meta, header_, &col_header_[ref_col_idx], &decoder_allocator_.get_inner_allocator(), ref_col_idx);
-          }
-        }
+        columns_[i].col_header_ = &col_header_[store_idx];
       }
     }
   }
@@ -1130,20 +564,21 @@ int ObMicroBlockDecoder::add_decoder(
 int ObMicroBlockDecoder::get_micro_metas(
     const ObMicroBlockHeader *&header,
     const ObColumnHeader *&col_header,
-    const char *&meta_data,
     const char *block,
     const int64_t block_size)
 {
   int ret = OB_SUCCESS;
-  if (nullptr == block || block_size <= 0) {
+  if (nullptr == block || block_size < static_cast<int64_t>(sizeof(ObMicroBlockHeader))) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     header = reinterpret_cast<const ObMicroBlockHeader *>(block);
-    block += header->header_size_;
-    col_header = reinterpret_cast<const ObColumnHeader *>(block);
-    meta_data = block + sizeof(*col_header) * header->column_count_;
-    if (meta_data - block > block_size || header->row_data_offset_ > block_size) {
+    if (header->header_size_ < sizeof(ObMicroBlockHeader)
+        || header->header_size_ > block_size
+        || header->column_count_ > (block_size - header->header_size_) / sizeof(*col_header)
+        || header->row_data_offset_ > block_size) {
       ret = OB_INVALID_ARGUMENT;
+    } else {
+      col_header = reinterpret_cast<const ObColumnHeader *>(block + header->header_size_);
     }
   }
   return ret;
@@ -1194,9 +629,8 @@ int ObMicroBlockDecoder::init(
 int ObMicroBlockDecoder::do_init(const ObMicroBlockData &block_data)
 {
   int ret = OB_SUCCESS;
-  int16_t col_cnt = 0;
-  if (OB_FAIL(get_micro_metas(header_, col_header_, meta_data_,
-                                     block_data.get_buf(), block_data.get_buf_size()))) {
+  if (OB_FAIL(get_micro_metas(header_, col_header_,
+      block_data.get_buf(), block_data.get_buf_size()))) {
   } else {
     if (NULL == read_info_) {
       request_cnt_ = header_->column_count_;
@@ -1205,57 +639,21 @@ int ObMicroBlockDecoder::do_init(const ObMicroBlockData &block_data)
     }
     row_count_ = header_->row_count_;
     original_data_length_ = header_->original_length_;
-    row_data_ = block_data.get_buf() + header_->row_data_offset_;
     block_data_ = block_data.get_buf();
     block_size_ = block_data.get_buf_size();
-    const int64_t row_data_len = block_data.get_buf_size() - header_->row_data_offset_;
-
-    if (header_->row_index_byte_ > 0) {
-      if (OB_FAIL(var_row_index_.init(row_data_, row_data_len,
-                                      header_->row_count_, header_->row_index_byte_))) {
-      }
-      row_index_ = &var_row_index_;
-    } else {
-      if (OB_FAIL(fix_row_index_.init(row_data_, row_data_len, header_->row_count_))) {
-      }
-      row_index_ = &fix_row_index_;
-    }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(!header_->is_valid())) {
       ret = OB_INNER_STAT_ERROR;
       LOG_ERROR("invalid micro_block_header", K(ret), "header", *header_);
-    } else if (OB_FAIL(init_decoders())) {
+    } else if (OB_FAIL(init_columns())) {
     } else {
       is_inited_ = true;
     }
   }
   if (OB_FAIL(ret)) {
     reset();
-  }
-  return ret;
-}
-
-int ObMicroBlockDecoder::decode_cells(const uint64_t row_id,
-                                        const int64_t row_len,
-                                        const char *row_data,
-                                        const int64_t col_begin,
-                                        const int64_t col_end,
-                                        ObStorageDatum *datums)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(col_begin < 0 || col_begin > col_end || col_end > request_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
-    for (int64_t i = col_begin; OB_SUCC(ret) && i < col_end; ++i) {
-      datums[i].reuse();
-      if (OB_FAIL(decoders_[i].decode(datums[i], row_id, bs, row_data, row_len))) {
-      }
-    }
   }
   return ret;
 }
@@ -1507,7 +905,7 @@ int ObMicroBlockDecoder::filter_truncate_evaluator(
   if (OB_UNLIKELY(start < 0 || count <= 0 || start + count > row_count_ ||
                   !evaluator.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(nullptr == header_ || nullptr == row_index_ || nullptr == decoders_)) {
+  } else if (OB_UNLIKELY(nullptr == header_ || nullptr == columns_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     const int64_t column_count = evaluator.referenced_column_count();
@@ -1650,11 +1048,7 @@ int ObMicroBlockDecoder::try_get_rows_rust(
     if (col_id < 0 || col_id >= request_cnt_) {
       return OB_INVALID_ARGUMENT;
     }
-    const ObColumnDecoderCtx *ctx = decoders_[col_id].ctx_;
-    if (nullptr == ctx) {
-      return OB_INVALID_DATA;
-    }
-    const ObColumnHeader *column = ctx->col_header_;
+    const ObColumnHeader *column = columns_[col_id].col_header_;
     if (nullptr == column) {
       continue;
     }
@@ -1740,11 +1134,12 @@ int ObMicroBlockDecoder::try_get_rows_rust(
   }
   for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < cols.count(); ++col_idx) {
     if (UINT32_MAX == rust_result_columns[col_idx]) {
-      const ObColumnDecoderCtx *ctx = decoders_[cols.at(col_idx)].ctx_;
+      const ObColumnParam *new_col_param = columns_[cols.at(col_idx)].col_param_;
       common::ObDatum *datums = datum_infos.at(col_idx).datum_ptr_ + datum_offset;
-      if (nullptr != ctx->col_param_) {
+      if (nullptr != new_col_param) {
         ObNewColumnCommonDecoder decoder;
-        ret = decoder.batch_decode(ctx->col_param_, ctx->allocator_, row_cap, datums);
+        ret = decoder.batch_decode(
+            new_col_param, &decoder_allocator_.get_inner_allocator(), row_cap, datums);
       } else {
         for (int64_t row_idx = 0; row_idx < row_cap; ++row_idx) {
           if (preserve_nop) {
@@ -1779,7 +1174,7 @@ int ObMicroBlockDecoder::get_row_count(
   } else if (contains_null || 0 == row_cap) {
     count = row_cap;
   } else {
-    const ObColumnHeader *column = decoders_[col_id].ctx_->col_header_;
+    const ObColumnHeader *column = columns_[col_id].col_header_;
     std::vector<uint32_t> rust_rows;
     rust_rows.reserve(row_cap);
     for (int64_t i = 0; i < row_cap; ++i) {
@@ -1789,11 +1184,11 @@ int ObMicroBlockDecoder::get_row_count(
       rust_rows.push_back(static_cast<uint32_t>(row_ids[i]));
     }
     if (nullptr == column) {
-      const ObColumnDecoderCtx *ctx = decoders_[col_id].ctx_;
-      if (nullptr != ctx->col_param_) {
+      const ObColumnParam *new_col_param = columns_[col_id].col_param_;
+      if (nullptr != new_col_param) {
         int64_t null_count = 0;
         ObNewColumnCommonDecoder decoder;
-        if (OB_FAIL(decoder.get_null_count(ctx->col_param_, row_cap, null_count))) {
+        if (OB_FAIL(decoder.get_null_count(new_col_param, row_cap, null_count))) {
         } else {
           count = row_cap - null_count;
         }

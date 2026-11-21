@@ -17,19 +17,13 @@
 #ifndef OCEANBASE_ENCODING_OB_NEW_COLUMN_DECODER_H_
 #define OCEANBASE_ENCODING_OB_NEW_COLUMN_DECODER_H_
 
-#include "storage/blocksstable/encoding/ob_icolumn_decoder.h"
+#include "storage/blocksstable/ob_block_sstable_struct.h"
+#include "storage/blocksstable/ob_datum_row.h"
 
 namespace oceanbase
 {
-namespace storage
-{
-class ObGroupByCellBase;
-}
 namespace blocksstable
 {
-
-class ObBitStream;
-class ObIRowIndex;
 
 class ObNewColumnCommonDecoder final
 {
@@ -48,83 +42,6 @@ public:
       const int64_t row_cap,
       int64_t &null_count) const;
 
-  int read_distinct(
-      const ObColumnParam *col_param,
-      storage::ObGroupByCellBase &group_by_cell) const;
-
-  int read_reference(
-      const int64_t row_cap,
-      storage::ObGroupByCellBase &group_by_cell) const;
-
-  int get_distinct_count(int64_t &distinct_count) const { distinct_count = 1; return OB_SUCCESS; }
-  bool is_new_column() const { return true; }
-};
-
-// decoder for column not exist in schema
-class ObNewColumnDecoder : public ObIColumnDecoder
-{
-public:
-  static const ObColumnHeader::Type type_ = ObColumnHeader::MAX_TYPE;
-
-  virtual ObColumnHeader::Type get_type() const override { return type_; }
-
-
-  virtual bool can_vectorized() const override { return true; }
-
-  virtual int decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, const int64_t row_id,
-      const ObBitStream &bs, const char *data, const int64_t len) const override
-  {
-    UNUSEDx(row_id, bs, data, len);
-    return common_decoder_.decode(ctx.col_param_, ctx.allocator_, datum);
-  }
-
-  virtual int batch_decode(
-      const ObColumnDecoderCtx &ctx,
-      const ObIRowIndex* row_index,
-      const int32_t *row_ids,
-      const char **cell_datas,
-      const int64_t row_cap,
-      common::ObDatum *datums) const override
-  {
-    UNUSEDx(row_index, row_ids, cell_datas);
-    return common_decoder_.batch_decode(ctx.col_param_, ctx.allocator_, row_cap, datums);
-  }
-
-
-  virtual int get_null_count(
-      const ObColumnDecoderCtx &ctx,
-      const ObIRowIndex *row_index,
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      int64_t &null_count) const override
-  {
-    UNUSEDx(row_index, row_ids);
-    return common_decoder_.get_null_count(ctx.col_param_, row_cap, null_count);
-  }
-
-  virtual int read_distinct(
-      const ObColumnDecoderCtx &ctx,
-      const char **cell_datas,
-      storage::ObGroupByCellBase &group_by_cell)  const override
-  {
-    return common_decoder_.read_distinct(ctx.col_param_, group_by_cell);
-  }
-
-  virtual int read_reference(
-      const ObColumnDecoderCtx &ctx,
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      storage::ObGroupByCellBase &group_by_cell) const override
-  {
-    UNUSEDx(ctx, row_ids);
-    return common_decoder_.read_reference(row_cap, group_by_cell);
-  }
-
-  virtual int get_distinct_count(int64_t &distinct_count) const override { return common_decoder_.get_distinct_count(distinct_count); }
-
-  virtual bool is_new_column() const override { return common_decoder_.is_new_column(); }
-private:
-  ObNewColumnCommonDecoder common_decoder_;
 };
 
 } // end namespace blocksstable

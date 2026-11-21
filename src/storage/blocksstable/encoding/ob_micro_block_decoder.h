@@ -20,74 +20,19 @@
 #include "ob_imicro_block_decoder.h"
 #include "storage/blocksstable/ob_row_reader.h"
 #include "storage/ob_i_store.h"
-#include "ob_integer_array.h"
-#include "ob_icolumn_decoder.h"
 #include "ob_new_column_decoder.h"
-#include "ob_encoding_allocator.h"
 #include "lib/container/ob_bitmap.h"
-#include "ob_row_index.h"
 
 namespace oceanbase
 {
 namespace blocksstable
 {
-class ObIColumnDecoder;
-class ObIRowIndex;
-
-struct ObColumnDecoder final
+struct ColumnReadInfo
 {
-public:
-  ObColumnDecoder() : decoder_(nullptr), ctx_(nullptr) {}
-  void reset()
-  {
-    decoder_ = nullptr;
-    ctx_ = nullptr;
-  }
-  // performance critical, do not check parameters
-  int decode(common::ObDatum &datum, const int64_t row_id,
-      const ObBitStream &bs, const char *data, const int64_t len);
-
-  // used for locate row in micro block rowkey object compare
-  // performance critical, do not check parameters
-  int quick_compare(const ObStorageDatum &left, const ObStorageDatumCmpFunc &cmp_func, const int64_t row_id,
-      const ObBitStream &bs, const char *data, const int64_t len, int32_t &cmp_ret);
-
-  int batch_decode(
-      const ObIRowIndex *row_index,
-      const int32_t *row_ids,
-      const char **cell_datas,
-      const int64_t row_cap,
-      common::ObDatum *datums);
-
-  int get_row_count(
-      const ObIRowIndex *row_index,
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      const bool contains_null,
-      int64_t &count);
-
-  OB_INLINE int get_distinct_count(int64_t &distinct_cnt) const
-  { return decoder_->get_distinct_count(distinct_cnt); }
-  OB_INLINE int read_distinct(
-      const char **cell_datas,
-      storage::ObGroupByCellBase &group_by_cell) const
-  { return decoder_->read_distinct(*ctx_, cell_datas, group_by_cell); }
-  OB_INLINE int read_reference(
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      storage::ObGroupByCellBase &group_by_cell) const
-  { return decoder_->read_reference(*ctx_, row_ids, row_cap, group_by_cell); }
-public:
-  const ObIColumnDecoder *decoder_;
-  ObColumnDecoderCtx *ctx_;
+  const ObColumnHeader *col_header_ = nullptr;
+  const ObColumnParam *col_param_ = nullptr;
 };
 
-template <class Decoder>
-int new_decoder_with_allocated_buf(char *buf,
-                                   const ObMicroBlockHeader &header,
-                                   const ObColumnHeader &col_header,
-                                   const char *meta_data,
-                                   const ObIColumnDecoder *&decoder);
 class ObIEncodeBlockReader
 {
 public:
@@ -98,48 +43,22 @@ public:
   static int get_micro_metas(
       const ObMicroBlockHeader *&header,
       const ObColumnHeader *&col_header,
-      const char *&meta_data,
       const char *block,
       const int64_t block_size);
 protected:
   int prepare(const int64_t column_cnt);
   int do_init(const ObMicroBlockData &block_data, const int64_t request_cnt);
-  int init_decoders();
-  int add_decoder(const int64_t store_idx, const common::ObObjMeta &obj_meta,
-                  int64_t &decoders_buf_pos, ObColumnDecoder &dest);
-  int acquire(const int64_t store_idx, int64_t &decoders_buf_pos, const ObIColumnDecoder *&decoder);
-  int setup_row(const uint64_t row_id, int64_t &row_len, const char *&row_data);
-  int alloc_decoders_buf(int64_t &decoders_buf_pos);
 protected:
   static const int64_t DEFAULT_DECODER_CNT = 16;
 
   int64_t request_cnt_; // request column count
   const ObMicroBlockHeader *header_;
   const ObColumnHeader *col_header_;
-  const char *meta_data_;
-  const char *row_data_;
   const char *block_data_;
   int64_t block_size_;
-  ObVarRowIndex var_row_index_;
-  ObFixRowIndex fix_row_index_;
-  ObIRowIndex *row_index_;
-  ObColumnDecoder *decoders_;
-  ObColumnDecoder default_decoders_[DEFAULT_DECODER_CNT];
-  ObColumnDecoderCtx *ctxs_;
   common::ObArenaAllocator decoder_allocator_;
-  // For highly concurrently get row on wide tables(eg: more then 100 columns),
-  // Frequently allocating from a shared ObDecodeResourcePool can become a bottleneck.
-  // for atomic operations under ARM, so we allocate mem for decoders in ObEncodeBlockGetReader
-  common::ObArenaAllocator buf_allocator_;
-  char *allocated_decoders_buf_;
-  int64_t allocated_decoders_buf_size_;
   int64_t *store_id_array_;
-  common::ObObjMeta *column_type_array_;
   int64_t default_store_ids_[DEFAULT_DECODER_CNT];
-  common::ObObjMeta default_column_types_[DEFAULT_DECODER_CNT];
-  bool need_cast_;
-  static ObNoneExistColumnDecoder none_exist_column_decoder_;
-  static ObColumnDecoderCtx none_exist_column_decoder_ctx_;
 };
 
 class ObEncodeBlockGetReader : public ObIMicroBlockGetReader, public ObIEncodeBlockReader
@@ -171,8 +90,6 @@ public:
       int64_t &row_id) final;
 protected:
   int get_all_columns(
-      const char *row_data,
-      const int64_t row_len,
       const int64_t row_id,
       ObDatumRow &row);
 private:
@@ -191,8 +108,6 @@ private:
   int locate_row(
       const ObDatumRowkey &rowkey,
       const ObITableReadInfo &read_info,
-      const char *&row_data,
-      int64_t &row_len,
       int64_t &row_id,
       bool &found);
 };
@@ -310,18 +225,7 @@ private:
       int64_t &end_key_begin_idx,
       int64_t &end_key_end_idx) override;
   int do_init(const ObMicroBlockData &block_data);
-  int init_decoders();
-  int add_decoder(const int64_t store_idx,
-                  const common::ObObjMeta &obj_meta,
-                  const ObColumnParam *col_param, 
-                  int64_t &decoders_buf_pos,
-                  ObColumnDecoder &dest);
-  int decode_cells(const uint64_t row_id,
-                   const int64_t row_len,
-                   const char *row_data,
-                   const int64_t col_begin,
-                   const int64_t col_end,
-                   ObStorageDatum *datums);
+  int init_columns();
 
   int get_col_datums(int32_t col_id,
                      const int32_t *row_ids,
@@ -346,38 +250,19 @@ private:
   static const ObRowHeader init_major_store_row_header();
   static int get_micro_metas(
       const ObMicroBlockHeader *&header, const ObColumnHeader *&col_header,
-      const char *&meta_data, const char *block, const int64_t block_size);
-
-  template <typename Allocator>
-  static int acquire(
-      Allocator &allocator,
-      const ObMicroBlockHeader &header,
-      const ObColumnHeader &col_header,
-      const char *meta_data,
-      const ObIColumnDecoder *&decoder);
-  int acquire(const int64_t store_idx, int64_t &decoders_buf_pos, const ObIColumnDecoder *&decoder);
-  int alloc_decoders_buf(const bool by_read_info, int64_t &decoders_buf_pos);
+      const char *block, const int64_t block_size);
 private:
   const ObMicroBlockHeader *header_;
   int64_t request_cnt_; // request column count
   const ObColumnHeader *col_header_;
-  const char *meta_data_;
-  const char *row_data_;
   const char *block_data_;
   int64_t block_size_;
-  ObVarRowIndex var_row_index_;
-  ObFixRowIndex fix_row_index_;
-  ObIRowIndex *row_index_;
-  ObColumnDecoder *decoders_;
+  ColumnReadInfo *columns_;
   ObRowReader flat_row_reader_;
-  ObColumnDecoderCtx *ctxs_;
-  static ObNoneExistColumnDecoder none_exist_column_decoder_;
-  static ObColumnDecoderCtx none_exist_column_decoder_ctx_;
-  static ObNewColumnDecoder new_column_decoder_;
   ObBlockReaderAllocator decoder_allocator_;
   common::ObArenaAllocator buf_allocator_;
-  char *allocated_decoders_buf_;
-  int64_t allocated_decoders_buf_size_;
+  char *column_buf_;
+  int64_t column_buf_size_;
 };
 
 }
