@@ -1,0 +1,12 @@
+# Regression for #1469: shared DDL must double embedded identifier backticks.
+--disable_warnings
+DROP TABLE IF EXISTS quoted_column_backfill;
+--enable_warnings
+CREATE TABLE quoted_column_backfill (`id``key` INT PRIMARY KEY, `v``alue` INT, `e``num` ENUM('a','b'), `s``et` SET('x','y'));
+INSERT INTO quoted_column_backfill VALUES (1,10,'a','x'),(2,20,'b','x,y');
+CREATE UNIQUE INDEX quoted_value_idx ON quoted_column_backfill (`v``alue`);
+CREATE INDEX quoted_enum_idx ON quoted_column_backfill (`e``num`);
+CREATE INDEX quoted_set_idx ON quoted_column_backfill (`s``et`);
+SELECT `id``key`, `v``alue` FROM quoted_column_backfill FORCE INDEX (quoted_value_idx) WHERE `v``alue` = 20;
+SELECT * FROM quoted_column_backfill ORDER BY `id``key`;
+DROP TABLE quoted_column_backfill;
