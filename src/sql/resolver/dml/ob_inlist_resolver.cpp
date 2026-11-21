@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashmap.h"
 
 namespace oceanbase
 {
@@ -54,6 +55,95 @@ struct InListRewriteInfo {
     param_types_.reuse();
   }
 };
+
+// A duplicate-heavy scalar integer list should remain a regular IN predicate
+// when its distinct membership is below the values-table rewrite threshold.
+// Compacting the list also prevents duplicate terms from skewing selectivity
+// estimates when the left operand is an expression instead of a bare column.
+// Equality constraints guard every removed question mark so a cached plan is
+// not reused after the duplicate pattern changes; formal prepares are left
+// unchanged because their parameter values are not available during resolve.
+int ObInListResolver::try_compact_duplicate_integer_inlist(
+    const ParseNode &in_list,
+    const bool is_question_mark,
+    const bool is_prepare_stmt,
+    const ParamStore *param_store,
+    const int64_t threshold,
+    ObQueryCtx *query_ctx,
+    ObIAllocator &alloc,
+    const ParseNode *&resolved_in_list)
+{
+  int ret = OB_SUCCESS;
+  bool is_supported = threshold > 1 && NULL != in_list.children_;
+  hash::ObHashMap<int64_t, int64_t, hash::NoPthreadDefendMode> first_indexes;
+  ObSEArray<ParseNode *, 8> unique_nodes;
+  ObSEArray<ObPCParamEqualInfo, 8> equal_params;
+  resolved_in_list = &in_list;
+  if (is_question_mark
+      && (is_prepare_stmt || OB_ISNULL(param_store) || OB_ISNULL(query_ctx))) {
+    is_supported = false;
+  } else if (is_supported
+             && OB_FAIL(first_indexes.create(threshold, ObModIds::OB_SQL_COMPILE))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && is_supported
+       && i < in_list.num_child_ && unique_nodes.count() < threshold; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+    int64_t first_idx = -1;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (is_question_mark) {
+      const int64_t param_idx = node->value_;
+      if (T_QUESTIONMARK != node->type_ || param_idx < 0 || param_idx >= param_store->count()) {
+        is_supported = false;
+      } else {
+        const ObObjParam &param = param_store->at(param_idx);
+        if (ObIntType != param.get_type()
+            || ObIntType != param.get_param_meta().get_type()) {
+          is_supported = false;
+        } else {
+          value = param.get_int();
+        }
+      }
+    } else if (T_INT != node->type_) {
+      is_supported = false;
+    } else {
+      value = node->value_;
+    }
+    if (OB_SUCC(ret) && is_supported) {
+      const int hash_ret = first_indexes.get_refactored(value, first_idx);
+      if (OB_HASH_NOT_EXIST == hash_ret) {
+        if (OB_FAIL(first_indexes.set_refactored(value, i))) {
+        } else if (OB_FAIL(unique_nodes.push_back(in_list.children_[i]))) {
+        }
+      } else if (OB_SUCCESS != hash_ret) {
+        ret = hash_ret;
+      } else if (is_question_mark) {
+        ObPCParamEqualInfo equal_info;
+        equal_info.first_param_idx_ = in_list.children_[first_idx]->value_;
+        equal_info.second_param_idx_ = node->value_;
+        if (OB_FAIL(equal_params.push_back(equal_info))) {
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && is_supported && unique_nodes.count() < threshold) {
+    ParseNode *compacted_list = NULL;
+    if (OB_ISNULL(compacted_list = new_node(&alloc, T_EXPR_LIST, unique_nodes.count()))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, &in_list, compacted_list))) {
+    } else if (is_question_mark
+               && OB_FAIL(append(query_ctx->all_equal_param_constraints_, equal_params))) {
+    } else {
+      compacted_list->num_child_ = unique_nodes.count();
+      for (int64_t i = 0; i < unique_nodes.count(); ++i) {
+        compacted_list->children_[i] = unique_nodes.at(i);
+      }
+      resolved_in_list = compacted_list;
+    }
+  }
+  return ret;
+}
 
 int ObInListResolver::resolve_inlist(ObInListInfo &inlist_info)
 {
@@ -275,10 +365,12 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObStmt *stmt,
                                                   ObIAllocator &alloc,
                                                   bool &is_question_mark,
-                                                  bool &is_enable)
+                                                  bool &is_enable,
+                                                  const ParseNode *&resolved_in_list)
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  resolved_in_list = &in_list;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -350,6 +442,19 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt
+          && OB_FAIL(try_compact_duplicate_integer_inlist(
+                         in_list,
+                         is_question_mark,
+                         helper.is_prepare_stmt_,
+                         param_store,
+                         threshold,
+                         NULL == stmt ? NULL : stmt->get_query_ctx(),
+                         alloc,
+                         resolved_in_list))) {
+      } else if (resolved_in_list != &in_list) {
+        is_enable = false;
+      }
     }
   }
   return ret;
