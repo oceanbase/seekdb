@@ -62,10 +62,7 @@ int try_locate_rowkey_bound(
   }
   for (int64_t i = 0; rust_eligible && i < rowkey_cnt; ++i) {
     const share::schema::ObColDesc &desc = read_info->get_columns_desc().at(i);
-    if (desc.col_order_ != common::ASC || datums[i].is_null() || datums[i].is_ext()
-        || (FLAT_ROW_STORE != header->row_store_type_
-            && ObColumnHeader::RAW != col_header[i].type_
-            && ObColumnHeader::CONST != col_header[i].type_)) {
+    if (desc.col_order_ != common::ASC || datums[i].is_null() || datums[i].is_ext()) {
       rust_eligible = false;
       break;
     }

@@ -14,7 +14,8 @@
 
 use crate::checksum::crc32c;
 use crate::format::{
-    header_checksum, write_u16, write_u32, write_u64, ColumnHeader, Header, ALL_LOB_IN_ROW,
+    header_checksum, is_signed_store_type, write_u16, write_u32, write_u64, ColumnHeader, Header,
+    ALL_LOB_IN_ROW,
     COLUMN_BIT_PACKING, COLUMN_FIX_LENGTH, COLUMN_HAS_EXTEND_VALUE, COLUMN_HEADER_SIZE,
     COLUMN_LAST_VAR_FIELD, ENCODING_ROW_STORE, FIXED_HEADER_SIZE, HAS_COLUMN_CHECKSUM,
     MICRO_BLOCK_MAGIC, MICRO_BLOCK_VERSION, SELECTIVE_ENCODING_ROW_STORE,
@@ -340,15 +341,25 @@ impl BlockWriter {
                 .any(|row| matches!(row[column_id], OwnedDatum::Null | OwnedDatum::Nop));
             if spec.fixed_length.is_some() {
                 let bit_width = if spec.enable_bit_packing {
-                    let mut max_value = 0u64;
+                    let mut bit_width = 1_usize;
                     for row in &self.rows {
                         if let OwnedDatum::UInt(value) = row[column_id] {
-                            max_value = max_value.max(value);
+                            let value_width = if is_signed_store_type(spec.obj_type) {
+                                let signed = value as i64;
+                                if signed < 0 {
+                                    65 - value.leading_ones() as usize
+                                } else {
+                                    65 - value.leading_zeros() as usize
+                                }
+                            } else {
+                                (64 - value.leading_zeros() as usize).max(1)
+                            };
+                            bit_width = bit_width.max(value_width);
                         } else if !matches!(row[column_id], OwnedDatum::Null | OwnedDatum::Nop) {
                             return Err(Error::InvalidArgument);
                         }
                     }
-                    Some((64 - max_value.leading_zeros() as usize).max(1))
+                    Some(bit_width)
                 } else {
                     None
                 };

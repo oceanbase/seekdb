@@ -176,7 +176,10 @@ protected:
       const int64_t row_id,
       ObDatumRow &row);
 private:
-  int try_get_all_columns_rust(const int64_t row_id, ObDatumRow &row);
+  int get_columns_rust(
+      const int64_t row_id,
+      const int64_t column_count,
+      ObStorageDatum *datums);
   int init_by_read_info(
       const ObMicroBlockData &block_data,
       const storage::ObITableReadInfo &read_info);
@@ -332,7 +335,8 @@ private:
       const int64_t row_cap,
       common::ObIArray<ObSqlDatumInfo> &datum_infos,
       const int64_t datum_offset,
-      const bool preserve_nop = false);
+      const bool preserve_nop = false,
+      const bool reverse_trans_version = false);
   int get_row_impl(int64_t index, ObDatumRow &row);
   OB_INLINE static const ObRowHeader &get_major_store_row_header()
   {

@@ -32,6 +32,10 @@ pub(crate) const COLUMN_HAS_EXTEND_VALUE: u8 = 2;
 pub(crate) const COLUMN_BIT_PACKING: u8 = 4;
 pub(crate) const COLUMN_LAST_VAR_FIELD: u8 = 8;
 
+pub(crate) fn is_signed_store_type(obj_type: u8) -> bool {
+    matches!(obj_type, 1..=5 | 17..=20 | 31..=34 | 41 | 42)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Header {
     pub header_size: usize,

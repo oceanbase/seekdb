@@ -15,7 +15,7 @@
 use crate::checksum::crc32c;
 use crate::format::{
     checked_slice, header_checksum, parse_column_header, parse_header, read_uint,
-    stored_header_checksum, ColumnHeader, Header, COLUMN_HEADER_SIZE,
+    is_signed_store_type, stored_header_checksum, ColumnHeader, Header, COLUMN_HEADER_SIZE,
 };
 use crate::{Error, Result};
 
@@ -394,7 +394,14 @@ impl<'a> Block<'a> {
                 .and_then(|offset| offset.checked_add(extend_bits))
                 .and_then(|offset| offset.checked_add(row_id * column.length))
                 .ok_or(Error::SizeOverflow)?;
-            return Ok(Cell::UInt(read_bits(self.meta, bit_offset, column.length)?));
+            let mut value = read_bits(self.meta, bit_offset, column.length)?;
+            if column.length < 64
+                && is_signed_store_type(column.obj_type)
+                && value & (1_u64 << (column.length - 1)) != 0
+            {
+                value |= u64::MAX << column.length;
+            }
+            return Ok(Cell::UInt(value));
         }
         if column.is_fixed() {
             let extend_bytes = if column.has_extend_value() {
@@ -700,6 +707,24 @@ mod tests {
             assert_eq!(block.lower_bound_int(0, -1).unwrap(), 2);
             assert_eq!(block.find_int(0, -1).unwrap(), None);
             assert_eq!(block.find_int(0, *values.last().unwrap()).unwrap(), Some(4));
+        }
+    }
+
+    #[test]
+    fn sign_extends_bit_packed_signed_cells() {
+        let mut key = ColumnSpec::fixed(5, 8);
+        key.enable_bit_packing = true;
+        let mut writer = BlockWriter::new(WriterConfig::new(vec![key], 1)).unwrap();
+        for value in [-2_i64, -1, 0, 1] {
+            writer
+                .append_row(&[OwnedDatum::UInt(value as u64)])
+                .unwrap();
+        }
+        let bytes = writer.finish().unwrap();
+        let block = Block::new(&bytes).unwrap();
+        for (row, value) in [-2_i64, -1, 0, 1].iter().enumerate() {
+            assert_eq!(block.cell(row, 0).unwrap().as_i64().unwrap(), *value);
+            assert_eq!(block.find_int(0, *value).unwrap(), Some(row as u32));
         }
     }
 
