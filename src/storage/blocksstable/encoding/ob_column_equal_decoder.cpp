@@ -123,19 +123,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
   return ret;
 }
 
-int ObColumnEqualDecoder::update_pointer(const char *old_block, const char *cur_block)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    ObIColumnDecoder::update_pointer(meta_header_, old_block, cur_block);
-  }
-  return ret;
-}
-
 int ObColumnEqualDecoder::get_ref_col_idx(int64_t &ref_col_idx) const
 {
   int ret = OB_SUCCESS;

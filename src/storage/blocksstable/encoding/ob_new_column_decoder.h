@@ -77,7 +77,6 @@ public:
 
   virtual ObColumnHeader::Type get_type() const override { return type_; }
 
-  virtual int update_pointer(const char *, const char *) override { return common::OB_SUCCESS; } 
 
   virtual bool can_vectorized() const override { return true; }
 

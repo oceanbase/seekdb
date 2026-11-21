@@ -31,9 +31,7 @@ namespace oceanbase
 {
 namespace blocksstable
 {
-struct ObBlockCachedDecoderHeader;
 class ObIColumnDecoder;
-struct ObBlockCachedDecoderHeader;
 class ObIRowIndex;
 
 struct ObColumnDecoder final
@@ -118,7 +116,6 @@ protected:
   int64_t request_cnt_; // request column count
   const ObMicroBlockHeader *header_;
   const ObColumnHeader *col_header_;
-  const ObBlockCachedDecoderHeader *cached_decoder_;
   const char *meta_data_;
   const char *row_data_;
   const char *block_data_;
@@ -202,23 +199,8 @@ class ObMicroBlockDecoder : public ObIMicroBlockDecoder
 public:
   static const int64_t ROW_CACHE_BUF_SIZE = 64 * 1024;
   static const int64_t CPU_CACHE_LINE_SIZE = 64;
-  static const int64_t MAX_CACHED_DECODER_BUF_SIZE = 1L << 10;
-
   ObMicroBlockDecoder();
   virtual ~ObMicroBlockDecoder();
-
-  static int get_decoder_cache_size(
-      const char *block,
-      const int64_t block_size,
-      int64_t &size);
-  static int cache_decoders(
-      char *buf,
-      const int64_t size,
-      const char *block,
-      const int64_t block_size,
-      const ObColDescIArray &full_schema_cols);
-  static int update_cached_decoders(char *cache, const int64_t cache_size,
-      const char *old_block, const char *cur_block, const int64_t block_size);
 
   virtual void reset();
   virtual int init(
@@ -253,11 +235,6 @@ public:
       const int64_t begin_idx,
       int64_t &row_idx,
       bool &equal) override;
-  static int cache_decoders(
-      char *buf,
-      const int64_t size,
-      const char *block,
-      const int64_t block_size);
   // Filter interface for filter pushdown
   virtual int filter_pushdown_filter(
       const sql::ObPushdownFilterExecutor *parent,
@@ -433,7 +410,6 @@ private:
   int64_t block_size_;
   ObVarRowIndex var_row_index_;
   ObFixRowIndex fix_row_index_;
-  const ObBlockCachedDecoderHeader *cached_decoder_;
   ObIRowIndex *row_index_;
   ObColumnDecoder *decoders_;
   ObRowReader flat_row_reader_;

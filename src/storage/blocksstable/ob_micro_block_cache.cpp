@@ -201,13 +201,6 @@ int ObMicroBlockCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCac
       switch (block_data_.type_) {
       case ObMicroBlockData::Type::DATA_BLOCK: {
         MEMCPY(new_buf + block_data_.get_buf_size(), block_data_.get_extra_buf(), block_data_.get_extra_size());
-        if (OB_FAIL(ObMicroBlockDecoder::update_cached_decoders(
-            new_buf + block_data_.get_buf_size(),
-            block_data_.get_extra_size(),
-            block_data_.get_buf(),
-            new_buf,
-            block_data_.get_buf_size()))) {
-        }
         break;
       }
       case ObMicroBlockData::Type::INDEX_BLOCK: {
@@ -1068,38 +1061,9 @@ int ObDataMicroBlockCache::get_allocator(common::ObIAllocator *&allocator)
   return ret;
 }
 
-int64_t ObDataMicroBlockCache::calc_value_size(const int64_t data_length,
-                                               const ObRowStoreType &type,
-                                               bool &need_decoder)
+int64_t ObDataMicroBlockCache::calc_value_size(const int64_t data_length)
 {
-  need_decoder = false;
-  int64_t value_size = sizeof(ObMicroBlockCacheValue) + data_length;
-  if (ObStoreFormat::is_row_store_type_with_encoding(type)) {
-    need_decoder = true;
-    value_size += ObMicroBlockDecoder::MAX_CACHED_DECODER_BUF_SIZE;
-  }
-  return value_size;
-}
-
-int ObDataMicroBlockCache::write_extra_buf(const ObRowStoreType row_store_type,
-                                           const char *block_buf,
-                                           const int64_t block_size,
-                                           char *extra_buf,
-                                           ObMicroBlockData &micro_data)
-{
-  int ret = OB_SUCCESS;
-  int64_t decoder_size = 0;
-
-  if (OB_FAIL(ObMicroBlockDecoder::get_decoder_cache_size(block_buf, block_size, decoder_size))) {
-  } else if (OB_FAIL(ObMicroBlockDecoder::cache_decoders(extra_buf, decoder_size, block_buf, block_size))) {
-  }
-  if (OB_FAIL(ret)) {
-  } else {
-    micro_data.get_extra_buf() = extra_buf;
-    micro_data.get_extra_size() = decoder_size;
-  }
-
-  return ret;
+  return sizeof(ObMicroBlockCacheValue) + data_length;
 }
 
 int ObDataMicroBlockCache::put_cache_block(
@@ -1132,11 +1096,10 @@ int ObDataMicroBlockCache::put_cache_block(
     int64_t block_size = 0;
     int64_t value_size = 0;
     int64_t extra_size = 0;
-    bool need_decoder = false;
     ObMicroBlockBufTransformer buf_transformer(des_meta, &reader, header, payload_buf, payload_size);
     if (OB_FAIL(buf_transformer.init())) {
     } else if (OB_FAIL(buf_transformer.get_buf_size(block_size))) {
-    } else if (FALSE_IT(value_size = calc_value_size(block_size, des_meta.row_store_type_, need_decoder))) {
+    } else if (FALSE_IT(value_size = calc_value_size(block_size))) {
     } else if (OB_FAIL(alloc(
         sizeof(ObMicroBlockCacheKey), value_size, kvpair, cache_handle, inst_handle))) {
     } else {
@@ -1146,8 +1109,6 @@ int ObDataMicroBlockCache::put_cache_block(
       ObMicroBlockData &micro_data = cache_value->get_block_data();
       micro_data.type_ = get_type();
       if (OB_FAIL(buf_transformer.transfrom(block_buf, block_size))) {
-      } else if (need_decoder && OB_FAIL(write_extra_buf(
-          des_meta.row_store_type_, block_buf, block_size, block_buf + block_size, micro_data))) {
       } else if (FALSE_IT(micro_block = cache_value)) {
       } else if (OB_FAIL(put_kvpair(inst_handle, kvpair, cache_handle, false /* overwrite */))) {
         if (OB_ENTRY_EXIST != ret) {
@@ -1181,9 +1142,7 @@ int ObDataMicroBlockCache::reserve_kvpair(
   int64_t block_size = 0;
   int64_t extra_size = 0;
   int64_t value_size = 0;
-  bool need_decoder = false;
   const int64_t key_size = sizeof(ObMicroBlockCacheKey);
-  const ObRowStoreType row_store_type = static_cast<ObRowStoreType>(micro_block_desc.header_->row_store_type_);
   if (OB_UNLIKELY(!micro_block_desc.is_valid() || inst_handle.is_valid()
                   || cache_handle.is_valid() || nullptr != kvpair)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1192,7 +1151,7 @@ int ObDataMicroBlockCache::reserve_kvpair(
   }
 
   if (OB_SUCC(ret)) {
-    value_size = calc_value_size(block_size, row_store_type, need_decoder);
+    value_size = calc_value_size(block_size);
     BaseBlockCache *kvcache = nullptr;
     if (OB_FAIL(get_cache(kvcache))) {
     } else if (OB_FAIL(kvcache->alloc(key_size, value_size, kvpair, cache_handle, inst_handle))) {
@@ -1205,14 +1164,7 @@ int ObDataMicroBlockCache::reserve_kvpair(
     }
   }
 
-  if (OB_FAIL(ret)) {
-  } else if (need_decoder && OB_FAIL(write_extra_buf(
-      static_cast<ObRowStoreType>(micro_block_desc.header_->row_store_type_),
-      reinterpret_cast<char *>(kvpair->value_) + sizeof(ObMicroBlockCacheValue),
-      block_size,
-      reinterpret_cast<char *>(kvpair->value_) + sizeof(ObMicroBlockCacheValue) + block_size,
-      static_cast<ObMicroBlockCacheValue *>(kvpair->value_)->get_block_data()))) {
-  } else {
+  if (OB_SUCC(ret)) {
     kvpair_size = sizeof(ObMicroBlockCacheKey) + value_size;
   }
 

@@ -318,19 +318,6 @@ int ObRawDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, 
   return ret;
 }
 
-int ObRawDecoder::update_pointer(const char *old_block, const char *cur_block)
-{
-  int ret = OB_SUCCESS;
-  if (!is_inited()) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    ObIColumnDecoder::update_pointer(meta_data_, old_block, cur_block);
-  }
-  return ret;
-}
-
 /**
  * Internal call, not check parameters for performance
  * Potential Optimization:

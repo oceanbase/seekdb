@@ -119,8 +119,6 @@ public:
 
   virtual ObColumnHeader::Type get_type() const = 0;
 
-  virtual int update_pointer(const char *old_block, const char *cur_block) = 0;
-
   virtual int get_ref_col_idx(int64_t &ref_col_idx) const
   {
     ref_col_idx = -1;
@@ -283,11 +281,6 @@ protected:
       const int32_t *row_ids,
       const int64_t row_cap);
 
-  template <typename T>
-  inline void update_pointer(T *&ptr, const char *old_block, const char *cur_block)
-  {
-    ptr = reinterpret_cast<T *>(cur_block + (reinterpret_cast<const char *>(ptr) - old_block));
-  }
 };
 
 class ObSpanColumnDecoder : public ObIColumnDecoder
@@ -308,8 +301,6 @@ public:
   }
 
   virtual ObColumnHeader::Type get_type() const { return type_; }
-
-  virtual int update_pointer(const char *, const char *) { return common::OB_SUCCESS; }
 
   virtual bool can_vectorized() const override { return false; }
 };

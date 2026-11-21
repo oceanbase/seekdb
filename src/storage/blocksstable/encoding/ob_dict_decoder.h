@@ -88,7 +88,6 @@ public:
       const int64_t row_cap,
       int64_t &null_count) const override;
 
-  virtual int update_pointer(const char *old_block, const char *cur_block) override;
 
   int decode(const common::ObObjType &obj_type, common::ObDatum &datum, const int64_t ref, const int64_t meta_legnth) const;
 

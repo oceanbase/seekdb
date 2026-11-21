@@ -75,19 +75,6 @@ int ObIntegerBaseDiffDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDa
   return ret;
 }
 
-int ObIntegerBaseDiffDecoder::update_pointer(const char *old_block, const char *cur_block)
-{
-  int ret = OB_SUCCESS;
-  if (!is_inited()) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    ObIColumnDecoder::update_pointer(header_, old_block, cur_block);
-  }
-  return ret;
-}
-
 #define INT_DIFF_UNPACK_VALUES(ctx, row_ids, row_cap, datums, datum_len, data_offset, unpack_type) \
   int64_t row_id = 0; \
   bool has_ext_val = ctx.has_extend_value(); \

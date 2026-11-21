@@ -488,13 +488,7 @@ public:
   virtual void cache_hit(int64_t &hit_cnt);
   virtual void cache_miss(int64_t &miss_cnt);
 private:
-  int64_t calc_value_size(const int64_t data_length, const ObRowStoreType &type, bool &need_decoder);
-  int write_extra_buf(
-      const ObRowStoreType row_store_type,
-      const char *block_buf,
-      const int64_t block_size,
-      char *extra_buf,
-      ObMicroBlockData &micro_data);
+  int64_t calc_value_size(const int64_t data_length);
 private:
   common::ObConcurrentFIFOAllocator allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObDataMicroBlockCache);

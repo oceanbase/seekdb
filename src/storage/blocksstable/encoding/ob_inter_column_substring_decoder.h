@@ -47,7 +47,6 @@ public:
       const ObBitStream &bs, const char *data, const int64_t len) const override;
 
 
-  virtual int update_pointer(const char *old_block, const char *cur_block) override;
 
   virtual int get_ref_col_idx(int64_t &ref_col_idx) const override;
 

@@ -66,7 +66,6 @@ public:
       const int64_t row_cap,
       int64_t &null_count) const override;
 
-  virtual int update_pointer(const char *old_block, const char *cur_block) override;
 
   void reset() { this->~ObRLEDecoder(); new (this) ObRLEDecoder(); }
   OB_INLINE void reuse();
