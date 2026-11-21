@@ -1,0 +1,20 @@
+CREATE TABLE ddl_identifier_escaping (
+`id``key` INT PRIMARY KEY,
+`value``name` INT,
+`enum``name` ENUM('a', 'b'),
+`set``name` SET('a', 'b')
+);
+INSERT INTO ddl_identifier_escaping VALUES (1, 10, 'a', 'a,b'), (2, 20, 'b', 'b');
+CREATE UNIQUE INDEX quoted_value_idx ON ddl_identifier_escaping (`value``name`);
+CREATE INDEX quoted_enum_idx ON ddl_identifier_escaping (`enum``name`);
+CREATE INDEX quoted_set_idx ON ddl_identifier_escaping (`set``name`);
+SELECT `id``key` AS id, `value``name` FROM ddl_identifier_escaping FORCE INDEX (quoted_value_idx)
+WHERE `value``name` = 20;
+id	value`name
+2	20
+ALTER TABLE ddl_identifier_escaping ADD COLUMN extra_id INT AUTO_INCREMENT UNIQUE;
+SELECT `id``key` AS id, `value``name`, `enum``name`, `set``name` FROM ddl_identifier_escaping ORDER BY `id``key`;
+id	value`name	enum`name	set`name
+1	10	a	a,b
+2	20	b	b
+DROP TABLE ddl_identifier_escaping;
