@@ -25,7 +25,6 @@
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "rootserver/ob_ddl_service_launcher.h"
-#include "observer/ob_system_package_load_service.h"
 
 namespace oceanbase
 {
@@ -56,7 +55,6 @@ ObLSRuntimeAdapter::ObLSRuntimeAdapter()
     dbms_sched_service_(nullptr),
     ddl_scheduler_(nullptr),
     ddl_service_launcher_(nullptr),
-    sys_package_service_(nullptr),
     vector_index_service_(nullptr)
 {
 }
@@ -66,14 +64,12 @@ int ObLSRuntimeAdapter::init(
     rootserver::ObDBMSSchedService &dbms_sched_service,
     rootserver::ObDDLScheduler &ddl_scheduler,
     rootserver::ObDDLServiceLauncher &ddl_service_launcher,
-    rootserver::ObSystemPackageLoadService &sys_package_service,
     share::ObPluginVectorIndexService &vector_index_service)
 {
   primary_major_freeze_service_ = &primary_major_freeze_service;
   dbms_sched_service_ = &dbms_sched_service;
   ddl_scheduler_ = &ddl_scheduler;
   ddl_service_launcher_ = &ddl_service_launcher;
-  sys_package_service_ = &sys_package_service;
   vector_index_service_ = &vector_index_service;
   return common::OB_SUCCESS;
 }
@@ -95,9 +91,6 @@ int ObLSRuntimeAdapter::resolve_log_handler(
       break;
     case logservice::DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE:
       ret = set_log_service_handler(ddl_service_launcher_, handler);
-      break;
-    case logservice::SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE:
-      ret = set_log_service_handler(sys_package_service_, handler);
       break;
     case logservice::VEC_INDEX_SERVICE_LOG_BASE_TYPE:
       ret = set_log_service_handler(vector_index_service_, handler);

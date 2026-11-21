@@ -140,6 +140,7 @@ public:
   int get_server_resource_info(share::ObServerResourceInfo &resource_info);
   static int get_build_version(share::ObBuildVersion &build_version);
   int get_build_version(char *buf, int64_t buf_len) override;
+  int ensure_system_packages();
   int load_all_special_system_packages() override;
   int load_leader_cluster_login_info();
   // ObCallSetDebugSyncActionP @RS::admin to set debug sync action

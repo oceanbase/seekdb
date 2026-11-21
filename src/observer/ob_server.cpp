@@ -33,7 +33,6 @@
 #include "observer/ob_server.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/allocator/ob_jemalloc.h"
-#include "observer/ob_system_package_load_service.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
@@ -195,8 +194,8 @@ public:
       LOG_WARN("failed to wait for schema readiness", KR(ret));
     } else if (OB_FAIL(server_.check_if_timezone_usable())) {
       LOG_WARN("failed to wait for timezone readiness", KR(ret));
-    } else if (OB_FAIL(server_.system_package_load_service()->start())) {
-      LOG_WARN("failed to schedule system package installation", KR(ret));
+    } else if (OB_FAIL(server_.ob_service_.ensure_system_packages())) {
+      LOG_WARN("failed to install system packages before SQL startup", KR(ret));
     }
     return ret;
   }
@@ -1589,20 +1588,6 @@ void ObServer::set_stop()
   FLOG_INFO("[OBSERVER_NOTICE] observer is setted to stop");
 }
 
-/** Cancel package DDL before joining its loader; null modules support partial initialization. */
-static void stop_in_process_package_ddl(
-    rootserver::ObDDLServiceLauncher *launcher,
-    rootserver::ObSystemPackageLoadService *loader)
-{
-  if (launcher != nullptr) {
-    launcher->deactivate();
-  }
-  if (loader != nullptr) {
-    loader->stop();
-    loader->wait();
-  }
-}
-
 int ObServer::stop()
 {
   int ret = OB_SUCCESS;
@@ -1610,10 +1595,8 @@ int ObServer::stop()
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_STOP_BEGIN, "observer stop begin.");
 
-  if (in_process_) {
-    // DDL retries must observe cancellation while schema and SQL services are still available.
-    // Otherwise session cleanup waits for a loader query that cannot publish its schema.
-    stop_in_process_package_ddl(mods_ddl_service_launcher_, mods_system_package_load_service_);
+  if (in_process_ && mods_ddl_service_launcher_ != nullptr) {
+    mods_ddl_service_launcher_->deactivate();
   }
 
 #ifndef __EMSCRIPTEN__
