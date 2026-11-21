@@ -264,27 +264,5 @@ int ObIMicroBlockReader::locate_border_row_id(
   return ret;
 }
 
-int ObIMicroBlockReader::validate_filter_info(
-    const sql::PushdownFilterInfo &pd_filter_info,
-    const sql::ObPushdownFilterExecutor &filter,
-    const void* col_buf,
-    const int64_t col_capacity,
-    const ObMicroBlockHeader *header)
-{
-  int ret = OB_SUCCESS;
-  int64_t col_count = filter.get_col_count();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(header) || OB_ISNULL(read_info_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(0 > col_count || col_capacity < col_count)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (0 == col_count) {
-  } else if (OB_ISNULL(col_buf) && 0 < col_capacity) {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  return ret;
-}
-
 }
 }

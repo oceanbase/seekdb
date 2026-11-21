@@ -42,10 +42,6 @@ public:
   virtual int compare_rowkey(const ObDatumRange &range, const int64_t index,
     int32_t &start_key_compare_result, int32_t &end_key_compare_result) = 0;
 
-  // Filter interface for filter pushdown
-  virtual int filter_pushdown_filter(const sql::ObPushdownFilterExecutor *parent,
-    sql::ObPhysicalFilterExecutor &filter, const sql::PushdownFilterInfo &pd_filter_info,
-    common::ObBitmap &result_bitmap) = 0;
   virtual int filter_truncate_evaluator(
       storage::ObTruncateFilterEvaluator &evaluator,
       const int64_t start,

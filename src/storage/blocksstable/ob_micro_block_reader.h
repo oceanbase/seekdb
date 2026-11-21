@@ -119,11 +119,6 @@ public:
       int64_t &trans_version,
       int64_t &sql_sequence);
   // Filter interface for filter pushdown
-  int filter_pushdown_filter(
-      const sql::ObPushdownFilterExecutor *parent,
-      sql::ObPushdownFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      common::ObBitmap &result_bitmap);
   int filter_truncate_evaluator(
       storage::ObTruncateFilterEvaluator &evaluator,
       const int64_t start,

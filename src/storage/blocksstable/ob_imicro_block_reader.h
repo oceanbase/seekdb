@@ -478,12 +478,6 @@ protected:
   {
     return OB_NOT_SUPPORTED;
   }
-  int validate_filter_info(
-      const sql::PushdownFilterInfo &pd_filter_info,
-      const sql::ObPushdownFilterExecutor &filter,
-      const void* col_buf,
-      const int64_t col_capacity,
-      const ObMicroBlockHeader *header);
   ObReaderType reader_type_;
 };
 

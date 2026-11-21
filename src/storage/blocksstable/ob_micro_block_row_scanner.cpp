@@ -517,13 +517,21 @@ int ObIMicroBlockRowScanner::apply_white_filter(
   int64_t bitmap_offset = 0;
   const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
   const sql::ObExprPtrIArray *column_exprs = filter.get_column_exprs();
-  ObSEArray<ObSqlDatumInfo, 1> datum_infos;
+  ObSEArray<ObSqlDatumInfo, 16> datum_infos;
   sql::ObEvalCtx &eval_ctx = param_->op_->get_eval_ctx();
-  if (OB_UNLIKELY(1 != filter.get_col_count() || nullptr == column_exprs
-                  || 1 != column_exprs->count() || nullptr == column_exprs->at(0))) {
+  if (OB_UNLIKELY(nullptr == column_exprs || column_exprs->count() != filter.get_col_count()
+                  || (!filter.is_semistruct_filter_node() && 1 != filter.get_col_count())
+                  || (filter.is_semistruct_filter_node()
+                      && (pd_filter_info.col_capacity_ < filter.get_col_count()
+                          || (filter.get_col_count() > 0 && nullptr == pd_filter_info.datum_buf_))))) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(datum_infos.push_back(ObSqlDatumInfo(
-                 column_exprs->at(0)->locate_batch_datums(eval_ctx), column_exprs->at(0))))) {
+  }
+  for (int64_t col = 0; OB_SUCC(ret) && col < column_exprs->count(); ++col) {
+    if (OB_ISNULL(column_exprs->at(col))) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(datum_infos.push_back(ObSqlDatumInfo(
+                   column_exprs->at(col)->locate_batch_datums(eval_ctx), column_exprs->at(col))))) {
+    }
   }
   while (OB_SUCC(ret) && cur_row_index < end_row_index) {
     const int64_t row_cap = MIN(pd_filter_info.batch_size_, end_row_index - cur_row_index);
@@ -546,7 +554,16 @@ int ObIMicroBlockRowScanner::apply_white_filter(
         continue;
       }
       bool filtered = false;
-      if (OB_FAIL(filter.filter_datum(datum_infos.at(0).datum_ptr_[i], filtered))) {
+      if (filter.is_semistruct_filter_node()) {
+        for (int64_t col = 0; col < filter.get_col_count(); ++col) {
+          pd_filter_info.datum_buf_[col].shallow_copy_from_datum(datum_infos.at(col).datum_ptr_[i]);
+        }
+        ret = static_cast<sql::ObPhysicalFilterExecutor &>(filter).filter(
+            pd_filter_info.datum_buf_, filter.get_col_count(), *pd_filter_info.skip_bit_, filtered);
+      } else {
+        ret = filter.filter_datum(datum_infos.at(0).datum_ptr_[i], filtered);
+      }
+      if (OB_FAIL(ret)) {
       } else if (!filtered && OB_FAIL(result_bitmap.set(bitmap_offset + i))) {
       }
     }
@@ -635,20 +652,11 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
                 bitmap))) {
     }
   } else if (filter->is_semistruct_filter_node()) {
-    if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
-      sql::ObPhysicalFilterExecutor *physical_filter = static_cast<sql::ObPhysicalFilterExecutor *>(filter);
-      if (OB_FAIL(decoder_->filter_pushdown_filter(parent,
-                                                   *physical_filter,
-                                                   pd_filter_info,
-                                                   bitmap))) {
-      }
-    } else {
-      if (OB_FAIL(flat_reader_->filter_pushdown_filter(
-                  parent,
-                  *filter,
-                  pd_filter_info,
-                  bitmap))) {
-      }
+    if (OB_FAIL(apply_white_filter(
+                parent,
+                *static_cast<sql::ObWhiteFilterExecutor *>(filter),
+                pd_filter_info,
+                bitmap))) {
     }
   } else if (filter->is_filter_black_node()) {
     sql::ObBlackFilterExecutor *black_filter = static_cast<sql::ObBlackFilterExecutor *>(filter);

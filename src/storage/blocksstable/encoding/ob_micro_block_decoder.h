@@ -236,11 +236,6 @@ public:
       int64_t &row_idx,
       bool &equal) override;
   // Filter interface for filter pushdown
-  virtual int filter_pushdown_filter(
-      const sql::ObPushdownFilterExecutor *parent,
-      sql::ObPhysicalFilterExecutor &filter,
-      const sql::PushdownFilterInfo &pd_filter_info,
-      common::ObBitmap &result_bitmap) override;
   virtual int filter_truncate_evaluator(
       storage::ObTruncateFilterEvaluator &evaluator,
       const int64_t start,
