@@ -263,6 +263,67 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+// Only use exact integer/NULL identity here. Strings, tuples and other types
+// retain the existing rewrite decision rather than approximate SQL equality.
+// The fixed-size set bounds planning work, even for mostly distinct lists.
+static bool has_small_integer_domain(const ParseNode &in_list,
+                                     const ParamStore *param_store,
+                                     const bool is_prepare_stmt,
+                                     const int64_t threshold)
+{
+  const int64_t MAX_DISTINCT = 64;
+  uint64_t values[MAX_DISTINCT];
+  ObObjType types[MAX_DISTINCT];
+  int64_t count = 0;
+  bool small = threshold > 1 && NULL != in_list.children_;
+  for (int64_t i = 0; small && i < in_list.num_child_; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    uint64_t value = 0;
+    ObObjType type = ObNullType;
+    if (NULL == node) {
+      small = false;
+    } else if (T_INT == node->type_) {
+      type = ObIntType;
+      value = static_cast<uint64_t>(node->value_);
+    } else if (T_UINT64 == node->type_) {
+      type = ObUInt64Type;
+      value = static_cast<uint64_t>(node->value_);
+    } else if (T_NULL == node->type_) {
+    } else if (T_QUESTIONMARK == node->type_ && !is_prepare_stmt
+               && NULL != param_store && node->value_ >= 0
+               && node->value_ < param_store->count()) {
+      const ObObjParam &param = param_store->at(node->value_);
+      if (param.is_int()) {
+        type = ObIntType;
+        value = static_cast<uint64_t>(param.get_int());
+      } else if (param.is_uint64()) {
+        type = ObUInt64Type;
+        value = param.get_uint64();
+      } else if (!param.is_null()) {
+        small = false;
+      }
+    } else {
+      small = false;
+    }
+    if (small) {
+      int64_t j = 0;
+      while (j < count && (type != types[j] || value != values[j])) {
+        ++j;
+      }
+      if (j == count) {
+        if (count == MAX_DISTINCT) {
+          small = false;
+        } else {
+          types[count] = type;
+          values[count++] = value;
+          small = count < threshold;
+        }
+      }
+    }
+  }
+  return small;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +411,13 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt
+          && has_small_integer_domain(in_list, param_store, is_prepare_stmt, threshold)) {
+        // Keep every original expression and parameter binding. This only
+        // avoids VALUES materialization for a demonstrably small domain, so
+        // a cached plan remains correct when later executions bind new values.
+        is_enable = false;
+      }
     }
   }
   return ret;
