@@ -195,6 +195,7 @@ struct State {
     pending_appends: Vec<PendingAppend>,
     pending_append_bytes: usize,
     append_leader: bool,
+    gather_appends: bool,
     append_results: BTreeMap<u64, Result<AppendResult>>,
 }
 
@@ -264,6 +265,7 @@ impl Stream {
             pending_appends: Vec::new(),
             pending_append_bytes: 0,
             append_leader: false,
+            gather_appends: false,
             append_results: BTreeMap::new(),
         });
         Self {
@@ -361,7 +363,7 @@ impl Stream {
             }
             if !state.append_leader && !state.pending_appends.is_empty() {
                 state.append_leader = true;
-                if self.inner.append_callers.load(Ordering::Relaxed) > 1 {
+                if self.inner.append_callers.load(Ordering::Relaxed) > 1 || state.gather_appends {
                     let deadline = Instant::now() + APPEND_BATCH_WINDOW;
                     while state.append_batch_has_capacity()
                         && !state.closed
@@ -969,6 +971,7 @@ impl State {
         &mut self,
         requests: Vec<PendingAppend>,
     ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
+        self.gather_appends = requests.len() > 1;
         if let Err(error) = self.check_writable() {
             return (
                 requests
@@ -1178,6 +1181,7 @@ fn create_state(
         pending_appends: Vec::new(),
         pending_append_bytes: 0,
         append_leader: false,
+        gather_appends: false,
         append_results: BTreeMap::new(),
     })
 }
@@ -1385,6 +1389,7 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         pending_appends: Vec::new(),
         pending_append_bytes: 0,
         append_leader: false,
+        gather_appends: false,
         append_results: BTreeMap::new(),
     })
 }
