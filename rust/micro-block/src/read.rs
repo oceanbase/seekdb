@@ -479,6 +479,16 @@ impl<'a> Block<'a> {
         })
     }
 
+    pub fn count_non_null(&self, rows: &[u32], column: usize) -> Result<usize> {
+        let mut count = 0usize;
+        for &row in rows {
+            if !matches!(self.cell(row as usize, column)?, Cell::Null | Cell::Nop) {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
     pub fn filter_uint_eq(&self, column: usize, value: u64, range: RowRange) -> Result<Vec<u32>> {
         self.check_range(range)?;
         let mut rows = Vec::new();
@@ -711,5 +721,25 @@ mod tests {
         assert_eq!(block.find_int(0, -9).unwrap(), Some(0));
         assert_eq!(block.find_int(0, 11).unwrap(), Some(2));
         assert!(Block::new(&bytes[..bytes.len() - 1]).is_err());
+    }
+
+    #[test]
+    fn counts_values_without_materializing_cells() {
+        let config = WriterConfig::new(vec![ColumnSpec::fixed(5, 8)], 1);
+        let mut writer = BlockWriter::new(config).unwrap();
+        for value in [
+            OwnedDatum::Null,
+            OwnedDatum::Nop,
+            OwnedDatum::UInt(7),
+            OwnedDatum::UInt(9),
+        ] {
+            writer.append_row(&[value]).unwrap();
+        }
+        let bytes = writer.finish().unwrap();
+        let block = Block::new(&bytes).unwrap();
+        assert_eq!(block.count_non_null(&[0, 1, 2, 3], 0).unwrap(), 2);
+        assert_eq!(block.count_non_null(&[0, 1, 3], 0).unwrap(), 1);
+        assert_eq!(block.count_non_null(&[], 0).unwrap(), 0);
+        assert_eq!(block.count_non_null(&[4], 0), Err(crate::Error::InvalidArgument));
     }
 }

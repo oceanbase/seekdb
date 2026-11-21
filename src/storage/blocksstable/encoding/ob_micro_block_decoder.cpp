@@ -1784,12 +1784,62 @@ int ObMicroBlockDecoder::get_row_count(
   decoder_allocator_.reuse();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(decoders_[col_id].get_row_count(
-              row_index_,
-              row_ids,
-              row_cap,
-              contains_null,
-              count))) {
+  } else if (OB_UNLIKELY(col_id < 0 || col_id >= request_cnt_ || row_cap < 0
+             || (row_cap > 0 && nullptr == row_ids))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (contains_null || 0 == row_cap) {
+    count = row_cap;
+  } else {
+    const ObColumnHeader *column = decoders_[col_id].ctx_->col_header_;
+    std::vector<uint32_t> rust_rows;
+    rust_rows.reserve(row_cap);
+    for (int64_t i = 0; i < row_cap; ++i) {
+      if (row_ids[i] < 0 || row_ids[i] >= row_count_) {
+        return OB_INVALID_ARGUMENT;
+      }
+      rust_rows.push_back(static_cast<uint32_t>(row_ids[i]));
+    }
+    if (nullptr == column) {
+      ret = OB_NOT_SUPPORTED;
+    } else {
+      const int64_t store_idx = column - col_header_;
+      if (store_idx < 0 || store_idx >= header_->column_count_) {
+        return OB_INVALID_DATA;
+      }
+      const rust::Slice<const uint8_t> block(
+          reinterpret_cast<const uint8_t *>(block_data_), static_cast<std::size_t>(block_size_));
+      const rust::Slice<const uint32_t> rows(rust_rows.data(), rust_rows.size());
+      const micro_block::CountResult result = micro_block::count_pax_non_null(
+          block, rows, static_cast<uint32_t>(store_idx));
+      switch (result.code) {
+        case micro_block::Code::Ok:
+          count = static_cast<int64_t>(result.count);
+          break;
+        case micro_block::Code::Unsupported:
+          ret = OB_NOT_SUPPORTED;
+          break;
+        case micro_block::Code::InvalidArgument:
+          ret = OB_INVALID_ARGUMENT;
+          break;
+        case micro_block::Code::InvalidData:
+          ret = OB_INVALID_DATA;
+          break;
+        case micro_block::Code::ChecksumMismatch:
+          ret = OB_CHECKSUM_ERROR;
+          break;
+        case micro_block::Code::OutputTooSmall:
+          ret = OB_BUF_NOT_ENOUGH;
+          break;
+        case micro_block::Code::SizeOverflow:
+          ret = OB_SIZE_OVERFLOW;
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+      }
+    }
+    if (OB_NOT_SUPPORTED == ret) {
+      ret = decoders_[col_id].get_row_count(row_index_, row_ids, row_cap, contains_null, count);
+    }
   }
   return ret;
 }
@@ -1889,93 +1939,6 @@ int ObMicroBlockDecoder::get_column_datum(
     if (OB_FAIL(get_col_datums(col_offset, &row_id, &cell_data, 1, &datum))) {
     } else if (col_param.get_meta_type().is_lob_storage() && !datum.is_null() && !datum.get_lob_data().in_row_) {
       if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockDecoder::get_distinct_count(const int32_t group_by_col, int64_t&distinct_cnt) const
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-     ret = decoders_[group_by_col].get_distinct_count(distinct_cnt);
-  }
-  return ret;
-}
-
-int ObMicroBlockDecoder::read_distinct(
-    const int32_t group_by_col,
-    const char **cell_datas,
-    const bool is_padding_mode,
-    storage::ObGroupByCellBase &group_by_cell) const
-{
-  UNUSED(is_padding_mode);
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    if (OB_FAIL(decoders_[group_by_col].read_distinct(cell_datas, group_by_cell))) {
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockDecoder::read_reference(
-    const int32_t group_by_col,
-    const int32_t *row_ids,
-    const int64_t row_cap,
-    storage::ObGroupByCellBase &group_by_cell) const
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(decoders_[group_by_col].read_reference(row_ids, row_cap, group_by_cell))) {
-  } else {
-    group_by_cell.set_ref_cnt(row_cap);
-  }
-  return ret;
-}
-
-int ObMicroBlockDecoder::get_group_by_aggregate_result(
-    const ObTableIterParam &iter_param,
-    const ObTableAccessContext &context,
-    const int32_t *row_ids,
-    const char **cell_datas,
-    const int64_t row_cap,
-    storage::ObGroupByCell &group_by_cell)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    const int32_t group_by_col = group_by_cell.get_group_by_col_offset();
-    int32_t last_agg_col_offset = INT32_MIN;
-    for (int64_t i = 0; OB_SUCC(ret) && i < group_by_cell.get_agg_cells().count(); ++i) {
-      storage::ObAggCell *agg_cell =  group_by_cell.get_agg_cells().at(i);
-      const int32_t agg_col_offset = agg_cell->get_col_offset();
-      common::ObDatum *col_datums = agg_cell->get_col_datums();
-      const share::schema::ObColumnParam *col_param = agg_cell->get_col_param();
-      bool need_get_col_datum = (0 == i || agg_col_offset != last_agg_col_offset) && agg_cell->need_access_data();
-      if (agg_col_offset == group_by_col) {
-        // agg on group by column
-        if (OB_FAIL(group_by_cell.eval_batch(group_by_cell.get_group_by_col_datums(), row_cap, i, true))) {
-        }
-      } else {
-        if (need_get_col_datum) {
-          if (OB_FAIL(get_col_datums(agg_col_offset, row_ids, cell_datas, row_cap, col_datums))) {
-          } else if (iter_param.has_lob_column_out() && has_lob_out_row()
-                    && nullptr != col_param && col_param->get_meta_type().is_lob_storage()
-                    && OB_FAIL(fill_datums_lob_locator(iter_param, context, *col_param, row_cap, col_datums, false))) {
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(group_by_cell.eval_batch(col_datums, row_cap, i))) {
-        } else if (need_get_col_datum) {
-          last_agg_col_offset = agg_col_offset;
-        }
       }
     }
   }

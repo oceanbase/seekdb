@@ -93,6 +93,11 @@ mod ffi {
         row_meta: Vec<FlatRowMeta>,
     }
 
+    struct CountResult {
+        code: Code,
+        count: u64,
+    }
+
     struct LocateResult {
         code: Code,
         row: u32,
@@ -158,6 +163,8 @@ mod ffi {
         /// Output offsets are relative to `block`, whose allocation and cache
         /// pin must remain valid while C++ uses the returned descriptors.
         fn project_pax_block(block: &[u8], rows: &[u32], columns: &[u32]) -> BatchResult;
+
+        fn count_pax_non_null(block: &[u8], rows: &[u32], column: u32) -> CountResult;
 
         /// Missing physical columns are returned as NOP. All byte cells borrow
         /// the pinned block and remain valid only for the caller's batch use.
@@ -510,6 +517,19 @@ fn project_pax_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::BatchR
         let cells = describe_cells(block, projection);
         Ok((rows.to_vec(), cells))
     })())
+}
+
+fn count_pax_non_null(block: &[u8], rows: &[u32], column: u32) -> ffi::CountResult {
+    match Block::new(block).and_then(|parsed| parsed.count_non_null(rows, column as usize)) {
+        Ok(count) => ffi::CountResult {
+            code: ffi::Code::Ok,
+            count: count as u64,
+        },
+        Err(error) => ffi::CountResult {
+            code: code(error),
+            count: 0,
+        },
+    }
 }
 
 fn project_flat_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::BatchResult {

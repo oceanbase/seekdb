@@ -285,24 +285,6 @@ public:
   {
     decoder_allocator_.set_reserve_memory(reserve);
   }
-  virtual int get_distinct_count(const int32_t group_by_col, int64_t &distinct_cnt) const override;
-  virtual int read_distinct(
-      const int32_t group_by_col,
-      const char **cell_datas,
-      const bool is_padding_mode,
-      storage::ObGroupByCellBase &group_by_cell) const override;
-  virtual int read_reference(
-      const int32_t group_by_col,
-      const int32_t *row_ids,
-      const int64_t row_cap,
-      storage::ObGroupByCellBase &group_by_cell) const override;
-  virtual int get_group_by_aggregate_result(
-      const ObTableIterParam &iter_param,
-      const ObTableAccessContext &context,
-      const int32_t *row_ids,
-      const char **cell_datas,
-      const int64_t row_cap,
-      storage::ObGroupByCell &group_by_cell) override;
   virtual bool has_lob_out_row() const override final
   { return nullptr != header_ && header_->has_lob_out_row(); }
 
