@@ -470,20 +470,7 @@ int ObIMicroBlockRowScanner::apply_black_filter_batch(
   int64_t bitmap_offset = 0;
   const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
   ObSEArray<ObSqlDatumInfo, 16> datum_infos;
-  bool filter_applied_directly = false;
-  if (ObIMicroBlockReader::Decoder == reader_->get_type() && filter.can_pushdown_decoder()) {
-    if (decoder_->can_apply_black(col_offsets) &&
-        OB_FAIL(decoder_->filter_black_filter_batch(
-                parent,
-                filter,
-                pd_filter_info,
-                result_bitmap,
-                filter_applied_directly))) {
-    }
-  }
-
-  if (OB_FAIL(ret) || filter_applied_directly) {
-  } else if (OB_FAIL(filter.get_datums_from_column(datum_infos))) {
+  if (OB_FAIL(filter.get_datums_from_column(datum_infos))) {
   } else {
     while (OB_SUCC(ret) && cur_row_index < end_row_index) {
       row_cap = MIN(pd_filter_info.batch_size_, end_row_index - cur_row_index);
@@ -511,9 +498,63 @@ int ObIMicroBlockRowScanner::apply_black_filter_batch(
       }
     }
   }
-  LOG_TRACE("[PUSHDOWN] apply black filter batch", K(ret), K(filter_applied_directly),
+  LOG_TRACE("[PUSHDOWN] apply black filter batch", K(ret),
             K(pd_filter_info.start_), K(pd_filter_info.count_),
             K(result_bitmap.popcnt()), K(result_bitmap), K(filter));
+  return ret;
+}
+
+int ObIMicroBlockRowScanner::apply_white_filter(
+    sql::ObPushdownFilterExecutor *parent,
+    sql::ObWhiteFilterExecutor &filter,
+    sql::PushdownFilterInfo &pd_filter_info,
+    common::ObBitmap &result_bitmap)
+{
+  int ret = OB_SUCCESS;
+  int64_t cur_row_index = pd_filter_info.start_;
+  const int64_t end_row_index = pd_filter_info.start_ + pd_filter_info.count_;
+  int32_t *row_ids = pd_filter_info.row_ids_;
+  int64_t bitmap_offset = 0;
+  const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
+  const sql::ObExprPtrIArray *column_exprs = filter.get_column_exprs();
+  ObSEArray<ObSqlDatumInfo, 1> datum_infos;
+  sql::ObEvalCtx &eval_ctx = param_->op_->get_eval_ctx();
+  if (OB_UNLIKELY(1 != filter.get_col_count() || nullptr == column_exprs
+                  || 1 != column_exprs->count() || nullptr == column_exprs->at(0))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(datum_infos.push_back(ObSqlDatumInfo(
+                 column_exprs->at(0)->locate_batch_datums(eval_ctx), column_exprs->at(0))))) {
+  }
+  while (OB_SUCC(ret) && cur_row_index < end_row_index) {
+    const int64_t row_cap = MIN(pd_filter_info.batch_size_, end_row_index - cur_row_index);
+    for (int64_t i = 0; i < row_cap; ++i) {
+      row_ids[i] = cur_row_index + i;
+    }
+    if (OB_FAIL(get_rows_for_old_format(col_offsets,
+                                        filter.get_col_params(),
+                                        row_ids,
+                                        row_cap,
+                                        0,
+                                        pd_filter_info.cell_data_ptrs_,
+                                        filter.get_filter_node().column_exprs_,
+                                        datum_infos,
+                                        &filter.get_default_datums(),
+                                        filter.is_padding_mode()))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
+      if (nullptr != parent && parent->can_skip_filter(bitmap_offset + i)) {
+        continue;
+      }
+      bool filtered = false;
+      if (OB_FAIL(filter.filter_datum(datum_infos.at(0).datum_ptr_[i], filtered))) {
+      } else if (!filtered && OB_FAIL(result_bitmap.set(bitmap_offset + i))) {
+      }
+    }
+    cur_row_index += row_cap;
+    bitmap_offset += row_cap;
+  }
+  LOG_TRACE("[PUSHDOWN] apply white filter", K(ret), K(pd_filter_info.start_),
+            K(pd_filter_info.count_), K(result_bitmap.popcnt()), K(result_bitmap), K(filter));
   return ret;
 }
 
@@ -617,7 +658,7 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
                   bitmap))) {
       }
     } else {
-      if (OB_FAIL(decoder_->filter_pushdown_filter(
+      if (OB_FAIL(apply_white_filter(
                   parent,
                   *static_cast<sql::ObWhiteFilterExecutor *>(filter),
                   pd_filter_info,

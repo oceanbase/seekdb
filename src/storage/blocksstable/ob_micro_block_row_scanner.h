@@ -174,6 +174,11 @@ private:
       sql::ObBlackFilterExecutor &filter,
       sql::PushdownFilterInfo &pd_filter_info,
       common::ObBitmap &result_bitmap);
+  int apply_white_filter(
+      sql::ObPushdownFilterExecutor *parent,
+      sql::ObWhiteFilterExecutor &filter,
+      sql::PushdownFilterInfo &pd_filter_info,
+      common::ObBitmap &result_bitmap);
 protected:
   bool is_inited_;
   bool reverse_scan_;
