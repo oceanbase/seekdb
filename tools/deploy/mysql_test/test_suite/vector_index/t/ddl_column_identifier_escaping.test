@@ -1,0 +1,24 @@
+# Shared DDL column formatting must escape identifiers without depending on sql.
+--disable_warnings
+DROP TABLE IF EXISTS ddl_column_identifier_escaping;
+--enable_warnings
+
+CREATE TABLE ddl_column_identifier_escaping (
+  `key``id` INT PRIMARY KEY,
+  `enum``value` ENUM('alpha','beta'),
+  `set````value` SET('x','y')
+);
+INSERT INTO ddl_column_identifier_escaping VALUES
+  (1,'alpha','x'),(2,'beta','x,y'),(3,NULL,NULL);
+
+# Exercises original names, aliases, enum/set casts and shadow primary keys.
+CREATE UNIQUE INDEX quoted_columns_idx ON ddl_column_identifier_escaping (`enum``value`,`set````value`);
+SELECT `key``id` AS id,
+       CAST(`enum``value` AS UNSIGNED) AS enum_ordinal,
+       CAST(`set````value` AS UNSIGNED) AS set_bits
+FROM ddl_column_identifier_escaping ORDER BY `key``id`;
+SELECT `key``id` AS id
+FROM ddl_column_identifier_escaping FORCE INDEX (quoted_columns_idx)
+WHERE `enum``value` = 'alpha';
+
+DROP TABLE ddl_column_identifier_escaping;
