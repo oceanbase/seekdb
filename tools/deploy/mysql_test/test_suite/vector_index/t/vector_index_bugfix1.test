@@ -662,4 +662,66 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1538: monotonic arithmetic on a column must keep the column's range selectivity
+--disable_warnings
+drop table if exists t_issue1538_arith_selectivity;
+--enable_warnings
+create table t_issue1538_arith_selectivity(
+  id bigint not null,
+  embedding vector(3) not null,
+  age int not null,
+  primary key(id),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+
+--disable_query_log
+--let $row = 0
+while ($row < 100)
+{
+  --let $age = $row
+  --inc $age
+  eval insert into t_issue1538_arith_selectivity values ($row, '[$row,0,0]', $age);
+  --inc $row
+}
+--enable_query_log
+--disable_result_log
+analyze table t_issue1538_arith_selectivity;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1538_ARITH_SELECTIVITY', numrows=>200000);
+--enable_result_log
+
+# Filters keeping about 91% of the rows choose the same scan as `age > 10`.
+--let $issue1538_filter = age > 10
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = ((age + 0) + 0) > 10
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = ((age * 1) * 1) > 10
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = (age + 2) > 12
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = (age + 2) > (10 + 2)
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = (age - 2) > 8
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = (age * 2) > 20
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = (age / 2.0) > 5.0
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+
+# Filters keeping about 5% of the rows still choose the pre-filter scan.
+--let $issue1538_filter = age >= 96
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = (age + 0) >= 96
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = (100 - age) < 5
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+--let $issue1538_filter = (age * -2) <= -192
+--source mysql_test/test_suite/vector_index/include/issue1538_check_plan.inc
+
+# The arithmetic filters still return the same rows.
+select count(*) from t_issue1538_arith_selectivity where ((age + 0) + 0) > 10;
+select count(*) from t_issue1538_arith_selectivity where (age / 2.0) > 5.0;
+select count(*) from t_issue1538_arith_selectivity where (100 - age) < 5;
+
+drop table t_issue1538_arith_selectivity;
+
 alter system set vector_memory_limit = 0;
