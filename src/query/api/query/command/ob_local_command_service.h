@@ -28,10 +28,6 @@ struct ObFlushOptStatArg;
 struct ObSetTracepointParam;
 struct ObUpdateStatCacheArg;
 }
-namespace common
-{
-class ObTimeoutCtx;
-}
 namespace query
 {
 
@@ -43,7 +39,6 @@ public:
   virtual int set_tracepoint(const obcall::ObSetTracepointParam &arg) = 0;
   virtual int cancel_sys_task(const share::ObTaskId &task_id) = 0;
   virtual int load_all_special_system_packages() = 0;
-  virtual int wait_system_package_ready(const common::ObTimeoutCtx &ctx) = 0;
   virtual int get_build_version(char *buf, int64_t buf_len) = 0;
   virtual int set_ds_action(const obcall::ObDebugSyncActionArg &arg) = 0;
   virtual int refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg) = 0;
