@@ -10189,14 +10189,8 @@ int ObTransformUtils::calc_const_expr_result(ObRawExpr * expr,
       if (OB_SUCC(ret)) {
         *has_warning = probe_warning_buf.get_total_warning_count() > 0;
       }
-      if (OB_SUCC(ret) && *has_warning) {
-        // Later speculative evaluations must leave these diagnostics to execution.
-        if (OB_FAIL(erase_calculable_expr_result(ctx, expr))) {
-          LOG_WARN("failed to erase warning expr result cache", K(ret), KPC(expr));
-        } else if (OB_FAIL(ObSQLUtils::store_result_to_ctx(*ctx->exec_ctx_, expr, result, false))) {
-          LOG_WARN("failed to mark warning expr unavailable for folding", K(ret), KPC(expr));
-        }
-      }
+      // The caller decides whether a warning permits folding. Range extraction
+      // still needs the computed value to build and validate plan constraints.
     }
   }
   return ret;
