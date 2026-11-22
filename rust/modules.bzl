@@ -11,7 +11,7 @@ MODULES = {
         "deps": [":file_io_headers"],
         "features": IO_FEATURES,
     },
-    "palf": {"bridge": "src/bridge.rs"},
+    "wal": {"bridge": "src/bridge.rs"},
     "mvt": {"bridge": "src/bridge.rs"},
     "standby-rpc": {
         "bridge": "src/bridge.rs",

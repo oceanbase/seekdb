@@ -67,7 +67,7 @@ using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace storage;
-using namespace palf;
+using namespace wal;
 
 namespace observer
 {

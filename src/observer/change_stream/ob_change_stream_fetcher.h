@@ -31,17 +31,17 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/atomic/ob_atomic.h"
 #include "share/log/types/lsn.h"
-#include "logservice/palf_adapter/palf_iterator.h"
-#include "logservice/palf_adapter/palf_handle.h"
-#include "logservice/palf_adapter/palf_callback.h"
+#include "logservice/wal_adapter/iterator.h"
+#include "logservice/wal_adapter/handle.h"
+#include "logservice/wal_adapter/callback.h"
 #include "storage/tx/ob_tx_seq.h"
 #include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {
-namespace palf
+namespace wal
 {
-class PalfEnv;
+class Env;
 }
 namespace share
 {
@@ -96,7 +96,7 @@ struct ObCSTxInfo
 {
   int64_t   tx_id_ = 0;
   int64_t   commit_version_ = 0;   // Used for refresh_scn and filtering.
-  palf::LSN start_lsn_;           // Used by get_min_dep_lsn for log reclaim and init restart.
+  wal::LSN start_lsn_;           // Used by get_min_dep_lsn for log reclaim and init restart.
   int64_t   schema_version_ = 0;  // Assigned from Fetcher's current_schema_version_ at commit time.
   bool      is_ddl_ = false;      // True if redo contains __all_ddl_operation rows.
   common::ObSEArray<ObCSRollbackRange, 1> rollback_list_;
@@ -156,7 +156,7 @@ struct ObCSAsyncSchemaState
 // ObCSFetcher: single-threaded CLOG consumer, assembles by transaction, pushes on commit.
 // ---------------------------------------------------------------------------
 
-class ObCSFetcher : public share::ObThreadPool, private palf::PalfFSCb
+class ObCSFetcher : public share::ObThreadPool, private wal::FsyncCallback
 {
 public:
   ObCSFetcher();
@@ -164,7 +164,7 @@ public:
 
   int init(
       ObCSDispatcher *dispatcher,
-      palf::PalfEnv &palf_env,
+      wal::Env &wal_env,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
   int start();
@@ -174,7 +174,7 @@ public:
 
   /// Return the latest Fetcher-published minimum depended LSN.
   /// This is an atomic cached read and never scans Fetcher transaction state.
-  int get_min_dep_lsn(palf::LSN &min_lsn) const;
+  int get_min_dep_lsn(wal::LSN &min_lsn) const;
 
   /// Get one internally consistent copy of the Fetcher-owned schema state.
   int get_async_schema_state(ObCSAsyncSchemaState &state);
@@ -191,7 +191,7 @@ public:
 
   transaction::ObTransID get_current_processing_tx_id() const;
   int64_t get_current_processing_tx_count() const;
-  palf::LSN get_current_lsn() const;
+  wal::LSN get_current_lsn() const;
   SCN get_current_scn() const;
 
   /// Called by Dispatcher drain loop after Worker commits a batch.
@@ -212,10 +212,10 @@ private:
   int bind_log_();
   void unbind_log_();
   int next_log_();
-  int update_end_lsn(const palf::LSN &end_lsn, const SCN &end_scn) override;
-  int calc_min_dep_lsn_(palf::LSN &min_lsn);
+  int update_end_lsn(const wal::LSN &end_lsn, const SCN &end_scn) override;
+  int calc_min_dep_lsn_(wal::LSN &min_lsn);
   void try_update_min_dep_lsn_();
-  void publish_min_dep_lsn_(const palf::LSN &min_lsn);
+  void publish_min_dep_lsn_(const wal::LSN &min_lsn);
   int get_runtime_schema_version_(int64_t &schema_version) const;
   /// Check exactly the requested runtime schema version.
   int check_has_async_index_tables_(const int64_t schema_version, bool &has_async);
@@ -228,7 +228,7 @@ private:
   int handle_redo_log_(const transaction::ObTransID &tx_id,
                        const char *mutator_buf,
                        int64_t mutator_size,
-                       const palf::LSN &lsn);
+                       const wal::LSN &lsn);
   int handle_commit_log_(const transaction::ObTransID &tx_id,
                          const SCN &commit_version);
   int handle_abort_log_(const transaction::ObTransID &tx_id);
@@ -237,17 +237,17 @@ private:
                               const transaction::ObTxSEQ &to);
   int extract_ddl_schema_version_(ObCSTxInfo *tx, int64_t &schema_version);
   /// Get or create tx in tx_info_; used by handle_redo_log_ and MDS DDL branch.
-  int get_or_create_tx_info_(int64_t tid, const palf::LSN &lsn, ObCSTxInfo *&tx);
+  int get_or_create_tx_info_(int64_t tid, const wal::LSN &lsn, ObCSTxInfo *&tx);
 
   bool is_inited_;
   ObCSDispatcher *dispatcher_;
-  palf::PalfEnv *palf_env_;
-  palf::PalfHandle read_handle_;
-  palf::PalfBufferIterator iter_;
+  wal::Env *wal_env_;
+  wal::Handle read_handle_;
+  wal::EntryIterator iter_;
   common::SimpleCond log_ready_;
   int32_t wake_armed_;
-  palf::LSN current_lsn_;
-  palf::LSN min_dep_lsn_;          // Atomically published; only Fetcher writes.
+  wal::LSN current_lsn_;
+  wal::LSN min_dep_lsn_;          // Atomically published; only Fetcher writes.
   int64_t processed_end_lsn_;
   SCN current_scn_;
   int64_t current_schema_version_;

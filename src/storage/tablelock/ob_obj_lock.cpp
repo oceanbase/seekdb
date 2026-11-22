@@ -32,7 +32,7 @@ using namespace common;
 using namespace storage;
 using namespace memtable;
 using namespace share;
-using namespace palf;
+using namespace wal;
 
 namespace transaction
 {

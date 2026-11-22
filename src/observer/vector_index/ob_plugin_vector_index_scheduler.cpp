@@ -1053,7 +1053,7 @@ int ObPluginVectorIndexLoadScheduler::submit_log_()
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObVectorIndexSyncLog ls_log(tablet_id_array_, table_id_array_);
-    palf::LSN lsn;
+    wal::LSN lsn;
     SCN base_scn = SCN::min_scn();
     SCN scn;
     logservice::ObLogBaseHeader
@@ -1121,7 +1121,7 @@ int ObPluginVectorIndexLoadScheduler::handle_replay_result(ObVectorIndexSyncLog 
 
 int ObPluginVectorIndexLoadScheduler::replay(const void *buffer,
                                              const int64_t buf_size,
-                                             const palf::LSN &lsn,
+                                             const wal::LSN &lsn,
                                              const share::SCN &log_scn)
 {
   int ret = OB_SUCCESS;

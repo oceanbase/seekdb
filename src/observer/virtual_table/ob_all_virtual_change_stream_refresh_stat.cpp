@@ -71,7 +71,7 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
     ObChangeStreamMgr *cs_mgr = share::server_service<ObChangeStreamMgr>();
     if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
       refresh_scn_val = cs_mgr->get_refresh_scn();
-      palf::LSN min_dep_lsn;
+      wal::LSN min_dep_lsn;
       const int min_dep_ret = cs_mgr->get_min_dep_lsn(min_dep_lsn);
       if (OB_SUCCESS == min_dep_ret) {
         min_dep_lsn_val = static_cast<int64_t>(min_dep_lsn.val_);

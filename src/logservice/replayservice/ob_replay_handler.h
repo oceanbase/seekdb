@@ -44,7 +44,7 @@ public:
   int replay(const ObLogBaseType &type,
              const void *buffer,
              const int64_t nbytes,
-             const palf::LSN &lsn,
+             const wal::LSN &lsn,
              const share::SCN &scn);
 private:
   typedef common::RWLock::WLockGuard WLockGuard;

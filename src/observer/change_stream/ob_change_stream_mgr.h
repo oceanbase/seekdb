@@ -45,12 +45,12 @@ public:
   /// Server module init: called after construction to initialize internal state.
   static int server_module_init(
       ObChangeStreamMgr *&mgr,
-      palf::PalfEnv &palf_env,
+      wal::Env &wal_env,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
 
   int init(
-      palf::PalfEnv &palf_env,
+      wal::Env &wal_env,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
   int start();
@@ -72,7 +72,7 @@ public:
   void reset_refresh_scn(const int64_t applied_scn) { ATOMIC_STORE(&refresh_scn_, applied_scn); }
 
   /// Return Change Stream's minimum log dependency from the Fetcher cache.
-  int get_min_dep_lsn(palf::LSN &min_dep_lsn) const;
+  int get_min_dep_lsn(wal::LSN &min_dep_lsn) const;
 
   /// Fetcher: consumes CLOG by transaction, pushes committed tx to Dispatcher.
   ObCSFetcher &get_fetcher() { return fetcher_; }

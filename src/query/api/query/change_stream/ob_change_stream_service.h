@@ -21,7 +21,7 @@
 
 namespace oceanbase
 {
-namespace palf
+namespace wal
 {
 struct LSN;
 }
@@ -34,7 +34,7 @@ public:
   virtual ~ObIChangeStreamService() = default;
   virtual int wait_until_refreshed(
       int64_t abs_timeout_us) = 0;
-  virtual int get_min_dep_lsn(palf::LSN &min_dep_lsn) = 0;
+  virtual int get_min_dep_lsn(wal::LSN &min_dep_lsn) = 0;
 };
 
 } // namespace query

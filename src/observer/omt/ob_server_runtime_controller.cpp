@@ -139,7 +139,7 @@ static int init_log_service(
         KP(module_init_ctx));
   } else if (OB_FAIL(ObLogService::server_module_init(
       log_service,
-      module_init_ctx->palf_options_,
+      module_init_ctx->wal_options_,
       *GCTX.local_store_,
       module_init_ctx->clog_dir_,
       OB_FILE_SYSTEM_ROUTER.get_clog_dir(),
@@ -536,7 +536,7 @@ int ObServerRuntimeController::update_server_config()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  if (OB_TMP_FAIL(update_palf_config())) {
+  if (OB_TMP_FAIL(update_wal_config())) {
   }
   if (OB_TMP_FAIL(update_dag_scheduler_config())) {
   }
@@ -548,7 +548,7 @@ int ObServerRuntimeController::update_server_config()
   return ret;
 }
 
-int ObServerRuntimeController::update_palf_config()
+int ObServerRuntimeController::update_wal_config()
 {
   int ret = OB_SUCCESS;
   ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
@@ -845,7 +845,7 @@ int ObServerRuntimeController::refresh_server_config_()
     ret = OB_NEED_RETRY;
   } else if (OB_FAIL(build_server_resource_config_(runtime_config))) {
   } else if (OB_FAIL(apply_server_resource_config_(runtime_config))) {
-  } else if (OB_FAIL(update_palf_config())) {
+  } else if (OB_FAIL(update_wal_config())) {
   } else {
     set_synced();
     periodically_check_runtime_();
@@ -1397,7 +1397,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(
       mods_change_stream_mgr_,
-      *mods_log_service_->get_palf_env(),
+      *mods_log_service_->get_wal_env(),
       schema_publish_signal_,
       share::server_runtime()))) {
     SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret));

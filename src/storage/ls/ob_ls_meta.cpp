@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace palf;
+using namespace wal;
 using namespace logservice;
 using namespace share;
 using namespace transaction;
@@ -37,7 +37,7 @@ ObLSMeta::ObLSMeta()
     update_lock_(),
     ls_persistent_state_(),
     clog_checkpoint_scn_(ObScnRange::MIN_SCN),
-    clog_base_lsn_(PALF_INITIAL_LSN_VAL),
+    clog_base_lsn_(WAL_INITIAL_LSN_VAL),
     restore_status_(ObRestoreStatus::Status::RESTORE_STATUS_MAX),
     tablet_change_checkpoint_scn_(SCN::min_scn()),
     all_id_meta_()
@@ -280,7 +280,7 @@ int ObLSMeta::update_for_physical_restore(
 int ObLSMeta::init(
     const ObRestoreStatus &restore_status,
     const SCN &create_scn,
-    const palf::LSN &clog_base_lsn)
+    const wal::LSN &clog_base_lsn)
 {
   int ret = OB_SUCCESS;
   if (!restore_status.is_valid()) {

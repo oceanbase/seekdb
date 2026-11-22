@@ -268,13 +268,13 @@ int ObIStorageClogRecorder::write_clog(
 {
   int ret = OB_SUCCESS;
   const bool need_nonblock = false;
-  palf::LSN lsn;
+  wal::LSN lsn;
   clog_scn_.reset();
   if (OB_UNLIKELY(nullptr == buf || buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(log_handler_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("palf handle is null", K(ret), KP(log_handler_));
+    LOG_WARN("wal handle is null", K(ret), KP(log_handler_));
   } else if (FALSE_IT(ATOMIC_STORE(&logcb_finish_flag_, false))) {
   } else if (OB_FAIL(log_handler_->append(buf, buf_len, share::SCN::min_scn(), need_nonblock, logcb_ptr_, lsn, clog_scn_))) {
   }

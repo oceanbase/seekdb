@@ -38,7 +38,7 @@
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "logservice/ob_log_handler.h"
-#include "logservice/palf_adapter/palf_env.h"
+#include "logservice/wal_adapter/env.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include <algorithm>
 
@@ -51,7 +51,7 @@ ObCSFetcher::ObCSFetcher()
   : share::ObThreadPool(1),
     is_inited_(false),
     dispatcher_(nullptr),
-    palf_env_(nullptr),
+    wal_env_(nullptr),
     read_handle_(),
     iter_(),
     log_ready_(),
@@ -78,7 +78,7 @@ ObCSFetcher::~ObCSFetcher()
 
 int ObCSFetcher::init(
     ObCSDispatcher *dispatcher,
-    palf::PalfEnv &palf_env,
+    wal::Env &wal_env,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -96,7 +96,7 @@ int ObCSFetcher::init(
     LOG_WARN("CSFetcher: fail to init schema_state_cond", KR(ret));
   } else {
     dispatcher_ = dispatcher;
-    palf_env_ = &palf_env;
+    wal_env_ = &wal_env;
     schema_publish_signal_ = &schema_publish_signal;
     observed_schema_publish_epoch_ = schema_publish_signal.current_epoch();
     current_scn_.set_min();
@@ -110,11 +110,11 @@ int ObCSFetcher::init_consumption_position_()
 {
   int ret = common::OB_SUCCESS;
   int64_t persisted_min_dep_lsn = 0;
-  palf::LSN start_lsn;
-  palf::LSN begin_lsn;
-  palf::LSN base_lsn;
-  palf::LSN end_lsn;
-  palf::LSN cached_min_dep_lsn;
+  wal::LSN start_lsn;
+  wal::LSN begin_lsn;
+  wal::LSN base_lsn;
+  wal::LSN end_lsn;
+  wal::LSN cached_min_dep_lsn;
   storage::ObLS *ls = nullptr;
   logservice::ObLogHandler *log_handler = nullptr;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
@@ -128,21 +128,21 @@ int ObCSFetcher::init_consumption_position_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSFetcher: log handler is null", KR(ret));
   } else if (OB_FAIL(log_handler->get_begin_lsn(begin_lsn))) {
-    LOG_WARN("CSFetcher: fail to get PALF begin_lsn", KR(ret));
+    LOG_WARN("CSFetcher: fail to get WAL begin_lsn", KR(ret));
   } else if (OB_FAIL(log_handler->get_base_lsn(base_lsn))) {
-    LOG_WARN("CSFetcher: fail to get PALF base_lsn", KR(ret));
+    LOG_WARN("CSFetcher: fail to get WAL base_lsn", KR(ret));
   } else if (OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
-    LOG_WARN("CSFetcher: fail to get PALF end_lsn", KR(ret));
+    LOG_WARN("CSFetcher: fail to get WAL end_lsn", KR(ret));
   } else if (!begin_lsn.is_valid() || !base_lsn.is_valid() || !end_lsn.is_valid()
              || begin_lsn > end_lsn || base_lsn > end_lsn) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSFetcher: invalid PALF restart boundaries",
+    LOG_WARN("CSFetcher: invalid WAL restart boundaries",
              KR(ret), K(begin_lsn), K(base_lsn), K(end_lsn));
   } else {
     start_lsn = begin_lsn < base_lsn ? base_lsn : begin_lsn;
 
     if (persisted_min_dep_lsn >= 0) {
-      const palf::LSN persisted_lsn(persisted_min_dep_lsn);
+      const wal::LSN persisted_lsn(persisted_min_dep_lsn);
       if (persisted_lsn.is_valid() && persisted_lsn <= end_lsn) {
         if (start_lsn < persisted_lsn) {
           start_lsn = persisted_lsn;
@@ -159,7 +159,7 @@ int ObCSFetcher::init_consumption_position_()
     if (OB_SUCCESS == cached_ret) {
       if (cached_min_dep_lsn > end_lsn) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("CSFetcher: cached min_dep_lsn is beyond PALF end",
+        LOG_WARN("CSFetcher: cached min_dep_lsn is beyond WAL end",
                  KR(ret), K(cached_min_dep_lsn), K(end_lsn));
       } else if (start_lsn < cached_min_dep_lsn) {
         start_lsn = cached_min_dep_lsn;
@@ -172,7 +172,7 @@ int ObCSFetcher::init_consumption_position_()
     if (OB_SUCC(ret) && current_lsn_.is_valid()) {
       if (current_lsn_ > end_lsn) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("CSFetcher: current_lsn is beyond PALF end",
+        LOG_WARN("CSFetcher: current_lsn is beyond WAL end",
                  KR(ret), K(current_lsn_), K(end_lsn));
       } else if (start_lsn < current_lsn_) {
         start_lsn = current_lsn_;
@@ -206,7 +206,7 @@ int ObCSFetcher::init_consumption_position_()
       int64_t timestamp_us = 0;
       const char *peek_buf = nullptr;
       int64_t peek_buf_len = 0;
-      palf::LSN peek_lsn;
+      wal::LSN peek_lsn;
       if (OB_FAIL(iter_.next())) {
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
@@ -244,9 +244,9 @@ int ObCSFetcher::init_consumption_position_()
 int ObCSFetcher::bind_log_()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(palf_env_)) {
+  if (OB_ISNULL(wal_env_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(palf_env_->open(read_handle_))) {
+  } else if (OB_FAIL(wal_env_->open(read_handle_))) {
   } else if (OB_FAIL(read_handle_.register_file_size_cb(this))) {
     LOG_WARN("CSFetcher: fail to register log notification", KR(ret));
   }
@@ -259,7 +259,7 @@ void ObCSFetcher::unbind_log_()
   iter_.destroy();
   if (read_handle_.is_valid()) {
     // close unregisters and drains callbacks before the condition can be destroyed.
-    palf_env_->close(read_handle_);
+    wal_env_->close(read_handle_);
   }
 }
 
@@ -277,7 +277,7 @@ int ObCSFetcher::next_log_()
   return ret;
 }
 
-int ObCSFetcher::update_end_lsn(const palf::LSN &end_lsn, const SCN &end_scn)
+int ObCSFetcher::update_end_lsn(const wal::LSN &end_lsn, const SCN &end_scn)
 {
   UNUSED(end_lsn);
   UNUSED(end_scn);
@@ -333,11 +333,11 @@ void ObCSFetcher::destroy()
     tx_info_.destroy();
     schema_state_cond_.destroy();
     dispatcher_ = nullptr;
-    palf_env_ = nullptr;
+    wal_env_ = nullptr;
     schema_publish_signal_ = nullptr;
     observed_schema_publish_epoch_ = 0;
     current_lsn_.reset();
-    ATOMIC_STORE(&min_dep_lsn_.val_, palf::LOG_INVALID_LSN_VAL);
+    ATOMIC_STORE(&min_dep_lsn_.val_, wal::LOG_INVALID_LSN_VAL);
     ATOMIC_STORE(&processed_end_lsn_, 0);
     current_scn_.reset();
     pending_ready_schema_version_ = 0;
@@ -361,11 +361,11 @@ void ObCSTxInfo::destroy()
 // ---------------------------------------------------------------------------
 // calc_min_dep_lsn_: capture end_lsn first, then use a version-matched ready proof.
 //   With async-index tables: min(tx_info_.start_lsn) if non-empty, else current_lsn_.
-//   Without async-index tables: end_lsn — allow PALF to reclaim up to the log tail.
+//   Without async-index tables: end_lsn — allow WAL to reclaim up to the log tail.
 //   A schema mismatch/error is fail-closed: caller must not advance.
 // ---------------------------------------------------------------------------
 
-int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn) const
+int ObCSFetcher::get_min_dep_lsn(wal::LSN &min_lsn) const
 {
   int ret = OB_SUCCESS;
   min_lsn.val_ = ATOMIC_LOAD(&min_dep_lsn_.val_);
@@ -375,12 +375,12 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn) const
   return ret;
 }
 
-int ObCSFetcher::calc_min_dep_lsn_(palf::LSN &min_lsn)
+int ObCSFetcher::calc_min_dep_lsn_(wal::LSN &min_lsn)
 {
   int ret = OB_SUCCESS;
   min_lsn.reset();
 
-  palf::LSN end_lsn;
+  wal::LSN end_lsn;
   storage::ObLS *ls = nullptr;
   logservice::ObLogHandler *log_handler = nullptr;
   if (OB_FAIL(share::server_service<storage::ObLSService>()->get_ls(ls))) {
@@ -420,7 +420,7 @@ int ObCSFetcher::calc_min_dep_lsn_(palf::LSN &min_lsn)
 
   // Has async-index tables: retain logs up to the earliest in-flight transaction.
   if (!tx_info_.empty()) {
-    palf::LSN tx_min;
+    wal::LSN tx_min;
     tx_min.reset();
     for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::const_iterator it = tx_info_.begin();
          it != tx_info_.end(); ++it) {
@@ -441,12 +441,12 @@ int ObCSFetcher::calc_min_dep_lsn_(palf::LSN &min_lsn)
   return ret;
 }
 
-void ObCSFetcher::publish_min_dep_lsn_(const palf::LSN &min_lsn)
+void ObCSFetcher::publish_min_dep_lsn_(const wal::LSN &min_lsn)
 {
   if (!min_lsn.is_valid()) {
     LOG_WARN_RET(OB_INVALID_ARGUMENT, "CSFetcher: cannot publish invalid min_dep_lsn", K(min_lsn));
   } else {
-    palf::LSN old_min_lsn;
+    wal::LSN old_min_lsn;
     old_min_lsn.val_ = ATOMIC_LOAD(&min_dep_lsn_.val_);
     if (!old_min_lsn.is_valid() || old_min_lsn < min_lsn) {
       ATOMIC_STORE(&min_dep_lsn_.val_, min_lsn.val_);
@@ -622,7 +622,7 @@ int ObCSFetcher::drain_to_idle_(const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
   running_mode_ = IDLE; // Stop producing new tasks before taking the barrier.
-  // Stop PALF callbacks and release the active iterator before publishing the
+  // Stop WAL callbacks and release the active iterator before publishing the
   // IDLE proof.  A later ACTIVE generation will bind a fresh handle and seek
   // from the last proven consumption position.
   unbind_log_();
@@ -726,7 +726,7 @@ int64_t ObCSFetcher::get_current_processing_tx_count() const
   return tx_info_.size();
 }
 
-palf::LSN ObCSFetcher::get_current_lsn() const
+wal::LSN ObCSFetcher::get_current_lsn() const
 {
   return current_lsn_;
 }
@@ -742,14 +742,14 @@ void ObCSFetcher::try_update_min_dep_lsn_()
     return;
   }
   int ret = OB_SUCCESS;
-  palf::LSN candidate_min_lsn;
+  wal::LSN candidate_min_lsn;
   if (OB_FAIL(calc_min_dep_lsn_(candidate_min_lsn))) {
     LOG_WARN("CSFetcher: calc_min_dep_lsn failed, keep previous cached value", KR(ret));
     return;
   }
 
   publish_min_dep_lsn_(candidate_min_lsn);
-  palf::LSN published_min_lsn;
+  wal::LSN published_min_lsn;
   if (OB_FAIL(get_min_dep_lsn(published_min_lsn))) {
     LOG_WARN("CSFetcher: published min_dep_lsn is not available", KR(ret), K(candidate_min_lsn));
   } else if (ACTIVE == running_mode_) {
@@ -850,7 +850,7 @@ int ObCSFetcher::extract_ddl_schema_version_(ObCSTxInfo *tx, int64_t &schema_ver
 // ---------------------------------------------------------------------------
 // get_or_create_tx_info_: shared by handle_redo_log_ and MDS DDL branch.
 // ---------------------------------------------------------------------------
-int ObCSFetcher::get_or_create_tx_info_(int64_t tid, const palf::LSN &lsn, ObCSTxInfo *&tx)
+int ObCSFetcher::get_or_create_tx_info_(int64_t tid, const wal::LSN &lsn, ObCSTxInfo *&tx)
 {
   int ret = OB_SUCCESS;
   tx = nullptr;
@@ -883,7 +883,7 @@ int ObCSFetcher::handle_redo_log_(
     const transaction::ObTransID &tx_id,
     const char *mutator_buf,
     int64_t mutator_size,
-    const palf::LSN &lsn)
+    const wal::LSN &lsn)
 {
   int ret = common::OB_SUCCESS;
   ObCSTxInfo *tx = nullptr;
@@ -1021,8 +1021,8 @@ void ObCSFetcher::run1()
 
   int ret = OB_SUCCESS;
 
-  // Failed LS creation and recovery can remove PALF before this readiness gate.
-  // After it, runtime teardown keeps PALF alive until the fetcher has joined.
+  // Failed LS creation and recovery can remove WAL before this readiness gate.
+  // After it, runtime teardown keeps WAL alive until the fetcher has joined.
   while (!has_set_stop()) {
     if (OB_ISNULL(GCTX.sql_proxy_) || GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0
         || OB_ISNULL(GCTX.schema_service_)) {
@@ -1111,14 +1111,14 @@ void ObCSFetcher::run1()
     const char *buf = nullptr;
     int64_t buf_len = 0;
     SCN scn;
-    palf::LSN lsn;
+    wal::LSN lsn;
     if (OB_FAIL(iter_.get_entry(buf, buf_len, scn, lsn))) {
       unbind_log_();
       iter_ready = false;
       continue;
     }
 
-    const palf::LSN entry_end_lsn = iter_.get_entry_end_lsn();
+    const wal::LSN entry_end_lsn = iter_.get_entry_end_lsn();
 
     // Pre-check: only process transaction logs.
     logservice::ObLogBaseHeader base_header;

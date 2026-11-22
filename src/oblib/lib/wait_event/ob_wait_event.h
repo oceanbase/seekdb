@@ -42,8 +42,8 @@ WAIT_EVENT_DEF(INTERM_RESULT_DISK_READ, 11009, "interm result disk read", "sched
 WAIT_EVENT_DEF(ROW_STORE_DISK_WRITE, 11010, "row store disk write", "schedule_queue_delay", "device_delay", "callback_delay", USER_IO, false, true)
 WAIT_EVENT_DEF(ROW_STORE_DISK_READ, 11011, "row store disk read", "schedule_queue_delay", "device_delay", "callback_delay", USER_IO, false, true)
 WAIT_EVENT_DEF(MEMSTORE_MEM_PAGE_ALLOC_WAIT, 11015, "memstore memory page alloc wait", "cur_mem_hold", "sleep_interval", "cur_ts", CONFIGURATION, false, true)
-WAIT_EVENT_DEF(PALF_READ, 11016, "palf read", "schedule_queue_delay", "device_delay", "callback_delay", SYSTEM_IO, false, true)
-WAIT_EVENT_DEF(PALF_WRITE, 11017, "palf write", "schedule_queue_delay", "device_delay", "callback_delay", SYSTEM_IO, false, true)
+WAIT_EVENT_DEF(WAL_READ, 11016, "wal read", "schedule_queue_delay", "device_delay", "callback_delay", SYSTEM_IO, false, true)
+WAIT_EVENT_DEF(WAL_WRITE, 11017, "wal write", "schedule_queue_delay", "device_delay", "callback_delay", SYSTEM_IO, false, true)
 WAIT_EVENT_DEF(TMP_FILE_WRITE, 11020, "tmp file write", "schedule_queue_delay", "device_delay", "callback_delay", USER_IO, true, true)
 WAIT_EVENT_DEF(TMP_FILE_READ, 11021, "tmp file read", "schedule_queue_delay", "device_delay", "callback_delay", USER_IO, true, true)
 
@@ -125,7 +125,7 @@ WAIT_EVENT_DEF(INNER_SESSION_IDLE_WAIT, 30001, "inner session wait to be called"
 
 // CONFIGURATION 30100-30999
 WAIT_EVENT_DEF(WAIT_REFRESH_SCHEMA, 30100, "sleep: wait refresh schema", "sleep_interval", "schema_version", "", CONFIGURATION, true, true)
-WAIT_EVENT_DEF(PALF_THROTTLING, 30101, "palf throttling sleep", "sleep_interval", "", "", USER_IO, false, true)
+WAIT_EVENT_DEF(WAL_THROTTLING, 30101, "wal throttling sleep", "sleep_interval", "", "", USER_IO, false, true)
 WAIT_EVENT_DEF(SLOG_NORMAL_RETRY_SLEEP, 30102, "sleep: slog has io error and retrying", "sleep_interval", "", "", USER_IO, true, true)
 WAIT_EVENT_DEF(INSUFFICIENT_PX_WORKER_RETRY_WAIT, 30103, "retry: insufficient px worker wait", "degree of parallel", "number of px workers required", "the total number of idle PX workers currently", CONFIGURATION, true, true)
 

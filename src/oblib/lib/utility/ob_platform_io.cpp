@@ -703,7 +703,7 @@ int ob_fsync_fd(int fd)
         ret = 0;
       } else if (is_directory) {
         // NTFS journals directory metadata; a directory handle cannot always be
-        // flushed, and PALF retries a failure forever. Report success, which is
+        // flushed, and WAL retries a failure forever. Report success, which is
         // what the Windows shim this replaces did.
         ret = 0;
       } else {

@@ -1223,13 +1223,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "palf"
-version = "0.1.0"
-dependencies = [
- "cxx",
-]
-
-[[package]]
 name = "path-utils"
 version = "0.1.0"
 dependencies = [
@@ -1632,7 +1625,6 @@ dependencies = [
  "math",
  "mvt",
  "number-parser",
- "palf",
  "path-utils",
  "regex-engine",
  "spatial-covering",
@@ -1641,6 +1633,7 @@ dependencies = [
  "storage-io",
  "uuid-generator",
  "vector-kernels",
+ "wal",
  "xml-parser",
 ]
 
@@ -2330,6 +2323,13 @@ version = "0.1.0"
 dependencies = [
  "cxx",
  "simsimd",
+]
+
+[[package]]
+name = "wal"
+version = "0.1.0"
+dependencies = [
+ "cxx",
 ]
 
 [[package]]

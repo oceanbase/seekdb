@@ -323,7 +323,7 @@ void ObTxRedoLog::reset_mutator_buf()
 int ObTxRedoLog::ob_admin_dump(memtable::ObMemtableMutatorIterator *iter_ptr,
                                ObAdminMutatorStringArg &arg,
                                const char *block_name,
-                               palf::LSN lsn,
+                               wal::LSN lsn,
                                int64_t tx_id,
                                SCN scn,
                                bool &has_dumped_tx_id)

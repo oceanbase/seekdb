@@ -79,8 +79,8 @@ public:
 private:
   int check_need_flush_(const share::SCN max_decided_scn, const share::SCN recycle_scn);
   int calculate_recycle_scn_(const share::SCN max_decided_scn, share::SCN &recycle_scn);
-  int calculate_min_recycle_scn_(const palf::LSN clog_checkpoint_lsn, share::SCN &min_recycle_scn);
-  int calculate_expected_recycle_scn_(const palf::LSN clog_checkpoint_lsn, share::SCN &expected_recycle_scn);
+  int calculate_min_recycle_scn_(const wal::LSN clog_checkpoint_lsn, share::SCN &min_recycle_scn);
+  int calculate_expected_recycle_scn_(const wal::LSN clog_checkpoint_lsn, share::SCN &expected_recycle_scn);
 
 private:
   static const int64_t CLOG_GC_PERCENT = 60;
@@ -101,7 +101,7 @@ private:
   bool update_checkpoint_enabled_;
   int64_t reuse_recycle_scn_times_;
 
-  palf::LSN prev_clog_checkpoint_lsn_;
+  wal::LSN prev_clog_checkpoint_lsn_;
   share::SCN prev_recycle_scn_;
 
   int64_t update_clog_checkpoint_times_;

@@ -116,7 +116,7 @@ public:
   int64_t get_rec_log_ts();
 
   // for clog replay
-  int replay(const void *buffer, const int64_t buf_size, const palf::LSN &lsn, const share::SCN &log_ts);
+  int replay(const void *buffer, const int64_t buf_size, const wal::LSN &lsn, const share::SCN &log_ts);
   int check_and_fill_ls();
   void update_limited_id(const int64_t limited_id, const share::SCN latest_log_ts);
   int update_id_meta(const bool persist_change);

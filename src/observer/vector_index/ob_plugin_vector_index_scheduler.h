@@ -270,7 +270,7 @@ public:
   // logger interfaces
   int handle_submit_callback(const bool success);
   int handle_replay_result(ObVectorIndexSyncLog &ls_log);
-  int replay(const void *buffer, const int64_t buf_size, const palf::LSN &lsn, const share::SCN &log_scn);
+  int replay(const void *buffer, const int64_t buf_size, const wal::LSN &lsn, const share::SCN &log_scn);
   
   // checkpoint interfaces
   int flush(share::SCN &scn);

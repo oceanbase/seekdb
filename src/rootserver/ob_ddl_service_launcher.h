@@ -49,7 +49,7 @@ public:
   int activate() override;
   void deactivate() override;
 
-  static int get_sys_palf_role_and_epoch(
+  static int get_sys_wal_role_and_epoch(
          common::ObRole &role,
          int64_t &proposal_id);
 
@@ -61,7 +61,7 @@ public:
   virtual int flush(share::SCN &rec_scn) override { return OB_SUCCESS; }
 
   // for ObIReplaySubHandler
-  int replay(const void *buffer, const int64_t nbytes, const palf::LSN &lsn, const share::SCN &scn) override
+  int replay(const void *buffer, const int64_t nbytes, const wal::LSN &lsn, const share::SCN &scn) override
   {
     int ret = OB_SUCCESS;
     UNUSEDx(buffer, nbytes, lsn, scn);

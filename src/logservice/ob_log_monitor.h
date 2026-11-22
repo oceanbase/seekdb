@@ -17,27 +17,27 @@
 #ifndef OCEANBASE_LOGSERVICE_OB_LOG_MONITOR_H_
 #define OCEANBASE_LOGSERVICE_OB_LOG_MONITOR_H_
 
-#include "palf_adapter/palf_callback.h"
+#include "wal_adapter/callback.h"
 
 namespace oceanbase
 {
 namespace logservice
 {
 
-class ObLogMonitor : public palf::PalfMonitorCb
+class ObLogMonitor : public wal::MonitorCallback
 {
 public:
   ObLogMonitor() { }
   virtual ~ObLogMonitor() { }
 public:
-  // =========== PALF Event Reporting ===========
-  int record_set_base_lsn_event(const palf::LSN &new_base_lsn) override final;
-  int record_advance_base_info_event(const palf::PalfBaseInfo &palf_base_info) override final;
-  int record_truncate_event(const palf::LSN &lsn,
+  // =========== WAL Event Reporting ===========
+  int record_set_base_lsn_event(const wal::LSN &new_base_lsn) override final;
+  int record_advance_base_info_event(const wal::BaseInfo &wal_base_info) override final;
+  int record_truncate_event(const wal::LSN &lsn,
                             const int64_t min_block_id,
                             const int64_t max_block_id,
                             const int64_t truncate_end_block_id) override final;
-  // =========== PALF Event Reporting ===========
+  // =========== WAL Event Reporting ===========
 private:
   enum EventType
   {

@@ -17,13 +17,13 @@
 #include "ob_log_apply_service.h"
 #include "logservice/ob_append_callback.h"
 #include "logservice/ob_i_log_storage.h"
-#include "logservice/palf_adapter/palf_env.h"
+#include "logservice/wal_adapter/env.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
 namespace oceanbase
 {
 using namespace common;
-using namespace palf;
+using namespace wal;
 using namespace storage;
 using namespace share;
 namespace logservice
@@ -52,7 +52,7 @@ void ObApplyFsCb::destroy()
 int ObApplyFsCb::update_end_lsn(const LSN &end_lsn,
                                 const SCN &end_scn)
 {
-  return apply_status_->update_palf_committed_end_lsn(end_lsn, end_scn);
+  return apply_status_->update_wal_committed_end_lsn(end_lsn, end_scn);
 }
 
 //---------------ObApplyServiceTask---------------//
@@ -248,13 +248,13 @@ ObApplyStatus::ObApplyStatus()
       ref_cnt_(0),
       accepting_append_(false),
       ap_sv_(NULL),
-      palf_committed_end_lsn_(0),
-      palf_committed_end_scn_(),
+      wal_committed_end_lsn_(0),
+      wal_committed_end_scn_(),
       last_check_scn_(),
       max_applied_cb_scn_(),
       submit_task_(),
-      palf_env_(NULL),
-      palf_handle_(),
+      wal_env_(NULL),
+      wal_handle_(),
       fs_cb_(),
       lock_(ObLatchIds::APPLY_STATUS_LOCK),
       mutex_(common::ObLatchIds::MAX_APPLY_SCN_LOCK),
@@ -274,17 +274,17 @@ ObApplyStatus::~ObApplyStatus()
   destroy();
 }
 
-int ObApplyStatus::init(palf::PalfEnv *palf_env,
+int ObApplyStatus::init(wal::Env *wal_env,
                         ObLogApplyService *ap_sv)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "apply status has already been inited", K(ret));
-  } else if (OB_ISNULL(palf_env) || OB_ISNULL(ap_sv)) {
+  } else if (OB_ISNULL(wal_env) || OB_ISNULL(ap_sv)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", KP(palf_env), K(ap_sv), K(ret));
-  } else if (OB_FAIL(palf_env->open(palf_handle_))) {
+    CLOG_LOG(WARN, "invalid argument", KP(wal_env), K(ap_sv), K(ret));
+  } else if (OB_FAIL(wal_env->open(wal_handle_))) {
   } else if (OB_FAIL(submit_task_.init(this))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < APPLY_TASK_QUEUE_SIZE; ++i) {
@@ -294,14 +294,14 @@ int ObApplyStatus::init(palf::PalfEnv *palf_env,
     if (OB_SUCCESS == ret) {
       accepting_append_ = false;
       ap_sv_ = ap_sv;
-      palf_env_ = palf_env;
+      wal_env_ = wal_env;
       last_check_scn_.reset();
       max_applied_cb_scn_.reset();
       get_info_debug_time_ = OB_INVALID_TIMESTAMP;
       try_wrlock_debug_time_ = OB_INVALID_TIMESTAMP;
       IGNORE_RETURN new (&fs_cb_) ObApplyFsCb(this);
       is_in_stop_state_ = false;
-      if (OB_FAIL(palf_handle_.register_file_size_cb(&fs_cb_))) {
+      if (OB_FAIL(wal_handle_.register_file_size_cb(&fs_cb_))) {
       } else {
         is_inited_ = true;
         CLOG_LOG(INFO, "apply status init success", K(ret), KPC(this), KP(&cb_append_stat_),
@@ -318,18 +318,18 @@ int ObApplyStatus::init(palf::PalfEnv *palf_env,
 void ObApplyStatus::destroy()
 {
   CLOG_LOG(INFO, "destuct apply status", KPC(this));
-  close_palf_handle();
+  close_wal_handle();
   is_inited_ = false;
   is_in_stop_state_ = true;
   accepting_append_ = false;
   fs_cb_.destroy();
-  palf_committed_end_scn_.reset();
-  palf_committed_end_lsn_.reset();
+  wal_committed_end_scn_.reset();
+  wal_committed_end_lsn_.reset();
   last_check_scn_.reset();
   max_applied_cb_scn_.reset();
   get_info_debug_time_ = OB_INVALID_TIMESTAMP;
   try_wrlock_debug_time_ = OB_INVALID_TIMESTAMP;
-  palf_env_ = NULL;
+  wal_env_ = NULL;
   ap_sv_ = NULL;
   submit_task_.reset();
   for (int64_t i = 0; i < APPLY_TASK_QUEUE_SIZE; ++i) {
@@ -346,12 +346,12 @@ int ObApplyStatus::stop()
     int64_t abs_timeout_us = ObTimeUtility::current_time() + WRLOCK_RETRY_INTERVAL_US;
     if (OB_SUCC(lock_.wrlock(abs_timeout_us))) {
       is_in_stop_state_ = true;
-      close_palf_handle();
+      close_wal_handle();
       stop_local_append_();
       lock_.unlock();
     } else {
       ret = OB_EAGAIN;
-      if (palf_reach_time_interval(1000 * 1000, try_wrlock_debug_time_)) {
+      if (wal_reach_time_interval(1000 * 1000, try_wrlock_debug_time_)) {
         CLOG_LOG(INFO, "try lock failed in stop", KPC(this), KR(ret));
       }
     }
@@ -377,7 +377,7 @@ int ObApplyStatus::push_append_cb(AppendCb *cb)
     CLOG_LOG(ERROR, "apply service not init", K(ret));
   } else {
     const int64_t start_ts = ObClockGenerator::getClock();
-    LSN palf_committed_end_lsn;
+    LSN wal_committed_end_lsn;
     const LSN cb_lsn = cb->__get_lsn();
     const SCN cb_scn = cb->__get_scn();
     const uint64_t cb_sign = cb_scn.get_val_for_logservice();
@@ -389,8 +389,8 @@ int ObApplyStatus::push_append_cb(AppendCb *cb)
       CLOG_LOG(ERROR, "push_append_cb failed", K(thread_index), K(cb_lsn), K(cb_sign),
                K(cb_queues_[thread_index]), KPC(this));
     } else {
-      palf_committed_end_lsn.val_ = ATOMIC_LOAD(&palf_committed_end_lsn_.val_);
-      if (cb_lsn < palf_committed_end_lsn) {
+      wal_committed_end_lsn.val_ = ATOMIC_LOAD(&wal_committed_end_lsn_.val_);
+      if (cb_lsn < wal_committed_end_lsn) {
         // The cb that needs to call on_success should actively trigger the push into the thread pool when entering the queue
         if (OB_FAIL(submit_task_to_apply_service_(cb_queues_[thread_index]))) {
         } else {
@@ -455,7 +455,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
       } else if (OB_ISNULL(cb = AppendCb::__get_class_address(link))) {
         ret = OB_ERR_UNEXPECTED;
         CLOG_LOG(ERROR, "cb is NULL", KPC(cb_queue), KPC(this), K(ret));
-      } else if ((lsn = cb->__get_lsn()).val_ < ATOMIC_LOAD(&palf_committed_end_lsn_.val_)) {
+      } else if ((lsn = cb->__get_lsn()).val_ < ATOMIC_LOAD(&wal_committed_end_lsn_.val_)) {
         // callbacks with log position less than the confirmed log position can callback on_success
         if (OB_FAIL(cb_queue->pop())) {
         } else {
@@ -507,7 +507,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
 }
 
 int ObApplyStatus::is_apply_done(bool &is_done,
-                                 palf::LSN &end_lsn)
+                                 wal::LSN &end_lsn)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -520,7 +520,7 @@ int ObApplyStatus::is_apply_done(bool &is_done,
       }
     }
     if (is_done) {
-      end_lsn.val_ = ATOMIC_LOAD(&palf_committed_end_lsn_.val_);
+      end_lsn.val_ = ATOMIC_LOAD(&wal_committed_end_lsn_.val_);
     }
   }
   return ret;
@@ -578,7 +578,7 @@ int ObApplyStatus::stop_local_append_()
   }
   return ret;
 }
-int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
+int ObApplyStatus::update_wal_committed_end_lsn(const wal::LSN &end_lsn,
                                                  const SCN &end_scn)
 {
   int ret = OB_SUCCESS;
@@ -593,9 +593,9 @@ int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
         //skip
         CLOG_LOG(WARN, "apply status has been stopped", K(ret), KPC(this));
       } else if (accepting_append_) {
-        if (palf_committed_end_lsn_ < end_lsn) {
-          palf_committed_end_scn_.atomic_store(end_scn);
-          ATOMIC_SET(&palf_committed_end_lsn_.val_, end_lsn.val_);
+        if (wal_committed_end_lsn_ < end_lsn) {
+          wal_committed_end_scn_.atomic_store(end_scn);
+          ATOMIC_SET(&wal_committed_end_lsn_.val_, end_lsn.val_);
           if (OB_FAIL(submit_task_to_apply_service_(submit_task_))) {
           }
         }
@@ -605,17 +605,17 @@ int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
   return ret;
 }
 
-share::SCN ObApplyStatus::get_palf_committed_end_scn() const
+share::SCN ObApplyStatus::get_wal_committed_end_scn() const
 {
-  share::SCN scn = palf_committed_end_scn_.atomic_load();
+  share::SCN scn = wal_committed_end_scn_.atomic_load();
   return scn;
 }
 
 int ObApplyStatus::unregister_file_size_cb()
 {
   int ret = OB_SUCCESS;
-  if (palf_handle_.is_valid()) {
-    if (OB_FAIL(palf_handle_.unregister_file_size_cb())) {
+  if (wal_handle_.is_valid()) {
+    if (OB_FAIL(wal_handle_.unregister_file_size_cb())) {
     } else {
       // do nothing
     }
@@ -623,10 +623,10 @@ int ObApplyStatus::unregister_file_size_cb()
   return ret;
 }
 
-void ObApplyStatus::close_palf_handle()
+void ObApplyStatus::close_wal_handle()
 {
-  if (palf_handle_.is_valid()) {
-    palf_env_->close(palf_handle_);
+  if (wal_handle_.is_valid()) {
+    wal_env_->close(wal_handle_);
   } else {
     // do nothing
   }
@@ -645,18 +645,18 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
   } else if (OB_UNLIKELY(is_in_stop_state_)) {
     // After stopping, return the last cached callback point.
   } else if (!accepting_append_) {
-    palf::LSN apply_end_lsn;
+    wal::LSN apply_end_lsn;
     bool is_done = false;
-    const SCN cur_palf_committed_end_scn = palf_committed_end_scn_.atomic_load();
-    if (max_applied_cb_scn_ == cur_palf_committed_end_scn) {
+    const SCN cur_wal_committed_end_scn = wal_committed_end_scn_.atomic_load();
+    if (max_applied_cb_scn_ == cur_wal_committed_end_scn) {
       //no need to push up
     } else if (OB_FAIL(is_apply_done(is_done, apply_end_lsn))) {
     } else if (!is_done) {
       // Do not update until all callbacks are complete.
       // All cb callbacks completed, attempt to advance the maximum consecutive callback point once
-    } else if (max_applied_cb_scn_ < cur_palf_committed_end_scn) {
-      max_applied_cb_scn_ = cur_palf_committed_end_scn;
-      CLOG_LOG(INFO, "update max_applied_cb_scn_", K(cur_palf_committed_end_scn), KPC(this));
+    } else if (max_applied_cb_scn_ < cur_wal_committed_end_scn) {
+      max_applied_cb_scn_ = cur_wal_committed_end_scn;
+      CLOG_LOG(INFO, "update max_applied_cb_scn_", K(cur_wal_committed_end_scn), KPC(this));
     }
   } else if ((!last_check_scn.is_valid()) || last_check_scn == max_applied_cb_scn_) {
     if (OB_FAIL(update_last_check_scn_())) {
@@ -682,7 +682,7 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
     CLOG_LOG(ERROR, "max_applied_cb_scn_ larger than last_check_scn_, unexpected", K(ret), KPC(this));
   }
   scn = max_applied_cb_scn_;
-  if (palf_reach_time_interval(5 * 1000 * 1000, get_info_debug_time_)) {
+  if (wal_reach_time_interval(5 * 1000 * 1000, get_info_debug_time_)) {
     CLOG_LOG(INFO, "get_max_applied_scn", K(scn), KPC(this));
   }
   return ret;
@@ -695,7 +695,7 @@ int ObApplyStatus::stat(LSApplyStat &stat) const
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    stat.end_lsn_ = palf_committed_end_lsn_;
+    stat.end_lsn_ = wal_committed_end_lsn_;
     stat.pending_cnt_ = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < APPLY_TASK_QUEUE_SIZE; ++i) {
       stat.pending_cnt_ -= (cb_queues_[i].get_total_apply_cb_cnt() - cb_queues_[i].get_total_submit_cb_cnt());
@@ -732,9 +732,9 @@ void ObApplyStatus::reset_meta()
   lib::ObMutexGuard guard(mutex_);
   last_check_scn_.reset();
   max_applied_cb_scn_.reset();
-  // palf_committed_end_scn_ also should be reset along with palf_committed_end_lsn_.
-  palf_committed_end_lsn_.val_ = 0;
-  palf_committed_end_scn_.reset();
+  // wal_committed_end_scn_ also should be reset along with wal_committed_end_lsn_.
+  wal_committed_end_lsn_.val_ = 0;
+  wal_committed_end_scn_.reset();
 }
 
 int ObApplyStatus::submit_task_to_apply_service_(ObApplyServiceTask &task)
@@ -756,15 +756,15 @@ int ObApplyStatus::submit_task_to_apply_service_(ObApplyServiceTask &task)
 int ObApplyStatus::update_last_check_scn_()
 {
   int ret = OB_SUCCESS;
-  SCN palf_max_scn;
-  if (OB_FAIL(palf_handle_.get_max_scn(palf_max_scn))) {
+  SCN wal_max_scn;
+  if (OB_FAIL(wal_handle_.get_max_scn(wal_max_scn))) {
   } else if (OB_FAIL(ap_sv_->wait_append_sync())) {
   } else {
     for (int64_t i = 0; i < APPLY_TASK_QUEUE_SIZE; ++i) {
       cb_queues_[i].set_snapshot_check_submit_cb_cnt();
     }
     // Recovery may cover an empty SCN interval beyond the current physical tail.
-    last_check_scn_ = std::max(palf_max_scn, max_applied_cb_scn_);
+    last_check_scn_ = std::max(wal_max_scn, max_applied_cb_scn_);
   }
   return ret;
 }
@@ -886,7 +886,7 @@ void ObApplyStatusGuard::set_apply_status_(ObApplyStatus *apply_status)
 ObLogApplyService::ObLogApplyService()
     : is_inited_(false),
       is_running_(false),
-      palf_env_(NULL),
+      wal_env_(NULL),
       log_storage_(NULL),
       apply_status_(NULL),
       lock_()
@@ -897,17 +897,17 @@ ObLogApplyService::~ObLogApplyService()
   destroy();
 }
 
-int ObLogApplyService::init(PalfEnv *palf_env,
+int ObLogApplyService::init(Env *wal_env,
                             ObILogStorage *log_storage)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogApplyService init twice", K(ret));
-  } else if (OB_ISNULL(palf_env_= palf_env)
+  } else if (OB_ISNULL(wal_env_= wal_env)
              || OB_ISNULL(log_storage_ = log_storage)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env), KP(log_storage));
+    CLOG_LOG(WARN, "invalid argument", K(ret), KP(wal_env), KP(log_storage));
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
       1,
       common::APPLY_TASK_QUEUE_SIZE + 1,
@@ -936,7 +936,7 @@ void ObLogApplyService::destroy()
   common::ObLinkQueueThreadPool::stop();
   common::ObLinkQueueThreadPool::wait();
   common::ObLinkQueueThreadPool::destroy();
-  palf_env_ = NULL;
+  wal_env_ = NULL;
   log_storage_ = NULL;
   lock_.destroy();
 }
@@ -998,10 +998,10 @@ int ObLogApplyService::create_status()
     CLOG_LOG(WARN, "failed to alloc apply status", K(ret));
   } else {
     new (apply_status) ObApplyStatus();
-    if (OB_FAIL(apply_status->init(palf_env_, this))) {
+    if (OB_FAIL(apply_status->init(wal_env_, this))) {
       server_free(apply_status);
       apply_status = NULL;
-      CLOG_LOG(WARN, "failed to init apply status", K(ret), K(palf_env_), K(this));
+      CLOG_LOG(WARN, "failed to init apply status", K(ret), K(wal_env_), K(this));
     } else {
       apply_status->inc_ref();
       {
@@ -1045,7 +1045,7 @@ int ObLogApplyService::remove_status()
 }
 
 int ObLogApplyService::is_apply_done(bool &is_done,
-                                     palf::LSN &end_lsn)
+                                     wal::LSN &end_lsn)
 {
   int ret = OB_SUCCESS;
   ObApplyStatus *apply_status = NULL;
@@ -1119,7 +1119,7 @@ int ObLogApplyService::get_max_applied_scn(SCN &scn)
   return ret;
 }
 
-int ObLogApplyService::get_palf_committed_end_scn(share::SCN &scn)
+int ObLogApplyService::get_wal_committed_end_scn(share::SCN &scn)
 {
   int ret = OB_SUCCESS;
   ObApplyStatus *apply_status = NULL;
@@ -1132,7 +1132,7 @@ int ObLogApplyService::get_palf_committed_end_scn(share::SCN &scn)
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else {
-    scn = apply_status->get_palf_committed_end_scn();
+    scn = apply_status->get_wal_committed_end_scn();
   }
   return ret;
 }

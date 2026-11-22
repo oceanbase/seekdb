@@ -57,7 +57,7 @@ class ObTxAbortLog;
 class ObTxClearLog;
 class ObIRetainCtxCheckFunctor;
 }
-namespace palf
+namespace wal
 {
 class LSN;
 }
@@ -262,54 +262,54 @@ public:
   int return_redo_log_cb(ObTxLogCb *log_cb);
   int push_replaying_log_ts(const share::SCN log_ts_ns, const int64_t log_entry_no);
   int push_replayed_log_ts(const share::SCN log_ts_ns,
-                           const palf::LSN &offset,
+                           const wal::LSN &offset,
                            const int64_t log_entry_no);
   int iter_next_log_for_replay(ObTxLogBlock &log_block,
                                ObTxLogHeader &log_header,
                                const share::SCN log_scn);
-  int replay_one_part_of_big_segment(const palf::LSN &offset,
+  int replay_one_part_of_big_segment(const wal::LSN &offset,
                                      const share::SCN &timestamp,
                                      const int64_t &part_log_no);
 
   int replay_redo_in_ctx(const ObTxRedoLog &redo_log,
-                         const palf::LSN &offset,
+                         const wal::LSN &offset,
                          const share::SCN &timestamp,
                          const int64_t &part_log_no,
                          const bool is_tx_log_queue,
                          const bool serial_final,
                          const ObTxSEQ &max_seq_no);
   int replay_rollback_to(const ObTxRollbackToLog &log,
-                         const palf::LSN &offset,
+                         const wal::LSN &offset,
                          const share::SCN &timestamp,
                          const int64_t &part_log_no,
                          const bool is_tx_log_queue,
                          const bool pre_barrier);
   int replay_commit_info(const ObTxCommitInfoLog &commit_info_log,
-                         const palf::LSN &offset,
+                         const wal::LSN &offset,
                          const share::SCN &timestamp,
                          const int64_t &part_log_no,
                          const bool pre_barrier);
   int replay_commit(const ObTxCommitLog &commit_log,
-                    const palf::LSN &offset,
+                    const wal::LSN &offset,
                     const share::SCN &timestamp,
                     const int64_t &part_log_no,
                     const share::SCN &replay_compact_version);
   int replay_clear(const ObTxClearLog &clear_log,
-                   const palf::LSN &offset,
+                   const wal::LSN &offset,
                    const share::SCN &timestamp,
                    const int64_t &part_log_no);
   int replay_abort(const ObTxAbortLog &abort_log,
-                   const palf::LSN &offset,
+                   const wal::LSN &offset,
                    const share::SCN &timestamp,
                    const int64_t &part_log_no);
 
   int replay_multi_data_source(const ObTxMultiDataSourceLog &log,
-                               const palf::LSN &lsn,
+                               const wal::LSN &lsn,
                                const share::SCN &timestamp,
                                const int64_t &part_log_no);
 
   int replay_record(const ObTxRecordLog &log,
-                    const palf::LSN &lsn,
+                    const wal::LSN &lsn,
                     const share::SCN &timestamp,
                     const int64_t &part_log_no);
 
@@ -489,13 +489,13 @@ private:
   int prepare_log_cb_(ObTxLogCb *&log_cb);
   int get_log_cb_(ObTxLogCb *&log_cb);
   int return_log_cb_(ObTxLogCb *log_cb);
-  int get_max_submitting_log_info_(palf::LSN &lsn, share::SCN &log_ts);
-  int get_prev_log_lsn_(const ObTxLogBlock &log_block, ObTxPrevLogType &prev_log_type, palf::LSN &lsn);
+  int get_max_submitting_log_info_(wal::LSN &lsn, share::SCN &log_ts);
+  int get_prev_log_lsn_(const ObTxLogBlock &log_block, ObTxPrevLogType &prev_log_type, wal::LSN &lsn);
   int set_start_scn_in_commit_log_(ObTxCommitLog &commit_log);
 
 
 
-  int check_replay_avaliable_(const palf::LSN &offset,
+  int check_replay_avaliable_(const wal::LSN &offset,
                               const share::SCN &timestamp,
                               const int64_t &part_log_no,
                               bool &need_replay);

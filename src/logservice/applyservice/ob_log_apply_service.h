@@ -22,8 +22,8 @@
 #include "lib/queue/ob_link_queue.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/thread/ob_thread_lease.h"
-#include "logservice/palf_adapter/palf_callback.h"
-#include "logservice/palf_adapter/palf_handle.h"
+#include "logservice/wal_adapter/callback.h"
+#include "logservice/wal_adapter/handle.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -32,9 +32,9 @@ namespace share
 {
 class SCN;
 }
-namespace palf
+namespace wal
 {
-class PalfEnv;
+class Env;
 }
 namespace logservice
 {
@@ -54,7 +54,7 @@ enum class ObApplyServiceTaskType
 //Virtual table statistics
 struct LSApplyStat
 {
-  palf::LSN end_lsn_;
+  wal::LSN end_lsn_;
   int64_t pending_cnt_;
 
   TO_STRING_KV(K(end_lsn_),
@@ -72,14 +72,14 @@ struct ApplyDiagnoseInfo
   }
 };
 
-class ObApplyFsCb : public palf::PalfFSCb
+class ObApplyFsCb : public wal::FsyncCallback
 {
 public:
   ObApplyFsCb();
   ObApplyFsCb(ObApplyStatus *apply_status);
   ~ObApplyFsCb();
   void destroy();
-  int update_end_lsn(const palf::LSN &end_lsn,
+  int update_end_lsn(const wal::LSN &end_lsn,
                      const share::SCN &end_scn);
 private:
   ObApplyStatus *apply_status_;
@@ -152,7 +152,7 @@ public:
   ObApplyStatus();
   ~ObApplyStatus();
 public:
-  int init(palf::PalfEnv *palf_env,
+  int init(wal::Env *wal_env,
            ObLogApplyService *ap_sv);
   void destroy();
   int stop();
@@ -163,14 +163,14 @@ public:
   int try_submit_cb_queues();
   int try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue, bool &is_timeslice_run_out);
   int is_apply_done(bool &is_done,
-                    palf::LSN &end_lsn);
+                    wal::LSN &end_lsn);
   int start_local_append(const share::SCN &recovered_scn);
   int stop_local_append();
-  //palf related
-  int update_palf_committed_end_lsn(const palf::LSN &end_lsn, const share::SCN &end_scn);
-  share::SCN get_palf_committed_end_scn() const;
+  //wal related
+  int update_wal_committed_end_lsn(const wal::LSN &end_lsn, const share::SCN &end_scn);
+  share::SCN get_wal_committed_end_scn() const;
   int unregister_file_size_cb();
-  void close_palf_handle();
+  void close_wal_handle();
   //maximum consecutive callback point
   int get_max_applied_scn(share::SCN &scn);
   int stat(LSApplyStat &stat) const;
@@ -178,8 +178,8 @@ public:
   int diagnose(ApplyDiagnoseInfo &diagnose_info);
   void reset_meta();
   TO_STRING_KV(K(accepting_append_),
-               K(palf_committed_end_lsn_),
-               K(palf_committed_end_scn_),
+               K(wal_committed_end_lsn_),
+               K(wal_committed_end_scn_),
                K(last_check_scn_),
                K(max_applied_cb_scn_));
 private:
@@ -194,7 +194,7 @@ private:
                      int64_t &append_finish_time,
                      int64_t &cb_first_handle_time,
                      int64_t &cb_start_time);
-  void statistics_cb_cost_(const palf::LSN &lsn,
+  void statistics_cb_cost_(const wal::LSN &lsn,
                            const share::SCN &scn,
                            const int64_t append_start_time,
                            const int64_t append_finish_time,
@@ -214,16 +214,16 @@ private:
   int64_t ref_cnt_; // guarantee the effectiveness of self memory
   bool accepting_append_;
   ObLogApplyService *ap_sv_;
-  palf::LSN palf_committed_end_lsn_;
-  share::SCN palf_committed_end_scn_;
+  wal::LSN wal_committed_end_lsn_;
+  share::SCN wal_committed_end_scn_;
   //LSN standy_committed_end_lsn_;
-  //palf::LSN min_committed_end_lsn_;
+  //wal::LSN min_committed_end_lsn_;
   share::SCN last_check_scn_; //The maximum continuous callback point to be confirmed currently
   share::SCN max_applied_cb_scn_; // The callbacks for cb before this point are guaranteed to be completed
   ObApplyServiceSubmitTask submit_task_;
   ObApplyServiceQueueTask cb_queues_[APPLY_TASK_QUEUE_SIZE];
-  palf::PalfEnv *palf_env_;
-  palf::PalfHandle palf_handle_;
+  wal::Env *wal_env_;
+  wal::Handle wal_handle_;
   ObApplyFsCb fs_cb_;
   mutable RWLock lock_;
   mutable lib::ObMutex mutex_; // Mutex for acquiring the maximum consecutive checkpoint will not be called concurrently
@@ -243,7 +243,7 @@ public:
   ObLogApplyService();
   virtual ~ObLogApplyService();
 public:
-  int init(palf::PalfEnv *palf_env,
+  int init(wal::Env *wal_env,
            ObILogStorage *log_storage);
   void destroy();
   int start();
@@ -256,11 +256,11 @@ public:
   void handle(common::LinkTask *task) override;
   void handle_drop(common::LinkTask *task) override;
   int is_apply_done(bool &is_done,
-                    palf::LSN &end_lsn);
+                    wal::LSN &end_lsn);
   int start_local_append(const share::SCN &recovered_scn);
   int stop_local_append();
   int get_max_applied_scn(share::SCN &scn);
-  int get_palf_committed_end_scn(share::SCN &scn);
+  int get_wal_committed_end_scn(share::SCN &scn);
   int push_task(ObApplyServiceTask *task);
   int wait_append_sync();
   int stat(LSApplyStat &apply_stat);
@@ -273,7 +273,7 @@ private:
 private:
   bool is_inited_;
   bool is_running_;
-  palf::PalfEnv *palf_env_;
+  wal::Env *wal_env_;
   ObILogStorage *log_storage_;
   ObApplyStatus *apply_status_;
   mutable common::ObQSyncLock lock_;

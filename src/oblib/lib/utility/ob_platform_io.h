@@ -56,7 +56,7 @@ int64_t ob_pwrite_fd(int fd, const void *buf, int64_t count, int64_t offset);
 // Flushes an open descriptor. POSIX: fsync(2). Windows: _commit, then
 // FlushFileBuffers on the underlying handle. A directory descriptor cannot be
 // flushed by the CRT; because NTFS journals directory metadata, the flush of a
-// directory is reported as success, which is the contract the PALF Windows shim
+// directory is reported as success, which is the contract the WAL Windows shim
 // this replaces had. File descriptors report a failed flush as -1 with errno.
 int ob_fsync_fd(int fd);
 
@@ -65,7 +65,7 @@ int ob_ftruncate_fd(int fd, int64_t length);
 
 // Reserves `length` bytes for an open file, growing it when it is shorter.
 // Linux: fallocate(fd, 0, 0, length); macOS: ftruncate (the new bytes read as
-// zero); Windows: _chsize_s. PALF calls this on the empty file it just created
+// zero); Windows: _chsize_s. WAL calls this on the empty file it just created
 // with O_EXCL, so growing the file and Linux's allocate-without-shrinking
 // contract coincide.
 int ob_fallocate_fd(int fd, int64_t length);

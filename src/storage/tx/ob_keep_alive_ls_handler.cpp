@@ -102,7 +102,7 @@ void ObKeepAliveLSHandler::clear_keep_alive_smaller_scn_info()
 int ObKeepAliveLSHandler::try_submit_log(const SCN &min_start_scn, MinStartScnStatus min_start_status)
 {
   int ret = OB_SUCCESS;
-  palf::LSN lsn;
+  wal::LSN lsn;
   SCN scn = SCN::min_scn();
 
   SpinWLockGuard guard(lock_);
@@ -167,7 +167,7 @@ int ObKeepAliveLSHandler::on_failure()
 
 int ObKeepAliveLSHandler::replay(const void *buffer,
                                  const int64_t nbytes,
-                                 const palf::LSN &lsn,
+                                 const wal::LSN &lsn,
                                  const SCN &scn)
 {
   int ret = OB_SUCCESS;

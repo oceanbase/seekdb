@@ -47,7 +47,7 @@ using namespace share::schema;
 
 using namespace storage;
 using namespace transaction;
-using namespace palf;
+using namespace wal;
 namespace memtable
 {
 
@@ -264,7 +264,7 @@ int ObMemtable::safe_to_destroy(bool &is_safe)
     if (!is_safe && ret == OB_STATE_NOT_MATCH) {
       ret = OB_SUCCESS;
       bool is_done = false;
-      palf::LSN end_lsn;
+      wal::LSN end_lsn;
       if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service()->
                   is_apply_done(is_done,
                                 end_lsn))) {

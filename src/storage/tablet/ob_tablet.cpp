@@ -55,7 +55,7 @@ using namespace share::schema;
 using namespace blocksstable;
 using namespace logservice;
 using namespace compaction;
-using namespace palf;
+using namespace wal;
 ERRSIM_POINT_DEF(EN_COMPACTION_RECORD_TRUNCATE_CACHE);
 namespace storage
 {
@@ -3771,7 +3771,7 @@ int ObTablet::write_sync_tablet_seq_log(ObTabletAutoincSeq &autoinc_seq,
   int64_t pos = 0;
   ObSyncTabletSeqMdsLogCb *cb = nullptr;
   ObLogHandler *log_handler = get_log_handler();
-  palf::LSN lsn;
+  wal::LSN lsn;
   const bool need_nonblock = true; // log_handler->append may return OB_EAGAIN, caller is responsible for retry
   const SCN ref_scn = SCN::min_scn();
   uint64_t new_autoinc_seq = 0;
@@ -3979,7 +3979,7 @@ int ObTablet::write_tablet_schema_version_change_clog(
     ObDDLClogCb *cb = nullptr;
     ObLogHandler *log_handler = get_log_handler();
 
-    palf::LSN lsn;
+    wal::LSN lsn;
     const bool need_nonblock= false;
     SCN ref_scn;
     ref_scn.set_min();

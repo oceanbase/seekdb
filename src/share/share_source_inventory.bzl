@@ -420,8 +420,8 @@ SHARE_UNITY_GROUPS = [
             "src/share/log/ob_log_base_header.cpp",
             "src/share/log/types/log_define.cpp",
             "src/share/log/types/lsn.cpp",
-            "src/share/log/types/palf_base_info.cpp",
-            "src/share/log/types/palf_options.cpp",
+            "src/share/log/types/base_info.cpp",
+            "src/share/log/types/options.cpp",
         ],
     ),
     struct(

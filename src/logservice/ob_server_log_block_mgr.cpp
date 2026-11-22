@@ -24,7 +24,7 @@
 
 namespace oceanbase
 {
-using namespace palf;
+using namespace wal;
 namespace logservice
 {
 
@@ -211,9 +211,9 @@ int ObServerLogBlockMgr::get_runtime_log_disk_size_(int64_t &runtime_log_disk_si
 {
   int ret = OB_SUCCESS;
   runtime_log_disk_size = 0;
-  PalfOptions opts;
+  Options opts;
   if (NULL == log_service_) {
-  } else if (OB_FAIL(log_service_->get_palf_options(opts))) {
+  } else if (OB_FAIL(log_service_->get_wal_options(opts))) {
   } else {
     runtime_log_disk_size = opts.disk_options_.log_disk_usage_limit_size_;
   }

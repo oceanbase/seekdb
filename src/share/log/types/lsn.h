@@ -22,7 +22,7 @@
 #include "lib/json/ob_yson.h"
 #include "log_define.h"                         // block_id_t
 namespace oceanbase {
-namespace palf {
+namespace wal {
 struct LSN
 {
   LSN();
@@ -69,7 +69,7 @@ inline offset_t lsn_2_offset(const LSN &lsn, const uint64_t block_size)
 {
   return lsn.val_ % block_size;
 }
-} // end namespace palf
+} // end namespace wal
 } // end namespace oceanbase
 
 #endif

@@ -136,7 +136,7 @@ public:
   virtual ~ObLS();
   int init(const ObRestoreStatus &restore_status,
            const share::SCN &create_scn,
-           const palf::LSN &clog_base_lsn);
+           const wal::LSN &clog_base_lsn);
   // I am ready to work now.
   int stop();
   void wait();
@@ -182,8 +182,8 @@ public:
   int finish_create_ls();
 
   // create myself at disk
-  // @param[in] palf_base_info, all the info that palf needed
-  int create_ls(const palf::PalfBaseInfo &palf_base_info);
+  // @param[in] wal_base_info, all the info that wal needed
+  int create_ls(const wal::BaseInfo &wal_base_info);
   // load ls info from disk
   int load_ls();
   // remove the durable info of myself from disk.
@@ -274,14 +274,14 @@ public:
     return ls_meta_.update_id_meta(service_type, limited_id, latest_scn, persist_change);
   }
   // protect in ls lock
-  int set_clog_checkpoint(const palf::LSN &clog_checkpoint_lsn,
+  int set_clog_checkpoint(const wal::LSN &clog_checkpoint_lsn,
                           const share::SCN &clog_checkpoint_scn,
                           const bool persist_change)
   {
     return ls_meta_.set_clog_checkpoint(clog_checkpoint_lsn, clog_checkpoint_scn, persist_change);
   }
   CONST_DELEGATE_WITH_RET(ls_meta_, get_clog_checkpoint_scn, share::SCN);
-  DELEGATE_WITH_RET(ls_meta_, get_clog_base_lsn, palf::LSN);
+  DELEGATE_WITH_RET(ls_meta_, get_clog_base_lsn, wal::LSN);
   CONST_DELEGATE_WITH_RET(ls_meta_, get_tablet_change_checkpoint_scn, share::SCN);
   DELEGATE_WITH_RET(ls_meta_, set_tablet_change_checkpoint_scn, int);
   int set_tablet_change_checkpoint_scn(const share::SCN &tablet_change_checkpoint_scn)
@@ -415,10 +415,10 @@ public:
   // @brief, get max decided log scn considering both apply and replay.
   // @param[out] share::SCN&, max decided log scn.
   DELEGATE_WITH_RET(log_handler_, get_max_decided_scn, int);
-  // @brief append count bytes from the buffer starting at buf to the palf handle, return the LSN and timestamp
+  // @brief append count bytes from the buffer starting at buf to the wal handle, return the LSN and timestamp
   // @param[in] const void *, the data buffer.
   // @param[in] const uint64_t, the length of data buffer.
-  // @param[in] const int64_t, the base timestamp(ns), palf will ensure that the return tiemstamp will greater
+  // @param[in] const int64_t, the base timestamp(ns), wal will ensure that the return tiemstamp will greater
   //            or equal than this field.
   // @param[in] const bool, decide this append option whether need block thread.
   // @param[int] AppendCb*, the callback of this append option, log handler will ensure that cb will be called after log has been committed

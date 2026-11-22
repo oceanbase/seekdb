@@ -70,7 +70,7 @@ int calc_timestamp_to_scn_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
                                                  OB_INVALID_VERSION,
                                                  *(const_cast<ObTZInfoMap *>(cur_tz_info->get_tz_info_map()))))) {
   } else {
-    uint64_t scn_value = palf::LOG_INVALID_LSN_VAL;
+    uint64_t scn_value = wal::LOG_INVALID_LSN_VAL;
     const ObTimeZoneInfo *sys_tz_info = tz_info_wrap.get_time_zone_info();
     const int64_t datetime_value = in_datum->get_datetime();
     if (OB_FAIL(ObTimeConverter::datetime_to_scn_value(datetime_value, sys_tz_info, scn_value))) {

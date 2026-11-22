@@ -23,7 +23,7 @@
 namespace oceanbase
 {
 using namespace share;
-using namespace palf;
+using namespace wal;
 namespace transaction
 {
 void ObIDService::reset()
@@ -107,7 +107,7 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
   } else if (OB_FAIL(check_and_fill_ls())) {
   } else {
     ObPresistIDLog ls_log(last_id, limited_id);
-    palf::LSN lsn;
+    wal::LSN lsn;
     SCN log_ts, base_scn;
     int64_t base_ts = 0;
     if (TimestampService == service_type_) {
@@ -168,7 +168,7 @@ int ObIDService::handle_submit_callback(const bool success, const int64_t limite
 }
 
 int ObIDService::replay(const void *buffer, const int64_t buf_size,
-                        const palf::LSN &lsn, const SCN &log_scn)
+                        const wal::LSN &lsn, const SCN &log_scn)
 {
   //TODO(scn)
   int ret = OB_SUCCESS;

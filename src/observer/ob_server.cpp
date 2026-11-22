@@ -373,7 +373,7 @@ int ObServer::wait_until_refreshed(
       abs_timeout_us);
 }
 
-int ObServer::get_min_dep_lsn(palf::LSN &min_dep_lsn)
+int ObServer::get_min_dep_lsn(wal::LSN &min_dep_lsn)
 {
   return OB_ISNULL(mods_change_stream_mgr_)
       ? common::OB_NOT_INIT

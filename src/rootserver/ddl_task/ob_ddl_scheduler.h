@@ -261,7 +261,7 @@ public:
   virtual void do_work() override;
   virtual share::SCN get_rec_scn() override { return share::SCN::max_scn(); }
   virtual int flush(SCN &rec_scn) override { return OB_SUCCESS; }
-  int replay(const void *buffer, const int64_t nbytes, const palf::LSN &lsn, const share::SCN &scn) override
+  int replay(const void *buffer, const int64_t nbytes, const wal::LSN &lsn, const share::SCN &scn) override
   {
     UNUSED(buffer);
     UNUSED(nbytes);

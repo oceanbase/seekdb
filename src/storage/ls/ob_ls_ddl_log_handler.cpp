@@ -235,7 +235,7 @@ int ObLSDDLLogHandler::online()
 
 int ObLSDDLLogHandler::replay(const void *buffer,
                               const int64_t buf_size,
-                              const palf::LSN &lsn,
+                              const wal::LSN &lsn,
                               const SCN &log_scn)
 {
   int ret = OB_SUCCESS;

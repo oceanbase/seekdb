@@ -20,7 +20,7 @@
 
 namespace oceanbase
 {
-namespace palf
+namespace wal
 {
 
 int convert_sys_errno()
@@ -119,5 +119,5 @@ bool is_number(const char* str)
 	return bool_ret;
 }
 
-} // namespace palf
+} // namespace wal
 } // namespace oceanbase
