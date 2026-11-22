@@ -1,0 +1,180 @@
+drop table if exists t_ip_desc_ann;
+drop table if exists t_ip_desc_exact;
+drop table if exists t_ip_desc_l2;
+drop table if exists t_ip_desc_part;
+create table t_ip_desc_ann (
+id int primary key,
+v vector(3),
+vector index idx_v(v) with (
+distance=inner_product, type=hnsw, lib=vsag, m=8,
+ef_construction=32, sync_mode=immediate)
+);
+insert into t_ip_desc_ann values
+(1, '[1,0,0]'), (2, '[2,0,0]'), (3, '[-1,0,0]'),
+(4, '[0,1,0]'), (5, '[-2,0,0]');
+  "OPERATOR":"VECTOR INDEX SCAN",
+select id from t_ip_desc_ann
+order by inner_product(v, [1,0,0]) desc approximate limit 3;
+id
+2
+1
+4
+  "OPERATOR":"VECTOR INDEX SCAN",
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by score desc approximate limit 5;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+  "OPERATOR":"VECTOR INDEX SCAN",
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by 2 desc approx limit 5;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+select id, inner_product(v, '[1,0,0]') as score,
+negative_inner_product(v, '[1,0,0]') as negative_score
+from t_ip_desc_ann
+order by inner_product(v, '[1,0,0]') desc approximate limit 3 offset 1;
+id	score	negative_score
+1	1	-1
+4	0	0
+3	-1	1
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann
+order by negative_inner_product(v, '[1,0,0]') approximate limit 5;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann where id <> 2
+order by score desc approximate limit 3;
+id	score
+1	1
+4	0
+3	-1
+prepare ip_desc_stmt from
+'select id, inner_product(v, ?) as score from t_ip_desc_ann order by score desc approximate limit 3';
+set @ip_query = '[1,0,0]';
+execute ip_desc_stmt using @ip_query;
+id	score
+2	2
+1	1
+4	0
+set @ip_query = '[-1,0,0]';
+execute ip_desc_stmt using @ip_query;
+id	score
+5	2
+3	1
+4	0
+deallocate prepare ip_desc_stmt;
+select id, inner_product('[1,0,0]', v) as score
+from t_ip_desc_ann order by score desc approximate limit 3;
+id	score
+2	2
+1	1
+4	0
+insert into t_ip_desc_ann values (6, NULL);
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by score desc approximate limit 6;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by score desc limit 6;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+6	NULL
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_ann order by score asc approximate limit 6;
+id	score
+6	NULL
+5	-2
+3	-1
+4	0
+1	1
+2	2
+create table t_ip_desc_exact (id int primary key, v vector(3));
+insert into t_ip_desc_exact select * from t_ip_desc_ann;
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_exact order by score desc approximate limit 6;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+6	NULL
+create table t_ip_desc_l2 (
+id int primary key, v vector(3),
+vector index idx_v(v) with (distance=l2, type=hnsw)
+);
+insert into t_ip_desc_l2 select * from t_ip_desc_ann;
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_l2 order by score desc approximate limit 6;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+6	NULL
+select id from t_ip_desc_ann
+order by inner_product(v, '[1,0,0]') desc approximate limit 3 parameters (similarity=0.7);
+ERROR 0A000: similarity parameter for inner_product distance is not supported
+drop table t_ip_desc_ann;
+drop table t_ip_desc_exact;
+drop table t_ip_desc_l2;
+create table t_ip_desc_part (
+id int primary key, v vector(3),
+vector index idx_v(v) with (distance=inner_product, type=hnsw)
+) partition by hash(id) partitions 2;
+insert into t_ip_desc_part values
+(1, '[1,0,0]'), (2, '[2,0,0]'), (3, '[-1,0,0]'),
+(4, '[0,1,0]'), (5, '[-2,0,0]');
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_part order by score desc approximate limit 5;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_part order by score desc approximate limit 3 offset 1;
+id	score
+1	1
+4	0
+3	-1
+drop table t_ip_desc_part;
+create table t_ip_desc_part (
+id int primary key, v vector(3),
+vector index idx_v(v) with (distance=inner_product, type=ivf_flat)
+) partition by hash(id) partitions 2;
+insert into t_ip_desc_part values
+(1, '[1,0,0]'), (2, '[2,0,0]'), (3, '[-1,0,0]'),
+(4, '[0,1,0]'), (5, '[-2,0,0]');
+select id, inner_product(v, '[1,0,0]') as score
+from t_ip_desc_part order by score desc approximate limit 5;
+id	score
+2	2
+1	1
+4	0
+3	-1
+5	-2
+drop table t_ip_desc_part;
