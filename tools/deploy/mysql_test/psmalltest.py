@@ -192,7 +192,6 @@ psmall_test=[
 'json.json_remove_mysql',
 'json.json_replace_mysql',
 'json.json_storage_size_free_mysql',
-'json.semistruct_json_mysql',
 'largetimeout',
 'limit',
 'lob.lob_basic_mysql',

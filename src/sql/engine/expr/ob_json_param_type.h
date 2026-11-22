@@ -136,11 +136,6 @@ typedef enum JsnValueOpt {
   JSN_VAL_ERROR_OPT,  // 3
 } JsnValueOpt;
 
-static bool is_support_pushdown_json_expr(const ObItemType type)
-{
-  return T_FUN_SYS_JSON_VALUE == type;
-}
-
 }  // namespace sql
 }  // namespace oceanbase
 #endif /* OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_JSON_PARAM_TYPE_H */

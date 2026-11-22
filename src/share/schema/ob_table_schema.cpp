@@ -101,9 +101,6 @@ bool ObTableMode::is_valid() const
 OB_SERIALIZE_MEMBER_SIMPLE(ObTableMode,
                            mode_);
 
-OB_SERIALIZE_MEMBER_SIMPLE(ObSemiStructEncodingType,
-                           flags_);
-
 common::ObString ObMergeSchema::EMPTY_STRING = common::ObString::make_string("");
 
 int ObMergeSchema::get_mulit_version_rowkey_column_ids(
@@ -1146,8 +1143,7 @@ ObTableSchema::ObTableSchema(ObIAllocator *allocator)
     micro_block_format_version_(DEFAULT_MICRO_BLOCK_FORMAT_VERSION),
     micro_index_clustered_(false),
     index_params_(),
-    exec_env_(),
-    semistruct_encoding_type_()
+    exec_env_()
 {
   reset();
 }
@@ -1324,10 +1320,6 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
   }
 
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.exec_env_, exec_env_))) {
-  }
-
-  if (OB_SUCC(ret)) {
-    semistruct_encoding_type_ = src_schema.semistruct_encoding_type_;
   }
 
   if (OB_FAIL(ret)) {
@@ -2553,7 +2545,6 @@ int64_t ObTableSchema::get_convert_size() const
 
   convert_size += index_params_.length() + 1;
 
-  convert_size += semistruct_encoding_type_.get_deep_copy_size();
   return convert_size;
 }
 
@@ -2627,7 +2618,6 @@ void ObTableSchema::reset()
   lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD;
   auto_increment_cache_size_ = 0;
 
-  semistruct_encoding_type_.reset();
   ObSimpleTableSchemaV2::reset();
 }
 
@@ -5298,8 +5288,7 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
     K_(lob_inrow_threshold),
     K_(auto_increment_cache_size),
     K_(index_params),
-    K_(exec_env),
-    K_(semistruct_encoding_type));
+    K_(exec_env));
   J_OBJ_END();
 
   return pos;
@@ -5349,6 +5338,7 @@ OB_DEF_SERIALIZE(ObTableSchema)
 {
   int ret = OB_SUCCESS;
   ObRowkey reserved_partition_metadata;
+  int64_t reserved_semistruct_encoding = 0;
   int64_t reserved_table_id_count = reserved_table_ids_.count();
 
   // !!! begin static check
@@ -5432,7 +5422,8 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(index_params_);
   OB_UNIS_ENCODE(micro_index_clustered_);
   OB_UNIS_ENCODE(parser_properties_);
-  OB_UNIS_ENCODE(semistruct_encoding_type_);
+  // Keep the removed encoding option's slot before micro_block_format_version_.
+  OB_UNIS_ENCODE(reserved_semistruct_encoding);
   OB_UNIS_ENCODE(micro_block_format_version_);
   // !!! end static check
   /*
@@ -5528,6 +5519,7 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   reset();
 
   int64_t reserved_table_id_count = 0;
+  int64_t reserved_semistruct_encoding = 0;
   // !!! begin static check
   OB_UNIS_DECODE(database_id_);
   OB_UNIS_DECODE(table_id_);
@@ -5635,7 +5627,7 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE_AND_FUNC(index_params_, deep_copy_str);
   OB_UNIS_DECODE(micro_index_clustered_);
   OB_UNIS_DECODE_AND_FUNC(parser_properties_, deep_copy_str);
-  OB_UNIS_DECODE(semistruct_encoding_type_);
+  OB_UNIS_DECODE(reserved_semistruct_encoding);
   OB_UNIS_DECODE(micro_block_format_version_);
   // !!! end static check
   /*
@@ -5668,6 +5660,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
 {
   int64_t len = 0;
   ObRowkey reserved_partition_metadata;
+  int64_t reserved_semistruct_encoding = 0;
   int64_t reserved_table_id_count = reserved_table_ids_.count();
 
   // !!! begin static check
@@ -5745,7 +5738,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(index_params_);
   OB_UNIS_ADD_LEN(micro_index_clustered_);
   OB_UNIS_ADD_LEN(parser_properties_);
-  OB_UNIS_ADD_LEN(semistruct_encoding_type_);
+  OB_UNIS_ADD_LEN(reserved_semistruct_encoding);
   OB_UNIS_ADD_LEN(micro_block_format_version_);
   // !!! end static check
   /*

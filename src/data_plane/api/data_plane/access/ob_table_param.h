@@ -272,8 +272,6 @@ public:
   inline bool enable_lob_locator_v2() const { return enable_lob_locator_v2_; }
   inline bool &get_enable_lob_locator_v2() { return enable_lob_locator_v2_; }
   inline bool has_virtual_column() const { return has_virtual_column_; }
-  inline bool is_enable_semistruct_encoding() const { return is_enable_semistruct_encoding_; }
-  inline void set_is_enable_semistruct_encoding(const bool v) { is_enable_semistruct_encoding_ = v; }
   inline const common::ObIArray<int32_t> &get_output_projector() const { return output_projector_; }
   inline const common::ObIArray<int32_t> &get_aggregate_projector() const { return aggregate_projector_; }
   inline const common::ObIArray<int32_t> &get_group_by_projector() const { return group_by_projector_; }
@@ -353,7 +351,6 @@ private:
   bool is_multivalue_index_;
   bool is_vec_index_;
   bool is_partition_table_;
-  bool is_enable_semistruct_encoding_;
   int8_t access_virtual_col_cnt_;
 };
 } //namespace schema

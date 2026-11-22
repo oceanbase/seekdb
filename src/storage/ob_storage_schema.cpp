@@ -153,7 +153,6 @@ ObStorageSchema::ObStorageSchema()
     column_array_(),
     skip_idx_attr_array_(),
     store_column_cnt_(0),
-    semistruct_encoding_type_(),
     is_inited_(false)
 {
 }
@@ -351,7 +350,6 @@ void ObStorageSchema::reset()
     skip_idx_attr_array_.reset();
     allocator_ = nullptr;
   }
-  semistruct_encoding_type_.reset();
   is_inited_ = false;
 }
 
@@ -398,6 +396,7 @@ int ObStorageSchema::assign(common::ObIAllocator &allocator, const ObStorageSche
 int ObStorageSchema::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
+  int64_t reserved_semistruct_encoding = 0;
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -433,7 +432,7 @@ int ObStorageSchema::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
     } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, store_column_cnt_))) {
     } else if (OB_FAIL(serialize_schema_array(buf, buf_len, pos, skip_idx_attr_array_))){
     } else {
-      OB_UNIS_ENCODE(semistruct_encoding_type_);
+      OB_UNIS_ENCODE(reserved_semistruct_encoding);
     }
   }
 
@@ -460,6 +459,7 @@ int ObStorageSchema::deserialize(
     int64_t &pos)
 {
   int ret = OB_SUCCESS;
+  int64_t reserved_semistruct_encoding = 0;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -501,7 +501,7 @@ int ObStorageSchema::deserialize(
     } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &store_column_cnt_))) {
     } else if (OB_FAIL(deserialize_skip_idx_attr_array(buf, data_len, pos))) {
     } else {
-      OB_UNIS_DECODE(semistruct_encoding_type_);
+      OB_UNIS_DECODE(reserved_semistruct_encoding);
     }
 
     if (OB_SUCC(ret) && OB_UNLIKELY(!ObStorageSchema::is_valid())) {
@@ -625,6 +625,7 @@ int ObStorageSchema::deserialize_skip_idx_attr_array(const char *buf,
 int64_t ObStorageSchema::get_serialize_size() const
 {
   int64_t len = 0;
+  int64_t reserved_semistruct_encoding = 0;
 
   LST_DO_CODE(OB_UNIS_ADD_LEN,
       format_version_,
@@ -648,7 +649,7 @@ int64_t ObStorageSchema::get_serialize_size() const
   }
   len += serialization::encoded_length_i64(store_column_cnt_);
   len += get_array_serialize_length(skip_idx_attr_array_);
-  OB_UNIS_ADD_LEN(semistruct_encoding_type_);
+  OB_UNIS_ADD_LEN(reserved_semistruct_encoding);
   return len;
 }
 
@@ -1070,21 +1071,18 @@ int ObStorageSchema::copy_from(const share::schema::ObMergeSchema &input_schema)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(input_schema.get_semistruct_encoding_type(semistruct_encoding_type_))) {
-  } else {
-    table_type_ = input_schema.get_table_type();
-    table_mode_ = input_schema.get_table_mode_struct();
-    index_type_ = input_schema.get_index_type();
-    row_store_type_ = input_schema.get_row_store_type();
-    schema_version_ = input_schema.get_schema_version();
-    column_cnt_ = input_schema.get_column_count();
-    tablet_size_ = input_schema.get_tablet_size();
-    pctfree_ = input_schema.get_pctfree();
-    block_size_ = input_schema.get_block_size();
-    progressive_merge_round_ = input_schema.get_progressive_merge_round();
-    progressive_merge_num_ = input_schema.get_progressive_merge_num();
-    compressor_type_ = input_schema.get_compressor_type();
-  }
+  table_type_ = input_schema.get_table_type();
+  table_mode_ = input_schema.get_table_mode_struct();
+  index_type_ = input_schema.get_index_type();
+  row_store_type_ = input_schema.get_row_store_type();
+  schema_version_ = input_schema.get_schema_version();
+  column_cnt_ = input_schema.get_column_count();
+  tablet_size_ = input_schema.get_tablet_size();
+  pctfree_ = input_schema.get_pctfree();
+  block_size_ = input_schema.get_block_size();
+  progressive_merge_round_ = input_schema.get_progressive_merge_round();
+  progressive_merge_num_ = input_schema.get_progressive_merge_num();
+  compressor_type_ = input_schema.get_compressor_type();
 
   return ret;
 }

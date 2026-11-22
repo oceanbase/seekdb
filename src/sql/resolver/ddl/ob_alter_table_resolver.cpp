@@ -152,7 +152,6 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCCESS == ret && NULL != parse_tree.children_[ACTION_LIST]){
       if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
       } else if (OB_FAIL(set_table_options())) {
-      } else if (OB_FAIL(check_semistruct_encoding_type(*table_schema_, alter_table_stmt->get_alter_table_schema()))) {
       } else {
         // deal with alter table rename to mock_fk_parent_table_name
         if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLE_NAME)) {
@@ -265,7 +264,6 @@ int ObAlterTableResolver::set_table_options()
     alter_table_schema.set_dop(table_dop_);
     alter_table_schema.set_lob_inrow_threshold(lob_inrow_threshold_);
     alter_table_schema.set_auto_increment_cache_size(auto_increment_cache_size_);
-    alter_table_schema.set_semistruct_encoding_type(semistruct_encoding_type_);
     //deep copy
     if (OB_FAIL(ret)) {
       //do nothing
@@ -4481,22 +4479,6 @@ int ObAlterTableResolver::check_drop_column_is_partition_key(const ObTableSchema
                      column_name.length(),
                      column_name.ptr());
     }
-  }
-  return ret;
-}
-
-int ObAlterTableResolver::check_semistruct_encoding_type(const ObTableSchema &origin_schema, const ObTableSchema &alter_schema)
-{
-  int ret = OB_SUCCESS;
-  // skip check if not modify semistruct encoding options and store format
-  if (! alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE)
-      && ! alter_table_bitset_.has_member(obcall::ObAlterTableArg::STORE_FORMAT)) { 
-  // skip check if semistruct_encoding is disable 
-  } else if ((alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! alter_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())
-    || (! alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! origin_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())) {
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "semistruct encoding is not supported");
   }
   return ret;
 }

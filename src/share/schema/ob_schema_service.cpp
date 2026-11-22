@@ -422,9 +422,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.index_params_, index_params_))) {
   }
 
-  if (OB_SUCC(ret)) {
-    semistruct_encoding_type_ = src_schema.semistruct_encoding_type_;
-  }
   return ret;
 }
 
