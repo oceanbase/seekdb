@@ -25,7 +25,7 @@ pub const ENTRY_MAGIC: u16 = 0x4c48;
 pub const GROUP_VERSION: u16 = 1;
 pub const ENTRY_VERSION: u16 = 1;
 pub const PADDING_FLAG: u32 = 1;
-const SEGMENT_MAGIC: &[u8; 8] = b"PFALSEG1";
+const SEGMENT_MAGIC: &[u8; 8] = b"PFALSEG2";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -99,6 +99,16 @@ pub struct GroupHeader {
     pub padding: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SegmentHeader {
+    pub start_lsn: u64,
+    pub prev_lsn: u64,
+    pub prev_scn: u64,
+    pub prev_log_id: i64,
+    pub prev_accumulated_checksum: u64,
+    pub first_scn: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct EntryMeta {
     pub offset: usize,
@@ -128,14 +138,26 @@ pub fn crc64(bytes: &[u8]) -> u64 {
 
 pub fn crc64_with_seed(seed: u64, bytes: &[u8]) -> u64 {
     let mut crc = seed;
-    for byte in bytes {
-        crc = CRC_TABLE[((crc ^ u64::from(*byte)) & 0xff) as usize] ^ (crc >> 8);
+    let mut chunks = bytes.chunks_exact(8);
+    for chunk in &mut chunks {
+        let value = u64::from_le_bytes(chunk.try_into().unwrap()) ^ crc;
+        crc = CRC_TABLES[7][(value & 0xff) as usize]
+            ^ CRC_TABLES[6][((value >> 8) & 0xff) as usize]
+            ^ CRC_TABLES[5][((value >> 16) & 0xff) as usize]
+            ^ CRC_TABLES[4][((value >> 24) & 0xff) as usize]
+            ^ CRC_TABLES[3][((value >> 32) & 0xff) as usize]
+            ^ CRC_TABLES[2][((value >> 40) & 0xff) as usize]
+            ^ CRC_TABLES[1][((value >> 48) & 0xff) as usize]
+            ^ CRC_TABLES[0][(value >> 56) as usize];
+    }
+    for byte in chunks.remainder() {
+        crc = CRC_TABLES[0][((crc ^ u64::from(*byte)) & 0xff) as usize] ^ (crc >> 8);
     }
     crc
 }
 
-const fn make_crc_table() -> [u64; 256] {
-    let mut table = [0; 256];
+const fn make_crc_tables() -> [[u64; 256]; 8] {
+    let mut tables = [[0; 256]; 8];
     let mut index = 0;
     while index < 256 {
         let mut value = index as u64;
@@ -148,13 +170,23 @@ const fn make_crc_table() -> [u64; 256] {
             };
             bit += 1;
         }
-        table[index] = value;
+        tables[0][index] = value;
         index += 1;
     }
-    table
+    let mut table = 1;
+    while table < 8 {
+        let mut index = 0;
+        while index < 256 {
+            let previous = tables[table - 1][index];
+            tables[table][index] = (previous >> 8) ^ tables[0][(previous & 0xff) as usize];
+            index += 1;
+        }
+        table += 1;
+    }
+    tables
 }
 
-const CRC_TABLE: [u64; 256] = make_crc_table();
+const CRC_TABLES: [[u64; 256]; 8] = make_crc_tables();
 
 fn get_u16(bytes: &[u8], offset: usize) -> Result<u16> {
     let value = bytes.get(offset..offset + 2).ok_or(Error::Corrupt)?;
@@ -363,33 +395,85 @@ pub fn validate_group(bytes: &[u8], group_lsn: u64) -> Result<GroupHeader> {
     Ok(header)
 }
 
-pub fn encode_segment_header(id: u64) -> Result<Vec<u8>> {
+pub fn encode_segment_header(id: u64, header: &SegmentHeader) -> Result<Vec<u8>> {
     let mut bytes = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
     bytes[..8].copy_from_slice(SEGMENT_MAGIC);
     put_u64(&mut bytes, 8, id);
-    let header_checksum = crc64(&bytes[..16]);
-    put_u64(&mut bytes, 16, header_checksum);
+    put_u64(&mut bytes, 16, header.start_lsn);
+    put_u64(&mut bytes, 24, header.prev_lsn);
+    put_u64(&mut bytes, 32, header.prev_scn);
+    put_i64(&mut bytes, 40, header.prev_log_id);
+    put_u64(&mut bytes, 48, header.prev_accumulated_checksum);
+    put_u64(&mut bytes, 56, header.first_scn);
+    let header_checksum = crc64(&bytes[..64]);
+    put_u64(&mut bytes, 64, header_checksum);
     Ok(bytes)
 }
 
-pub fn validate_segment_header(bytes: &[u8], id: u64) -> Result<()> {
+pub fn validate_segment_header(bytes: &[u8], id: u64) -> Result<SegmentHeader> {
     if bytes.len() < SEGMENT_HEADER_SIZE as usize
         || bytes.get(..8) != Some(SEGMENT_MAGIC)
         || get_u64(bytes, 8)? != id
-        || crc64(&bytes[..16]) != get_u64(bytes, 16)?
+        || crc64(&bytes[..64]) != get_u64(bytes, 64)?
     {
         return Err(Error::Corrupt);
     }
-    Ok(())
+    Ok(SegmentHeader {
+        start_lsn: get_u64(bytes, 16)?,
+        prev_lsn: get_u64(bytes, 24)?,
+        prev_scn: get_u64(bytes, 32)?,
+        prev_log_id: get_i64(bytes, 40)?,
+        prev_accumulated_checksum: get_u64(bytes, 48)?,
+        first_scn: get_u64(bytes, 56)?,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn bytewise_crc64_with_seed(seed: u64, bytes: &[u8]) -> u64 {
+        let mut crc = seed;
+        for byte in bytes {
+            crc = CRC_TABLES[0][((crc ^ u64::from(*byte)) & 0xff) as usize] ^ (crc >> 8);
+        }
+        crc
+    }
+
+    #[test]
+    fn sliced_crc_matches_bytewise_crc_at_every_alignment() {
+        let bytes: Vec<u8> = (0..131).map(|index| (index * 37 + 11) as u8).collect();
+        for seed in [0, 1, u64::MAX, 0x1234_5678_9abc_def0] {
+            for len in 0..=bytes.len() {
+                assert_eq!(
+                    crc64_with_seed(seed, &bytes[..len]),
+                    bytewise_crc64_with_seed(seed, &bytes[..len]),
+                    "seed={seed:#x} len={len}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn impossible_allocation_is_an_error() {
         assert_eq!(zeroed_bytes(usize::MAX).unwrap_err(), Error::NoMemory);
+    }
+
+    #[test]
+    fn segment_headers_round_trip_recovery_metadata() {
+        let header = SegmentHeader {
+            start_lsn: BLOCK_SIZE,
+            prev_lsn: BLOCK_SIZE - 128,
+            prev_scn: 42,
+            prev_log_id: 9,
+            prev_accumulated_checksum: 1234,
+            first_scn: 43,
+        };
+        let bytes = encode_segment_header(1, &header).unwrap();
+        assert_eq!(validate_segment_header(&bytes, 1), Ok(header));
+        let mut damaged = bytes;
+        damaged[24] ^= 1;
+        assert_eq!(validate_segment_header(&damaged, 1), Err(Error::Corrupt));
     }
 
     #[test]

@@ -16,7 +16,7 @@ use crate::format::{
     block_id, block_offset, copied_bytes, crc64, crc64_with_seed, decode_group_header,
     encode_entry, encode_group, encode_segment_header, group_entries, physical_offset,
     segment_path, validate_group, validate_segment_header, zeroed_bytes, Error, GroupHeader,
-    Result, BLOCK_SIZE, ENTRY_HEADER_SIZE, GROUP_HEADER_SIZE, MAX_LOG_BODY_SIZE,
+    Result, SegmentHeader, BLOCK_SIZE, ENTRY_HEADER_SIZE, GROUP_HEADER_SIZE, MAX_LOG_BODY_SIZE,
     PHYSICAL_BLOCK_SIZE, SEGMENT_HEADER_SIZE,
 };
 use std::collections::BTreeMap;
@@ -88,7 +88,7 @@ impl DiskPolicy {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BaseInfo {
     pub curr_lsn: u64,
     pub prev_lsn: u64,
@@ -125,6 +125,24 @@ struct RecordMeta {
     header: GroupHeader,
 }
 
+#[derive(Clone, Debug)]
+struct SegmentMeta {
+    length: u64,
+    header: SegmentHeader,
+}
+
+impl SegmentMeta {
+    fn base_info(&self) -> BaseInfo {
+        BaseInfo {
+            curr_lsn: self.header.start_lsn,
+            prev_lsn: self.header.prev_lsn,
+            prev_scn: self.header.prev_scn,
+            prev_log_id: self.header.prev_log_id,
+            prev_accumulated_checksum: self.header.prev_accumulated_checksum,
+        }
+    }
+}
+
 impl RecordMeta {
     fn end_lsn(&self) -> u64 {
         self.lsn + self.len
@@ -141,12 +159,14 @@ struct PlannedRecord {
     lsn: u64,
     bytes: Vec<u8>,
     meta: Option<RecordMeta>,
+    new_segment: Option<SegmentHeader>,
 }
 
 struct AppendBatch {
     records: Vec<PlannedRecord>,
     appends: Vec<(u64, u64, u64, u64)>,
-    segment_lengths: BTreeMap<u64, u64>,
+    segments: BTreeMap<u64, SegmentMeta>,
+    last_record: Option<RecordMeta>,
     end_lsn: u64,
     end_scn: u64,
     next_log_id: i64,
@@ -156,7 +176,8 @@ struct AppendBatch {
 struct BatchCheckpoint {
     records_len: usize,
     appends_len: usize,
-    segment_lengths: BTreeMap<u64, u64>,
+    segments: BTreeMap<u64, SegmentMeta>,
+    last_record: Option<RecordMeta>,
     end_lsn: u64,
     end_scn: u64,
     next_log_id: i64,
@@ -191,8 +212,8 @@ struct State {
     manifest_writer: Option<ManifestWriter>,
     append_file: Option<(u64, File)>,
     manifest: Manifest,
-    records: BTreeMap<u64, RecordMeta>,
-    segment_lengths: BTreeMap<u64, u64>,
+    segments: BTreeMap<u64, SegmentMeta>,
+    last_record: Option<RecordMeta>,
     end_lsn: u64,
     end_scn: u64,
     next_log_id: i64,
@@ -249,6 +270,7 @@ pub struct Cursor {
     current_accumulated_checksum: u64,
     current_padding: bool,
     next_min_scn: u64,
+    seek_required: bool,
 }
 
 impl Stream {
@@ -274,8 +296,8 @@ impl Stream {
                     accumulated_checksum: 0,
                 },
             },
-            records: BTreeMap::new(),
-            segment_lengths: BTreeMap::new(),
+            segments: BTreeMap::new(),
+            last_record: None,
             end_lsn: 0,
             end_scn: 0,
             next_log_id: 1,
@@ -459,7 +481,9 @@ impl Stream {
             return Err(Error::Invalid);
         }
         let write_size = groups.iter().try_fold(0u64, |total, group| {
-            total.checked_add(group.bytes.len() as u64).ok_or(Error::Invalid)
+            total
+                .checked_add(group.bytes.len() as u64)
+                .ok_or(Error::Invalid)
         })?;
         let mut state = self.lock_for_write(write_size)?;
         let mut plan = AppendBatch::new(&state);
@@ -484,10 +508,10 @@ impl Stream {
         state.check_open()?;
         let begin_lsn = state.manifest.base_lsn;
         let begin_scn = state
-            .records
-            .range(begin_lsn..)
+            .segments
+            .range(block_id(begin_lsn)..)
             .next()
-            .map(|(_, record)| record.header.max_scn)
+            .map(|(_, segment)| segment.header.first_scn)
             .unwrap_or(state.manifest.previous.prev_scn);
         let unrecyclable_disk = state.end_lsn.saturating_sub(state.manifest.base_lsn);
         Ok(Progress {
@@ -497,7 +521,7 @@ impl Stream {
             end_lsn: state.end_lsn,
             end_scn: state.end_scn,
             ref_scn: state.manifest.ref_scn,
-            used_disk: state.segment_lengths.values().sum(),
+            used_disk: state.segments.values().map(|segment| segment.length).sum(),
             unrecyclable_disk,
             integrity: state.integrity,
         })
@@ -509,7 +533,7 @@ impl Stream {
         if lsn > state.end_lsn || lsn < state.manifest.base_lsn {
             return Err(Error::Invalid);
         }
-        let previous = state.previous_info(lsn);
+        let previous = state.previous_info(lsn)?;
         Ok(BaseInfo {
             curr_lsn: lsn,
             ..previous
@@ -522,7 +546,7 @@ impl Stream {
         if lsn > state.end_lsn || lsn < state.manifest.base_lsn || block_offset(lsn) != 0 {
             return Err(Error::Invalid);
         }
-        let previous = state.previous_info(lsn);
+        let previous = state.previous_info(lsn)?;
         let mut manifest = state.manifest.clone();
         manifest.base_lsn = lsn;
         manifest.previous = BaseInfo {
@@ -540,23 +564,25 @@ impl Stream {
             state.append_file = None;
         }
         let old_blocks: Vec<u64> = state
-            .segment_lengths
+            .segments
             .range(..minimum_block)
             .map(|(id, _)| *id)
             .collect();
         for id in old_blocks {
             match fs::remove_file(segment_path(&state.directory, id)) {
                 Ok(()) => {
-                    state.segment_lengths.remove(&id);
+                    state.segments.remove(&id);
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    state.segment_lengths.remove(&id);
+                    state.segments.remove(&id);
                 }
                 Err(error) => return Err(error.into()),
             }
         }
         sync_directory(&state.directory)?;
-        state.records = state.records.split_off(&lsn);
+        if lsn == state.end_lsn {
+            state.last_record = None;
+        }
         drop(state);
         self.inner.changed.notify_all();
         self.progress()
@@ -578,26 +604,21 @@ impl Stream {
     pub fn locate_by_scn(&self, scn: u64) -> Result<u64> {
         let state = self.lock()?;
         state.check_open()?;
-        let lsn = state
-            .records
+        let (id, _) = state
+            .segments
             .iter()
-            .rfind(|(_, record)| record.header.max_scn <= scn)
-            .map(|(lsn, _)| *lsn)
+            .rfind(|(_, segment)| segment.header.first_scn <= scn)
             .ok_or(Error::OutLower)?;
-        Ok((block_id(lsn) * BLOCK_SIZE).max(state.manifest.base_lsn))
+        Ok((id * BLOCK_SIZE).max(state.manifest.base_lsn))
     }
 
     pub fn locate_by_lsn(&self, lsn: u64) -> Result<u64> {
         let state = self.lock()?;
         state.check_open()?;
-        let (_, record) = state
-            .records
-            .range(..=lsn)
-            .next_back()
-            .ok_or(Error::OutLower)?;
-        if lsn >= record.end_lsn() {
-            return Err(Error::OutUpper);
+        if state.last_record.is_none() {
+            return Err(Error::OutLower);
         }
+        let (record, _) = state.find_record(lsn)?;
         Ok(record.header.max_scn)
     }
 
@@ -637,6 +658,7 @@ impl Cursor {
             current_accumulated_checksum: 0,
             current_padding: false,
             next_min_scn: 0,
+            seek_required: true,
         }
     }
 
@@ -648,6 +670,7 @@ impl Cursor {
         self.next_lsn = lsn;
         self.bytes.clear();
         self.entry_offset = 0;
+        self.seek_required = true;
         Ok(())
     }
 
@@ -677,26 +700,25 @@ impl Cursor {
             if self.next_lsn >= state.end_lsn {
                 return Err(Error::End);
             }
-            let meta = state
-                .records
-                .range(..=self.next_lsn)
-                .next_back()
-                .map(|(_, meta)| meta.clone())
-                .ok_or(Error::OutLower)?;
-            if self.next_lsn >= meta.end_lsn() {
-                let remaining = BLOCK_SIZE - block_offset(self.next_lsn);
-                if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64
-                    && self.next_lsn + remaining <= state.end_lsn
-                {
-                    let next_lsn = self.next_lsn + remaining;
-                    drop(state);
-                    self.next_lsn = next_lsn;
-                    self.bytes.clear();
-                    continue;
-                }
-                return Err(Error::Partial);
+            let remaining = BLOCK_SIZE - block_offset(self.next_lsn);
+            if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64
+                && self.next_lsn + remaining <= state.end_lsn
+            {
+                let next_lsn = state.skip_zero_padding(self.next_lsn)?;
+                drop(state);
+                self.next_lsn = next_lsn;
+                self.bytes.clear();
+                continue;
             }
-            let bytes = state.read_record(meta.lsn)?;
+            let (meta, bytes) = if self.seek_required {
+                state.find_record(self.next_lsn)?
+            } else {
+                match state.read_record(self.next_lsn) {
+                    Ok(record) => record,
+                    Err(Error::OutUpper) => return Err(Error::Partial),
+                    Err(error) => return Err(error),
+                }
+            };
             let header = validate_group(&bytes, meta.lsn)?;
             if self.group_mode {
                 if self.next_lsn != meta.lsn {
@@ -715,6 +737,7 @@ impl Cursor {
                 self.current_padding = header.padding;
                 self.next_lsn = meta.end_lsn();
                 self.next_min_scn = 0;
+                self.seek_required = false;
                 return Ok(());
             }
             let entries = group_entries(&bytes[GROUP_HEADER_SIZE..], meta.lsn)?;
@@ -746,6 +769,7 @@ impl Cursor {
             self.current_lsn = meta.lsn;
             self.current_end_lsn = meta.end_lsn();
             self.next_lsn = meta.end_lsn();
+            self.seek_required = false;
             return self.set_entry(&entries[index]);
         }
     }
@@ -821,7 +845,8 @@ impl AppendBatch {
         Self {
             records: Vec::new(),
             appends: Vec::new(),
-            segment_lengths: state.segment_lengths.clone(),
+            segments: state.segments.clone(),
+            last_record: state.last_record.clone(),
             end_lsn: state.end_lsn,
             end_scn: state.end_scn,
             next_log_id: state.next_log_id,
@@ -833,7 +858,8 @@ impl AppendBatch {
         BatchCheckpoint {
             records_len: self.records.len(),
             appends_len: self.appends.len(),
-            segment_lengths: self.segment_lengths.clone(),
+            segments: self.segments.clone(),
+            last_record: self.last_record.clone(),
             end_lsn: self.end_lsn,
             end_scn: self.end_scn,
             next_log_id: self.next_log_id,
@@ -844,7 +870,8 @@ impl AppendBatch {
     fn rollback(&mut self, checkpoint: BatchCheckpoint) {
         self.records.truncate(checkpoint.records_len);
         self.appends.truncate(checkpoint.appends_len);
-        self.segment_lengths = checkpoint.segment_lengths;
+        self.segments = checkpoint.segments;
+        self.last_record = checkpoint.last_record;
         self.end_lsn = checkpoint.end_lsn;
         self.end_scn = checkpoint.end_scn;
         self.next_log_id = checkpoint.next_log_id;
@@ -852,15 +879,69 @@ impl AppendBatch {
     }
 
     fn ensure_capacity(&self, state: &State, additional: u64) -> Result<()> {
-        state.ensure_capacity_at(&self.segment_lengths, self.end_lsn, additional)
+        state.ensure_capacity_at(&self.segments, self.end_lsn, additional)
     }
 
-    fn note_write(&mut self, lsn: u64, length: usize) {
-        let segment_length = self
-            .segment_lengths
-            .entry(block_id(lsn))
-            .or_insert(SEGMENT_HEADER_SIZE);
-        *segment_length = (*segment_length).max(physical_offset(lsn) + length as u64);
+    fn note_write(&mut self, lsn: u64, length: usize) -> Result<()> {
+        let segment = self
+            .segments
+            .get_mut(&block_id(lsn))
+            .ok_or(Error::Invalid)?;
+        segment.length = segment.length.max(physical_offset(lsn) + length as u64);
+        Ok(())
+    }
+
+    fn push_record(
+        &mut self,
+        state: &State,
+        lsn: u64,
+        bytes: Vec<u8>,
+        meta: Option<RecordMeta>,
+    ) -> Result<()> {
+        let new_segment = if self.segments.contains_key(&block_id(lsn)) {
+            None
+        } else {
+            let meta = meta.as_ref().ok_or(Error::Invalid)?;
+            let mut previous =
+                self.last_record
+                    .as_ref()
+                    .map_or(state.manifest.previous, |record| BaseInfo {
+                        curr_lsn: lsn,
+                        prev_lsn: record.lsn,
+                        prev_scn: record.header.max_scn,
+                        prev_log_id: record.header.log_id,
+                        prev_accumulated_checksum: record.header.accumulated_checksum,
+                    });
+            previous.curr_lsn = lsn;
+            Some(SegmentHeader {
+                start_lsn: lsn,
+                prev_lsn: previous.prev_lsn,
+                prev_scn: previous.prev_scn,
+                prev_log_id: previous.prev_log_id,
+                prev_accumulated_checksum: previous.prev_accumulated_checksum,
+                first_scn: meta.header.max_scn,
+            })
+        };
+        if let Some(header) = &new_segment {
+            self.segments.insert(
+                block_id(lsn),
+                SegmentMeta {
+                    length: SEGMENT_HEADER_SIZE,
+                    header: header.clone(),
+                },
+            );
+        }
+        self.note_write(lsn, bytes.len())?;
+        if let Some(meta) = &meta {
+            self.last_record = Some(meta.clone());
+        }
+        self.records.push(PlannedRecord {
+            lsn,
+            bytes,
+            meta,
+            new_segment,
+        });
+        Ok(())
     }
 
     fn push(&mut self, state: &State, request: &PendingAppend) -> Result<()> {
@@ -873,12 +954,7 @@ impl AppendBatch {
             if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64 {
                 self.ensure_capacity(state, remaining)?;
                 let bytes = zeroed_bytes(remaining as usize)?;
-                self.note_write(lsn, bytes.len());
-                self.records.push(PlannedRecord {
-                    lsn,
-                    bytes,
-                    meta: None,
-                });
+                self.push_record(state, lsn, bytes, None)?;
             } else {
                 let payload_len = remaining as usize - GROUP_HEADER_SIZE - ENTRY_HEADER_SIZE;
                 let entry = encode_entry(&zeroed_bytes(payload_len)?, scn, true)?;
@@ -892,16 +968,16 @@ impl AppendBatch {
                 )?;
                 self.ensure_capacity(state, group.len() as u64)?;
                 let header = validate_group(&group, lsn)?;
-                self.note_write(lsn, group.len());
-                self.records.push(PlannedRecord {
+                self.push_record(
+                    state,
                     lsn,
-                    bytes: group,
-                    meta: Some(RecordMeta {
+                    group,
+                    Some(RecordMeta {
                         lsn,
                         len: remaining,
                         header: header.clone(),
                     }),
-                });
+                )?;
                 self.accumulated_checksum = header.accumulated_checksum;
                 self.next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
             }
@@ -918,16 +994,16 @@ impl AppendBatch {
         )?;
         self.ensure_capacity(state, group.len() as u64)?;
         let header = validate_group(&group, lsn)?;
-        self.note_write(lsn, group.len());
-        self.records.push(PlannedRecord {
+        self.push_record(
+            state,
             lsn,
-            bytes: group,
-            meta: Some(RecordMeta {
+            group,
+            Some(RecordMeta {
                 lsn,
                 len: group_len as u64,
                 header: header.clone(),
             }),
-        });
+        )?;
         self.end_lsn = lsn + group_len as u64;
         self.end_scn = scn;
         self.appends.push((
@@ -961,16 +1037,16 @@ impl AppendBatch {
             return Err(Error::Invalid);
         }
         self.ensure_capacity(state, group.bytes.len() as u64)?;
-        self.note_write(group.source_lsn, group.bytes.len());
-        self.records.push(PlannedRecord {
-            lsn: group.source_lsn,
-            bytes: copied_bytes(group.bytes)?,
-            meta: Some(RecordMeta {
+        self.push_record(
+            state,
+            group.source_lsn,
+            copied_bytes(group.bytes)?,
+            Some(RecordMeta {
                 lsn: group.source_lsn,
                 len: group.bytes.len() as u64,
                 header: header.clone(),
             }),
-        });
+        )?;
         self.end_lsn = group.source_lsn + group.bytes.len() as u64;
         self.end_scn = group.source_scn;
         self.next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
@@ -1120,16 +1196,12 @@ impl State {
         };
         self.publish_manifest(&manifest)?;
         self.manifest = manifest;
-        self.segment_lengths = plan.segment_lengths.clone();
+        self.segments = plan.segments.clone();
+        self.last_record = plan.last_record.clone();
         self.end_lsn = plan.end_lsn;
         self.end_scn = plan.end_scn;
         self.next_log_id = plan.next_log_id;
         self.accumulated_checksum = plan.accumulated_checksum;
-        for record in &plan.records {
-            if let Some(meta) = &record.meta {
-                self.records.insert(meta.lsn, meta.clone());
-            }
-        }
         Ok(())
     }
 
@@ -1138,7 +1210,7 @@ impl State {
         let mut new_segment = false;
         while index < records.len() {
             let id = block_id(records[index].lsn);
-            let create = !self.segment_lengths.contains_key(&id);
+            let create = !self.segments.contains_key(&id);
             if self
                 .append_file
                 .as_ref()
@@ -1154,7 +1226,8 @@ impl State {
             }
             let file = &mut self.append_file.as_mut().ok_or(Error::Io)?.1;
             if create {
-                file.write_all(&encode_segment_header(id)?)?;
+                let header = records[index].new_segment.as_ref().ok_or(Error::Invalid)?;
+                file.write_all(&encode_segment_header(id, header)?)?;
                 new_segment = true;
             }
             while index < records.len() && block_id(records[index].lsn) == id {
@@ -1173,7 +1246,7 @@ impl State {
 
     fn ensure_capacity_at(
         &self,
-        segment_lengths: &BTreeMap<u64, u64>,
+        segments: &BTreeMap<u64, SegmentMeta>,
         end_lsn: u64,
         additional: u64,
     ) -> Result<()> {
@@ -1181,9 +1254,9 @@ impl State {
         if hard_limit == 0 {
             return Ok(());
         }
-        let used: u64 = segment_lengths.values().sum();
+        let used: u64 = segments.values().map(|segment| segment.length).sum();
         let id = block_id(end_lsn);
-        let segment_exists = segment_lengths.contains_key(&id);
+        let segment_exists = segments.contains_key(&id);
         let required = additional
             + if segment_exists {
                 0
@@ -1218,30 +1291,217 @@ impl State {
         Some(Duration::from_micros(delay_us.min(u64::MAX as u128) as u64))
     }
 
-    fn read_record(&self, lsn: u64) -> Result<Vec<u8>> {
-        let meta = self.records.get(&lsn).ok_or(Error::OutLower)?;
-        let mut file = File::open(segment_path(&self.directory, block_id(lsn)))?;
-        file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-        let mut bytes = zeroed_bytes(meta.len as usize)?;
-        file.read_exact(&mut bytes)?;
-        validate_group(&bytes, lsn)?;
-        Ok(bytes)
+    fn read_record(&self, lsn: u64) -> Result<(RecordMeta, Vec<u8>)> {
+        let id = block_id(lsn);
+        let segment = self.segments.get(&id).ok_or(Error::OutLower)?;
+        let mut file = File::open(segment_path(&self.directory, id))?;
+        read_record_from(
+            &mut file,
+            segment.length,
+            lsn,
+            self.end_lsn.min((id + 1) * BLOCK_SIZE),
+        )
     }
 
-    fn previous_info(&self, lsn: u64) -> BaseInfo {
-        if let Some((_, record)) = self.records.range(..lsn).next_back() {
-            BaseInfo {
-                curr_lsn: lsn,
-                prev_lsn: record.lsn,
-                prev_scn: record.header.max_scn,
-                prev_log_id: record.header.log_id,
-                prev_accumulated_checksum: record.header.accumulated_checksum,
+    fn skip_zero_padding(&self, lsn: u64) -> Result<u64> {
+        let id = block_id(lsn);
+        let segment = self.segments.get(&id).ok_or(Error::Corrupt)?;
+        let remaining = BLOCK_SIZE - block_offset(lsn);
+        if physical_offset(lsn) + remaining > segment.length {
+            return Err(Error::Corrupt);
+        }
+        let mut file = File::open(segment_path(&self.directory, id))?;
+        file.seek(SeekFrom::Start(physical_offset(lsn)))?;
+        let mut padding = zeroed_bytes(remaining as usize)?;
+        file.read_exact(&mut padding)?;
+        if padding.iter().any(|byte| *byte != 0) {
+            return Err(Error::Corrupt);
+        }
+        Ok(lsn + remaining)
+    }
+
+    fn find_record(&self, lsn: u64) -> Result<(RecordMeta, Vec<u8>)> {
+        if lsn < self.manifest.base_lsn {
+            return Err(Error::OutLower);
+        }
+        let id = block_id(lsn);
+        let Some(segment) = self.segments.get(&id) else {
+            return Err(if self.last_record.is_none() {
+                Error::OutLower
+            } else {
+                Error::OutUpper
+            });
+        };
+        let mut scanner = SegmentScanner::new(
+            &self.directory,
+            id,
+            segment,
+            self.end_lsn.min((id + 1) * BLOCK_SIZE),
+        )?;
+        while let Some((record, bytes)) = scanner.next()? {
+            if lsn < record.end_lsn() {
+                return Ok((record, bytes));
             }
-        } else {
-            BaseInfo {
-                curr_lsn: lsn,
-                ..self.manifest.previous
+        }
+        Err(Error::OutUpper)
+    }
+
+    fn previous_info(&self, lsn: u64) -> Result<BaseInfo> {
+        if lsn == self.manifest.base_lsn {
+            return Ok(self.manifest.previous);
+        }
+        if lsn == self.end_lsn {
+            if let Some(record) = &self.last_record {
+                return Ok(base_after_record(lsn, record));
             }
+        }
+        let id = block_id(lsn);
+        let segment = self.segments.get(&id).ok_or(Error::Corrupt)?;
+        let base = segment.base_info();
+        if block_offset(lsn) == 0 {
+            return Ok(base);
+        }
+        let mut previous = base;
+        let mut scanner = SegmentScanner::new(
+            &self.directory,
+            id,
+            segment,
+            self.end_lsn.min((id + 1) * BLOCK_SIZE),
+        )?;
+        while let Some((record, _)) = scanner.next()? {
+            if record.lsn >= lsn {
+                break;
+            }
+            previous = base_after_record(lsn, &record);
+        }
+        Ok(previous)
+    }
+}
+
+fn base_after_record(curr_lsn: u64, record: &RecordMeta) -> BaseInfo {
+    BaseInfo {
+        curr_lsn,
+        prev_lsn: record.lsn,
+        prev_scn: record.header.max_scn,
+        prev_log_id: record.header.log_id,
+        prev_accumulated_checksum: record.header.accumulated_checksum,
+    }
+}
+
+fn read_record_from(
+    file: &mut File,
+    segment_length: u64,
+    lsn: u64,
+    limit: u64,
+) -> Result<(RecordMeta, Vec<u8>)> {
+    if physical_offset(lsn) + GROUP_HEADER_SIZE as u64 > segment_length {
+        return Err(Error::OutUpper);
+    }
+    file.seek(SeekFrom::Start(physical_offset(lsn)))?;
+    let mut header_bytes = zeroed_bytes(GROUP_HEADER_SIZE)?;
+    file.read_exact(&mut header_bytes)?;
+    if header_bytes.iter().all(|byte| *byte == 0) {
+        return Err(Error::OutUpper);
+    }
+    let header = decode_group_header(&header_bytes)?;
+    let record_len = GROUP_HEADER_SIZE as u64 + header.data_len as u64;
+    let record_end = lsn.checked_add(record_len).ok_or(Error::Corrupt)?;
+    if block_offset(lsn) + record_len > BLOCK_SIZE
+        || record_end > limit
+        || physical_offset(lsn) + record_len > segment_length
+    {
+        return Err(Error::Corrupt);
+    }
+    let mut bytes = zeroed_bytes(record_len as usize)?;
+    bytes[..GROUP_HEADER_SIZE].copy_from_slice(&header_bytes);
+    file.read_exact(&mut bytes[GROUP_HEADER_SIZE..])?;
+    let header = validate_group(&bytes, lsn)?;
+    Ok((
+        RecordMeta {
+            lsn,
+            len: record_len,
+            header,
+        },
+        bytes,
+    ))
+}
+
+struct SegmentScanner {
+    file: File,
+    segment_length: u64,
+    limit: u64,
+    lsn: u64,
+    end_scn: u64,
+    next_log_id: i64,
+    accumulated_checksum: u64,
+    last_record: Option<RecordMeta>,
+}
+
+impl SegmentScanner {
+    fn new(directory: &Path, id: u64, segment: &SegmentMeta, limit: u64) -> Result<Self> {
+        let start = segment.header.start_lsn;
+        if block_id(start) != id || limit < start || limit > (id + 1) * BLOCK_SIZE {
+            return Err(Error::Corrupt);
+        }
+        Ok(Self {
+            file: File::open(segment_path(directory, id))?,
+            segment_length: segment.length,
+            limit,
+            lsn: start,
+            end_scn: segment.header.prev_scn,
+            next_log_id: segment
+                .header
+                .prev_log_id
+                .checked_add(1)
+                .ok_or(Error::Corrupt)?,
+            accumulated_checksum: segment.header.prev_accumulated_checksum,
+            last_record: None,
+        })
+    }
+
+    fn next(&mut self) -> Result<Option<(RecordMeta, Vec<u8>)>> {
+        loop {
+            if self.lsn == self.limit {
+                return Ok(None);
+            }
+            if self.lsn > self.limit {
+                return Err(Error::Corrupt);
+            }
+            let remaining = BLOCK_SIZE - block_offset(self.lsn);
+            if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64 {
+                if self.lsn + remaining != self.limit
+                    || physical_offset(self.lsn) + remaining > self.segment_length
+                {
+                    return Err(Error::Corrupt);
+                }
+                let mut padding = zeroed_bytes(remaining as usize)?;
+                self.file.seek(SeekFrom::Start(physical_offset(self.lsn)))?;
+                self.file.read_exact(&mut padding)?;
+                if padding.iter().any(|byte| *byte != 0) {
+                    return Err(Error::Corrupt);
+                }
+                self.lsn += remaining;
+                continue;
+            }
+            let (record, bytes) =
+                read_record_from(&mut self.file, self.segment_length, self.lsn, self.limit)?;
+            let header = &record.header;
+            if header.committed_end_lsn != self.lsn
+                || header.log_id != self.next_log_id
+                || header.accumulated_checksum
+                    != crc64_with_seed(
+                        self.accumulated_checksum,
+                        &header.data_checksum.to_le_bytes(),
+                    )
+            {
+                return Err(Error::Corrupt);
+            }
+            self.lsn = record.end_lsn();
+            self.end_scn = header.max_scn;
+            self.next_log_id = header.log_id.checked_add(1).ok_or(Error::Corrupt)?;
+            self.accumulated_checksum = header.accumulated_checksum;
+            self.last_record = Some(record.clone());
+            return Ok(Some((record, bytes)));
         }
     }
 }
@@ -1279,8 +1539,8 @@ fn create_state(
         next_log_id: base.prev_log_id.checked_add(1).ok_or(Error::Invalid)?,
         accumulated_checksum: base.prev_accumulated_checksum,
         manifest,
-        records: BTreeMap::new(),
-        segment_lengths: BTreeMap::new(),
+        segments: BTreeMap::new(),
+        last_record: None,
         disk_policy,
         integrity: true,
         closed: false,
@@ -1295,8 +1555,6 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
     if committed.end_lsn < manifest.base_lsn {
         return Err(Error::Corrupt);
     }
-    let mut records = BTreeMap::new();
-    let mut segment_lengths = BTreeMap::new();
     let mut ids = Vec::new();
     for item in fs::read_dir(directory)? {
         let item = item?;
@@ -1317,102 +1575,77 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
     {
         return Err(Error::Corrupt);
     }
-    let mut end_lsn = manifest.base_lsn;
-    let mut end_scn = manifest.previous.prev_scn;
-    let mut next_log_id = manifest
-        .previous
-        .prev_log_id
-        .checked_add(1)
-        .ok_or(Error::Corrupt)?;
-    let mut accumulated_checksum = manifest.previous.prev_accumulated_checksum;
+    let first_required = block_id(manifest.base_lsn);
+    let last_required =
+        (committed.end_lsn > manifest.base_lsn).then(|| block_id(committed.end_lsn - 1));
+    let required_count = last_required.map_or(0, |last| last - first_required + 1);
+    let mut required_seen = 0u64;
+    let mut segments = BTreeMap::new();
     for id in ids.iter().copied() {
-        if end_lsn == committed.end_lsn {
-            break;
+        if last_required.is_none_or(|last| id > last) {
+            continue;
         }
-        if id != block_id(end_lsn) {
+        if id != first_required + required_seen {
             return Err(Error::Corrupt);
         }
+        required_seen += 1;
         let path = segment_path(directory, id);
-        let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+        let mut file = File::open(&path)?;
         let length = file.metadata()?.len();
         if !(SEGMENT_HEADER_SIZE..=PHYSICAL_BLOCK_SIZE).contains(&length) {
             return Err(Error::Corrupt);
         }
-        let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
-        file.read_exact(&mut segment_header)?;
-        validate_segment_header(&segment_header, id)?;
-        segment_lengths.insert(id, length);
-        while end_lsn < committed.end_lsn && block_id(end_lsn) == id {
-            let lsn = end_lsn;
-            let remaining = BLOCK_SIZE - block_offset(lsn);
-            if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64 {
-                if physical_offset(lsn) + remaining > length {
-                    return Err(Error::Corrupt);
-                }
-                let mut padding = zeroed_bytes(remaining as usize)?;
-                file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-                file.read_exact(&mut padding)?;
-                if padding.iter().any(|byte| *byte != 0) {
-                    return Err(Error::Corrupt);
-                }
-                end_lsn += remaining;
-                continue;
-            }
-            if physical_offset(lsn) + GROUP_HEADER_SIZE as u64 > length {
-                return Err(Error::Corrupt);
-            }
-            file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-            let mut header_bytes = zeroed_bytes(GROUP_HEADER_SIZE)?;
-            file.read_exact(&mut header_bytes)?;
-            if header_bytes.iter().all(|byte| *byte == 0) {
-                return Err(Error::Corrupt);
-            }
-            let header = decode_group_header(&header_bytes)?;
-            let record_len = GROUP_HEADER_SIZE as u64 + header.data_len as u64;
-            let record_end = lsn.checked_add(record_len).ok_or(Error::Corrupt)?;
-            if block_offset(lsn) + record_len > BLOCK_SIZE
-                || record_end > committed.end_lsn
-                || physical_offset(lsn) + record_len > length
-            {
-                return Err(Error::Corrupt);
-            }
-            let mut bytes = zeroed_bytes(record_len as usize)?;
-            file.seek(SeekFrom::Start(physical_offset(lsn)))?;
-            file.read_exact(&mut bytes)?;
-            let header = validate_group(&bytes, lsn)?;
-            if header.committed_end_lsn != lsn
-                || header.log_id != next_log_id
-                || header.accumulated_checksum
-                    != crc64_with_seed(accumulated_checksum, &header.data_checksum.to_le_bytes())
-            {
-                return Err(Error::Corrupt);
-            }
-            let meta = RecordMeta {
-                lsn,
-                len: record_len,
-                header: header.clone(),
-            };
-            records.insert(lsn, meta);
-            end_lsn = record_end;
-            end_scn = header.max_scn;
-            next_log_id = header.log_id.checked_add(1).ok_or(Error::Corrupt)?;
-            accumulated_checksum = header.accumulated_checksum;
-        }
-        if end_lsn != committed.end_lsn.min((id + 1) * BLOCK_SIZE) {
+        if last_required.is_some_and(|last| id < last) && length != PHYSICAL_BLOCK_SIZE {
             return Err(Error::Corrupt);
         }
+        let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
+        file.read_exact(&mut segment_header)?;
+        let header = validate_segment_header(&segment_header, id)?;
+        if block_id(header.start_lsn) != id
+            || header.start_lsn < manifest.base_lsn
+            || header.first_scn < header.prev_scn
+            || (id != first_required && block_offset(header.start_lsn) != 0)
+        {
+            return Err(Error::Corrupt);
+        }
+        segments.insert(id, SegmentMeta { length, header });
     }
-    if end_lsn != committed.end_lsn
-        || end_scn != committed.end_scn
-        || next_log_id != committed.log_id.checked_add(1).ok_or(Error::Corrupt)?
-        || accumulated_checksum != committed.accumulated_checksum
+    if required_seen != required_count {
+        return Err(Error::Corrupt);
+    }
+    if let Some(segment) = segments.get(&first_required) {
+        if segment.base_info() != manifest.previous {
+            return Err(Error::Corrupt);
+        }
+    } else if last_required.is_some() {
+        return Err(Error::Corrupt);
+    }
+    let mut last_record = None;
+    if let Some(last) = last_required {
+        let segment = segments.get(&last).ok_or(Error::Corrupt)?;
+        let mut scanner = SegmentScanner::new(directory, last, segment, committed.end_lsn)?;
+        let mut first = true;
+        while let Some((record, _)) = scanner.next()? {
+            if first && record.header.max_scn != segment.header.first_scn {
+                return Err(Error::Corrupt);
+            }
+            first = false;
+        }
+        if first
+            || scanner.lsn != committed.end_lsn
+            || scanner.end_scn != committed.end_scn
+            || scanner.next_log_id != committed.log_id.checked_add(1).ok_or(Error::Corrupt)?
+            || scanner.accumulated_checksum != committed.accumulated_checksum
+        {
+            return Err(Error::Corrupt);
+        }
+        last_record = scanner.last_record;
+    } else if committed.end_scn != manifest.previous.prev_scn
+        || committed.log_id != manifest.previous.prev_log_id
+        || committed.accumulated_checksum != manifest.previous.prev_accumulated_checksum
     {
         return Err(Error::Corrupt);
     }
-    let last_required = records
-        .values()
-        .next_back()
-        .map(|record| block_id(record.lsn));
     let mut removed_segment = false;
     let mut append_file = None;
     for id in ids {
@@ -1423,14 +1656,15 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
                 PHYSICAL_BLOCK_SIZE
             };
             let path = segment_path(directory, id);
-            let file = OpenOptions::new()
-                .write(true)
-                .open(&path)?;
+            let file = OpenOptions::new().write(true).open(&path)?;
             file.set_len(valid_length)?;
             append_file = Some((id, file));
-            segment_lengths.insert(id, valid_length);
+            if let Some(segment) = segments.get_mut(&id) {
+                segment.length = valid_length;
+            }
         } else if last_required.is_none_or(|last| id > last) {
             fs::remove_file(segment_path(directory, id))?;
+            segments.remove(&id);
             removed_segment = true;
         }
     }
@@ -1442,12 +1676,12 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         manifest_writer: Some(manifest_writer),
         append_file,
         manifest,
-        records,
-        segment_lengths,
-        end_lsn,
-        end_scn,
-        next_log_id,
-        accumulated_checksum,
+        segments,
+        last_record,
+        end_lsn: committed.end_lsn,
+        end_scn: committed.end_scn,
+        next_log_id: committed.log_id.checked_add(1).ok_or(Error::Corrupt)?,
+        accumulated_checksum: committed.accumulated_checksum,
         disk_policy,
         integrity: true,
         closed: false,
@@ -1692,7 +1926,7 @@ mod tests {
             file.write_all(&group).unwrap();
             file.sync_data().unwrap();
             let length = file.metadata().unwrap().len();
-            state.segment_lengths.insert(block_id(lsn), length);
+            state.segments.get_mut(&block_id(lsn)).unwrap().length = length;
         }
         drop(stream);
 
@@ -1705,6 +1939,27 @@ mod tests {
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"next");
         assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+    }
+
+    #[test]
+    fn incomplete_unconfirmed_segment_is_removed_without_validation() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let confirmed = stream.append(b"confirmed", 10).unwrap();
+        drop(stream);
+        OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(segment_path(&directory.0, 1))
+            .unwrap()
+            .write_all(b"torn segment header")
+            .unwrap();
+
+        let reopened = Stream::open(&path, 0);
+        assert_eq!(reopened.status(), Ok(true));
+        assert_eq!(reopened.progress().unwrap().end_lsn, confirmed.end_lsn);
+        assert!(!segment_path(&directory.0, 1).exists());
     }
 
     #[test]
@@ -1732,6 +1987,42 @@ mod tests {
             fs::metadata(segment_path(&directory.0, 0)).unwrap().len(),
             physical_offset(second.end_lsn)
         );
+    }
+
+    #[test]
+    fn recovery_validates_the_tail_without_scanning_old_segment_data() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0, 0);
+        let large = vec![7; 1024 * 1024];
+        for index in 0..70 {
+            stream.append(&large, index + 1).unwrap();
+        }
+        let tail = stream.append(b"tail", 100).unwrap();
+        let expected_scn_position = stream.locate_by_scn(65).unwrap();
+        drop(stream);
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .open(segment_path(&directory.0, 0))
+            .unwrap();
+        file.seek(SeekFrom::Start(
+            physical_offset(0) + (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64,
+        ))
+        .unwrap();
+        file.write_all(b"X").unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+
+        let reopened = Stream::open(&path, 0);
+        assert_eq!(reopened.status(), Ok(true));
+        assert_eq!(reopened.locate_by_scn(65), Ok(expected_scn_position));
+        assert_eq!(reopened.locate_by_lsn(tail.lsn), Ok(100));
+        let mut old = reopened.cursor(0, true);
+        assert_eq!(old.next(u64::MAX), Err(Error::Corrupt));
+        let mut tail_cursor = reopened.cursor(block_id(tail.lsn) * BLOCK_SIZE, true);
+        while tail_cursor.next(u64::MAX).is_ok() {}
+        assert_eq!(tail_cursor.current_lsn, tail.lsn - GROUP_HEADER_SIZE as u64);
     }
 
     #[test]
@@ -1776,13 +2067,16 @@ mod tests {
             stream.progress().unwrap().end_lsn
         );
         let checkpoint = BLOCK_SIZE;
+        let expected_base = stream.base_info(checkpoint).unwrap();
         let progress = stream.set_base_lsn(checkpoint).unwrap();
         assert_eq!(progress.unrecyclable_disk, progress.end_lsn - checkpoint);
         assert!(!segment_path(&directory.0, 0).exists());
+        let expected_begin_scn = stream.progress().unwrap().begin_scn;
         drop(stream);
         let reopened = Stream::open(&path, 0);
         assert_eq!(reopened.progress().unwrap().base_lsn, checkpoint);
-        assert_eq!(reopened.base_info(checkpoint).unwrap().curr_lsn, checkpoint);
+        assert_eq!(reopened.base_info(checkpoint).unwrap(), expected_base);
+        assert_eq!(reopened.progress().unwrap().begin_scn, expected_begin_scn);
     }
 
     #[test]
@@ -1961,10 +2255,7 @@ mod tests {
         let mut corrupted = bytes.clone();
         let last = corrupted.len() - 1;
         corrupted[last] ^= 1;
-        assert_eq!(
-            import(&target, 0, 10, &corrupted),
-            Err(Error::Corrupt)
-        );
+        assert_eq!(import(&target, 0, 10, &corrupted), Err(Error::Corrupt));
         import(&target, 0, 10, &bytes).unwrap();
         assert_eq!(import(&target, 0, 10, &bytes), Err(Error::Duplicate));
         let header = validate_group(&bytes, 0).unwrap();
@@ -2089,19 +2380,12 @@ mod tests {
         }
         let largest = vec![5; MAX_LOG_BODY_SIZE];
         let accepted = stream.append(&largest, 30).unwrap();
-        assert_eq!(
-            accepted.lsn,
-            target_group_lsn + GROUP_HEADER_SIZE as u64
-        );
+        assert_eq!(accepted.lsn, target_group_lsn + GROUP_HEADER_SIZE as u64);
         assert_eq!(accepted.end_lsn, BLOCK_SIZE);
         expected.push((accepted.lsn, accepted.scn, largest));
         let next_segment = stream.append(b"next-segment", 31).unwrap();
         assert_eq!(next_segment.lsn, BLOCK_SIZE + GROUP_HEADER_SIZE as u64);
-        expected.push((
-            next_segment.lsn,
-            next_segment.scn,
-            b"next-segment".to_vec(),
-        ));
+        expected.push((next_segment.lsn, next_segment.scn, b"next-segment".to_vec()));
 
         assert_eq!(
             stream.append(&vec![6; MAX_LOG_BODY_SIZE + 1], 32),
@@ -2171,6 +2455,17 @@ mod tests {
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"two");
         assert_eq!(cursor.lsn(), first_entry_len + GROUP_HEADER_SIZE as u64);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"three");
+        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        drop(stream);
+
+        let reopened = Stream::open(&path, 0);
+        let second_lsn = first_entry_len + GROUP_HEADER_SIZE as u64;
+        assert_eq!(reopened.locate_by_lsn(second_lsn), Ok(11));
+        let mut cursor = reopened.cursor(second_lsn, false);
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"two");
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"three");
         assert_eq!(cursor.next(u64::MAX), Err(Error::End));
