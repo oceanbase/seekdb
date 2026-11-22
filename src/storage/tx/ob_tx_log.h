@@ -26,7 +26,7 @@
 #include "share/ob_admin_dump_helper.h"
 #include "share/log/ob_log_base_type.h"
 #include "share/log/ob_log_base_header.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 #include "share/scn.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "storage/tablelock/ob_table_lock_common.h"

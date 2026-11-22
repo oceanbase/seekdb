@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_LOGSERVICE_PALF_HANDLE_GUARD_
 #define OCEANBASE_LOGSERVICE_PALF_HANDLE_GUARD_
 #include "share/ob_delegate.h"
-#include "palf/palf_handle.h"
-#include "palf/palf_env.h"
+#include "palf_adapter/palf_handle.h"
+#include "palf_adapter/palf_env.h"
 namespace oceanbase
 {
 namespace palf

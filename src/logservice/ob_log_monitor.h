@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_OB_LOG_MONITOR_H_
 #define OCEANBASE_LOGSERVICE_OB_LOG_MONITOR_H_
 
-#include "palf/palf_callback.h"
+#include "palf_adapter/palf_callback.h"
 
 namespace oceanbase
 {

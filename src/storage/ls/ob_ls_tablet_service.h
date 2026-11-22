@@ -22,7 +22,7 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "share/log/ob_log_base_type.h"
-#include "logservice/palf/palf_callback.h"
+#include "logservice/palf_adapter/palf_callback.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/ob_dml_common.h"
 #include "storage/ob_relative_table.h"

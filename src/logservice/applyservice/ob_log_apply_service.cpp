@@ -17,7 +17,7 @@
 #include "ob_log_apply_service.h"
 #include "logservice/ob_append_callback.h"
 #include "logservice/ob_i_log_storage.h"
-#include "logservice/palf/palf_env.h"
+#include "logservice/palf_adapter/palf_env.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
 namespace oceanbase

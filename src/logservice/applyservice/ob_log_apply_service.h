@@ -22,8 +22,8 @@
 #include "lib/queue/ob_link_queue.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/thread/ob_thread_lease.h"
-#include "logservice/palf/palf_callback.h"
-#include "logservice/palf/palf_handle.h"
+#include "logservice/palf_adapter/palf_callback.h"
+#include "logservice/palf_adapter/palf_handle.h"
 #include "share/scn.h"
 
 namespace oceanbase

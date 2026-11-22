@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_OB_LOG_BASE_TYPE_
 #define OCEANBASE_LOGSERVICE_OB_LOG_BASE_TYPE_
 
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 
 namespace oceanbase
 {

@@ -98,7 +98,6 @@ int ObReplayServiceSubmitTask::init(const palf::LSN &base_lsn,
     CLOG_LOG(WARN, "invalid argument", K(type_), K(ret), K(replay_status));
   } else if (OB_FAIL(seek_log_iterator_no_shared_storage(
                  replay_status->palf_env_, base_lsn, iterator_))) {
-  } else if (OB_FAIL(iterator_.set_io_context(palf::LogIOContext(palf::LogIOUser::REPLAY)))) {
   } else if (OB_UNLIKELY(!base_scn.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "base_scn is invalid", K(type_), K(base_lsn), K(base_scn), KR(ret));

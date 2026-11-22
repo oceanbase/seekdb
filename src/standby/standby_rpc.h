@@ -45,7 +45,7 @@
 #include "lib/container/ob_se_array.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 #include "storage/ls/ob_ls_meta.h"
 #include "lib/oblog/ob_log_module.h"
 #include <climits>

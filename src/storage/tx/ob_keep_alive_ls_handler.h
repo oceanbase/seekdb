@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_KEEP_ALIVE_LS_HANDLER
 #define OCEANBASE_TRANSACTION_KEEP_ALIVE_LS_HANDLER
 
-#include "logservice/palf/palf_callback.h"
+#include "logservice/palf_adapter/palf_callback.h"
 #include "share/log/ob_log_base_header.h"
 #include "share/log/ob_log_base_type.h"
 #include "logservice/ob_append_callback.h"

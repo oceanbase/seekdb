@@ -22,10 +22,10 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "common/ob_role.h"
 #include "share/ob_delegate.h"
-#include "palf/palf_env.h"
-#include "palf/palf_handle.h"
-#include "share/log/palf/palf_base_info.h"
-#include "palf/palf_iterator.h"
+#include "palf_adapter/palf_env.h"
+#include "palf_adapter/palf_handle.h"
+#include "share/log/types/palf_base_info.h"
+#include "palf_adapter/palf_iterator.h"
 
 namespace oceanbase
 {
@@ -201,7 +201,7 @@ public:
   // - OB_ERR_OUT_OF_LOWER_BOUND: scn is too old, log files may have been recycled
   // - others: bug
 
-  // @desc: query coarse lsn by ts(ns), that means there is a LogGroupEntry in disk,
+  // @desc: query coarse lsn by ts(ns), that means there is a group record in disk,
   // its lsn and scn are result_lsn and result_scn, and result_scn <= scn.
   // Note that this function may be time-consuming
   // Note that result_lsn is a readable coarse lower bound for the located log.

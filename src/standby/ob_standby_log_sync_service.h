@@ -23,7 +23,7 @@
 #include "lib/net/ob_addr.h"
 #include "lib/string/ob_string.h"
 #include "lib/task/ob_timer.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 #include "share/scn.h"
 
 namespace oceanbase

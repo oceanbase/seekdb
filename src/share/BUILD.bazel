@@ -203,10 +203,10 @@ grouped_unity_cc_library(
     public_hdrs = [
         "log/ob_log_base_header.h",
         "log/ob_log_base_type.h",
-        "log/palf/log_define.h",
-        "log/palf/lsn.h",
-        "log/palf/palf_base_info.h",
-        "log/palf/palf_options.h",
+        "log/types/log_define.h",
+        "log/types/lsn.h",
+        "log/types/palf_base_info.h",
+        "log/types/palf_options.h",
     ],
     deps = [
         ":error_codes",

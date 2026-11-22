@@ -25,7 +25,7 @@
 #include "logservice/ob_log_service.h"
 #include "logservice/replayservice/ob_log_replay_service.h"
 #include "share/ob_debug_sync.h"
-#include "share/log/palf/log_define.h"
+#include "share/log/types/log_define.h"
 #include "share/rc/ob_server_runtime.h"
 #include "standby/standby_rpc.h"
 #include "standby/ob_standby_source_util.h"

@@ -20,7 +20,7 @@
 #include "common/ob_role.h"
 #include "lib/ob_define.h"
 #include "applyservice/ob_log_apply_service.h"
-#include "share/log/palf/log_define.h"
+#include "share/log/types/log_define.h"
 #include "localservice/ob_local_log_handler_set.h"
 #include "replayservice/ob_log_replay_service.h"
 #include "ob_i_log_storage.h"

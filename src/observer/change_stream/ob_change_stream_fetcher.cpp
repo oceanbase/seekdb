@@ -38,8 +38,7 @@
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "logservice/ob_log_handler.h"
-#include "logservice/palf/palf_env.h"
-#include "logservice/palf/log_io_context.h"
+#include "logservice/palf_adapter/palf_env.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include <algorithm>
 
@@ -190,12 +189,6 @@ int ObCSFetcher::init_consumption_position_()
                   K(start_lsn), K(begin_lsn), K(base_lsn), K(end_lsn),
                   K(persisted_min_dep_lsn), K(cached_min_dep_lsn));
       }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    palf::LogIOContext io_ctx(palf::LogIOUser::CDC);
-    if (OB_FAIL(iter_.set_io_context(io_ctx))) {
-      LOG_WARN("CSFetcher: fail to set_io_context", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {

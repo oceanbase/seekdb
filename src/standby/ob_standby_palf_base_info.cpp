@@ -20,7 +20,6 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log.h"
 #include "logservice/ob_log_handler.h"
-#include "logservice/palf/log_group_entry.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -119,9 +118,6 @@ int ObStandbyPalfBaseInfoBuilder::build(
         palf::PalfGroupBufferIterator iterator;
         if (OB_FAIL(log_handler->seek(curr_base_lsn, iterator))) {
           LOG_WARN("failed to seek source log iterator", K(ret), K(ls_id), K(curr_base_lsn), K(arg));
-        } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf::LogIOUser::FETCHLOG)))) {
-          LOG_WARN("failed to set source iterator io context", K(ret), K(ls_id), K(arg));
-        } else if (FALSE_IT(iterator.set_need_print_error(false))) {
         } else {
           const char *entry = nullptr;
           int64_t entry_size = 0;
