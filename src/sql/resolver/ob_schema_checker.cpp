@@ -614,22 +614,21 @@ int ObSchemaChecker::check_if_partition_key(uint64_t table_id, uint64_t column_i
 
 int ObSchemaChecker::get_can_read_index_array(
     uint64_t table_id,
-    uint64_t *index_tid_array,
-    int64_t &size) const
+    ObIArray<uint64_t> &index_ids) const
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(OB_INVALID_ID == table_id || size <= 0) || OB_ISNULL(index_tid_array)) {
+  } else if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_NOT_NULL(sql_schema_mgr_)) {
     if (OB_FAIL(sql_schema_mgr_->get_can_read_index_array(
-                table_id, index_tid_array, size,
+                table_id, index_ids,
                 true /* with_global_index*/, true /* with_domin_index*/, false /* with_spatial_index*/))) {
     }
   } else {
     if (OB_FAIL(schema_mgr_->get_can_read_index_array(
-        table_id, index_tid_array, size))) {
+        table_id, index_ids))) {
     }
   }
   return ret;
@@ -681,16 +680,15 @@ int ObSchemaChecker::check_column_has_index(uint64_t table_id, uint64_t column_i
 {
   int ret = OB_SUCCESS;
   const ObColumnSchemaV2 *col_schema = NULL;
-  uint64_t index_tid_array[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
-  int64_t index_cnt = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
+  ObSEArray<uint64_t, 16> index_ids;
 
   has_index = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(get_can_read_index_array(table_id, index_tid_array, index_cnt))) {
+  } else if (OB_FAIL(get_can_read_index_array(table_id, index_ids))) {
   }
-  for (int64_t i = 0; OB_SUCC(ret) && !has_index && i < index_cnt; ++i) {
-    if (OB_FAIL(get_column_schema_inner(index_tid_array[i], column_id, col_schema, is_link))) {
+  for (int64_t i = 0; OB_SUCC(ret) && !has_index && i < index_ids.count(); ++i) {
+    if (OB_FAIL(get_column_schema_inner(index_ids.at(i), column_id, col_schema, is_link))) {
     } else if (col_schema != NULL && col_schema->is_index_column()) {
       has_index = true;
     }

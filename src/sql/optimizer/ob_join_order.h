@@ -2494,8 +2494,7 @@ struct NullAwareAntiJoinInfo {
                             ObIArray<uint64_t> &valid_index_id);
     int get_valid_index_ids_with_no_index_hint(ObSqlSchemaGuard &schema_guard,
                                                const uint64_t ref_table_id,
-                                               uint64_t *tids,
-                                               const int64_t index_count,
+                                               const ObIArray<uint64_t> &index_ids,
                                                const ObIArray<uint64_t> &ignore_index_ids,
                                                ObIArray<uint64_t> &valid_index_ids);
     // table heuristics
@@ -2715,7 +2714,7 @@ struct NullAwareAntiJoinInfo {
                                 ObQueryRangeProvider *query_range,
                                 int64_t &query_range_row_count,
                                 double &selectivity);
-    int add_valid_fts_index_ids(PathHelper &helper, uint64_t *index_tid_array, int64_t &size);
+    int add_valid_fts_index_ids(PathHelper &helper, ObIArray<uint64_t> &index_ids);
     int add_valid_fts_index_ids_for_dml(const PathHelper &helper, 
                                         const uint64_t table_id,
                                         ObIArray<uint64_t> &valid_index_ids);
@@ -2727,8 +2726,7 @@ struct NullAwareAntiJoinInfo {
                                 const uint64_t table_id,
                                 const uint64_t ref_table_id,
                                 const bool has_aggr,
-                                uint64_t *index_tid_array, 
-                                int64_t &size,
+                                ObIArray<uint64_t> &index_ids,
                                 PathHelper &helper);
     int add_valid_vec_index_ids(const ObDMLStmt &stmt,
                                 ObSqlSchemaGuard *schema_guard,

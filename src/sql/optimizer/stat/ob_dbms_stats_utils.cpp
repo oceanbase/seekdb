@@ -1831,16 +1831,14 @@ int ObDbmsStatsUtils::get_max_work_area_size(
 }
 
 int ObDbmsStatsUtils::get_table_index_infos(share::schema::ObSchemaGetterGuard *schema_guard,
-                                       const uint64_t table_id,
-                                       uint64_t *index_tid_arr,
-                                       int64_t &index_count)
+                                            const uint64_t table_id,
+                                            ObIArray<uint64_t> &index_tids)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_id,
-                                                            index_tid_arr,
-                                                            index_count,
+                                                            index_tids,
                                                             true, /*with_global_index*/
                                                             false /*domain index*/))) {
   }

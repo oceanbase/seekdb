@@ -339,8 +339,7 @@ int ObSqlSchemaGuard::get_table_schema_version(const uint64_t table_id,
 }
 
 int ObSqlSchemaGuard::get_can_read_index_array(uint64_t table_id,
-                                                 uint64_t *index_tid_array,
-                                                 int64_t &size,
+                                                 ObIArray<uint64_t> &index_ids,
                                                  bool with_global_index,
                                                  bool with_domain_index,
                                                  bool with_spatial_index,
@@ -350,7 +349,7 @@ int ObSqlSchemaGuard::get_can_read_index_array(uint64_t table_id,
   
   OV (OB_NOT_NULL(schema_guard_));
   OZ (schema_guard_->get_can_read_index_array(table_id,
-                                              index_tid_array, size,
+                                              index_ids,
                                               with_global_index, with_domain_index,
                                               with_spatial_index, with_vector_index));
   return ret;

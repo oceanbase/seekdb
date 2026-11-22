@@ -428,15 +428,13 @@ int ObDbmsStats::fast_gather_index_stats(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   is_all_fast_gather = true;
-  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
+  ObSEArray<uint64_t, 8> index_tids;
   share::schema::ObSchemaGetterGuard *schema_guard = ctx.get_virtual_table_ctx().schema_guard_;
   if (OB_FAIL(ObDbmsStatsUtils::get_table_index_infos(schema_guard,
                                                       data_param.table_id_,
-                                                      index_tids,
-                                                      index_count))) {
+                                                      index_tids))) {
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_tids.count(); ++i) {
       StatTable stat_table;
       stat_table.database_id_ = data_param.db_id_;
       stat_table.table_id_ = index_tids[i];
@@ -489,7 +487,6 @@ int ObDbmsStats::fast_gather_index_stats(ObExecContext &ctx,
       }
     }
   }
-  } // smart var
   return ret;
 }
 
@@ -986,14 +983,12 @@ int ObDbmsStats::delete_table_index_stats(sql::ObExecContext &ctx,
                                           const ObTableStatParam data_param)
 {
   int ret = OB_SUCCESS;
-  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
+  ObSEArray<uint64_t, 8> index_tids;
   if (OB_FAIL(ObDbmsStatsUtils::get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                                       data_param.table_id_,
-                                                      index_tids,
-                                                      index_count))) {
+                                                      index_tids))) {
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_tids.count(); ++i) {
       StatTable stat_table;
       stat_table.database_id_ = data_param.db_id_;
       stat_table.table_id_ = index_tids[i];
@@ -1014,7 +1009,6 @@ int ObDbmsStats::delete_table_index_stats(sql::ObExecContext &ctx,
       }
     }
   }
-  } // smart var
   return ret;
 }
 
@@ -1400,14 +1394,12 @@ int ObDbmsStats::export_table_index_stats(sql::ObExecContext &ctx,
                                           const ObTableStatParam data_param)
 {
   int ret = OB_SUCCESS;
-  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
+  ObSEArray<uint64_t, 8> index_tids;
   if (OB_FAIL(ObDbmsStatsUtils::get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                                       data_param.table_id_,
-                                                      index_tids,
-                                                      index_count))) {
+                                                      index_tids))) {
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_tids.count(); ++i) {
       StatTable stat_table;
       stat_table.database_id_ = data_param.db_id_;
       stat_table.table_id_ = index_tids[i];
@@ -1425,7 +1417,6 @@ int ObDbmsStats::export_table_index_stats(sql::ObExecContext &ctx,
       }
     }
   }
-  } // smart vars
   return ret;
 }
 
@@ -1730,14 +1721,12 @@ int ObDbmsStats::import_table_index_stats(sql::ObExecContext &ctx,
                                           const ObTableStatParam data_param)
 {
   int ret = OB_SUCCESS;
-  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
+  ObSEArray<uint64_t, 8> index_tids;
   if (OB_FAIL(ObDbmsStatsUtils::get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                                       data_param.table_id_,
-                                                      index_tids,
-                                                      index_count))) {
+                                                      index_tids))) {
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_tids.count(); ++i) {
       StatTable stat_table;
       stat_table.database_id_ = data_param.db_id_;
       stat_table.table_id_ = index_tids[i];
@@ -1760,7 +1749,6 @@ int ObDbmsStats::import_table_index_stats(sql::ObExecContext &ctx,
       }
     }
   }
-  } // smart var
   return ret;
 }
 
@@ -1917,14 +1905,12 @@ int ObDbmsStats::lock_or_unlock_index_stats(sql::ObExecContext &ctx,
                                             bool is_lock_stats)
 {
   int ret = OB_SUCCESS;
-  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
+  ObSEArray<uint64_t, 8> index_tids;
   if (OB_FAIL(ObDbmsStatsUtils::get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                                       data_param.table_id_,
-                                                      index_tids,
-                                                      index_count))) {
+                                                      index_tids))) {
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_tids.count(); ++i) {
       StatTable stat_table;
       stat_table.database_id_ = data_param.db_id_;
       stat_table.table_id_ = index_tids[i];
@@ -1943,7 +1929,6 @@ int ObDbmsStats::lock_or_unlock_index_stats(sql::ObExecContext &ctx,
       }
     }
   }
-  } // smart var
   return ret;
 }
 
@@ -3174,20 +3159,16 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       }
     }
   }
-  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE], tids) {
-  int64_t index_aux_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
+  ObSEArray<uint64_t, 8> tids;
   const ObTableSchema *index_schema = NULL;
   
   if (OB_FAIL(ret)) {//do nothing
   } else if (OB_FAIL(schema_guard.get_can_read_index_array(table_schema.get_table_id(),
                                                            tids,
-                                                           index_aux_count,
                                                            true, /*with_global_index*/
                                                            false /*domain index*/))) {
-  } else if (index_aux_count > OB_MAX_AUX_TABLE_PER_MAIN_TABLE) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_aux_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < tids.count(); ++i) {
       if (OB_FAIL(schema_guard.get_table_schema( tids[i], index_schema))) {
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -3217,7 +3198,6 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       }
     }
   }
-  } // smart var
   return ret;
 }
 
@@ -5511,17 +5491,15 @@ int ObDbmsStats::get_index_schema(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard *schema_guard = ctx.get_virtual_table_ctx().schema_guard_;
   index_schema = NULL;
-  SMART_VAR(uint64_t[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1], index_tids) {
-  int64_t index_aux_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
+  ObSEArray<uint64_t, 8> index_tids;
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObDbmsStatsUtils::get_table_index_infos(ctx.get_virtual_table_ctx().schema_guard_,
                                                              data_table_id,
-                                                             index_tids,
-                                                             index_aux_count))) {
+                                                             index_tids))) {
   } else {
     bool found_it = false;
-    for (int64_t i = 0; OB_SUCC(ret) && !found_it && i < index_aux_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && !found_it && i < index_tids.count(); ++i) {
       const share::schema::ObTableSchema *cur_index_schema = NULL;
       ObString cur_index_name;
       if (index_tids[i] == data_table_id) {
@@ -5549,7 +5527,6 @@ int ObDbmsStats::get_index_schema(sql::ObExecContext &ctx,
       LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(index_name), helper.convert(index_name));
     }
   }
-  } // smart var
   return ret;
 }
 
