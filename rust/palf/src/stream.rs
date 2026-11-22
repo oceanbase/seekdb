@@ -23,16 +23,14 @@ use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
 const MANIFEST_FILE_SIZE: usize = MANIFEST_SIZE * 2;
 const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN3";
 const THROTTLE_CHECK_INTERVAL: Duration = Duration::from_millis(30);
-const APPEND_BATCH_WINDOW: Duration = Duration::from_micros(50);
 const MAX_APPEND_BATCH_REQUESTS: usize = 32;
 const MAX_APPEND_BATCH_BYTES: usize = 2 * 1024 * 1024;
 
@@ -230,7 +228,6 @@ struct AppendQueue {
     pending_appends: Vec<PendingAppend>,
     pending_append_bytes: usize,
     append_leader: bool,
-    gather_appends: bool,
     append_results: BTreeMap<u64, Result<AppendResult>>,
 }
 
@@ -239,15 +236,6 @@ struct StreamInner {
     appends: Mutex<AppendQueue>,
     changed: Condvar,
     append_changed: Condvar,
-    append_callers: AtomicUsize,
-}
-
-struct AppendCallGuard<'a>(&'a AtomicUsize);
-
-impl Drop for AppendCallGuard<'_> {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::Relaxed);
-    }
 }
 
 pub struct Stream {
@@ -313,7 +301,6 @@ impl Stream {
                 appends: Mutex::new(AppendQueue::default()),
                 changed: Condvar::new(),
                 append_changed: Condvar::new(),
-                append_callers: AtomicUsize::new(0),
             }),
         }
     }
@@ -385,8 +372,6 @@ impl Stream {
         if payload.is_empty() || payload.len() > MAX_LOG_BODY_SIZE || ref_scn == u64::MAX {
             return Err(Error::Invalid);
         }
-        self.inner.append_callers.fetch_add(1, Ordering::Relaxed);
-        let _call_guard = AppendCallGuard(&self.inner.append_callers);
         let mut queue = self.lock_appends()?;
         let id = queue.next_append_id;
         queue.next_append_id = queue.next_append_id.checked_add(1).ok_or(Error::Invalid)?;
@@ -415,26 +400,7 @@ impl Stream {
             }
             if !queue.append_leader && !queue.pending_appends.is_empty() {
                 queue.append_leader = true;
-                if self.inner.append_callers.load(Ordering::Relaxed) > 1 || queue.gather_appends {
-                    let deadline = Instant::now() + APPEND_BATCH_WINDOW;
-                    while queue.append_batch_has_capacity() {
-                        let now = Instant::now();
-                        if now >= deadline {
-                            break;
-                        }
-                        let (next, timeout) = self
-                            .inner
-                            .append_changed
-                            .wait_timeout(queue, deadline - now)
-                            .map_err(|_| Error::Io)?;
-                        queue = next;
-                        if timeout.timed_out() {
-                            break;
-                        }
-                    }
-                }
                 let requests = queue.take_append_batch();
-                queue.gather_appends = requests.len() > 1;
                 drop(queue);
                 let (results, retry) = self.execute_append_batch(requests);
                 queue = self.lock_appends()?;
@@ -1060,11 +1026,6 @@ impl AppendQueue {
         self.pending_appends.len() < MAX_APPEND_BATCH_REQUESTS
             && (self.pending_appends.is_empty()
                 || self.pending_append_bytes.saturating_add(payload_len) <= MAX_APPEND_BATCH_BYTES)
-    }
-
-    fn append_batch_has_capacity(&self) -> bool {
-        self.pending_appends.len() < MAX_APPEND_BATCH_REQUESTS
-            && self.pending_append_bytes < MAX_APPEND_BATCH_BYTES
     }
 
     fn enqueue_append(&mut self, request: PendingAppend) {
