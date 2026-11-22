@@ -75,14 +75,8 @@ public:
 
   // @brief get palf disk usage
   // @param [out] used_size_byte
-  // @param [out] total_size_byte, if in shrinking status, total_size_byte is the value after shrinking.
-  // NB: total_size_byte may be smaller than used_size_byte.
+  // @param [out] total_size_byte, the configured soft target for checkpoint and recycling.
   int get_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
-
-  // @brief get stable disk usage
-  // @param [out] used_size_byte
-  // @param [out] total_size_byte, if in shrinking status, total_size_byte is the value before shrinking.
-  int get_stable_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
 
   // @brief update options
   // @param [in] options
@@ -90,8 +84,6 @@ public:
   // @brief get current options
   // @param [out] options
   int get_options(PalfOptions &options);
-  // @brief check the disk space used to palf whether is enough
-  bool check_disk_space_enough();
   // for failure detector
   // @brief get last io worker start time
   // @param [out] last working time

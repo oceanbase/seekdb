@@ -120,10 +120,6 @@ ObServerRuntimeController::ObServerRuntimeController()
 static ObLogRuntimeConfig current_log_runtime_config()
 {
   return {
-      config::log_disk_utilization_threshold(),
-      config::log_disk_utilization_limit_threshold(),
-      config::log_disk_throttling_percentage(),
-      config::log_disk_throttling_maximum_duration(),
       config::log_storage_warning_tolerance_time(),
   };
 }
@@ -559,8 +555,7 @@ int ObServerRuntimeController::update_palf_config()
   if (NULL == log_service) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ret = log_service->update_palf_options_except_disk_usage_limit_size(
-        current_log_runtime_config());
+    ret = log_service->update_log_runtime_config(current_log_runtime_config());
   }
   return ret;
 }

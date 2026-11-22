@@ -29,83 +29,9 @@ using namespace common;
 using namespace share;
 namespace palf
 {
-int PalfDiskOptionsWrapper::init(const PalfDiskOptions &disk_opts)
-{
-  int ret = OB_SUCCESS;
-  if (!disk_opts.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    disk_opts_for_recycling_blocks_ = disk_opts_for_stopping_writing_ = disk_opts;
-    status_ = Status::NORMAL_STATUS;
-    sequence_ = 0;
-  }
-  return ret;
-}
-
-void PalfDiskOptionsWrapper::reset()
-{
-  ObSpinLockGuard guard(disk_opts_lock_);
-  disk_opts_for_recycling_blocks_.reset();
-  disk_opts_for_stopping_writing_.reset();
-  status_ = Status::INVALID_STATUS;
-  sequence_ = -1;
-}
-
-int PalfDiskOptionsWrapper::update_disk_options(const PalfDiskOptions &disk_opts)
-{
-  ObSpinLockGuard guard(disk_opts_lock_);
-  return update_disk_options_not_guarded_by_lock_(disk_opts);
-}
-
-void PalfDiskOptionsWrapper::change_to_normal(const int64_t sequence)
-{
-  ObSpinLockGuard guard(disk_opts_lock_);
-  if (sequence_ == sequence && Status::SHRINKING_STATUS == status_) {
-    status_ = Status::NORMAL_STATUS;
-    disk_opts_for_stopping_writing_ = disk_opts_for_recycling_blocks_;
-    PALF_LOG(INFO, "change_to_normal", KPC(this));
-  }
-}
-
-int PalfDiskOptionsWrapper::update_disk_options_not_guarded_by_lock_(
-    const PalfDiskOptions &disk_opts_for_recycling_blocks)
-{
-  int ret = OB_SUCCESS;
-  const int64_t curr_stop_write_limit_size =
-      disk_opts_for_stopping_writing_.log_disk_usage_limit_size_;
-  const int64_t next_stop_write_limit_size =
-      disk_opts_for_recycling_blocks.log_disk_usage_limit_size_;
-  if (!disk_opts_for_recycling_blocks.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (disk_opts_for_recycling_blocks_ == disk_opts_for_recycling_blocks) {
-  } else {
-    if (curr_stop_write_limit_size > next_stop_write_limit_size) {
-      status_ = Status::SHRINKING_STATUS;
-      disk_opts_for_recycling_blocks_ = disk_opts_for_recycling_blocks;
-    } else {
-      status_ = Status::NORMAL_STATUS;
-      disk_opts_for_recycling_blocks_ = disk_opts_for_stopping_writing_ =
-          disk_opts_for_recycling_blocks;
-    }
-    const int64_t new_trigger_percentage =
-        disk_opts_for_recycling_blocks.log_disk_throttling_percentage_;
-    const int64_t new_maximum_duration =
-        disk_opts_for_recycling_blocks.log_disk_throttling_maximum_duration_;
-    disk_opts_for_stopping_writing_.log_disk_throttling_percentage_ = new_trigger_percentage;
-    disk_opts_for_recycling_blocks_.log_disk_throttling_percentage_ = new_trigger_percentage;
-    disk_opts_for_stopping_writing_.log_disk_throttling_maximum_duration_ = new_maximum_duration;
-    disk_opts_for_recycling_blocks_.log_disk_throttling_maximum_duration_ = new_maximum_duration;
-    sequence_++;
-  }
-  return ret;
-}
-
 PalfEnvImpl::PalfEnvImpl()
     : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK), store_(nullptr), monitor_(NULL),
-      disk_options_wrapper_(),
-      disk_not_enough_print_interval_in_loop_thread_(OB_INVALID_TIMESTAMP), self_(),
-      palf_handle_(nullptr),
-      diskspace_enough_(true), is_inited_(false), is_running_(false)
+      disk_options_(), self_(), palf_handle_(nullptr), is_inited_(false), is_running_(false)
 {
   log_dir_[0] = '\0';
   tmp_log_dir_[0] = '\0';
@@ -123,7 +49,7 @@ int PalfEnvImpl::init(const PalfOptions &options, share::LocalStore &store,
   int pret = 0;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(base_dir) || !self.is_valid() || OB_ISNULL(monitor)) {
+  } else if (OB_ISNULL(base_dir) || !options.is_valid() || !self.is_valid() || OB_ISNULL(monitor)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid arguments", K(ret), K(base_dir), K(self), KP(monitor));
   } else if ((pret = snprintf(log_dir_, MAX_PATH_SIZE, "%s", base_dir)) < 0
@@ -132,8 +58,8 @@ int PalfEnvImpl::init(const PalfOptions &options, share::LocalStore &store,
   } else if ((pret = snprintf(tmp_log_dir_, MAX_PATH_SIZE, "%s/tmp_dir", log_dir_)) < 0
              || pret >= MAX_PATH_SIZE) {
     ret = OB_BUF_NOT_ENOUGH;
-  } else if (OB_FAIL(disk_options_wrapper_.init(options.disk_options_))) {
   } else {
+    disk_options_ = options.disk_options_;
     store_ = &store;
     monitor_ = monitor;
     self_ = self;
@@ -188,11 +114,10 @@ void PalfEnvImpl::destroy()
   }
   store_ = nullptr;
   monitor_ = NULL;
-  disk_not_enough_print_interval_in_loop_thread_ = OB_INVALID_TIMESTAMP;
   self_.reset();
   log_dir_[0] = '\0';
   tmp_log_dir_[0] = '\0';
-  disk_options_wrapper_.reset();
+  disk_options_.reset();
 }
 
 int PalfEnvImpl::create_palf_handle_impl(const AccessMode &access_mode,
@@ -219,16 +144,12 @@ int PalfEnvImpl::create_palf_handle_impl_(const AccessMode &access_mode,
     ret = OB_NOT_RUNNING;
   } else if (NULL != palf_handle_) {
     ret = OB_ENTRY_EXIST;
-  } else if (disk_options_wrapper_.get_disk_opts_for_recycling_blocks().log_disk_usage_limit_size_
-             < MIN_DISK_SIZE_PER_PALF_INSTANCE) {
-    ret = OB_LOG_OUTOF_DISK_SPACE;
   } else if (0 > (pret = snprintf(base_dir, MAX_PATH_SIZE, "%s/log_stream", log_dir_))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (NULL == (handle = SERVER_NEW(PalfHandleImpl, "palf_env"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(create_directory(base_dir))) {
-  } else if (OB_FAIL(handle->init(access_mode, palf_base_info, base_dir,
-      disk_options_wrapper_.get_disk_opts_for_stopping_writing(), self_))) {
+  } else if (OB_FAIL(handle->init(access_mode, palf_base_info, base_dir, self_))) {
   } else {
     palf_handle_ = handle;
     (void)handle->set_monitor_cb(monitor_);
@@ -310,13 +231,6 @@ int PalfEnvImpl::remove_directory(const char *log_dir)
   return ret;
 }
 
-bool PalfEnvImpl::check_disk_space_enough()
-{
-  RLockGuard guard(palf_meta_lock_);
-  refresh_disk_state_();
-  return ATOMIC_LOAD(&diskspace_enough_);
-}
-
 PalfEnvImpl::RemoveStaleIncompletePalfFunctor::RemoveStaleIncompletePalfFunctor(
     PalfEnvImpl *palf_env_impl) : palf_env_impl_(palf_env_impl)
 {}
@@ -355,21 +269,9 @@ int PalfEnvImpl::RemoveStaleIncompletePalfFunctor::func(const char *entry_name)
 int PalfEnvImpl::get_disk_usage(int64_t &used_size_byte, int64_t &total_usable_size_byte)
 {
   RLockGuard guard(palf_meta_lock_);
-  const PalfDiskOptions disk_options = disk_options_wrapper_.get_disk_opts_for_recycling_blocks();
   int ret = get_disk_usage_(used_size_byte);
   if (OB_SUCC(ret)) {
-    total_usable_size_byte = disk_options.log_disk_usage_limit_size_;
-  }
-  return ret;
-}
-
-int PalfEnvImpl::get_stable_disk_usage(int64_t &used_size_byte, int64_t &total_usable_size_byte)
-{
-  RLockGuard guard(palf_meta_lock_);
-  const PalfDiskOptions disk_options = disk_options_wrapper_.get_disk_opts_for_stopping_writing();
-  int ret = get_disk_usage_(used_size_byte);
-  if (OB_SUCC(ret)) {
-    total_usable_size_byte = disk_options.log_disk_usage_limit_size_;
+    total_usable_size_byte = disk_options_.log_disk_usage_limit_size_;
   }
   return ret;
 }
@@ -382,23 +284,20 @@ int PalfEnvImpl::update_options(const PalfOptions &options)
     ret = OB_NOT_INIT;
   } else if (!options.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(check_can_update_log_disk_options_(options.disk_options_))) {
-  } else if (OB_FAIL(disk_options_wrapper_.update_disk_options(options.disk_options_))) {
-  } else if (NULL != palf_handle_ && OB_FAIL(palf_handle_->set_disk_options(
-      disk_options_wrapper_.get_disk_opts_for_stopping_writing()))) {
   } else {
-    refresh_disk_state_();
+    disk_options_ = options.disk_options_;
   }
   return ret;
 }
 
 int PalfEnvImpl::get_options(PalfOptions &options)
 {
+  RLockGuard guard(palf_meta_lock_);
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    options.disk_options_ = disk_options_wrapper_.get_disk_opts_for_recycling_blocks();
+    options.disk_options_ = disk_options_;
   }
   return ret;
 }
@@ -428,8 +327,7 @@ int PalfEnvImpl::reload_palf_handle_impl_()
     }
   } else if (NULL == (handle = SERVER_NEW(PalfHandleImpl, "palf_env"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(handle->load(base_dir,
-      disk_options_wrapper_.get_disk_opts_for_stopping_writing(), self_, is_integrity))) {
+  } else if (OB_FAIL(handle->load(base_dir, self_, is_integrity))) {
   } else {
     palf_handle_ = handle;
     (void)handle->set_monitor_cb(monitor_);
@@ -545,15 +443,6 @@ int PalfEnvImpl::get_io_start_time(int64_t &last_working_time)
   return ret;
 }
 
-int PalfEnvImpl::check_can_update_log_disk_options_(const PalfDiskOptions &disk_opts)
-{
-  int ret = OB_SUCCESS;
-  if (NULL != palf_handle_ && disk_opts.log_disk_usage_limit_size_ < MIN_DISK_SIZE_PER_PALF_INSTANCE) {
-    ret = OB_NOT_SUPPORTED;
-  }
-  return ret;
-}
-
 int PalfEnvImpl::remove_directory_while_exist_(const char *log_dir)
 {
   int ret = OB_SUCCESS;
@@ -563,43 +452,6 @@ int PalfEnvImpl::remove_directory_while_exist_(const char *log_dir)
     ret = remove_directory(log_dir);
   }
   return ret;
-}
-
-void PalfEnvImpl::refresh_disk_state_()
-{
-  int ret = OB_SUCCESS;
-  PalfDiskOptions stopping;
-  PalfDiskOptions recycling;
-  PalfDiskOptionsWrapper::Status status = PalfDiskOptionsWrapper::Status::INVALID_STATUS;
-  int64_t sequence = -1;
-  int64_t used_size_byte = 0;
-  disk_options_wrapper_.get_disk_opts(stopping, recycling, status, sequence);
-  const int64_t recycle_threshold = 0 == recycling.log_disk_utilization_threshold_
-      ? DEFAULT_LOG_UTL_THRESHOLD : recycling.log_disk_utilization_threshold_;
-  const int64_t recycle_limit =
-      recycling.log_disk_usage_limit_size_ * recycle_threshold / 100LL;
-  if (OB_FAIL(get_disk_usage_(used_size_byte))) {
-    PALF_LOG_RET(WARN, ret, "failed to get Rust PALF disk usage");
-  } else {
-    if (PalfDiskOptionsWrapper::Status::SHRINKING_STATUS == status
-        && used_size_byte <= recycle_limit) {
-      disk_options_wrapper_.change_to_normal(sequence);
-      stopping = disk_options_wrapper_.get_disk_opts_for_stopping_writing();
-      if (NULL != palf_handle_) {
-        (void)palf_handle_->set_disk_options(stopping);
-      }
-    }
-    const int64_t stop_limit = stopping.log_disk_usage_limit_size_
-        * stopping.log_disk_utilization_limit_threshold_ / 100LL;
-    ATOMIC_STORE(&diskspace_enough_, used_size_byte <= stop_limit);
-    if (used_size_byte > stop_limit
-        && palf_reach_time_interval(1000 * 1000, disk_not_enough_print_interval_in_loop_thread_)) {
-      const int tmp_ret = OB_LOG_OUTOF_DISK_SPACE;
-      LOG_DBA_ERROR(OB_LOG_OUTOF_DISK_SPACE, "msg", "log disk space is almost full",
-          "ret", tmp_ret, "total_size", stopping.log_disk_usage_limit_size_,
-          "used_size", used_size_byte, "limit_size", stop_limit);
-    }
-  }
 }
 
 } // namespace palf

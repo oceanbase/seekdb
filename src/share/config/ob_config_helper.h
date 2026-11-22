@@ -70,26 +70,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigWriteThrottleTriggerIntChecker);
 };
 
-//only used for RS checking
-class ObConfigLogDiskLimitThresholdIntChecker
-{
-public:
-  static bool check(const obcall::ObAdminSetConfigItem &t);
-private:
-  static int64_t get_log_disk_throttling_percentage_();
-  DISALLOW_COPY_AND_ASSIGN(ObConfigLogDiskLimitThresholdIntChecker);
-};
-
-//only used for RS checking
-class ObConfigLogDiskThrottlingPercentageIntChecker
-{
-public:
-  static bool check(const obcall::ObAdminSetConfigItem &t);
-private:
-  static int64_t get_log_disk_utilization_limit_threshold_();
-  DISALLOW_COPY_AND_ASSIGN(ObConfigLogDiskThrottlingPercentageIntChecker);
-};
-
 class ObConfigTabletSizeChecker
   : public ObConfigChecker
 {

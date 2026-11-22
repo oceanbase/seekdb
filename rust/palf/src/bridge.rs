@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::format::{copied_bytes, Error, Result};
-use crate::stream::{self, Cursor, DiskPolicy as NativeDiskPolicy, Stream};
+use crate::stream::{self, Cursor, Stream};
 
 #[cxx::bridge(namespace = "oceanbase::palf::palf_rs")]
 mod ffi {
@@ -41,13 +41,6 @@ mod ffi {
         prev_scn: u64,
         prev_log_id: i64,
         prev_accumulated_checksum: u64,
-    }
-
-    struct DiskPolicy {
-        capacity: u64,
-        stop_percentage: u8,
-        throttle_percentage: u8,
-        max_throttle_duration_us: u64,
     }
 
     struct AppendResult {
@@ -95,9 +88,8 @@ mod ffi {
 
     extern "Rust" {
         type Stream;
-        fn create_stream(path: &str, base: BaseInfo, ref_scn: u64, disk: DiskPolicy)
-            -> Box<Stream>;
-        fn open_stream(path: &str, disk: DiskPolicy) -> Box<Stream>;
+        fn create_stream(path: &str, base: BaseInfo, ref_scn: u64) -> Box<Stream>;
+        fn open_stream(path: &str) -> Box<Stream>;
         fn status_ffi(stream: &Stream) -> Code;
         fn integrity_ffi(stream: &Stream) -> bool;
         fn append_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult;
@@ -107,7 +99,6 @@ mod ffi {
         fn progress_ffi(stream: &Stream) -> Progress;
         fn base_info_ffi(stream: &Stream, lsn: u64) -> BaseInfoResult;
         fn set_base_lsn_ffi(stream: &Stream, lsn: u64) -> Progress;
-        fn set_disk_policy_ffi(stream: &Stream, disk: DiskPolicy) -> Code;
         fn locate_by_scn_ffi(stream: &Stream, scn: u64) -> PositionResult;
         fn locate_by_lsn_ffi(stream: &Stream, lsn: u64) -> PositionResult;
         fn close_ffi(stream: &Stream) -> Code;
@@ -131,20 +122,9 @@ mod ffi {
 }
 
 pub use ffi::{
-    AppendResult, BaseInfo, BaseInfoResult, Code, DiskPolicy, ImportedGroup, ImportedGroupResult,
-    PositionResult, Progress,
+    AppendResult, BaseInfo, BaseInfoResult, Code, ImportedGroup, ImportedGroupResult, PositionResult,
+    Progress,
 };
-
-impl From<DiskPolicy> for NativeDiskPolicy {
-    fn from(policy: DiskPolicy) -> Self {
-        Self {
-            capacity: policy.capacity,
-            stop_percentage: policy.stop_percentage,
-            throttle_percentage: policy.throttle_percentage,
-            max_throttle_duration_us: policy.max_throttle_duration_us,
-        }
-    }
-}
 
 fn code(result: Result<()>) -> Code {
     match result {
@@ -197,17 +177,12 @@ impl From<stream::BaseInfo> for BaseInfo {
     }
 }
 
-fn create_stream(path: &str, base: BaseInfo, ref_scn: u64, disk: DiskPolicy) -> Box<Stream> {
-    Box::new(Stream::create_with_policy(
-        path,
-        base.into(),
-        ref_scn,
-        disk.into(),
-    ))
+fn create_stream(path: &str, base: BaseInfo, ref_scn: u64) -> Box<Stream> {
+    Box::new(Stream::create(path, base.into(), ref_scn))
 }
 
-fn open_stream(path: &str, disk: DiskPolicy) -> Box<Stream> {
-    Box::new(Stream::open_with_policy(path, disk.into()))
+fn open_stream(path: &str) -> Box<Stream> {
+    Box::new(Stream::open(path))
 }
 
 fn status_ffi(stream: &Stream) -> Code {
@@ -354,10 +329,6 @@ fn set_base_lsn_ffi(stream: &Stream, lsn: u64) -> Progress {
             integrity: false,
         },
     }
-}
-
-fn set_disk_policy_ffi(stream: &Stream, disk: DiskPolicy) -> Code {
-    code(stream.set_disk_policy(disk.into()))
 }
 
 fn locate_by_scn_ffi(stream: &Stream, scn: u64) -> PositionResult {

@@ -53,10 +53,6 @@ namespace logservice
 
 struct ObLogRuntimeConfig
 {
-  int64_t log_disk_utilization_threshold_;
-  int64_t log_disk_utilization_limit_threshold_;
-  int64_t log_disk_throttling_percentage_;
-  int64_t log_disk_throttling_maximum_duration_;
   int64_t log_storage_warning_tolerance_time_;
 };
 
@@ -109,40 +105,10 @@ public:
 
   // @brief get palf disk usage
   // @param [out] used_size_byte
-  // @param [out] total_size_byte, if in shrinking status, total_size_byte is the value after shrinking.
-  // NB: total_size_byte may be smaller than used_size_byte.
+  // @param [out] total_size_byte, the configured soft target for checkpoint and recycling.
   int get_palf_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
 
-  // @brief get palf disk usage
-  // @param [out] used_size_byte
-  // @param [out] total_size_byte, if in shrinking status, total_size_byte is the value before shrinking.
-  int get_palf_stable_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
-  // why we need update 'log_disk_size_' and 'log_disk_util_threshold' separately.
-  //
-  // 'log_disk_size' is part of the server resource configuration.
-  // 'log_disk_util_threshold' and 'log_disk_util_limit_threshold' are runtime parameters.
-  // If we just only provide 'update_disk_options', the correctness of PalfDiskOptions can not be guaranteed.
-  // for example, original PalfDiskOptions is that
-  // {
-  //   log_disk_size = 100G,
-  //   log_disk_util_limit_threshold = 95,
-  //   log_disk_util_threshold = 80
-  // }
-  //
-  // 1. thread1 update 'log_disk_size' with 50G, and it will used 'update_disk_options' with PalfDiskOptions
-  // {
-  //   log_disk_size = 50G,
-  //   log_disk_util_limit_threshold = 95,
-  //   log_disk_util_threshold = 80
-  // }
-  // 2. thread2 updaet 'log_disk_util_limit_threshold' with 85, and it will used 'update_disk_options' with PalfDiskOptions
-  // {
-  //   log_disk_size = 100G,
-  //   log_disk_util_limit_threshold = 85,
-  //   log_disk_util_threshold = 80
-  // }.
-  int update_palf_options_except_disk_usage_limit_size(
-      const ObLogRuntimeConfig &runtime_config);
+  int update_log_runtime_config(const ObLogRuntimeConfig &runtime_config);
   int update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size);
   int get_palf_options(palf::PalfOptions &options);
   int stat_palf(palf::PalfStat &palf_stat);
@@ -152,7 +118,6 @@ public:
   int diagnose_replay(ReplayDiagnoseInfo &diagnose_info);
   int diagnose_apply(ApplyDiagnoseInfo &diagnose_info);
   int get_io_start_time(int64_t &last_working_time);
-  int check_disk_space_enough(bool &is_disk_enough);
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
   bool is_replay_enabled() const;
@@ -220,11 +185,8 @@ namespace oceanbase
 {
 namespace logservice
 {
-// Checks whether the clog disk is full or hung through the server log module.
-int check_clog_disk_full_or_hang(
-    ObLogService &log_service,
-    bool &clog_disk_is_full,
-    bool &clog_disk_is_hang);
+// Checks whether the clog disk is hung through the server log module.
+int check_clog_disk_hang(ObLogService &log_service, bool &clog_disk_is_hang);
 }
 }
 

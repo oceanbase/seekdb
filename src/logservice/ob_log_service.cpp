@@ -528,42 +528,14 @@ int ObLogService::get_palf_disk_usage(int64_t &used_size_byte, int64_t &total_si
   return ret;
 }
 
-int ObLogService::get_palf_stable_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    ret = palf_env_->get_stable_disk_usage(used_size_byte, total_size_byte);
-  }
-  return ret;
-}
-
-int ObLogService::update_palf_options_except_disk_usage_limit_size(
-    const ObLogRuntimeConfig &runtime_config)
+int ObLogService::update_log_runtime_config(const ObLogRuntimeConfig &runtime_config)
 {
   ObSpinLockGuard guard(update_palf_opts_lock_);
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    PalfOptions palf_opts;
-    if (OB_FAIL(palf_env_->get_options(palf_opts))) {
-    } else {
-      palf_opts.disk_options_.log_disk_utilization_threshold_ =
-          runtime_config.log_disk_utilization_threshold_;
-      palf_opts.disk_options_.log_disk_utilization_limit_threshold_ =
-          runtime_config.log_disk_utilization_limit_threshold_;
-      palf_opts.disk_options_.log_disk_throttling_percentage_ =
-          runtime_config.log_disk_throttling_percentage_;
-      palf_opts.disk_options_.log_disk_throttling_maximum_duration_ =
-          runtime_config.log_disk_throttling_maximum_duration_;
-      if (OB_FAIL(palf_env_->update_options(palf_opts))) {
-      } else {
-        runtime_config_ = runtime_config;
-        CLOG_LOG(INFO, "palf update_options success", K(ret), K(palf_opts));
-      }
-    }
+    runtime_config_ = runtime_config;
   }
   return ret;
 }
@@ -711,18 +683,6 @@ int ObLogService::get_io_start_time(int64_t &last_working_time)
   return ret;
 }
 
-int ObLogService::check_disk_space_enough(bool &is_disk_enough)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else {
-    is_disk_enough = palf_env_->check_disk_space_enough();
-  }
-  return ret;
-}
-
 int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
 {
   int ret = OB_SUCCESS;
@@ -765,21 +725,14 @@ namespace oceanbase
 namespace logservice
 {
 using namespace oceanbase::share;
-int check_clog_disk_full_or_hang(
-    ObLogService &log_service,
-    bool &clog_disk_is_full,
-    bool &clog_disk_is_hang)
+int check_clog_disk_hang(ObLogService &log_service, bool &clog_disk_is_hang)
 {
   int ret = OB_SUCCESS;
-  clog_disk_is_full = false;
   clog_disk_is_hang = false;
   int64_t clog_disk_last_working_time = OB_INVALID_TIMESTAMP;
   const int64_t now = ObTimeUtility::current_time();
-  bool is_disk_enough = true;
   if (OB_FAIL(log_service.get_io_start_time(clog_disk_last_working_time))) {
-  } else if (OB_FAIL(log_service.check_disk_space_enough(is_disk_enough))) {
   } else {
-    clog_disk_is_full = !is_disk_enough;
     clog_disk_is_hang =
         OB_INVALID_TIMESTAMP != clog_disk_last_working_time &&
         now - clog_disk_last_working_time >

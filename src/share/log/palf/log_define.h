@@ -69,7 +69,6 @@ typedef uint64_t block_id_t ;
 typedef uint64_t offset_t;
 class LSN;
 // ==================== palf env start =============================
-const int64_t MIN_DISK_SIZE_PER_PALF_INSTANCE = 512 * 1024 * 1024ul;
 // =====================palf env end ===============================
 
 // ==================== block and log start ========================
@@ -79,7 +78,6 @@ constexpr offset_t MAX_LOG_BODY_SIZE = 3 * 1024 * 1024 + 512 * 1024;            
 
 const int64_t PALF_PHY_BLOCK_SIZE = 1 << 26;                                        // 64MB
 const int64_t PALF_BLOCK_SIZE = PALF_PHY_BLOCK_SIZE - MAX_INFO_BLOCK_SIZE;          // log block size is 64M-MAX_INFO_BLOCK_SIZE by default.
-const int64_t DEFAULT_LOG_UTL_THRESHOLD = 80;
 
 constexpr int64_t CLOG_FILE_TAIL_PADDING_TRIGGER = 4096;     // Threshold for padding the remaining space at the end of the file
 // The valid group_entry (not padding entry) size range is:
@@ -110,7 +108,6 @@ const int64_t PALF_MAX_SUBMIT_LOG_COUNT = PALF_SLIDING_WINDOW_SIZE / 2;
 const int64_t FIRST_VALID_LOG_ID = 1;  // The first valid log_id is 1.
 const int64_t PALF_DUMP_DEBUG_INFO_INTERVAL_US = 10 * 1000 * 1000;                  // 10s
 constexpr char PADDING_LOG_CONTENT_CHAR = '\0';
-const int64_t MIN_WRITING_THTOTTLING_TRIGGER_PERCENTAGE = 40;
 constexpr int64_t PALF_IO_WAIT_EVENT_TIMEOUT_MS = 100;
 
 // ====================== Local log state end ========================

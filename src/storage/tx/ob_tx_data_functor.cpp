@@ -15,7 +15,7 @@
  */
 
 #include "ob_tx_data_functor.h"
-#include "logservice/ob_log_service.h"  // logservice::check_clog_disk_full_or_hang
+#include "logservice/ob_log_service.h"  // logservice::check_clog_disk_hang
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 #include "data_plane/transaction/ob_virtual_tx_data.h"
@@ -414,8 +414,7 @@ int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx
         if (retry_cnt == MAX_RETRY_CNT) {
           int tmp_ret = OB_SUCCESS;
 
-          // Opt1: Check the failure detector for clog disk full
-          if (OB_TMP_FAIL(check_clog_disk_full_())) {
+          if (OB_TMP_FAIL(check_clog_disk_hang_())) {
             ret = tmp_ret;
           }
 
@@ -430,20 +429,15 @@ int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx
   return ret;
 }
 
-int LockForReadFunctor::check_clog_disk_full_()
+int LockForReadFunctor::check_clog_disk_hang_()
 {
   int ret = OB_SUCCESS;
-  bool clog_is_full = false;
   bool clog_is_hang = false;
   logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_ISNULL(log_service)) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "log service is null", KR(ret));
-  } else if (OB_FAIL(logservice::check_clog_disk_full_or_hang(
-      *log_service, clog_is_full, clog_is_hang))) {
-  } else if (clog_is_full) {
-    ret = OB_LOG_OUTOF_DISK_SPACE;
-    TRANS_LOG(ERROR, "disk full error", K(ret), KPC(this));
+  } else if (OB_FAIL(logservice::check_clog_disk_hang(*log_service, clog_is_hang))) {
   } else if (clog_is_hang) {
     ret = OB_CLOG_DISK_HANG;
     TRANS_LOG(ERROR, "disk hang error", K(ret), KPC(this));

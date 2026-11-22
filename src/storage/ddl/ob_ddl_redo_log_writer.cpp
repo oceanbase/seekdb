@@ -51,37 +51,22 @@ int ObDDLCtrlSpeedItem::init()
     } else {
       is_inited_ = true;
       LOG_INFO("succeed to init ObDDLCtrlSpeedItem", K(ret), K(is_inited_),
-        K(next_available_write_ts_), K(write_speed_), K(disk_used_stop_write_threshold_));
+        K(next_available_write_ts_), K(write_speed_));
     }
   }
   return ret;
 }
 
-// Refresh DDL log write speed and the database-wide disk threshold.
+// Refresh DDL log write speed.
 int ObDDLCtrlSpeedItem::refresh()
 {
   int ret = OB_SUCCESS;
   int64_t refresh_speed = 0;
-  int64_t total_used_space = 0; // for current tenant, used bytes.
-  int64_t total_disk_space = 0; // for current tenant, limit used bytes.
-  palf::PalfOptions palf_opt;
-  logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
-  if (OB_ISNULL(log_service)) {
-    ret = OB_ERR_UNEXPECTED;
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(log_service->get_palf_options(palf_opt))) {
-  } else if (OB_FAIL(log_service->get_palf_disk_usage(total_used_space, total_disk_space))) {
-  } else if (OB_ISNULL(GCTX.bandwidth_throttle_)) {
+  if (OB_ISNULL(GCTX.bandwidth_throttle_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(GCTX.bandwidth_throttle_->get_rate(refresh_speed))) {
   } else {
     write_speed_ = std::max(refresh_speed, 1 * MIN_WRITE_SPEED);
-    disk_used_stop_write_threshold_ = min(0 == palf_opt.disk_options_.log_disk_utilization_threshold_ ?
-                                          palf::DEFAULT_LOG_UTL_THRESHOLD : palf_opt.disk_options_.log_disk_utilization_threshold_,
-                                          palf_opt.disk_options_.log_disk_utilization_limit_threshold_);
-    need_stop_write_ = 100.0 * total_used_space / total_disk_space >= disk_used_stop_write_threshold_ ? true : false;
   }
   return ret;
 }
@@ -128,7 +113,7 @@ int ObDDLCtrlSpeedItem::do_sleep(
   } else if (OB_TMP_FAIL(check_need_stop_write(checker, is_need_stop_write))) {
   }
   if (OB_FAIL(ret)) {
-  } else if (is_need_stop_write) /*clog disk used exceeds threshold*/ {
+  } else if (is_need_stop_write) {
     int64_t loop_cnt = 0;
     while (OB_SUCC(ret) && is_need_stop_write) {
       ob_usleep(SLEEP_INTERVAL);
@@ -158,9 +143,7 @@ int ObDDLCtrlSpeedItem::do_sleep(
         }
       }
       if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-        FLOG_INFO("stop write ddl clog", K(ret),
-          K(write_speed_), K(need_stop_write_), K(ref_cnt_),
-          K(disk_used_stop_write_threshold_));
+        FLOG_INFO("stop write ddl clog", K(ret), K(write_speed_), K(ref_cnt_));
       }
       if (is_need_stop_write && OB_TMP_FAIL(check_need_stop_write(checker, is_need_stop_write))) {
         LOG_WARN("fail to check need stop write", K(tmp_ret));
@@ -184,7 +167,7 @@ int ObDDLCtrlSpeedItem::check_need_stop_write(ObDDLNeedStopWriteChecker &checker
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
   } else {
-    is_need_stop_write = checker.check_need_stop_write() || need_stop_write_;
+    is_need_stop_write = checker.check_need_stop_write();
   }
   return ret;
 }
@@ -202,8 +185,7 @@ int ObDDLCtrlSpeedItem::limit_and_sleep(
   int64_t transmit_sleep_us = 0; // network related.
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-  } else if ((disk_used_stop_write_threshold_ <= 0
-      || disk_used_stop_write_threshold_ > 100) || bytes < 0 || 0 == task_id) {
+  } else if (bytes < 0 || 0 == task_id) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(cal_limit(bytes, next_available_ts))) {
   } else if (OB_ISNULL(GCTX.bandwidth_throttle_)) {
@@ -277,7 +259,6 @@ int ObDDLCtrlSpeedHandle::refresh()
     if (OB_FAIL(speed_handle_item_.refresh())) {
     }
   } else if (OB_SERVER_RUNTIME_NOT_READY == ret || OB_IN_STOP_STATE == ret) {
-    speed_handle_item_.reset_need_stop_write();
     ret = OB_SUCCESS;
   } else {
   }

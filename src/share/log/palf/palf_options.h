@@ -22,18 +22,10 @@ namespace oceanbase
 namespace palf
 {
 // Following disk options can be set to Palf.
-// 1. log_disk_usage_limit_size_, the total log disk space.
-// 2. log_disk_utilization_threshold_, log_disklog disk utilization threshold before reuse log files.
-// 3. log_disk_utilization_limit_threshold_, maximum of log disk usage percentage before stop submitting or receiving logs.
-// 4. log_disk_throttling_percentage_, the threshold of the size of the log disk when writing_limit will be triggered.
+// log_disk_usage_limit_size_ is a soft target for checkpoint and recycling.
 struct PalfDiskOptions
 {
-  PalfDiskOptions() : log_disk_usage_limit_size_(-1),
-                      log_disk_utilization_threshold_(-1),
-                      log_disk_utilization_limit_threshold_(-1),
-                      log_disk_throttling_percentage_(-1),
-                      log_disk_throttling_maximum_duration_(-1)
-  {}
+  PalfDiskOptions() : log_disk_usage_limit_size_(-1) {}
   ~PalfDiskOptions() { reset(); }
   static constexpr int64_t MB = 1024*1024ll;
   void reset();
@@ -42,15 +34,7 @@ struct PalfDiskOptions
   bool operator!=(const PalfDiskOptions &rhs) const;
   PalfDiskOptions &operator=(const PalfDiskOptions &other);
   int64_t log_disk_usage_limit_size_;
-  int log_disk_utilization_threshold_;
-  int log_disk_utilization_limit_threshold_;
-  int64_t log_disk_throttling_percentage_;
-  int64_t log_disk_throttling_maximum_duration_;
-  TO_STRING_KV("log_disk_size(MB)", log_disk_usage_limit_size_ / MB,
-               "log_disk_utilization_threshold(%)", log_disk_utilization_threshold_,
-               "log_disk_utilization_limit_threshold(%)", log_disk_utilization_limit_threshold_,
-               "log_disk_throttling_percentage(%)", log_disk_throttling_percentage_,
-               "log_disk_throttling_maximum_duration(s)", log_disk_throttling_maximum_duration_ / (1000 * 1000));
+  TO_STRING_KV("log_disk_size(MB)", log_disk_usage_limit_size_ / MB);
 };
 
 
@@ -115,43 +99,6 @@ struct PalfOptions
 public:
   PalfDiskOptions disk_options_;
 };
-
-struct PalfThrottleOptions
-{
-  public:
-  PalfThrottleOptions() {reset();}
-  ~PalfThrottleOptions() {reset();}
-  void reset();
-  bool is_valid() const;
-  bool operator==(const PalfThrottleOptions &rhs) const;
-  // size of available log disk when writing throttling triggered
-  inline int64_t get_available_size_after_limit() const;
-  inline int64_t get_maximum_duration() const {return maximum_duration_;}
-  inline bool need_throttling() const;
-  static constexpr int64_t MB = 1024*1024ll;
-  TO_STRING_KV("total_disk_space", total_disk_space_ / MB,
-               K_(stopping_writing_percentage), K_(trigger_percentage),
-               "maximum_duration(s)", maximum_duration_/ (1000 * 1000L),
-               "unrecyclable_disk_space(MB)", unrecyclable_disk_space_ / MB);
-public:
-  int64_t total_disk_space_;
-  int64_t stopping_writing_percentage_;
-  int64_t trigger_percentage_;
-  int64_t maximum_duration_;
-  int64_t unrecyclable_disk_space_;
-};
-
-inline int64_t PalfThrottleOptions::get_available_size_after_limit() const
-{
-  return (total_disk_space_ * MAX(0, stopping_writing_percentage_ - trigger_percentage_)) / 100;
-}
-
-inline bool PalfThrottleOptions::need_throttling() const
-{
-  return trigger_percentage_> 0  && total_disk_space_ > 0
-      && (trigger_percentage_ < stopping_writing_percentage_)
-      && unrecyclable_disk_space_ > (total_disk_space_ * trigger_percentage_ / 100);
-}
 
 } // end namespace palf
 } // end namspace oceanbase
