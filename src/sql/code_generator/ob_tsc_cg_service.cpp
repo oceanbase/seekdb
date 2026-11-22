@@ -353,7 +353,6 @@ int ObTscCgService::generate_table_param(const ObLogTableScan &op,
   } else if (table_schema->is_fts_index() && FALSE_IT(scan_ctdef.table_param_.set_is_fts_index(true))) {
   } else if (table_schema->is_multivalue_index_aux() && FALSE_IT(scan_ctdef.table_param_.set_is_multivalue_index(true))) {
   } else if (table_schema->is_vec_index() && FALSE_IT(scan_ctdef.table_param_.set_is_vec_index(true))) {
-  } else if (table_schema->get_semistruct_encoding_type().is_enable_semistruct_encoding() && FALSE_IT(scan_ctdef.table_param_.set_is_enable_semistruct_encoding(true))) {
   } else if (FALSE_IT(scan_ctdef.table_param_.set_is_partition_table(table_schema->is_partitioned_table()))) {
   } else if (OB_FAIL(extract_das_output_column_ids(op, scan_ctdef, *table_schema, cg_ctx, tsc_out_cols))) {
   }
@@ -498,8 +497,7 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
     if (OB_FAIL(cg_.generate_rt_exprs(scan_pushdown_filters, scan_ctdef.pd_expr_spec_.pushdown_filters_))) {
     } else if (pd_filter) {
       ObPushdownFilterConstructor filter_constructor(
-          &cg_.phy_plan_->get_allocator(), cg_, &op,
-          scan_ctdef.table_param_.is_enable_semistruct_encoding());
+          &cg_.phy_plan_->get_allocator(), cg_, &op, false);
       if (OB_FAIL(filter_constructor.apply(
           scan_pushdown_filters, scan_ctdef.pd_expr_spec_.pd_storage_filters_.get_pushdown_filter()))) {
       }
@@ -510,8 +508,7 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
     if (OB_FAIL(cg_.generate_rt_exprs(lookup_pushdown_filters, lookup_ctdef->pd_expr_spec_.pushdown_filters_))) {
     } else if (pd_filter) {
       ObPushdownFilterConstructor filter_constructor(
-          &cg_.phy_plan_->get_allocator(), cg_, &op,
-          lookup_ctdef->table_param_.is_enable_semistruct_encoding());
+          &cg_.phy_plan_->get_allocator(), cg_, &op, false);
       if (OB_FAIL(filter_constructor.apply(
           lookup_pushdown_filters, lookup_ctdef->pd_expr_spec_.pd_storage_filters_.get_pushdown_filter()))) {
       }
@@ -1121,8 +1118,7 @@ int ObTscCgService::generate_das_scan_ctdef(const ObLogTableScan &op,
       } else if (OB_FAIL(cg_.generate_rt_exprs(scan_pushdown_filters, scan_ctdef.pd_expr_spec_.pushdown_filters_))) {
       } else if (scan_ctdef.pd_expr_spec_.pd_storage_flag_.is_filter_pushdown()) {
         ObPushdownFilterConstructor filter_constructor(
-            &cg_.phy_plan_->get_allocator(), cg_, &op,
-            scan_ctdef.table_param_.is_enable_semistruct_encoding());
+            &cg_.phy_plan_->get_allocator(), cg_, &op, false);
         if (OB_FAIL(filter_constructor.apply(
                     scan_pushdown_filters, scan_ctdef.pd_expr_spec_.pd_storage_filters_.get_pushdown_filter()))) {
         }

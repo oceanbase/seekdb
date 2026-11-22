@@ -84,8 +84,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     index_params_(),
     table_organization_(ObTableOrganizationType::OB_ORGANIZATION_INVALID),
     vec_column_name_(),
-    vec_index_type_(INDEX_TYPE_MAX),
-    semistruct_encoding_type_()
+    vec_index_type_(INDEX_TYPE_MAX)
 {
   table_mode_.reset();
 }
@@ -1661,10 +1660,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
-      case T_SEMISTRUCT_ENCODING_TYPE: {
-        ret = resolve_semistruct_encoding_type(option_node, is_index_option);
-        break;
-      }
       default: {
         /* won't be here */
         ret = OB_ERR_UNEXPECTED;
@@ -2970,7 +2965,6 @@ void ObDDLResolver::reset() {
   lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD;
   auto_increment_cache_size_ = 0;
   index_params_.reset();
-  semistruct_encoding_type_.reset();
 }
 
 void ObDDLResolver::reset_index()
@@ -7905,45 +7899,6 @@ int ObDDLResolver::check_skip_index(share::schema::ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(blocksstable::check_skip_index_valid(table_schema))) {
-  }
-  return ret;
-}
-
-int ObDDLResolver::resolve_semistruct_encoding_type(const ParseNode *option_node, const bool is_index_option)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(session_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "session_info_ is null", K(ret));
-  } else if (is_index_option) {
-    ret = OB_NOT_SUPPORTED;
-  } else if (OB_ISNULL(option_node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "option_node is null", K(ret));
-  } else if (OB_ISNULL(option_node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "the children of option_node is null", K(option_node->children_), K(ret));
-  } else if (OB_ISNULL(option_node->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN,"children can't be null", K(ret));
-  } else if (OB_ISNULL(stmt_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN,"stmt_ is null", K(ret));
-  } else {
-    ObString type_str(static_cast<int32_t>(option_node->children_[0]->str_len_), (char *)(option_node->children_[0]->str_value_));
-    if (type_str.empty()) {
-      semistruct_encoding_type_.mode_ = ObSemiStructEncodingType::Mode::NONE;
-    } else if (0 == type_str.case_compare("encoding")) {
-      semistruct_encoding_type_.mode_ = ObSemiStructEncodingType::Mode::ENCODING;
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-      SQL_RESV_LOG(WARN, "failed to resolve semistruct encoding type str", K(ret), K(type_str));
-      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "semistruct encoding type, should be none or encoding");
-    }
-    if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-      if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE))) {
-      }
-    }
   }
   return ret;
 }

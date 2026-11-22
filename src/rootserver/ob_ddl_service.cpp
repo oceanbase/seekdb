@@ -1759,10 +1759,6 @@ int ObDDLService::set_raw_table_options(
           }
           break;
         }
-        case ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE: {
-          new_table_schema.set_semistruct_encoding_type(alter_table_schema.get_semistruct_encoding_type());
-          break;
-        }
         default: {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unknown option!", K(i));

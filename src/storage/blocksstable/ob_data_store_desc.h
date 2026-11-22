@@ -84,8 +84,7 @@ public:
       K_(micro_index_clustered),
       K_(progressive_merge_round),
       K_(need_submit_io),
-      K_(encoding_granularity),
-      K_(semistruct_encoding_type));
+      K_(encoding_granularity));
 private:
   OB_INLINE void init_block_size(const share::schema::ObMergeSchema &merge_schema);
   static const int64_t DEFAULT_RESERVE_PERCENT = 90;
@@ -109,7 +108,6 @@ public:
   bool micro_index_clustered_;
   bool need_submit_io_;
   uint64_t encoding_granularity_;
-  share::schema::ObSemiStructEncodingType semistruct_encoding_type_;
 };
 
 struct ObColDataStoreDesc
@@ -258,7 +256,6 @@ public:
   #undef STORE_DESC_DEFINE_POINT_FUNC
   OB_INLINE int64_t get_micro_block_size() const { return micro_block_size_; }
   OB_INLINE common::ObRowStoreType get_row_store_type() const { return row_store_type_; }
-  OB_INLINE const share::schema::ObSemiStructEncodingType& get_semistruct_encoding_type() const { return static_desc_->semistruct_encoding_type_; }
   static const int64_t MIN_MICRO_BLOCK_SIZE = 4 * 1024; //4KB
   TO_STRING_KV(
       KPC_(static_desc),

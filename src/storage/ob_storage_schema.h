@@ -158,12 +158,6 @@ public:
   virtual inline share::schema::ObTableModeFlag get_table_mode_flag() const override
   { return (share::schema::ObTableModeFlag)table_mode_.mode_flag_; }
   virtual inline share::schema::ObTableMode get_table_mode_struct() const override { return table_mode_; }
-  const share::schema::ObSemiStructEncodingType& get_semistruct_encoding_type() const { return semistruct_encoding_type_; }
-  virtual int get_semistruct_encoding_type(share::schema::ObSemiStructEncodingType& type) const
-  {
-    type = semistruct_encoding_type_;
-    return OB_SUCCESS;
-  }
   virtual inline share::schema::ObTableType get_table_type() const override { return table_type_; }
   virtual inline share::schema::ObIndexType get_index_type() const override { return index_type_; }
   const common::ObIArray<ObStorageColumnSchema> &get_store_column_schemas() const { return column_array_; }
@@ -256,7 +250,6 @@ public:
   common::ObFixedArray<ObStorageColumnSchema, common::ObIAllocator> column_array_; // column schema, including virtual column
   common::ObFixedArray<share::schema::ObSkipIndexAttrWithId, common::ObIAllocator> skip_idx_attr_array_;
   int64_t store_column_cnt_; // NOT include virtual generated column
-  share::schema::ObSemiStructEncodingType semistruct_encoding_type_;
   bool is_inited_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObStorageSchema);

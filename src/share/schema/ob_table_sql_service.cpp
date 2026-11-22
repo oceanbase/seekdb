@@ -2413,7 +2413,6 @@ int ObTableSqlService::gen_table_dml_without_check(
       || (OB_FAIL(dml.add_column("index_params", ObHexEscapeSqlStr(index_params))))
       || (OB_FAIL(dml.add_column("micro_index_clustered", table.get_micro_index_clustered())))
       || (OB_FAIL(dml.add_column("parser_properties", ObHexEscapeSqlStr(parser_properties))))
-      || (OB_FAIL(dml.add_column("semistruct_encoding_type", table.get_semistruct_encoding_flags())))
       ) {
       }
 

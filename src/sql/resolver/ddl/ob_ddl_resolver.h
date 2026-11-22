@@ -558,7 +558,6 @@ protected:
   int resolve_lob_storage_parameter(share::schema::ObColumnSchemaV2 &column, const ParseNode &param_node);
   int resolve_lob_chunk_size(const ParseNode &size_node, int64_t &lob_chunk_size);
   int resolve_lob_chunk_size(share::schema::ObColumnSchemaV2 &column, const ParseNode &lob_chunk_size_node);
-  int resolve_semistruct_encoding_type(const ParseNode *option_node, const bool is_index_option);
   /*
   int resolve_generated_column_definition(
       share::schema::ObColumnSchemaV2 &column,
@@ -881,7 +880,6 @@ protected:
   ObTableOrganizationType table_organization_;
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;
-  ObSemiStructEncodingType semistruct_encoding_type_;
 private:
   template <typename STMT>
   DISALLOW_COPY_AND_ASSIGN(ObDDLResolver);

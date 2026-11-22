@@ -661,8 +661,6 @@ constexpr int OB_NOT_MULTIVALUE_SUPPORT = -5519;
 constexpr int OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX = -5520;
 constexpr int OB_ERR_JSON_CONTAINER_CAST_SCALAR = -5521;
 constexpr int OB_ERR_INVALID_IDENTIFIER_JSON_TABLE = -5522;
-constexpr int OB_SEMISTRUCT_SCHEMA_NOT_MATCH = -5523;
-constexpr int OB_NOT_SUPPORT_SEMISTRUCT_ENCODE = -5524;
 constexpr int OB_ERR_SP_ALREADY_EXISTS = -5541;
 constexpr int OB_ERR_SP_DOES_NOT_EXIST = -5542;
 constexpr int OB_ERR_SP_UNDECLARED_VAR = -5543;
@@ -2039,8 +2037,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX__USER_ERROR_MSG "Invalid JSON value for CAST for functional index."
 #define OB_ERR_JSON_CONTAINER_CAST_SCALAR__USER_ERROR_MSG "Cannot store an array or an object in a scalar key part of the index."
 #define OB_ERR_INVALID_IDENTIFIER_JSON_TABLE__USER_ERROR_MSG "invalid identifier used for path expression in JSON_TABLE"
-#define OB_SEMISTRUCT_SCHEMA_NOT_MATCH__USER_ERROR_MSG "Cannot match semistruct schema."
-#define OB_NOT_SUPPORT_SEMISTRUCT_ENCODE__USER_ERROR_MSG "not support semistruct encoding."
 #define OB_ERR_SESSION_VAR_CHANGED__USER_ERROR_MSG "System variable '%.*s' is different from the old value solidified for '%.*s'(old value:%.*s)."
 #define OB_ERR_SP_ALREADY_EXISTS__USER_ERROR_MSG "%s %.*s already exists"
 #define OB_ERR_SP_DOES_NOT_EXIST__USER_ERROR_MSG "%s %.*s.%.*s does not exist"

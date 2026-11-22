@@ -7,7 +7,7 @@ id	field	type	length	precision	nullable
 19	row_id	5	0	20	0
 20	column_name	22	128	-1	0
 21	column_value	22	65536	-1	1
-table oceanbase.__all_table column_count 70 table_id 3
+table oceanbase.__all_table column_count 69 table_id 3
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_core_column_table where table_id=3 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -79,7 +79,6 @@ id	field	type	length	precision	nullable
 82	index_params	22	256	-1	0
 83	micro_index_clustered	1	0	4	0
 84	parser_properties	30	536870911	-1	0
-85	semistruct_encoding_type	5	0	20	0
 table oceanbase.__all_column column_count 34 table_id 4
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_core_column_table where table_id=4 order by column_id;
 id	field	type	length	precision	nullable
@@ -131,7 +130,7 @@ id	field	type	length	precision	nullable
 24	table_name	22	128	-1	0
 25	operation_type	5	0	20	0
 26	ddl_stmt_str	30	536870911	-1	0
-table oceanbase.__all_table_history column_count 71 table_id 12
+table oceanbase.__all_table_history column_count 70 table_id 12
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_core_column_table where table_id=12 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -204,7 +203,6 @@ id	field	type	length	precision	nullable
 83	index_params	22	256	-1	1
 84	micro_index_clustered	1	0	4	1
 85	parser_properties	30	536870911	-1	1
-86	semistruct_encoding_type	5	0	20	1
 table oceanbase.__all_column_history column_count 35 table_id 13
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_core_column_table where table_id=13 order by column_id;
 id	field	type	length	precision	nullable
@@ -2201,7 +2199,7 @@ id	field	type	length	precision	nullable
 31	savepoints_total_cnt	5	0	20	0
 32	internal_abort_cause	5	0	20	0
 33	can_early_lock_release	1	0	4	0
-table oceanbase.__all_virtual_core_all_table column_count 68 table_id 11035
+table oceanbase.__all_virtual_core_all_table column_count 67 table_id 11035
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11035 order by column_id;
 id	field	type	length	precision	nullable
 16	table_id	5	0	20	0
@@ -2271,7 +2269,6 @@ id	field	type	length	precision	nullable
 80	index_params	22	256	-1	0
 81	micro_index_clustered	1	0	4	0
 82	parser_properties	30	536870911	-1	0
-83	semistruct_encoding_type	5	0	20	0
 table oceanbase.__all_virtual_core_column_table column_count 32 table_id 11036
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11036 order by column_id;
 id	field	type	length	precision	nullable

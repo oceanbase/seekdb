@@ -291,8 +291,7 @@ all_table_def = dict(
       ('auto_increment_cache_size', 'int', 'false', '0'),
       ('index_params', 'varchar:OB_MAX_INDEX_PARAMS_LENGTH', 'false', ''),
       ('micro_index_clustered', 'bool', 'false', 'false'),
-      ('parser_properties', 'longtext', 'false', ''),
-      ('semistruct_encoding_type', 'int', 'false', '0')
+      ('parser_properties', 'longtext', 'false', '')
                      ]
   )
 

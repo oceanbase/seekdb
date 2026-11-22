@@ -173,14 +173,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     if (OB_SUCC(ret) && auto_increment_cache_size_ != 0) {
       table_schema.set_auto_increment_cache_size(auto_increment_cache_size_);
     }
-    if (OB_SUCC(ret)) {
-      if (semistruct_encoding_type_.is_enable_semistruct_encoding()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "semistruct encoding is not supported");
-      } else {
-        table_schema.set_semistruct_encoding_type(semistruct_encoding_type_);
-      }
-    }
   }
   return ret;
 }

@@ -305,38 +305,6 @@ public:
   };
 };
 
-struct ObSemiStructEncodingType
-{
-  OB_UNIS_VERSION(1);
-public:
-  enum Mode {
-    NONE = 0,
-    ENCODING = 1
-  };
-
-public:
-  ObSemiStructEncodingType():
-    flags_(0)
-  {}
-
-  ~ObSemiStructEncodingType() { reset(); }
-
-  void reset() { flags_ = 0;}
-  bool is_enable_semistruct_encoding() const { return ENCODING == mode_; }
-  int64_t get_deep_copy_size() const { return sizeof(ObSemiStructEncodingType); }
-
-  union 
-  {
-    int64_t flags_;
-    struct 
-    {
-      uint64_t mode_ : 8;
-      uint64_t reserved_ : 56;
-    };
-  };
-  TO_STRING_KV(K_(mode), K_(reserved));
-};
-
 struct ObBackUpTableModeOp
 {
   /*
@@ -542,11 +510,6 @@ public:
   virtual int get_skip_index_col_attr(common::ObIArray<ObSkipIndexColumnAttr> &skip_idx_attrs) const
   {
     UNUSED(skip_idx_attrs);
-    return common::OB_NOT_SUPPORTED;
-  }
-  virtual int get_semistruct_encoding_type(ObSemiStructEncodingType& type) const
-  {
-    UNUSED(type);
     return common::OB_NOT_SUPPORTED;
   }
   DECLARE_PURE_VIRTUAL_TO_STRING;
@@ -1505,15 +1468,6 @@ public:
   inline bool has_table_flag(uint64_t flag) const { return table_flags_ & flag; }
   inline void set_table_flags(uint64_t flags) { table_flags_ = flags; }
   inline uint64_t get_table_flags() const { return table_flags_; }
-  void set_semistruct_encoding_type(const int64_t type) { semistruct_encoding_type_.flags_ = type; }
-  void set_semistruct_encoding_type(const ObSemiStructEncodingType& type) { semistruct_encoding_type_ = type; }
-  const ObSemiStructEncodingType& get_semistruct_encoding_type() const { return semistruct_encoding_type_; }
-  int64_t get_semistruct_encoding_flags() const { return semistruct_encoding_type_.flags_; }
-  virtual int get_semistruct_encoding_type(ObSemiStructEncodingType& type) const
-  {
-    type = semistruct_encoding_type_;
-    return OB_SUCCESS;
-  }
   DECLARE_VIRTUAL_TO_STRING;
 
 protected:
@@ -1661,7 +1615,6 @@ protected:
   common::ObString index_params_;
   // exec_env
   common::ObString exec_env_;
-  ObSemiStructEncodingType semistruct_encoding_type_;
 };
 
 class ObPrintableTableSchema final : public ObTableSchema
