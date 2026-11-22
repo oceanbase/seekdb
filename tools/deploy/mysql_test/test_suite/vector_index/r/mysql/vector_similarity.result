@@ -688,6 +688,13 @@ select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5;
 c1	c2	c3
 2	2	[1,1,2]
 1	1	[0,1,2]
+  "OPERATOR":"VECTOR INDEX SCAN",
+select c1, inner_product(c3, [1,0,0]) as score from t1 order by score desc approximate limit 5;
+c1	score
+2	1
+1	0
+select * from t1 order by inner_product(c3, [1,0,0]) asc approximate limit 5;
+ERROR 0A000: ASC ordering with inner_product in APPROXIMATE vector search is not supported
 select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5 parameters (similarity=0.7);
 ERROR 0A000: similarity parameter for inner_product distance is not supported
 select cosine_similarity([0,1,2], [1,1,2]);

@@ -441,6 +441,12 @@ insert into t1 values(1, 1, [0,1,2]);
 insert into t1 values(2, 2, [1,1,2]);
 
 select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5;
+--let $sql = explain format=json select * from t1 order by inner_product(c3, [1,0,0]) desc approximate limit 5
+--let $scan_operator = query_get_value("$sql", Query Plan, 3)
+--echo $scan_operator
+select c1, inner_product(c3, [1,0,0]) as score from t1 order by score desc approximate limit 5;
+--error 1235
+select * from t1 order by inner_product(c3, [1,0,0]) asc approximate limit 5;
 --error 1235
 select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5 parameters (similarity=0.7);
 
