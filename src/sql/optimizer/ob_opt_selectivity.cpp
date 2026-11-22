@@ -1073,7 +1073,95 @@ int ObOptSelectivity::calculate_selectivity(const OptTableMetas &table_metas,
   if (OB_SUCC(ret)) {
     selectivity = ctx.get_correlation_model().combine_filters_selectivity(selectivities);
   }
+  // Several negated equalities on one column exclude each other, so their union
+  // is estimated as 1 - null_sel - sum(sel(col = value)) instead of combining
+  // independent estimates. This also keeps "col != v1 AND col != v2 ..." on the
+  // same estimate as the equivalent "col NOT IN (v1, v2, ...)", so equivalent
+  // predicates choose the same vector scan path.
+  if (OB_SUCC(ret) && sel_estimators.count() >= 2) {
+    const ObColumnRefRawExpr *exclusion_column = NULL;
+    ObSEArray<ObRawExpr *, 4> excluded_values;
+    bool all_exclusions = true;
+    for (int64_t i = 0; OB_SUCC(ret) && all_exclusions && i < sel_estimators.count(); ++i) {
+      const ObColumnRefRawExpr *column = NULL;
+      const ObRawExpr *value = NULL;
+      if (OB_ISNULL(sel_estimators.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null estimator", K(ret));
+      } else if (!sel_estimators.at(i)->get_negated_equal_value(column, value)) {
+        all_exclusions = false;
+      } else if (OB_ISNULL(column) || OB_ISNULL(value)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null exclusion info", K(ret));
+      } else if (NULL == exclusion_column) {
+        exclusion_column = column;
+        if (OB_FAIL(excluded_values.push_back(const_cast<ObRawExpr *>(value)))) {
+          LOG_WARN("failed to push back excluded value", K(ret));
+        }
+      } else if (exclusion_column != column) {
+        all_exclusions = false;
+      } else if (OB_FAIL(excluded_values.push_back(const_cast<ObRawExpr *>(value)))) {
+        LOG_WARN("failed to push back excluded value", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && all_exclusions && excluded_values.count() >= 2) {
+      // Reuse the NOT IN estimator so that an exclusion chain and the
+      // equivalent NOT IN predicate get exactly the same selectivity, and
+      // therefore choose the same vector scan path.
+      ObOpRawExpr row_expr(ctx.get_allocator());
+      ObOpRawExpr not_in_expr(ctx.get_allocator());
+      row_expr.set_expr_type(T_OP_ROW);
+      not_in_expr.set_expr_type(T_OP_NOT_IN);
+      double exclusion_sel = 0.0;
+      if (OB_FAIL(row_expr.set_param_exprs(excluded_values))) {
+        LOG_WARN("failed to set row params", K(ret));
+      } else if (OB_FAIL(not_in_expr.set_param_exprs(
+                     const_cast<ObColumnRefRawExpr *>(exclusion_column), &row_expr))) {
+        LOG_WARN("failed to set not in params", K(ret));
+      } else if (OB_FAIL(ObInSelEstimator::get_in_sel(table_metas, ctx, not_in_expr,
+                                                      exclusion_sel))) {
+        LOG_WARN("failed to get not in selectivity", K(ret));
+      } else {
+        selectivity = std::min(selectivity, exclusion_sel);
+      }
+    }
+  }
   return ret;
+}
+
+// Extract "column != value" / "NOT(column = value)" from a predicate.
+static bool get_exclusion_column_value(const ObRawExpr &pred,
+                                       const ObColumnRefRawExpr *&column,
+                                       const ObRawExpr *&value)
+{
+  bool bret = false;
+  column = NULL;
+  value = NULL;
+  const ObRawExpr *eq = NULL;
+  if (T_OP_NE == pred.get_expr_type() && 2 == pred.get_param_count()) {
+    eq = &pred;
+  } else if (T_OP_NOT == pred.get_expr_type() && 1 == pred.get_param_count()) {
+    const ObRawExpr *child = pred.get_param_expr(0);
+    if (NULL != child && T_OP_EQ == child->get_expr_type() && 2 == child->get_param_count()) {
+      eq = child;
+    }
+  }
+  if (NULL != eq) {
+    const ObRawExpr *left = eq->get_param_expr(0);
+    const ObRawExpr *right = eq->get_param_expr(1);
+    if (NULL != left && NULL != right) {
+      if (left->is_column_ref_expr() && !right->has_flag(CNT_COLUMN)) {
+        column = static_cast<const ObColumnRefRawExpr *>(left);
+        value = right;
+        bret = true;
+      } else if (right->is_column_ref_expr() && !left->has_flag(CNT_COLUMN)) {
+        column = static_cast<const ObColumnRefRawExpr *>(right);
+        value = left;
+        bret = true;
+      }
+    }
+  }
+  return bret;
 }
 
 int ObOptSelectivity::calculate_selectivity(const OptTableMetas &table_metas,
@@ -1128,6 +1216,66 @@ int ObOptSelectivity::calculate_selectivity(const OptTableMetas &table_metas,
     }
   }
   if (FAILEDx(calculate_selectivity(table_metas, ctx, sel_estimators, selectivity, all_predicate_sel, true))) {
+  } else {
+    // The filter is either a flattened predicate list or one AND expression.
+    // Collect the candidates accordingly.
+    ObSEArray<ObRawExpr *, 4> exclusion_predicates;
+    if (1 == predicates.count() && NULL != predicates.at(0) &&
+        T_OP_AND == predicates.at(0)->get_expr_type()) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < predicates.at(0)->get_param_count(); ++i) {
+        if (OB_FAIL(exclusion_predicates.push_back(predicates.at(0)->get_param_expr(i)))) {
+          LOG_WARN("failed to push back predicate", K(ret));
+        }
+      }
+    } else if (OB_FAIL(append(exclusion_predicates, predicates))) {
+      LOG_WARN("failed to append predicates", K(ret));
+    }
+    // A chain of exclusions on one column and the equivalent NOT IN predicate
+    // must be estimated identically, otherwise the vector scan picks a
+    // different path for two semantically equal filters.
+    const ObColumnRefRawExpr *exclusion_column = NULL;
+    ObSEArray<ObRawExpr *, 4> excluded_values;
+    bool all_exclusions = OB_SUCC(ret) && exclusion_predicates.count() >= 2;
+    for (int64_t i = 0; OB_SUCC(ret) && all_exclusions && i < exclusion_predicates.count(); ++i) {
+      const ObColumnRefRawExpr *column = NULL;
+      const ObRawExpr *value = NULL;
+      if (OB_ISNULL(exclusion_predicates.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null predicate", K(ret));
+      } else if (!get_exclusion_column_value(*exclusion_predicates.at(i), column, value)) {
+        all_exclusions = false;
+      } else if (OB_ISNULL(column) || OB_ISNULL(value) ||
+                 value->get_result_type().is_null()) {
+        all_exclusions = false;
+      } else if (NULL == exclusion_column) {
+        exclusion_column = column;
+        if (OB_FAIL(excluded_values.push_back(const_cast<ObRawExpr *>(value)))) {
+          LOG_WARN("failed to push back excluded value", K(ret));
+        }
+      } else if (exclusion_column != column) {
+        all_exclusions = false;
+      } else if (OB_FAIL(excluded_values.push_back(const_cast<ObRawExpr *>(value)))) {
+        LOG_WARN("failed to push back excluded value", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && all_exclusions && excluded_values.count() >= 2) {
+      ObOpRawExpr row_expr(ctx.get_allocator());
+      ObOpRawExpr not_in_expr(ctx.get_allocator());
+      row_expr.set_expr_type(T_OP_ROW);
+      not_in_expr.set_expr_type(T_OP_NOT_IN);
+      double exclusion_sel = 0.0;
+      if (OB_FAIL(row_expr.set_param_exprs(excluded_values))) {
+        LOG_WARN("failed to set row params", K(ret));
+      } else if (OB_FAIL(not_in_expr.set_param_exprs(
+                     const_cast<ObColumnRefRawExpr *>(exclusion_column), &row_expr))) {
+        LOG_WARN("failed to set not in params", K(ret));
+      } else if (OB_FAIL(ObInSelEstimator::get_in_sel(table_metas, ctx, not_in_expr,
+                                                      exclusion_sel))) {
+        LOG_WARN("failed to get not in selectivity", K(ret));
+      } else {
+        selectivity = exclusion_sel;
+      }
+    }
   }
   return ret;
 }

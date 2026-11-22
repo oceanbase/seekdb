@@ -91,6 +91,17 @@ public:
 
   static int append_estimators(ObIArray<ObSelEstimator *> &sel_estimators, ObSelEstimator *new_estimator);
   
+  // Returns true when this estimator describes "column != value" or the
+  // equivalent "NOT(column = value)", and fills the column and the value expr.
+  // Used to combine several exclusions on one column as a set instead of
+  // multiplying estimates that are actually mutually exclusive.
+  virtual bool get_negated_equal_value(const ObColumnRefRawExpr *&column,
+                                       const ObRawExpr *&value) const
+  {
+    UNUSED(column);
+    UNUSED(value);
+    return false;
+  }
   // Check whether it is related to other ObSelEstimator, and if so, merge them
   virtual int merge(const ObSelEstimator &other, bool &is_success) = 0;
   // check whether it is independent of any other ObSelEstimator
@@ -452,6 +463,7 @@ public:
     return T_OP_IN == expr.get_expr_type() || T_OP_NOT_IN == expr.get_expr_type();
   }
 private:
+  friend class ObOptSelectivity;
   static int get_in_sel(const OptTableMetas &table_metas,
                         const OptSelectivityCtx &ctx,
                         const ObRawExpr &qual,
@@ -590,6 +602,9 @@ public:
                       const OptSelectivityCtx &ctx,
                       double &selectivity,
                       ObIArray<ObExprSelPair> &all_predicate_sel) override;
+
+  virtual bool get_negated_equal_value(const ObColumnRefRawExpr *&column,
+                                       const ObRawExpr *&value) const override;
 
   inline static bool check_expr_valid(const ObRawExpr &expr) {
     return  T_OP_EQ == expr.get_expr_type() ||
@@ -731,6 +746,8 @@ public:
                       const OptSelectivityCtx &ctx,
                       double &selectivity,
                       ObIArray<ObExprSelPair> &all_predicate_sel) override;
+  virtual bool get_negated_equal_value(const ObColumnRefRawExpr *&column,
+                                       const ObRawExpr *&value) const override;
   VIRTUAL_TO_STRING_KV(K_(type), K_(child_estimators));
 
 private:
