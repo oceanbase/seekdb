@@ -27,7 +27,7 @@
 #include "lib/list/ob_list.h"
 #include "lib/random/ob_random.h"
 #include "lib/trace/ob_trace_event.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 #include "share/log/ob_log_base_header.h"
 #include "share/scn.h"
 #include "share/allocator/ob_reserve_arena.h"

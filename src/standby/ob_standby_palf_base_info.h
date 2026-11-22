@@ -18,7 +18,7 @@
 #define OCEANBASE_STANDBY_OB_STANDBY_PALF_BASE_INFO_H_
 
 #include "lib/ob_define.h"
-#include "share/log/palf/palf_base_info.h"
+#include "share/log/types/palf_base_info.h"
 #include "share/scn.h"
 
 namespace oceanbase

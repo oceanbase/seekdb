@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_SYNC_TABLET_SEQ_CLOG_H_
 
 #include "common/ob_tablet_id.h"
-#include "logservice/palf/palf_callback.h"
+#include "logservice/palf_adapter/palf_callback.h"
 #include "logservice/ob_append_callback.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "storage/ddl/ob_ddl_clog.h"

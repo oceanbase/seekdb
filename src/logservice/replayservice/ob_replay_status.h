@@ -20,11 +20,11 @@
 #include <stdint.h>
 #include "share/log/ob_log_base_header.h"
 #include "share/log/ob_log_base_type.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 #include "share/scn.h"
-#include "logservice/palf/palf_callback.h"
-#include "logservice/palf/palf_iterator.h"
-#include "logservice/palf/palf_handle.h"
+#include "logservice/palf_adapter/palf_callback.h"
+#include "logservice/palf_adapter/palf_iterator.h"
+#include "logservice/palf_adapter/palf_handle.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/queue/ob_link_queue.h"
@@ -279,6 +279,7 @@ public:
   int get_base_scn(share::SCN &scn) const;
   int need_skip(const share::SCN &scn, bool &need_skip);
   int get_log(const char *&buffer, int64_t &nbytes, share::SCN &scn, palf::LSN &offset);
+  palf::LSN get_entry_end_lsn() const { return iterator_.get_entry_end_lsn(); }
   int next_log(const share::SCN &replayable_point,
                bool &iterate_end_by_replayable_point);
   // Reset the iterator with the current endpoint as the new starting point

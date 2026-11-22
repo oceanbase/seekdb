@@ -19,7 +19,7 @@
 
 #include "lib/utility/utility.h"           // ObTimeGuard
 #include "lib/lock/ob_spin_lock.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 #include "lib/ob_define.h"
 #include "lib/function/ob_function.h"
 #include "storage/ls/ob_ls_state.h"

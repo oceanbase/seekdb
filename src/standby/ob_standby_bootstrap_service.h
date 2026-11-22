@@ -18,7 +18,7 @@
 #define OCEANBASE_STANDBY_OB_STANDBY_BOOTSTRAP_SERVICE_H_
 
 #include "lib/net/ob_addr.h"
-#include "share/log/palf/palf_base_info.h"
+#include "share/log/types/palf_base_info.h"
 #include "share/scn.h"
 
 namespace oceanbase

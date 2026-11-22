@@ -19,7 +19,7 @@
 
 #include "lib/net/ob_addr.h"
 #include "share/scn.h"
-#include "share/log/palf/palf_base_info.h"
+#include "share/log/types/palf_base_info.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "standby/restore/ob_physical_copy_ctx.h"
 #include "standby/restore/ob_restore_helper.h"

@@ -19,7 +19,7 @@
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
-#include "logservice/palf/palf_handle.h"
+#include "logservice/palf_adapter/palf_handle.h"
 
 namespace oceanbase
 {

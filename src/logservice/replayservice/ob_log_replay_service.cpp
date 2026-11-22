@@ -918,8 +918,7 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
     free_replay_task(replay_task);
   } else if (OB_SUCC(ret) && need_iterate_next_log) {
     bool unused_iterate_end_by_replayable_point = false;
-    // TODO by runlin: compatibility with LogEntryHeader
-    if (OB_FAIL(submit_task->update_submit_log_meta_info(cur_lsn + log_size + sizeof(LogEntryHeader),
+    if (OB_FAIL(submit_task->update_submit_log_meta_info(submit_task->get_entry_end_lsn(),
                                                          cur_log_submit_scn))) {
       // log info fallback
       CLOG_LOG(ERROR, "failed to update_submit_log_meta_info", KR(ret), K(cur_lsn),
