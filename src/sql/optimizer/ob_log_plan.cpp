@@ -12222,8 +12222,9 @@ static bool text_retrieval_needs_relevance(const ObDMLStmt *const_stmt,
       col_used = select_stmt->get_aggr_item(i)->has_flag(CNT_COLUMN);
     }
     // The score may be dropped only when the MATCH predicate is used purely as a
-    // filter: a bare condition, a boolean context, or a comparison with constant
-    // zero. Any other use of the score (non-zero bound, arithmetic) keeps BM25.
+    // boolean filter (a bare condition or a boolean context), the only forms the
+    // index scan path accepts. Any comparison or arithmetic use of the score
+    // keeps BM25.
     int64_t match_cond_cnt = 0;
     bool filter_only = true;
     for (int64_t i = 0; i < stmt->get_condition_exprs().count(); ++i) {
@@ -12234,17 +12235,6 @@ static bool text_retrieval_needs_relevance(const ObDMLStmt *const_stmt,
         if (!is_filter_only && T_OP_BOOL == cond->get_expr_type() && 1 == cond->get_param_count()) {
           ObRawExpr *param = cond->get_param_expr(0);
           is_filter_only = OB_NOT_NULL(param) && param->has_flag(IS_MATCH_EXPR);
-        }
-        if (!is_filter_only && IS_RANGE_CMP_OP(cond->get_expr_type()) && 2 == cond->get_param_count()) {
-          ObRawExpr *l = cond->get_param_expr(0);
-          ObRawExpr *r = cond->get_param_expr(1);
-          ObRawExpr *cmp_match = (OB_NOT_NULL(l) && l->has_flag(IS_MATCH_EXPR)) ? l : r;
-          ObRawExpr *cmp_other = (cmp_match == l) ? r : l;
-          if (OB_NOT_NULL(cmp_other) && cmp_other->is_const_expr()) {
-            const ObObj &cmp_value = static_cast<const ObConstRawExpr *>(cmp_other)->get_value();
-            is_filter_only = (cmp_value.is_integer_type() && cmp_value.is_zero())
-                             || (cmp_value.is_number() && cmp_value.is_zero());
-          }
         }
         filter_only = filter_only && is_filter_only;
       } else if (OB_NOT_NULL(cond) && cond->has_flag(CNT_COLUMN)) {

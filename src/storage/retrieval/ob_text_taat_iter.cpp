@@ -32,11 +32,13 @@ int ObTextTaaTIter::init(const ObTextTaaTParam &param)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, mem_param))) {
   } else if (OB_FAIL(ObSRTaaTIterImpl::init(*param.base_param_, *param.dim_iter_, *param.allocator_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (param.base_param_->need_project_relevance()
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
   } else {
     query_tokens_ = param.query_tokens_;
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
+    estimated_total_doc_cnt_ = param.bm25_param_est_ctx_.estimated_total_doc_cnt_;
   }
   return ret;
 }
@@ -44,6 +46,7 @@ int ObTextTaaTIter::init(const ObTextTaaTParam &param)
 void ObTextTaaTIter::reset()
 {
   query_tokens_ = nullptr;
+  estimated_total_doc_cnt_ = 0;
   bm25_param_estimator_.reset();
   if (OB_NOT_NULL(dim_iter_)) {
     static_cast<ObTextRetrievalTokenIter *>(dim_iter_)->reset();
@@ -72,8 +75,12 @@ int ObTextTaaTIter::pre_process()
       const int64_t total_doc_cnt = bm25_param_estimator_.get_total_doc_cnt();
       partition_cnt_ = MIN((total_doc_cnt-1) / OB_HASHMAP_DEFAULT_SIZE + 1, OB_MAX_HASHMAP_COUNT);
     }
+  } else if (estimated_total_doc_cnt_ > 0) {
+    // No execution-time doc count scan without relevance; partition by the
+    // optimizer estimate so a broad match does not materialize every distinct
+    // document in a single hash map.
+    partition_cnt_ = MIN((estimated_total_doc_cnt_ - 1) / OB_HASHMAP_DEFAULT_SIZE + 1, OB_MAX_HASHMAP_COUNT);
   } else {
-    // no relevance to project, a single partition is enough to dedup the doc ids
     partition_cnt_ = 1;
   }
   return ret;
