@@ -1,0 +1,14 @@
+SET SESSION recyclebin = ON;
+CREATE DATABASE purge_batch_db;
+CREATE TABLE purge_batch_db.t (id INT PRIMARY KEY);
+SET @db_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = 'purge_batch_db');
+DROP TABLE purge_batch_db.t;
+DROP DATABASE purge_batch_db;
+SELECT original_name, type FROM oceanbase.__all_recyclebin WHERE database_id = @db_id AND type IN (1, 4) ORDER BY type;
+original_name	type
+t	1
+purge_batch_db	4
+PURGE RECYCLEBIN;
+SELECT COUNT(*) AS remaining FROM oceanbase.__all_recyclebin WHERE database_id = @db_id;
+remaining
+0

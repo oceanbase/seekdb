@@ -59,8 +59,12 @@
 #define FETCH_EXPIRE_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
     "WHERE 0 = %" PRIu64 " %% 1 and time_to_usec(gmt_create) < %" PRId64 " order by gmt_create"
 
-#define FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE (0 = %" PRIu64 " %% 1 or TYPE = 7) and time_to_usec(gmt_create) < %" PRId64 " order by gmt_create"
+// Purging a database also purges its recycled tables and views in the same transaction.
+#define FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL "SELECT r.* FROM %s r " \
+    "WHERE time_to_usec(r.gmt_create) < %" PRId64 " " \
+    "AND (r.type NOT IN (%d, %d) OR NOT EXISTS (SELECT 1 FROM %s db " \
+    "WHERE db.database_id = r.database_id AND db.type = %d AND time_to_usec(db.gmt_create) < %" PRId64 ")) " \
+    "ORDER BY r.gmt_create"
 
 #define FETCH_ALL_RECYCLEBIN_SQL_WITH_CONDITION COMMON_SCHEMA_SQL
 
@@ -4536,7 +4540,11 @@ int ObSchemaServiceSQLImpl::fetch_expire_recycle_objects(const int64_t expire_ti
       {
         if (OB_FAIL(sql.append_fmt(FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL,
                                    OB_ALL_RECYCLEBIN_TNAME,
-                                   uint64_t(1),
+                                   expire_time,
+                                   ObRecycleObject::TABLE,
+                                   ObRecycleObject::VIEW,
+                                   OB_ALL_RECYCLEBIN_TNAME,
+                                   ObRecycleObject::DATABASE,
                                    expire_time))) {
         }
       }
