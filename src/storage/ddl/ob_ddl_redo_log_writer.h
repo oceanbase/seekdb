@@ -66,15 +66,12 @@ public:
 // control the write speed of ddl clog for 4.0 . More detailly,
 // a. set write speed to the log archive speed if archive is on;
 // b. set write speed to the out bandwidth throttle rate if archive is off.
-// c. control ddl clog space used at tenant level rather than observer/logstream level.
 class ObDDLCtrlSpeedItem final
 {
 public:
   ObDDLCtrlSpeedItem(): is_inited_(false),
-      next_available_write_ts_(-1), write_speed_(750), disk_used_stop_write_threshold_(-1),
-      need_stop_write_(false), ref_cnt_(0) {}
+      next_available_write_ts_(-1), write_speed_(750), ref_cnt_(0) {}
   ~ObDDLCtrlSpeedItem() {};
-  void reset_need_stop_write() { need_stop_write_ = false; }
   int init();
   int refresh();
   int limit_and_sleep(const int64_t bytes,
@@ -89,7 +86,7 @@ public:
   int64_t get_ref() { return ATOMIC_LOAD(&ref_cnt_); }
 
   TO_STRING_KV(K_(is_inited), K_(next_available_write_ts),
-    K_(write_speed), K_(disk_used_stop_write_threshold), K_(need_stop_write), K_(ref_cnt));
+    K_(write_speed), K_(ref_cnt));
 private:
   int cal_limit(const int64_t bytes, int64_t &next_available_ts);
   int do_sleep(const int64_t next_available_ts,
@@ -102,8 +99,6 @@ private:
   bool is_inited_;
   int64_t next_available_write_ts_;
   int64_t write_speed_;
-  int64_t disk_used_stop_write_threshold_; // Database-wide stop-write threshold.
-  bool need_stop_write_;
   int64_t ref_cnt_; // reference count
   DISALLOW_COPY_AND_ASSIGN(ObDDLCtrlSpeedItem);
 };

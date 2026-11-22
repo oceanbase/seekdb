@@ -24,66 +24,18 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::Duration;
 
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
 const MANIFEST_FILE_SIZE: usize = MANIFEST_SIZE * 2;
 const MANIFEST_MAGIC: &[u8; 8] = b"PALFMAN3";
-const THROTTLE_CHECK_INTERVAL: Duration = Duration::from_millis(30);
 const MAX_APPEND_BATCH_REQUESTS: usize = 32;
 const MAX_APPEND_BATCH_BYTES: usize = 2 * 1024 * 1024;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DiskPolicy {
-    pub capacity: u64,
-    pub stop_percentage: u8,
-    pub throttle_percentage: u8,
-    pub max_throttle_duration_us: u64,
-}
 
 pub struct ImportedGroup<'a> {
     pub source_lsn: u64,
     pub source_scn: u64,
     pub bytes: &'a [u8],
-}
-
-impl DiskPolicy {
-    pub const fn with_capacity(capacity: u64) -> Self {
-        Self {
-            capacity,
-            stop_percentage: 100,
-            throttle_percentage: 100,
-            max_throttle_duration_us: 0,
-        }
-    }
-
-    fn validate(self) -> Result<()> {
-        if self.stop_percentage == 0
-            || self.throttle_percentage < 40
-            || (self.throttle_percentage < 100 && self.max_throttle_duration_us == 0)
-        {
-            Err(Error::Invalid)
-        } else {
-            Ok(())
-        }
-    }
-
-    fn hard_limit(self) -> u64 {
-        self.capacity.saturating_mul(self.stop_percentage as u64) / 100
-    }
-
-    fn throttle_limit(self) -> Option<u64> {
-        if self.throttle_percentage < self.stop_percentage && self.capacity > 0 {
-            Some(
-                self.capacity
-                    .saturating_mul(self.throttle_percentage as u64)
-                    / 100,
-            )
-        } else {
-            None
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -216,7 +168,6 @@ struct State {
     end_scn: u64,
     next_log_id: i64,
     accumulated_checksum: u64,
-    disk_policy: DiskPolicy,
     integrity: bool,
     closed: bool,
     failed: Option<Error>,
@@ -290,7 +241,6 @@ impl Stream {
             end_scn: 0,
             next_log_id: 1,
             accumulated_checksum: 0,
-            disk_policy: DiskPolicy::with_capacity(0),
             integrity: false,
             closed: false,
             failed: Some(error),
@@ -305,25 +255,12 @@ impl Stream {
         }
     }
 
-    pub fn create(path: &str, base: BaseInfo, ref_scn: u64, disk_limit: u64) -> Self {
-        Self::create_with_policy(path, base, ref_scn, DiskPolicy::with_capacity(disk_limit))
+    pub fn create(path: &str, base: BaseInfo, ref_scn: u64) -> Self {
+        Self::from_result(create_state(Path::new(path), base, ref_scn))
     }
 
-    pub fn create_with_policy(
-        path: &str,
-        base: BaseInfo,
-        ref_scn: u64,
-        disk_policy: DiskPolicy,
-    ) -> Self {
-        Self::from_result(create_state(Path::new(path), base, ref_scn, disk_policy))
-    }
-
-    pub fn open(path: &str, disk_limit: u64) -> Self {
-        Self::open_with_policy(path, DiskPolicy::with_capacity(disk_limit))
-    }
-
-    pub fn open_with_policy(path: &str, disk_policy: DiskPolicy) -> Self {
-        Self::from_result(open_state(Path::new(path), disk_policy))
+    pub fn open(path: &str) -> Self {
+        Self::from_result(open_state(Path::new(path)))
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, State>> {
@@ -334,32 +271,10 @@ impl Stream {
         self.inner.appends.lock().map_err(|_| Error::Io)
     }
 
-    fn lock_for_write(&self, write_size: u64) -> Result<MutexGuard<'_, State>> {
-        let mut state = self.lock()?;
-        loop {
-            state.check_writable()?;
-            let Some(mut remaining) = state.throttle_delay(write_size) else {
-                return Ok(state);
-            };
-            loop {
-                let wait = remaining.min(THROTTLE_CHECK_INTERVAL);
-                let (next, timeout) = self
-                    .inner
-                    .changed
-                    .wait_timeout(state, wait)
-                    .map_err(|_| Error::Io)?;
-                state = next;
-                state.check_writable()?;
-                if timeout.timed_out() {
-                    remaining = remaining.saturating_sub(wait);
-                    if remaining.is_zero() {
-                        return Ok(state);
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
+    fn lock_for_write(&self) -> Result<MutexGuard<'_, State>> {
+        let state = self.lock()?;
+        state.check_writable()?;
+        Ok(state)
     }
 
     pub fn status(&self) -> Result<bool> {
@@ -422,12 +337,7 @@ impl Stream {
         &self,
         requests: Vec<PendingAppend>,
     ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
-        let write_size = requests.iter().try_fold(0u64, |total, request| {
-            total
-                .checked_add(request.payload.len() as u64)
-                .ok_or(Error::Invalid)
-        });
-        let mut state = match write_size.and_then(|write_size| self.lock_for_write(write_size)) {
+        let mut state = match self.lock_for_write() {
             Ok(state) => state,
             Err(error) => {
                 return (
@@ -446,12 +356,7 @@ impl Stream {
         if groups.is_empty() {
             return Err(Error::Invalid);
         }
-        let write_size = groups.iter().try_fold(0u64, |total, group| {
-            total
-                .checked_add(group.bytes.len() as u64)
-                .ok_or(Error::Invalid)
-        })?;
-        let mut state = self.lock_for_write(write_size)?;
+        let mut state = self.lock_for_write()?;
         let mut plan = AppendBatch::new(&state);
         for group in groups {
             plan.push_imported(&state, group)?;
@@ -552,19 +457,6 @@ impl Stream {
         drop(state);
         self.inner.changed.notify_all();
         self.progress()
-    }
-
-    pub fn set_disk_limit(&self, disk_limit: u64) -> Result<()> {
-        self.set_disk_policy(DiskPolicy::with_capacity(disk_limit))
-    }
-
-    pub fn set_disk_policy(&self, disk_policy: DiskPolicy) -> Result<()> {
-        disk_policy.validate()?;
-        let mut state = self.lock()?;
-        state.check_open()?;
-        state.disk_policy = disk_policy;
-        self.inner.changed.notify_all();
-        Ok(())
     }
 
     pub fn locate_by_scn(&self, scn: u64) -> Result<u64> {
@@ -844,10 +736,6 @@ impl AppendBatch {
         self.accumulated_checksum = checkpoint.accumulated_checksum;
     }
 
-    fn ensure_capacity(&self, state: &State, additional: u64) -> Result<()> {
-        state.ensure_capacity_at(&self.segments, self.end_lsn, additional)
-    }
-
     fn note_write(&mut self, lsn: u64, length: usize) -> Result<()> {
         let segment = self
             .segments
@@ -918,7 +806,6 @@ impl AppendBatch {
         let remaining = BLOCK_SIZE - block_offset(lsn);
         if remaining < group_len as u64 {
             if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64 {
-                self.ensure_capacity(state, remaining)?;
                 let bytes = zeroed_bytes(remaining as usize)?;
                 self.push_record(state, lsn, bytes, None)?;
             } else {
@@ -932,7 +819,6 @@ impl AppendBatch {
                     self.accumulated_checksum,
                     true,
                 )?;
-                self.ensure_capacity(state, group.len() as u64)?;
                 let header = validate_group(&group, lsn)?;
                 self.push_record(
                     state,
@@ -958,7 +844,6 @@ impl AppendBatch {
             self.accumulated_checksum,
             false,
         )?;
-        self.ensure_capacity(state, group.len() as u64)?;
         let header = validate_group(&group, lsn)?;
         self.push_record(
             state,
@@ -1002,7 +887,6 @@ impl AppendBatch {
         {
             return Err(Error::Invalid);
         }
-        self.ensure_capacity(state, group.bytes.len() as u64)?;
         self.push_record(
             state,
             group.source_lsn,
@@ -1203,53 +1087,6 @@ impl State {
             sync_directory(&self.directory)?;
         }
         Ok(())
-    }
-
-    fn ensure_capacity_at(
-        &self,
-        segments: &BTreeMap<u64, SegmentMeta>,
-        end_lsn: u64,
-        additional: u64,
-    ) -> Result<()> {
-        let hard_limit = self.disk_policy.hard_limit();
-        if hard_limit == 0 {
-            return Ok(());
-        }
-        let used: u64 = segments.values().map(|segment| segment.length).sum();
-        let id = block_id(end_lsn);
-        let segment_exists = segments.contains_key(&id);
-        let required = additional
-            + if segment_exists {
-                0
-            } else {
-                SEGMENT_HEADER_SIZE
-            };
-        if used.saturating_add(required) > hard_limit {
-            Err(Error::NoSpace)
-        } else {
-            Ok(())
-        }
-    }
-
-    fn throttle_delay(&self, write_size: u64) -> Option<Duration> {
-        let trigger = self.disk_policy.throttle_limit()?;
-        let current = self.end_lsn.saturating_sub(self.manifest.base_lsn);
-        if current <= trigger {
-            return None;
-        }
-        let available = self.disk_policy.hard_limit().saturating_sub(trigger);
-        if available == 0 {
-            return None;
-        }
-        let after = current
-            .saturating_sub(trigger)
-            .saturating_add(write_size)
-            .min(available);
-        let delay_us = (self.disk_policy.max_throttle_duration_us as u128)
-            .saturating_mul(write_size as u128)
-            .saturating_mul(after as u128)
-            / (available as u128 * available as u128);
-        Some(Duration::from_micros(delay_us.min(u64::MAX as u128) as u64))
     }
 
     fn read_record(&self, lsn: u64) -> Result<(RecordMeta, Vec<u8>)> {
@@ -1467,16 +1304,10 @@ impl SegmentScanner {
     }
 }
 
-fn create_state(
-    directory: &Path,
-    base: BaseInfo,
-    ref_scn: u64,
-    disk_policy: DiskPolicy,
-) -> Result<State> {
+fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64) -> Result<State> {
     if base.curr_lsn < base.prev_lsn || ref_scn == u64::MAX {
         return Err(Error::Invalid);
     }
-    disk_policy.validate()?;
     fs::create_dir_all(directory)?;
     let manifest = Manifest {
         base_lsn: base.curr_lsn,
@@ -1502,15 +1333,13 @@ fn create_state(
         manifest,
         segments: BTreeMap::new(),
         last_record: None,
-        disk_policy,
         integrity: true,
         closed: false,
         failed: None,
     })
 }
 
-fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
-    disk_policy.validate()?;
+fn open_state(directory: &Path) -> Result<State> {
     let (manifest, manifest_writer) = ManifestWriter::open(directory)?;
     let committed = manifest.committed;
     if committed.end_lsn < manifest.base_lsn {
@@ -1643,7 +1472,6 @@ fn open_state(directory: &Path, disk_policy: DiskPolicy) -> Result<State> {
         end_scn: committed.end_scn,
         next_log_id: committed.log_id.checked_add(1).ok_or(Error::Corrupt)?,
         accumulated_checksum: committed.accumulated_checksum,
-        disk_policy,
         integrity: true,
         closed: false,
         failed: None,
@@ -1833,7 +1661,7 @@ mod tests {
     fn acknowledged_records_survive_reopen_and_torn_tail_is_removed() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let first = stream.append(b"one", 10).unwrap();
         let second = stream.append(b"two", 11).unwrap();
         assert_eq!(first.lsn, GROUP_HEADER_SIZE as u64);
@@ -1846,7 +1674,7 @@ mod tests {
             .unwrap()
             .write_all(b"torn")
             .unwrap();
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         assert!(reopened.status().unwrap());
         let progress = reopened.progress().unwrap();
         assert_eq!(progress.end_lsn, second.end_lsn);
@@ -1864,7 +1692,7 @@ mod tests {
     fn complete_but_unconfirmed_group_is_removed() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let confirmed = stream.append(b"confirmed", 10).unwrap();
         {
             let mut state = stream.inner.state.lock().unwrap();
@@ -1891,7 +1719,7 @@ mod tests {
         }
         drop(stream);
 
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         assert_eq!(reopened.progress().unwrap().end_lsn, confirmed.end_lsn);
         reopened.append(b"next", 11).unwrap();
         let mut cursor = reopened.cursor(confirmed.lsn, false);
@@ -1906,7 +1734,7 @@ mod tests {
     fn incomplete_unconfirmed_segment_is_removed_without_validation() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let confirmed = stream.append(b"confirmed", 10).unwrap();
         drop(stream);
         OpenOptions::new()
@@ -1917,7 +1745,7 @@ mod tests {
             .write_all(b"torn segment header")
             .unwrap();
 
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         assert_eq!(reopened.status(), Ok(true));
         assert_eq!(reopened.progress().unwrap().end_lsn, confirmed.end_lsn);
         assert!(!segment_path(&directory.0, 1).exists());
@@ -1927,7 +1755,7 @@ mod tests {
     fn confirmed_corruption_is_not_truncated() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         stream.append(b"one", 10).unwrap();
         let second = stream.append(b"two", 11).unwrap();
         drop(stream);
@@ -1942,7 +1770,7 @@ mod tests {
         file.sync_all().unwrap();
         drop(file);
 
-        assert_eq!(Stream::open(&path, 0).status(), Err(Error::Corrupt));
+        assert_eq!(Stream::open(&path).status(), Err(Error::Corrupt));
         assert_eq!(fs::metadata(segment).unwrap().len(), original_length);
         assert_eq!(
             fs::metadata(segment_path(&directory.0, 0)).unwrap().len(),
@@ -1954,7 +1782,7 @@ mod tests {
     fn recovery_validates_the_tail_without_scanning_old_segment_data() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let large = vec![7; 1024 * 1024];
         for index in 0..70 {
             stream.append(&large, index + 1).unwrap();
@@ -1975,7 +1803,7 @@ mod tests {
         file.sync_all().unwrap();
         drop(file);
 
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         assert_eq!(reopened.status(), Ok(true));
         assert_eq!(reopened.locate_by_scn(65), Ok(expected_scn_position));
         assert_eq!(reopened.locate_by_lsn(tail.lsn), Ok(100));
@@ -1990,7 +1818,7 @@ mod tests {
     fn committed_short_zero_padding_survives_reopen() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let payload_len = BLOCK_SIZE as usize - GROUP_HEADER_SIZE - ENTRY_HEADER_SIZE - 32;
         let entry = encode_entry(&vec![7; payload_len], 10, false).unwrap();
         let group = encode_group(&entry, 0, 10, 1, 0, false).unwrap();
@@ -2004,7 +1832,7 @@ mod tests {
         assert_eq!(cursor.payload(), b"next");
         drop(stream);
 
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         assert_eq!(reopened.status(), Ok(true));
         let mut cursor = reopened.cursor(0, false);
         cursor.next(u64::MAX).unwrap();
@@ -2018,7 +1846,7 @@ mod tests {
     fn checkpoint_is_persistent_and_old_segments_disappear() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let large = vec![7; 1024 * 1024];
         for index in 0..70 {
             stream.append(&large, index + 1).unwrap();
@@ -2034,7 +1862,7 @@ mod tests {
         assert!(!segment_path(&directory.0, 0).exists());
         let expected_begin_scn = stream.progress().unwrap().begin_scn;
         drop(stream);
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         assert_eq!(reopened.progress().unwrap().base_lsn, checkpoint);
         assert_eq!(reopened.base_info(checkpoint).unwrap(), expected_base);
         assert_eq!(reopened.progress().unwrap().begin_scn, expected_begin_scn);
@@ -2047,7 +1875,7 @@ mod tests {
 
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         while stream.progress().unwrap().end_lsn < BLOCK_SIZE {
             let remaining = BLOCK_SIZE - stream.progress().unwrap().end_lsn;
             let group_len = if remaining > MAX_GROUP_LEN && remaining < 2 * MAX_GROUP_LEN {
@@ -2080,7 +1908,7 @@ mod tests {
         assert_eq!(block_id(appended.lsn), 1);
         drop(stream);
 
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         assert_eq!(reopened.status(), Ok(true));
         assert_eq!(reopened.progress().unwrap().base_lsn, BLOCK_SIZE);
         assert_eq!(reopened.progress().unwrap().end_lsn, appended.end_lsn);
@@ -2094,7 +1922,7 @@ mod tests {
     fn checkpoint_failure_preserves_segments_and_empty_gc_is_idempotent() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let large = vec![7; 1024 * 1024];
         for index in 0..70 {
             stream.append(&large, index + 1).unwrap();
@@ -2128,7 +1956,7 @@ mod tests {
         );
         drop(stream);
         assert_eq!(
-            Stream::open(&path, 0).progress().unwrap().base_lsn,
+            Stream::open(&path).progress().unwrap().base_lsn,
             BLOCK_SIZE
         );
     }
@@ -2137,12 +1965,12 @@ mod tests {
     fn manifest_reopen_uses_latest_intact_generation() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         stream.append(b"one", 10).unwrap();
         let second = stream.append(b"two", 11).unwrap();
         drop(stream);
 
-        let stream = Stream::open(&path, 0);
+        let stream = Stream::open(&path);
         assert_eq!(stream.progress().unwrap().end_lsn, second.end_lsn);
         assert_eq!(
             stream
@@ -2170,7 +1998,7 @@ mod tests {
         file.sync_all().unwrap();
         drop(file);
 
-        let stream = Stream::open(&path, 0);
+        let stream = Stream::open(&path);
         assert_eq!(stream.status(), Ok(true));
         assert_eq!(stream.progress().unwrap().end_lsn, second.end_lsn);
         let mut cursor = stream.cursor(0, false);
@@ -2185,7 +2013,7 @@ mod tests {
     fn cursor_owns_current_bytes_but_does_not_pin_old_segments() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let large = vec![7; 1024 * 1024];
         for index in 0..70 {
             stream.append(&large, index + 1).unwrap();
@@ -2203,14 +2031,14 @@ mod tests {
     fn imported_groups_require_the_exact_next_position() {
         let source_directory = Directory::new();
         let source_path = source_directory.0.to_string_lossy().into_owned();
-        let source = Stream::create(&source_path, base(), 0, 0);
+        let source = Stream::create(&source_path, base(), 0);
         source.append(b"one", 10).unwrap();
         let mut cursor = source.cursor(0, true);
         cursor.next(u64::MAX).unwrap();
         let bytes = cursor.bytes().to_vec();
         let target_directory = Directory::new();
         let target_path = target_directory.0.to_string_lossy().into_owned();
-        let target = Stream::create(&target_path, base(), 0, 0);
+        let target = Stream::create(&target_path, base(), 0);
         assert_eq!(import(&target, 1, 10, &bytes), Err(Error::Invalid));
         assert_eq!(import(&target, 0, 11, &bytes), Err(Error::Invalid));
         let mut corrupted = bytes.clone();
@@ -2251,7 +2079,7 @@ mod tests {
     fn imported_batches_publish_together() {
         let source_directory = Directory::new();
         let source_path = source_directory.0.to_string_lossy().into_owned();
-        let source = Stream::create(&source_path, base(), 0, 0);
+        let source = Stream::create(&source_path, base(), 0);
         source.append(b"one", 10).unwrap();
         source.append(b"two", 11).unwrap();
         source.append(b"three", 12).unwrap();
@@ -2271,11 +2099,11 @@ mod tests {
 
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let target = Stream::create(&path, base(), 0, 0);
+        let target = Stream::create(&path, base(), 0);
         let result = target.append_imported(&groups).unwrap();
         assert_eq!(result.end_lsn, source.progress().unwrap().end_lsn);
         drop(target);
-        let target = Stream::open(&path, 0);
+        let target = Stream::open(&path);
         let mut cursor = target.cursor(0, false);
         for payload in [b"one".as_slice(), b"two", b"three"] {
             cursor.next(u64::MAX).unwrap();
@@ -2284,7 +2112,7 @@ mod tests {
 
         let rejected_directory = Directory::new();
         let rejected_path = rejected_directory.0.to_string_lossy().into_owned();
-        let rejected = Stream::create(&rejected_path, base(), 0, 0);
+        let rejected = Stream::create(&rejected_path, base(), 0);
         let mut corrupted = records[1].2.clone();
         let last = corrupted.len() - 1;
         corrupted[last] ^= 1;
@@ -2314,7 +2142,7 @@ mod tests {
 
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let mut expected = Vec::new();
         for (index, size) in [OLD_NORMAL_LIMIT - 1, OLD_NORMAL_LIMIT, OLD_NORMAL_LIMIT + 1]
             .into_iter()
@@ -2363,13 +2191,13 @@ mod tests {
             }
             assert_eq!(cursor.next(u64::MAX), Err(Error::End));
         };
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         assert_eq!(reopened.status(), Ok(true));
         verify(&reopened);
 
         let target_directory = Directory::new();
         let target_path = target_directory.0.to_string_lossy().into_owned();
-        let target = Stream::create(&target_path, base(), 0, 0);
+        let target = Stream::create(&target_path, base(), 0);
         let mut groups = reopened.cursor(0, true);
         for (lsn, scn, _) in &expected {
             groups.next(u64::MAX).unwrap();
@@ -2379,7 +2207,7 @@ mod tests {
         }
         assert_eq!(groups.next(u64::MAX), Err(Error::End));
         drop(target);
-        let target = Stream::open(&target_path, 0);
+        let target = Stream::open(&target_path);
         assert_eq!(target.status(), Ok(true));
         verify(&target);
     }
@@ -2388,7 +2216,7 @@ mod tests {
     fn scn_lookup_returns_a_readable_segment_boundary() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         stream.append(b"one", 10).unwrap();
         stream.append(b"two", 20).unwrap();
 
@@ -2401,7 +2229,7 @@ mod tests {
     fn imported_groups_preserve_every_entry_position() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let mut payload = encode_entry(b"one", 10, false).unwrap();
         let first_entry_len = payload.len() as u64;
         payload.extend(encode_entry(b"two", 10, false).unwrap());
@@ -2421,7 +2249,7 @@ mod tests {
         assert_eq!(cursor.next(u64::MAX), Err(Error::End));
         drop(stream);
 
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         let second_lsn = first_entry_len + GROUP_HEADER_SIZE as u64;
         assert_eq!(reopened.locate_by_lsn(second_lsn), Ok(11));
         let mut cursor = reopened.cursor(second_lsn, false);
@@ -2436,7 +2264,7 @@ mod tests {
     fn entry_cursor_honors_replayable_point_within_a_group() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let mut payload = encode_entry(b"one", 10, false).unwrap();
         payload.extend(encode_entry(b"two", 11, false).unwrap());
         payload.extend(encode_entry(b"three", 12, false).unwrap());
@@ -2460,7 +2288,7 @@ mod tests {
     fn only_group_cursor_returns_padding() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let entry = encode_entry(&[0; 8], 10, true).unwrap();
         let group = encode_group(&entry, 0, 10, 1, 0, true).unwrap();
         import(&stream, 0, 10, &group).unwrap();
@@ -2479,38 +2307,6 @@ mod tests {
     }
 
     #[test]
-    fn disk_limit_can_be_relieved_without_reopening() {
-        let directory = Directory::new();
-        let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 128);
-        assert_eq!(stream.append(b"one", 10), Err(Error::NoSpace));
-        stream.set_disk_limit(0).unwrap();
-        stream.append(b"one", 10).unwrap();
-        stream.set_disk_limit(1).unwrap();
-        assert_eq!(stream.append(b"two", 11), Err(Error::NoSpace));
-    }
-
-    #[test]
-    fn stop_threshold_bounds_writes_and_can_be_raised() {
-        let directory = Directory::new();
-        let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
-        stream
-            .set_disk_policy(DiskPolicy {
-                capacity: 16_384,
-                stop_percentage: 50,
-                throttle_percentage: 100,
-                max_throttle_duration_us: 0,
-            })
-            .unwrap();
-        stream.append(&vec![0; 3000], 10).unwrap();
-        assert_eq!(stream.append(&vec![0; 3000], 11), Err(Error::NoSpace));
-        assert!(stream.progress().unwrap().used_disk <= 8192);
-        stream.set_disk_limit(16_384).unwrap();
-        stream.append(&vec![0; 3000], 11).unwrap();
-    }
-
-    #[test]
     fn concurrent_appends_complete_once_and_survive_reopen() {
         use std::collections::BTreeSet;
         use std::sync::Barrier;
@@ -2519,7 +2315,7 @@ mod tests {
         const WRITES_PER_WRITER: usize = 16;
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Arc::new(Stream::create(&path, base(), 0, 0));
+        let stream = Arc::new(Stream::create(&path, base(), 0));
         let barrier = Arc::new(Barrier::new(WRITERS));
         let (sender, receiver) = std::sync::mpsc::channel();
         let mut threads = Vec::new();
@@ -2555,7 +2351,7 @@ mod tests {
         assert_eq!(positions.len(), WRITERS * WRITES_PER_WRITER);
         drop(stream);
 
-        let reopened = Stream::open(&path, 0);
+        let reopened = Stream::open(&path);
         let mut actual = BTreeSet::new();
         let mut cursor = reopened.cursor(GROUP_HEADER_SIZE as u64, false);
         loop {
@@ -2571,43 +2367,10 @@ mod tests {
     }
 
     #[test]
-    fn close_interrupts_throttled_write_before_io() {
-        let directory = Directory::new();
-        let path = directory.0.to_string_lossy().into_owned();
-        let stream = Arc::new(Stream::create(&path, base(), 0, 0));
-        stream.append(&vec![0; 400], 10).unwrap();
-        stream
-            .set_disk_policy(DiskPolicy {
-                capacity: 1024,
-                stop_percentage: 100,
-                throttle_percentage: 40,
-                max_throttle_duration_us: 5_000_000,
-            })
-            .unwrap();
-        let writer = Arc::clone(&stream);
-        let (sender, receiver) = std::sync::mpsc::channel();
-        let thread = std::thread::spawn(move || {
-            sender.send(writer.append(&vec![0; 400], 11)).unwrap();
-        });
-        std::thread::sleep(Duration::from_millis(30));
-        assert!(matches!(
-            receiver.try_recv(),
-            Err(std::sync::mpsc::TryRecvError::Empty)
-        ));
-        stream.close().unwrap();
-        assert_eq!(
-            receiver.recv_timeout(Duration::from_secs(1)),
-            Ok(Err(Error::Closed))
-        );
-        thread.join().unwrap();
-        assert!(matches!(stream.progress(), Err(Error::Closed)));
-    }
-
-    #[test]
     fn checkpoints_must_be_segment_boundaries() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
-        let stream = Stream::create(&path, base(), 0, 0);
+        let stream = Stream::create(&path, base(), 0);
         let appended = stream.append(b"one", 10).unwrap();
         assert!(matches!(
             stream.set_base_lsn(appended.lsn),

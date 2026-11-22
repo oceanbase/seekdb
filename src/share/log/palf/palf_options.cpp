@@ -15,7 +15,6 @@
  */
 
 #include "share/log/palf/palf_options.h"
-#include "share/log/palf/log_define.h"
 
 namespace oceanbase
 {
@@ -34,33 +33,16 @@ bool PalfOptions::is_valid() const
 void PalfDiskOptions::reset()
 {
   log_disk_usage_limit_size_ = -1;
-  log_disk_utilization_limit_threshold_ = -1;
-  log_disk_utilization_threshold_ = -1;
-  log_disk_throttling_percentage_ = -1;
-  log_disk_throttling_maximum_duration_ = -1;
 }
 
 bool PalfDiskOptions::is_valid() const
 {
-  const int64_t MIN_DURATION = 1LL * 1000 * 1000;
-  const int64_t MAX_DURATION = 3LL * 24 * 60 * 60 * 1000 * 1000;
-  return 0 <= log_disk_usage_limit_size_
-    && 0 <=log_disk_utilization_threshold_ && 100 >= log_disk_utilization_threshold_
-    && 1 <=log_disk_utilization_limit_threshold_ && 100 >= log_disk_utilization_limit_threshold_
-    && log_disk_utilization_limit_threshold_ > log_disk_utilization_threshold_
-    && log_disk_throttling_percentage_ >= MIN_WRITING_THTOTTLING_TRIGGER_PERCENTAGE
-    && log_disk_throttling_percentage_ <= 100
-    && log_disk_throttling_maximum_duration_ >= MIN_DURATION
-    && log_disk_throttling_maximum_duration_ <= MAX_DURATION;
+  return 0 <= log_disk_usage_limit_size_;
 }
 
 bool PalfDiskOptions::operator==(const PalfDiskOptions &palf_disk_options) const
 {
-  return log_disk_usage_limit_size_ == palf_disk_options.log_disk_usage_limit_size_
-    && log_disk_utilization_threshold_ == palf_disk_options.log_disk_utilization_threshold_
-    && log_disk_utilization_limit_threshold_ == palf_disk_options.log_disk_utilization_limit_threshold_
-    && log_disk_throttling_percentage_ == palf_disk_options.log_disk_throttling_percentage_
-    && log_disk_throttling_maximum_duration_ == palf_disk_options.log_disk_throttling_maximum_duration_;
+  return log_disk_usage_limit_size_ == palf_disk_options.log_disk_usage_limit_size_;
 }
 
 bool PalfDiskOptions::operator!=(const PalfDiskOptions &palf_disk_options) const
@@ -71,10 +53,6 @@ bool PalfDiskOptions::operator!=(const PalfDiskOptions &palf_disk_options) const
 PalfDiskOptions &PalfDiskOptions::operator=(const PalfDiskOptions &other)
 {
   log_disk_usage_limit_size_ = other.log_disk_usage_limit_size_;
-  log_disk_utilization_threshold_ = other.log_disk_utilization_threshold_;
-  log_disk_utilization_limit_threshold_ = other.log_disk_utilization_limit_threshold_;
-  log_disk_throttling_percentage_ = other.log_disk_throttling_percentage_;
-  log_disk_throttling_maximum_duration_ = other.log_disk_throttling_maximum_duration_;
   return *this;
 }
 
@@ -101,33 +79,6 @@ int get_access_mode(const common::ObString &str, AccessMode &mode)
     ret = OB_ERR_UNEXPECTED;
   }
   return ret;
-}
-
-void PalfThrottleOptions::reset()
-{
-  total_disk_space_ = -1;
-  stopping_writing_percentage_ = -1;
-  trigger_percentage_ = -1;
-  maximum_duration_ = -1;
-  unrecyclable_disk_space_ = -1;
-}
-
-bool PalfThrottleOptions::is_valid() const
-{
-  return (total_disk_space_ > 0 
-  && stopping_writing_percentage_ > 0 && stopping_writing_percentage_ <= 100
-  && trigger_percentage_ >= MIN_WRITING_THTOTTLING_TRIGGER_PERCENTAGE && trigger_percentage_ <= 100
-  && maximum_duration_ > 0
-  && unrecyclable_disk_space_ >= 0);
-}
-
-bool PalfThrottleOptions::operator==(const PalfThrottleOptions &other) const
-{
-  return total_disk_space_  == other.total_disk_space_
-    && stopping_writing_percentage_ == other.stopping_writing_percentage_
-    && trigger_percentage_ == other.trigger_percentage_
-    && maximum_duration_ == other.maximum_duration_
-    && unrecyclable_disk_space_ == other.unrecyclable_disk_space_;
 }
 
 }// end of namespace palf

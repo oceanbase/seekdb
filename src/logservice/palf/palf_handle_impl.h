@@ -71,12 +71,10 @@ public:
   PalfHandleImpl();
   ~PalfHandleImpl();
   int init(const AccessMode &access_mode, const PalfBaseInfo &palf_base_info,
-      const char *log_dir, const PalfDiskOptions &disk_options, const common::ObAddr &self);
-  int load(const char *log_dir, const PalfDiskOptions &disk_options, const common::ObAddr &self,
-      bool &is_integrity);
+      const char *log_dir, const common::ObAddr &self);
+  int load(const char *log_dir, const common::ObAddr &self, bool &is_integrity);
   bool check_can_be_used() const;
   void destroy();
-  int set_disk_options(const PalfDiskOptions &disk_options);
   int submit_log(const PalfAppendOptions &opts, const char *buf, const int64_t buf_len,
       const share::SCN &ref_scn, LSN &lsn, share::SCN &scn);
   int submit_imported_groups(const ImportedGroups &groups);

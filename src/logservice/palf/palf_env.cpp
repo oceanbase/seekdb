@@ -134,11 +134,6 @@ int PalfEnv::get_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte)
   return palf_env_impl_.get_disk_usage(used_size_byte, total_size_byte);
 }
 
-int PalfEnv::get_stable_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte)
-{
-  return palf_env_impl_.get_stable_disk_usage(used_size_byte, total_size_byte);
-}
-
 int PalfEnv::get_options(PalfOptions &options)
 {
   return palf_env_impl_.get_options(options);
@@ -147,11 +142,6 @@ int PalfEnv::get_options(PalfOptions &options)
 int PalfEnv::update_options(const PalfOptions &options)
 {
   return palf_env_impl_.update_options(options);
-}
-
-bool PalfEnv::check_disk_space_enough()
-{
-  return palf_env_impl_.check_disk_space_enough();
 }
 
 int PalfEnv::get_io_start_time(int64_t &last_working_time)
