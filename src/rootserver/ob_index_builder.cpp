@@ -37,7 +37,7 @@ using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace sql;
-using namespace palf;
+using namespace wal;
 namespace rootserver
 {
 

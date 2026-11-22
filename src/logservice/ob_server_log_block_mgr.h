@@ -58,7 +58,7 @@ public:
   TO_STRING_KV(K_(is_inited));
 
 private:
-  static const int64_t BLOCK_SIZE = palf::PALF_PHY_BLOCK_SIZE;
+  static const int64_t BLOCK_SIZE = wal::WAL_PHY_BLOCK_SIZE;
   int do_load_(const char *log_disk_path);
   int scan_log_disk_dir_(const char *log_disk_path, int64_t &segment_count);
   bool check_space_is_enough_(const int64_t log_disk_size) const;

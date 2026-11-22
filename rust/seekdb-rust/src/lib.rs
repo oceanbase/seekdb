@@ -36,4 +36,4 @@ pub use uuid_generator;
 pub use xml_parser;
 pub use math;
 pub use vector_kernels;
-pub use palf;
+pub use wal;

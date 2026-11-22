@@ -26,7 +26,7 @@
 #include "standby/restore/ob_tablet_copy_finish_task.h"
 #include "standby/restore/ob_sstable_copy_finish_task.h"
 #include "standby/standby_rpc.h"
-#include "standby/ob_standby_palf_base_info.h"
+#include "standby/ob_standby_wal_base_info.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_ls_meta.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
@@ -109,16 +109,16 @@ int ObStandbySSTableCopier::init(
 
 int ObStandbySSTableCopier::prepare_replay_base(
     share::SCN &restore_checkpoint_scn,
-    palf::PalfBaseInfo &palf_base_info,
+    wal::BaseInfo &wal_base_info,
     share::SCN &source_end_scn)
 {
   int ret = OB_SUCCESS;
   static const int64_t RPC_TIMEOUT_US = 60L * 1000L * 1000L;
-  standby::ObFetchStandbyPalfBaseInfoArg arg;
-  standby::ObFetchStandbyPalfBaseInfoResult result;
+  standby::ObFetchStandbyWalBaseInfoArg arg;
+  standby::ObFetchStandbyWalBaseInfoResult result;
   standby::StandbyRpcClient client;
   restore_checkpoint_scn.reset();
-  palf_base_info.reset();
+  wal_base_info.reset();
   source_end_scn.reset();
 
   if (!is_inited_) {
@@ -141,17 +141,17 @@ int ObStandbySSTableCopier::prepare_replay_base(
   } else if (FALSE_IT(arg.replay_start_scn_ = restore_checkpoint_scn)) {
   } else if (OB_FAIL(client.init(src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
     LOG_WARN("failed to init RPC client for replay base", K(ret), K_(src));
-  } else if (OB_FAIL(client.fetch_standby_palf_base_info(arg, result))) {
-    LOG_WARN("failed to fetch source palf replay base", K(ret), K_(src), K(arg));
+  } else if (OB_FAIL(client.fetch_standby_wal_base_info(arg, result))) {
+    LOG_WARN("failed to fetch source wal replay base", K(ret), K_(src), K(arg));
   } else if (!result.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("source returned invalid palf replay base", K(ret), K_(src), K(arg), K(result));
+    LOG_WARN("source returned invalid wal replay base", K(ret), K_(src), K(arg), K(result));
   } else {
-    palf_base_info = result.palf_base_info_;
+    wal_base_info = result.wal_base_info_;
     source_end_scn = result.source_end_scn_;
     replay_base_prepared_ = true;
     LOG_INFO("prepared standby physical replay base",
-        K_(src), K(restore_checkpoint_scn), K(palf_base_info), K(result.source_end_scn_));
+        K_(src), K(restore_checkpoint_scn), K(wal_base_info), K(result.source_end_scn_));
   }
   return ret;
 }

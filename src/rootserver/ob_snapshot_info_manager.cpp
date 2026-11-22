@@ -25,7 +25,7 @@
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::palf;
+using namespace oceanbase::wal;
 namespace oceanbase
 {
 namespace rootserver

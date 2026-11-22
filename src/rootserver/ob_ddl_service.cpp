@@ -82,7 +82,7 @@ using namespace common;
 using namespace share;
 using namespace obcall;
 using namespace storage;
-using namespace palf;
+using namespace wal;
 using namespace transaction::tablelock;
 namespace rootserver
 {
@@ -23539,7 +23539,7 @@ int check_local_is_sys_leader()
   int ret = OB_SUCCESS;
   common::ObRole role = common::INVALID_ROLE;
   int64_t proposal_id = 0;
-  if (OB_FAIL(ObDDLServiceLauncher::get_sys_palf_role_and_epoch(role, proposal_id))) {
+  if (OB_FAIL(ObDDLServiceLauncher::get_sys_wal_role_and_epoch(role, proposal_id))) {
   } else if (OB_UNLIKELY(!common::is_leader_like(role))) {
     ret = OB_LS_NOT_LEADER;
   }

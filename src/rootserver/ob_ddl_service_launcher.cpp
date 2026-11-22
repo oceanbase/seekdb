@@ -95,7 +95,7 @@ int ObDDLServiceLauncher::activate()
   return ret;
 }
 
-int ObDDLServiceLauncher::get_sys_palf_role_and_epoch(
+int ObDDLServiceLauncher::get_sys_wal_role_and_epoch(
     common::ObRole &role,
     int64_t &proposal_id)
 {
@@ -137,7 +137,7 @@ int ObDDLServiceLauncher::inner_start_ddl_service_with_lock_()
   common::ObRole role = FOLLOWER;
   int64_t proposal_id = 0;
   SpinWLockGuard guard(rw_lock_);
-  if (OB_FAIL(get_sys_palf_role_and_epoch(role, proposal_id))) {
+  if (OB_FAIL(get_sys_wal_role_and_epoch(role, proposal_id))) {
   } else if (!is_leader_like(role)) {
     // DO NOT use is_strong_leader(), because standby cluster's role is STANDBY_LEADER
     ret = OB_LS_NOT_LEADER;

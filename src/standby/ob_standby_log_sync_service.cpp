@@ -69,7 +69,7 @@ bool is_fatal_sync_error(const int ret)
 }
 
 int get_local_position(
-    palf::LSN &end_lsn,
+    wal::LSN &end_lsn,
     share::SCN &end_scn,
     share::SCN &sync_scn)
 {
@@ -180,7 +180,7 @@ int ObStandbyLogSyncService::get_local_progress(
     share::SCN &sync_scn)
 {
   int ret = OB_SUCCESS;
-  palf::LSN end_lsn;
+  wal::LSN end_lsn;
   ret = get_local_position(end_lsn, end_scn, sync_scn);
   return ret;
 }
@@ -412,10 +412,10 @@ int ObStandbyLogSyncService::sync_once_(
     bool &made_progress)
 {
   int ret = OB_SUCCESS;
-  palf::LSN start_lsn;
+  wal::LSN start_lsn;
   logservice::ObLogHandler *log_handler = nullptr;
   StandbyRpcClient client;
-  palf::ImportedGroups groups;
+  wal::ImportedGroups groups;
   made_progress = false;
   if (OB_SUCCESS != (ret = get_fatal_error_())) {
   } else if (OB_FAIL(get_log_handler(log_handler))) {
@@ -427,18 +427,18 @@ int ObStandbyLogSyncService::sync_once_(
       start_lsn,
       FETCH_BATCH_BYTES,
       [&groups](const char *buf, const int64_t size,
-                const palf::LSN &source_lsn,
+                const wal::LSN &source_lsn,
                 const share::SCN &source_scn) -> int {
         int ret = OB_SUCCESS;
-        if (OB_ISNULL(buf) || size <= 0 || size > palf::MAX_LOG_BUFFER_SIZE
+        if (OB_ISNULL(buf) || size <= 0 || size > wal::MAX_LOG_BUFFER_SIZE
             || !source_lsn.is_valid() || !source_scn.is_valid()) {
           ret = OB_INVALID_ARGUMENT;
         } else {
-          auto copied = palf::palf_rs::copy_imported_group(
+          auto copied = wal::wal_rs::copy_imported_group(
               source_lsn.val_, source_scn.get_val_for_logservice(),
               {reinterpret_cast<const uint8_t *>(buf), static_cast<size_t>(size)});
-          if (palf::palf_rs::Code::Ok != copied.code) {
-            ret = palf::from_rust_code(copied.code);
+          if (wal::wal_rs::Code::Ok != copied.code) {
+            ret = wal::from_rust_code(copied.code);
           } else {
             groups.emplace_back(std::move(copied.group));
           }

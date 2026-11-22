@@ -38,8 +38,8 @@ public:
     __reset();
   }
   void __reset() { __start_lsn_.reset(); __next_ = NULL; __scn_.reset();}
-  const palf::LSN &__get_lsn() const { return __start_lsn_; }
-  void __set_lsn(const palf::LSN &lsn) { __start_lsn_ = lsn; }
+  const wal::LSN &__get_lsn() const { return __start_lsn_; }
+  void __set_lsn(const wal::LSN &lsn) { __start_lsn_ = lsn; }
   const share::SCN& __get_scn() const { return __scn_; }
   void __set_scn(const share::SCN& scn) { __scn_ = scn; }
   static AppendCb* __get_class_address(common::ObLink *ptr);
@@ -47,7 +47,7 @@ public:
   common::ObLink *__next_;
   VIRTUAL_TO_STRING_KV(KP(__next_), K(__start_lsn_), K(__scn_));
 private:
-  palf::LSN __start_lsn_;
+  wal::LSN __start_lsn_;
   share::SCN __scn_;
 };
 
@@ -76,8 +76,8 @@ public:
   int64_t get_cb_first_handle_ts() const { return cb_first_handle_ts_; }
   virtual const char *get_cb_name() const = 0;
 public:
-  int64_t append_start_ts_; // start timestamp for submission to palf
-  int64_t append_finish_ts_; // palf submission completion timestamp, i.e., the start time of submission to apply service
+  int64_t append_start_ts_; // start timestamp for submission to wal
+  int64_t append_finish_ts_; // wal submission completion timestamp, i.e., the start time of submission to apply service
   int64_t cb_first_handle_ts_; // the moment cb is first handled, not necessarily calling on_success
 };
 

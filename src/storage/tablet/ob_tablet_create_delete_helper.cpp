@@ -27,7 +27,7 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::transaction;
-using namespace oceanbase::palf;
+using namespace oceanbase::wal;
 using namespace oceanbase::memtable;
 using namespace oceanbase::obcall;
 

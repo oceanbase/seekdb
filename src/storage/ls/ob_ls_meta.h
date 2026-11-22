@@ -48,8 +48,8 @@ public:
   const ObLSPersistentState &get_persistent_state() const;
   ObLSMeta &operator=(const ObLSMeta &other);
   share::SCN get_clog_checkpoint_scn() const;
-  palf::LSN get_clog_base_lsn() const;
-  int set_clog_checkpoint(const palf::LSN &clog_checkpoint_lsn,
+  wal::LSN get_clog_base_lsn() const;
+  int set_clog_checkpoint(const wal::LSN &clog_checkpoint_lsn,
                           const share::SCN &clog_checkpoint_scn,
                           const bool persist_change);
   int set_restore_status(const ObRestoreStatus &restore_status);
@@ -67,7 +67,7 @@ public:
   int init(
       const ObRestoreStatus &restore_status,
       const share::SCN &create_scn,
-      const palf::LSN &clog_base_lsn);
+      const wal::LSN &clog_base_lsn);
 
   // IF I have locked with W:
   //    lock with R/W will be succeed do nothing.
@@ -127,7 +127,7 @@ private:
   // 1. all clog entries which lsn are smaller than clog_base_lsn_ have been recycled
   // 2. log_scn of log entry that clog_base_lsn_ points to is smaller than/equal to clog_checkpoint_scn_
   // 3. clog starts to replay log entries from clog_base_lsn_ on crash recovery
-  palf::LSN clog_base_lsn_;
+  wal::LSN clog_base_lsn_;
   ObRestoreStatus restore_status_;
   //TODO(yaoying.yyy):modify this
   share::SCN tablet_change_checkpoint_scn_;

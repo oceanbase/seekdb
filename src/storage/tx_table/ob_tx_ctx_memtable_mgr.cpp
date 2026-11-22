@@ -25,7 +25,7 @@
 namespace oceanbase
 {
 using namespace share;
-using namespace palf;
+using namespace wal;
 namespace storage
 {
 

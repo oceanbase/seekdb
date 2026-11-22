@@ -305,16 +305,16 @@ STAT_EVENT_ADD_DEF(LS_ALL_TABLE_OPERATOR_GET_COUNT, "log stream table operator g
 STAT_EVENT_ADD_DEF(LS_ALL_TABLE_OPERATOR_GET_TIME, "log stream table operator get time", ObStatClassIds::DEBUG, 70007, false, true, true)
 
 //CLOG 80001 ~ 90000
-STAT_EVENT_ADD_DEF(PALF_WRITE_IO_COUNT, "palf write io count to disk",  ObStatClassIds::CLOG, 80001, true, true, true)
-STAT_EVENT_ADD_DEF(PALF_WRITE_SIZE, "palf write size to disk",  ObStatClassIds::CLOG, 80002, true, true, true)
-STAT_EVENT_ADD_DEF(PALF_WRITE_TIME, "palf write total time to disk", ObStatClassIds::CLOG, 80003, true, true, true)
-STAT_EVENT_ADD_DEF(PALF_READ_COUNT_FROM_HOT_CACHE, "palf read count from hot cache", ObStatClassIds::CLOG, 80004, true, true, true) // FARM COMPAT WHITELIST
-STAT_EVENT_ADD_DEF(PALF_READ_SIZE_FROM_HOT_CACHE, "palf read size from hot cache", ObStatClassIds::CLOG, 80005, true, true, true) // FARM COMPAT WHITELIST
-STAT_EVENT_ADD_DEF(PALF_READ_TIME_FROM_HOT_CACHE, "palf read total time from hot cache", ObStatClassIds::CLOG, 80006, true, true, true) // FARM COMPAT WHITELIST
-STAT_EVENT_ADD_DEF(PALF_READ_IO_COUNT_FROM_DISK, "palf read io count from disk", ObStatClassIds::CLOG, 80007, true, true, true)
-STAT_EVENT_ADD_DEF(PALF_READ_SIZE_FROM_DISK, "palf read size from disk", ObStatClassIds::CLOG, 80008, true, true, true)
-STAT_EVENT_ADD_DEF(PALF_READ_TIME_FROM_DISK, "palf read total time from disk", ObStatClassIds::CLOG, 80009, true, true, true)
-STAT_EVENT_ADD_DEF(PALF_HANDLE_RPC_REQUEST_COUNT, "palf handle rpc request count", ObStatClassIds::CLOG, 80010, true, true, true)
+STAT_EVENT_ADD_DEF(WAL_WRITE_IO_COUNT, "wal write io count to disk",  ObStatClassIds::CLOG, 80001, true, true, true)
+STAT_EVENT_ADD_DEF(WAL_WRITE_SIZE, "wal write size to disk",  ObStatClassIds::CLOG, 80002, true, true, true)
+STAT_EVENT_ADD_DEF(WAL_WRITE_TIME, "wal write total time to disk", ObStatClassIds::CLOG, 80003, true, true, true)
+STAT_EVENT_ADD_DEF(WAL_READ_COUNT_FROM_HOT_CACHE, "wal read count from hot cache", ObStatClassIds::CLOG, 80004, true, true, true) // FARM COMPAT WHITELIST
+STAT_EVENT_ADD_DEF(WAL_READ_SIZE_FROM_HOT_CACHE, "wal read size from hot cache", ObStatClassIds::CLOG, 80005, true, true, true) // FARM COMPAT WHITELIST
+STAT_EVENT_ADD_DEF(WAL_READ_TIME_FROM_HOT_CACHE, "wal read total time from hot cache", ObStatClassIds::CLOG, 80006, true, true, true) // FARM COMPAT WHITELIST
+STAT_EVENT_ADD_DEF(WAL_READ_IO_COUNT_FROM_DISK, "wal read io count from disk", ObStatClassIds::CLOG, 80007, true, true, true)
+STAT_EVENT_ADD_DEF(WAL_READ_SIZE_FROM_DISK, "wal read size from disk", ObStatClassIds::CLOG, 80008, true, true, true)
+STAT_EVENT_ADD_DEF(WAL_READ_TIME_FROM_DISK, "wal read total time from disk", ObStatClassIds::CLOG, 80009, true, true, true)
+STAT_EVENT_ADD_DEF(WAL_HANDLE_RPC_REQUEST_COUNT, "wal handle rpc request count", ObStatClassIds::CLOG, 80010, true, true, true)
 STAT_EVENT_ADD_DEF(RESTORE_READ_LOG_SIZE, "restore read log size", ObStatClassIds::CLOG, 80013, true, true, true)
 STAT_EVENT_ADD_DEF(RESTORE_WRITE_LOG_SIZE, "restore write log size", ObStatClassIds::CLOG, 80014, true, true, true)
 STAT_EVENT_ADD_DEF(CLOG_TRANS_LOG_TOTAL_SIZE, "clog trans log total size", ObStatClassIds::CLOG, 80057, false, true, true)

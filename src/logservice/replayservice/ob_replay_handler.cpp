@@ -19,7 +19,7 @@
 
 namespace oceanbase
 {
-using namespace palf;
+using namespace wal;
 using namespace share;
 namespace logservice
 {
@@ -72,7 +72,7 @@ void ObReplayHandler::unregister_handler(const ObLogBaseType &type)
 int ObReplayHandler::replay(const ObLogBaseType &type,
                             const void *buffer,
                             const int64_t nbytes,
-                            const palf::LSN &lsn,
+                            const wal::LSN &lsn,
                             const SCN &scn)
 {
   int ret = OB_SUCCESS;

@@ -24,7 +24,7 @@ namespace oceanbase
 using namespace common;
 using namespace share;
 using namespace storage;
-using namespace palf;
+using namespace wal;
 
 namespace transaction
 {

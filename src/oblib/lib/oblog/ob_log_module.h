@@ -66,7 +66,7 @@ DEFINE_LOG_SUB_MOD(LOGTOOL)              // logtool
 DEFINE_LOG_SUB_MOD(WRS)                  // weak read service
 DEFINE_LOG_SUB_MOD(EASY)                 // libeasy
 DEFINE_LOG_SUB_MOD(DETECT)               // dead lock
-DEFINE_LOG_SUB_MOD(PALF)                 // palf
+DEFINE_LOG_SUB_MOD(WAL)                 // wal
 DEFINE_LOG_SUB_MOD(COORDINATOR)          // leader coordinator
 DEFINE_LOG_SUB_MOD(FLT)                // trace
 DEFINE_LOG_SUB_MOD(OBTRACE)                // trace
@@ -397,8 +397,8 @@ LOG_MOD_END(PL)
 #define _LOGTOOL_LOG(level, _fmt_, args...) _OB_MOD_LOG(LOGTOOL, level, _fmt_, ##args)
 #define DETECT_LOG(level, info_string, args...) OB_MOD_LOG(DETECT, level, info_string, ##args)
 #define _DETECT_LOG(level, _fmt_, args...) _OB_MOD_LOG(DETECT, level, _fmt_, ##args)
-#define PALF_LOG(level, info_string, args...) OB_MOD_LOG(PALF, level, info_string, ##args)
-#define _PALF_LOG(level, _fmt_, args...) _OB_MOD_LOG(PALF, level, _fmt_, ##args)
+#define WAL_LOG(level, info_string, args...) OB_MOD_LOG(WAL, level, info_string, ##args)
+#define _WAL_LOG(level, _fmt_, args...) _OB_MOD_LOG(WAL, level, _fmt_, ##args)
 #define COORDINATOR_LOG(level, info_string, args...) OB_MOD_LOG(COORDINATOR, level, info_string, ##args)
 #define _COORDINATOR_LOG(level, _fmt_, args...) _OB_MOD_LOG(COORDINATOR, level, _fmt_, ##args)
 #define FLT_LOG(level, info_string, args...) OB_MOD_LOG(FLT, level, info_string, ##args)
@@ -837,8 +837,8 @@ LOG_MOD_END(PL)
 #define _LOGTOOL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _LOGTOOL_LOG(level, ##args); }
 #define DETECT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; DETECT_LOG(level, ##args); }
 #define _DETECT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _DETECT_LOG(level, ##args); }
-#define PALF_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; PALF_LOG(level, ##args); }
-#define _PALF_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _PALF_LOG(level, ##args); }
+#define WAL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; WAL_LOG(level, ##args); }
+#define _WAL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _WAL_LOG(level, ##args); }
 #define COORDINATOR_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; COORDINATOR_LOG(level, ##args); }
 #define _COORDINATOR_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _COORDINATOR_LOG(level, ##args); }
 #define FLT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; FLT_LOG(level, ##args); }

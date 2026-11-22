@@ -28,7 +28,7 @@ class ObTabletID;
 namespace logservice
 {
 class ObLogHandler;
-} // namespace palf
+} // namespace wal
 namespace share
 {
 }

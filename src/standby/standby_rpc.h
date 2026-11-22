@@ -43,7 +43,7 @@
 #endif
 #include "standby/rpc_transport.h"
 #include "lib/container/ob_se_array.h"
-#include "standby/ob_standby_palf_base_info.h"
+#include "standby/ob_standby_wal_base_info.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "share/log/types/lsn.h"
 #include "storage/ls/ob_ls_meta.h"
@@ -204,12 +204,12 @@ public:
   int init(const common::ObAddr& addr, int64_t timeout, bool rpc_tls_enabled);
   int get_ls_view_tablet_count(ObStandbyLSViewTabletCountResult& result);
   int check_restore_precondition(obcall::ObCheckRestorePreconditionResult& result);
-  int fetch_standby_palf_base_info(const standby::ObFetchStandbyPalfBaseInfoArg &arg,
-                                   standby::ObFetchStandbyPalfBaseInfoResult &result);
+  int fetch_standby_wal_base_info(const standby::ObFetchStandbyWalBaseInfoArg &arg,
+                                   standby::ObFetchStandbyWalBaseInfoResult &result);
   int fetch_log(
-      const palf::LSN &start_lsn,
+      const wal::LSN &start_lsn,
       const int64_t max_bytes,
-      const std::function<int(const char *, int64_t, const palf::LSN &,
+      const std::function<int(const char *, int64_t, const wal::LSN &,
                               const share::SCN &)> &consume_log);
   int get_promotion_boundary(
       const StandbyPromotionBoundaryRequest &request,

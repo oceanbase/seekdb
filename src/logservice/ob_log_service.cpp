@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX CLOG
 #include "ob_log_service.h"
-#include "logservice/palf_handle_guard.h"
+#include "logservice/wal_handle_guard.h"
 #include "logservice/ob_log_allocator_mgr.h"
 #include "lib/ob_running_mode.h"
 #include "share/ob_share_util.h"
@@ -25,7 +25,7 @@ namespace oceanbase
 {
 using namespace share;
 using namespace common;
-using namespace palf;
+using namespace wal;
 
 namespace logservice
 {
@@ -37,7 +37,7 @@ ObLogService::ObLogService() :
   is_running_(false),
   enable_shared_storage_(false),
   self_(),
-  palf_env_(NULL),
+  wal_env_(NULL),
   alloc_mgr_(NULL),
   apply_service_(),
   replay_lock_(),
@@ -50,7 +50,7 @@ ObLogService::ObLogService() :
   log_storage_(NULL),
   runtime_config_(),
   monitor_(),
-  update_palf_opts_lock_()
+  update_wal_opts_lock_()
 {}
 
 ObLogService::~ObLogService()
@@ -60,7 +60,7 @@ ObLogService::~ObLogService()
 
 int ObLogService::server_module_init(
     ObLogService *&logservice,
-    const palf::PalfOptions &palf_options,
+    const wal::Options &wal_options,
     share::LocalStore &store,
     const char *runtime_clog_dir,
     const char *clog_dir,
@@ -81,7 +81,7 @@ int ObLogService::server_module_init(
         KP(runtime_clog_dir), KP(clog_dir), KP(log_storage),
         KP(io_manager), K(self));
   } else if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
-  } else if (OB_FAIL(logservice->init(palf_options, store,
+  } else if (OB_FAIL(logservice->init(wal_options, store,
                                       runtime_clog_dir,
                                       self,
                                       alloc_mgr,
@@ -106,7 +106,7 @@ void ObLogService::server_module_destroy(ObLogService* &logservice)
 int ObLogService::start()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(palf_env_->start())) {
+  if (OB_FAIL(wal_env_->start())) {
   } else if (OB_FAIL(apply_service_.start())) {
   } else {
     is_running_ = true;
@@ -147,9 +147,9 @@ void ObLogService::destroy()
   apply_service_.destroy();
   (void)disable_replay();
   log_storage_ = NULL;
-  if (NULL != palf_env_) {
-    PalfEnv::destroy_palf_env(palf_env_);
-    palf_env_ = NULL;
+  if (NULL != wal_env_) {
+    Env::destroy_wal_env(wal_env_);
+    wal_env_ = NULL;
   }
   alloc_mgr_ = NULL;
   FLOG_INFO("ObLogService is destroyed");
@@ -165,7 +165,7 @@ int ObLogService::enable_replay(const LSN &lsn, const SCN &scn)
     replay_service_ = OB_NEW(ObLogReplayService, "ReplayService");
     if (nullptr == replay_service_) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(replay_service_->init(palf_env_, log_storage_,
+    } else if (OB_FAIL(replay_service_->init(wal_env_, log_storage_,
                                             alloc_mgr_, replay_thread_quota_))) {
     } else if (OB_FAIL(replay_service_->start())) {
     } else if (OB_FAIL(replay_service_->create_status())) {
@@ -353,7 +353,7 @@ int check_and_prepare_dir(const char *dir)
   return ret;
 }
 
-int ObLogService::init(const PalfOptions &options,
+int ObLogService::init(const Options &options,
                        share::LocalStore &store,
                        const char *base_dir,
                        const common::ObAddr &self,
@@ -377,12 +377,12 @@ int ObLogService::init(const PalfOptions &options,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
              KP(alloc_mgr), KP(log_storage), KP(io_manager));
-  } else if (OB_FAIL(PalfEnv::create_palf_env(options, store, base_dir, self,
-                                              &monitor_, palf_env_))) {
-  } else if (OB_ISNULL(palf_env_)) {
+  } else if (OB_FAIL(Env::create_wal_env(options, store, base_dir, self,
+                                              &monitor_, wal_env_))) {
+  } else if (OB_ISNULL(wal_env_)) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(ERROR, "palf_env_ is NULL", K(ret));
-  } else if (OB_FAIL(apply_service_.init(palf_env_, log_storage))) {
+    CLOG_LOG(ERROR, "wal_env_ is NULL", K(ret));
+  } else if (OB_FAIL(apply_service_.init(wal_env_, log_storage))) {
   } else {
     replay_thread_quota_ = replay_thread_quota;
     alloc_mgr_ = alloc_mgr;
@@ -401,19 +401,19 @@ int ObLogService::init(const PalfOptions &options,
   return ret;
 }
 
-int ObLogService::create_ls(const palf::PalfBaseInfo &palf_base_info,
+int ObLogService::create_ls(const wal::BaseInfo &wal_base_info,
                             ObLogHandler &log_handler)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (!palf_base_info.is_valid()) {
+  } else if (!wal_base_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid palf base info", K(ret), K(palf_base_info));
-  } else if (OB_FAIL(create_ls_(palf_base_info, log_handler))) {
+    CLOG_LOG(WARN, "invalid wal base info", K(ret), K(wal_base_info));
+  } else if (OB_FAIL(create_ls_(wal_base_info, log_handler))) {
   } else {
-    FLOG_INFO("ObLogService create_ls success", K(ret), K(palf_base_info), K(log_handler));
+    FLOG_INFO("ObLogService create_ls success", K(ret), K(wal_base_info), K(log_handler));
   }
   return ret;
 }
@@ -434,7 +434,7 @@ int ObLogService::remove_ls(ObLogHandler &log_handler)
     // In normal case(for gc), stop has been executed, this stop has no effect.
     // In abnormal case(create ls failed, need remove ls directlly), there is no possibility for dead lock.
     log_handler.stop();
-    if (OB_FAIL(palf_env_->remove())) {
+    if (OB_FAIL(wal_env_->remove())) {
     } else {
       FLOG_INFO("ObLogService remove_ls success", K(ret));
     }
@@ -443,25 +443,25 @@ int ObLogService::remove_ls(ObLogHandler &log_handler)
   return ret;
 }
 
-int ObLogService::check_palf_exist(bool &exist) const
+int ObLogService::check_wal_exist(bool &exist) const
 {
   int ret = OB_SUCCESS;
-  PalfHandle handle;
+  Handle handle;
   exist = true;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "ObLogService is not inited", K(ret));
-  } else if (OB_FAIL(palf_env_->open(handle))) {
+  } else if (OB_FAIL(wal_env_->open(handle))) {
     if (OB_ENTRY_NOT_EXIST == ret ) {
       ret = OB_SUCCESS;
       exist = false;
     } else {
-      CLOG_LOG(WARN, "open palf failed", K(ret));
+      CLOG_LOG(WARN, "open wal failed", K(ret));
     }
   }
 
   if (true == handle.is_valid()) {
-    palf_env_->close(handle);
+    wal_env_->close(handle);
   }
   return ret;
 }
@@ -473,7 +473,7 @@ int ObLogService::add_ls(ObLogHandler &log_handler)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(apply_service_.create_status())) {
-  } else if (OB_FAIL(log_handler.init(self_, &apply_service_, this, palf_env_))) {
+  } else if (OB_FAIL(log_handler.init(self_, &apply_service_, this, wal_env_))) {
   } else {
     FLOG_INFO("add_ls success", K(ret), KP(this));
   }
@@ -481,21 +481,21 @@ int ObLogService::add_ls(ObLogHandler &log_handler)
   return ret;
 }
 
-int ObLogService::open_palf(palf::PalfHandleGuard &palf_handle_guard)
+int ObLogService::open_wal(wal::HandleGuard &wal_handle_guard)
 {
   int ret = OB_SUCCESS;
-  palf::PalfHandle palf_handle;
+  wal::Handle wal_handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(palf_env_->open(palf_handle))) {
-  } else if (FALSE_IT(palf_handle_guard.set(palf_handle, palf_env_))) {
+  } else if (OB_FAIL(wal_env_->open(wal_handle))) {
+  } else if (FALSE_IT(wal_handle_guard.set(wal_handle, wal_env_))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    if (true == palf_handle.is_valid()) {
-      palf_env_->close(palf_handle);
+    if (true == wal_handle.is_valid()) {
+      wal_env_->close(wal_handle);
     }
   }
 
@@ -517,20 +517,20 @@ int ObLogService::update_replayable_point(const SCN &replayable_point)
   return ret;
 }
 
-int ObLogService::get_palf_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte)
+int ObLogService::get_wal_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    ret = palf_env_->get_disk_usage(used_size_byte, total_size_byte);
+    ret = wal_env_->get_disk_usage(used_size_byte, total_size_byte);
   }
   return ret;
 }
 
 int ObLogService::update_log_runtime_config(const ObLogRuntimeConfig &runtime_config)
 {
-  ObSpinLockGuard guard(update_palf_opts_lock_);
+  ObSpinLockGuard guard(update_wal_opts_lock_);
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -543,38 +543,38 @@ int ObLogService::update_log_runtime_config(const ObLogRuntimeConfig &runtime_co
 int ObLogService::update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size)
 {
   int ret = OB_SUCCESS;
-  ObSpinLockGuard guard(update_palf_opts_lock_);
-  PalfOptions palf_opts;
+  ObSpinLockGuard guard(update_wal_opts_lock_);
+  Options wal_opts;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(palf_env_->get_options(palf_opts))) {
-  } else if (FALSE_IT(palf_opts.disk_options_.log_disk_usage_limit_size_ = log_disk_usage_limit_size)) {
-  } else if (OB_FAIL(palf_env_->update_options(palf_opts))) {
+  } else if (OB_FAIL(wal_env_->get_options(wal_opts))) {
+  } else if (FALSE_IT(wal_opts.disk_options_.log_disk_usage_limit_size_ = log_disk_usage_limit_size)) {
+  } else if (OB_FAIL(wal_env_->update_options(wal_opts))) {
   } else {
     CLOG_LOG(INFO, "update_log_disk_usage_limit_size success", K(log_disk_usage_limit_size));
   }
   return ret;
 }
 
-int ObLogService::get_palf_options(palf::PalfOptions &opts)
+int ObLogService::get_wal_options(wal::Options &opts)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    ret = palf_env_->get_options(opts);
+    ret = wal_env_->get_options(opts);
   }
   return ret;
 }
 
-int ObLogService::stat_palf(PalfStat &palf_stat)
+int ObLogService::stat_wal(Stat &wal_stat)
 {
   int ret = OB_SUCCESS;
-  PalfHandleGuard guard;
+  HandleGuard guard;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(open_palf(guard))) {
-  } else if (OB_FAIL(guard.get_palf_handle()->stat(palf_stat))) {
+  } else if (OB_FAIL(open_wal(guard))) {
+  } else if (OB_FAIL(guard.get_wal_handle()->stat(wal_stat))) {
   }
   return ret;
 }
@@ -603,45 +603,45 @@ int ObLogService::stat_replay(LSReplayStat &replay_stat)
     // No row after retirement: do not keep or fabricate a historical submit cursor.
     ret = OB_ITER_END;
   } else if (OB_SUCC(ret)) {
-    palf::PalfHandleGuard handle;
-    if (OB_FAIL(open_palf(handle))) {
+    wal::HandleGuard handle;
+    if (OB_FAIL(open_wal(handle))) {
     } else {
-      ret = handle.get_palf_handle()->get_end_lsn(replay_stat.end_lsn_);
+      ret = handle.get_wal_handle()->get_end_lsn(replay_stat.end_lsn_);
     }
   }
   return ret;
 }
 
-int ObLogService::create_ls_(const palf::PalfBaseInfo &palf_base_info,
+int ObLogService::create_ls_(const wal::BaseInfo &wal_base_info,
                              ObLogHandler &log_handler)
 {
   int ret = OB_SUCCESS;
-  PalfHandle palf_handle;
-  bool palf_exist = true;
-  if (false == palf_base_info.is_valid()) {
+  Handle wal_handle;
+  bool wal_exist = true;
+  if (false == wal_base_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", K(ret), K(palf_base_info));
-  } else if (OB_FAIL(check_palf_exist(palf_exist))) {
-  } else if (palf_exist) {
+    CLOG_LOG(WARN, "invalid argument", K(ret), K(wal_base_info));
+  } else if (OB_FAIL(check_wal_exist(wal_exist))) {
+  } else if (wal_exist) {
     ret = OB_ENTRY_EXIST;
-    CLOG_LOG(WARN, "palf has eixst", K(ret), K(palf_base_info));
+    CLOG_LOG(WARN, "wal has eixst", K(ret), K(wal_base_info));
   } else {
-    if (OB_FAIL(palf_env_->create(palf::AccessMode::APPEND, palf_base_info, palf_handle))) {
+    if (OB_FAIL(wal_env_->create(wal_base_info, wal_handle))) {
     } else if (OB_FAIL(apply_service_.create_status())) {
-    } else if (OB_FAIL(log_handler.init(self_, &apply_service_, this, palf_env_))) {
+    } else if (OB_FAIL(log_handler.init(self_, &apply_service_, this, wal_env_))) {
     } else {
       CLOG_LOG(INFO, "ObLogService create_ls success", K(ret), K(log_handler));
     }
-    if (palf_handle.is_valid() && nullptr != palf_env_) {
-      palf_env_->close(palf_handle);
+    if (wal_handle.is_valid() && nullptr != wal_env_) {
+      wal_env_->close(wal_handle);
     }
     if (OB_FAIL(ret)) {
       CLOG_LOG(ERROR, "create_ls failed!!!", KR(ret));
       disable_replay();
       apply_service_.remove_status();
       log_handler.destroy();
-      palf_env_->close(palf_handle);
-      palf_env_->remove();
+      wal_env_->close(wal_handle);
+      wal_env_->remove();
     }
   }
   return ret;
@@ -676,7 +676,7 @@ int ObLogService::get_io_start_time(int64_t &last_working_time)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(palf_env_->get_io_start_time(last_working_time))) {
+  } else if (OB_FAIL(wal_env_->get_io_start_time(last_working_time))) {
   } else {
     // do nothing
   }
@@ -692,7 +692,7 @@ int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(palf_env_->get_disk_usage(used_size, total_size))) {
+  } else if (OB_FAIL(wal_env_->get_disk_usage(used_size, total_size))) {
   } else {
     int64_t unrecyclable_log_disk_size = 0;
     const int64_t CHECKPOINT_PERCENTAGE = enable_shared_storage_ ? 60 : 30;

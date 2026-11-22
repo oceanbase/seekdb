@@ -50,7 +50,7 @@ struct ObAdminMutatorStringArg;
 
 }
 
-namespace palf
+namespace wal
 {
 class LSN;
 }
@@ -72,7 +72,7 @@ class ObTxLogCb;
 class ObTxCtx;
 
 typedef int64_t TxID;
-typedef palf::LSN LogOffSet;
+typedef wal::LSN LogOffSet;
 
 // Trans Log
 enum class ObTxLogType : int64_t
@@ -274,7 +274,7 @@ public:
   int ob_admin_dump(memtable::ObMemtableMutatorIterator *iter_ptr,
                     share::ObAdminMutatorStringArg &arg,
                     const char *block_name,
-                    palf::LSN lsn,
+                    wal::LSN lsn,
                     int64_t tx_id,
                     share::SCN scn,
                     bool &has_output);
@@ -804,7 +804,7 @@ private:
 public:
   static const int64_t MIN_LOG_BUF_SIZE = 4096;
   static const int64_t NORMAL_LOG_BUF_SIZE = common::OB_MAX_LOG_ALLOWED_SIZE;
-  static const int64_t BIG_LOG_BUF_SIZE = palf::MAX_LOG_BODY_SIZE;
+  static const int64_t BIG_LOG_BUF_SIZE = wal::MAX_LOG_BODY_SIZE;
   STATIC_ASSERT((BIG_LOG_BUF_SIZE > 3 * 1024 * 1024 && BIG_LOG_BUF_SIZE < 4 * 1024 * 1024), "unexpected big log buf size");
 
 private:

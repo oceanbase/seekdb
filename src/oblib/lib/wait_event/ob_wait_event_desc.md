@@ -196,53 +196,53 @@ The read and write operation on tenant map in global io manager instance should 
 
 The read and write operation on diagnose info in global io detector instance should be mutually exclusive.
 
-## spinlock: palf sw last submit log info lock wait
+## spinlock: wal sw last submit log info lock wait
 
-The read and write operation on last submit log info in sliding window of palf should be mutually exclusive.
+The read and write operation on last submit log info in sliding window of wal should be mutually exclusive.
 
-## spinlock: palf sw committed info lock wait
+## spinlock: wal sw committed info lock wait
 
-The read and write operation on committed info in sliding window of palf should be mutually exclusive.
+The read and write operation on committed info in sliding window of wal should be mutually exclusive.
 
-## spinlock: palf sw last slide log info lock wait
+## spinlock: wal sw last slide log info lock wait
 
-The read and write operation on last slide log info in sliding window of palf should be mutually exclusive.
+The read and write operation on last slide log info in sliding window of wal should be mutually exclusive.
 
-## spinlock: palf sw fetch log info lock wait
+## spinlock: wal sw fetch log info lock wait
 
-The read and write operation on fetch log info in sliding window of palf should be mutually exclusive.
+The read and write operation on fetch log info in sliding window of wal should be mutually exclusive.
 
-## spinlock: palf sw match lsn map lock wait
+## spinlock: wal sw match lsn map lock wait
 
-The read and write operation on sw match lsn map in sliding window of palf should be mutually exclusive.
+The read and write operation on sw match lsn map in sliding window of wal should be mutually exclusive.
 
-## spinlock: palf sw location cache cb lock wait
+## spinlock: wal sw location cache cb lock wait
 
-The read and write operation on sw location cache cb in sliding window of palf should be mutually exclusive.
+The read and write operation on sw location cache cb in sliding window of wal should be mutually exclusive.
 
-## spinlock: palf cm config data lock wait
+## spinlock: wal cm config data lock wait
 
-The read and write operation on config data in config mgr of palf should be mutually exclusive.
+The read and write operation on config data in config mgr of wal should be mutually exclusive.
 
-## spinlock: palf cm parent info lock wait
+## spinlock: wal cm parent info lock wait
 
-The read and write operation on parent info in config mgr of palf should be mutually exclusive.
+The read and write operation on parent info in config mgr of wal should be mutually exclusive.
 
-## spinlock: palf cm child info lock wait
+## spinlock: wal cm child info lock wait
 
-The read and write operation on child info in config mgr of palf should be mutually exclusive.
+The read and write operation on child info in config mgr of wal should be mutually exclusive.
 
-## RWLock: palf handle impl lock wait
+## RWLock: wal handle impl lock wait
 
-The read and write operation on state of palf handle impl should be mutually exclusive. This lock protects basic state of a palf handle impl instance.
+The read and write operation on state of wal handle impl should be mutually exclusive. This lock protects basic state of a wal handle impl instance.
 
-## spinglock: palf log engine lock wait
+## spinglock: wal log engine lock wait
 
 The read and write operation on log storage meta info in multiple threads should be mutually exclusive.
 
-## spinglock: palf env lock wait
+## spinglock: wal env lock wait
 
-The read and write operation on palf env meta info in multiple threads should be mutually exclusive.
+The read and write operation on wal env meta info in multiple threads should be mutually exclusive.
 
 ## spinglock: role change service lock wait
 

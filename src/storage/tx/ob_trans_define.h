@@ -95,7 +95,7 @@ class AggreLogTask;
 class ObITxCallback;
 class ObTxMultiDataSourceLog;
 enum class NotifyType : int64_t;
-typedef palf::LSN LogOffSet;
+typedef wal::LSN LogOffSet;
 enum { MAX_CALLBACK_LIST_COUNT = 64 };
 class TransModulePageAllocator : public common::ModulePageAllocator
 {
@@ -1007,7 +1007,7 @@ public:
 
 typedef common::ObSEArray<ObElrTransInfo, 1, TransModulePageAllocator> ObElrTransInfoArray;
 typedef common::ObSEArray<int64_t, 10, TransModulePageAllocator> ObRedoLogIdArray;
-typedef common::ObSEArray<palf::LSN, 10, ModulePageAllocator> ObRedoLSNArray;
+typedef common::ObSEArray<wal::LSN, 10, ModulePageAllocator> ObRedoLSNArray;
 
 struct CtxInfo final
 {
@@ -1135,7 +1135,7 @@ public:
   ObTxSEQ max_submitted_seq_no_;
   ObSEArray<uint64_t,1> checksum_;
   ObSEArray<share::SCN,1> checksum_scn_;
-  palf::LSN max_durable_lsn_;
+  wal::LSN max_durable_lsn_;
   bool data_complete_;
   bool need_checksum_;
   // since this scn

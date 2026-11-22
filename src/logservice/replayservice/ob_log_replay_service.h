@@ -30,9 +30,9 @@ namespace share
 {
 class SCN;
 }
-namespace palf
+namespace wal
 {
-class PalfEnv;
+class Env;
 }
 namespace logservice
 {
@@ -68,7 +68,7 @@ class ObLogReplayService: public common::ObLinkQueueThreadPool
 public:
   ObLogReplayService();
   virtual ~ObLogReplayService();
-  int init(palf::PalfEnv *palf_env,
+  int init(wal::Env *wal_env,
            ObILogStorage *log_storage,
            ObILogAllocator *allocator,
            const int64_t replay_thread_quota);
@@ -83,7 +83,7 @@ public:
   int get_replay_status(ObReplayStatusGuard &guard) const;
   int remove_status();
   int finish(int64_t deadline_us);
-  int enable(const palf::LSN &base_lsn,
+  int enable(const wal::LSN &base_lsn,
              const share::SCN &base_scn);
   int block_submit_log();
   int unblock_submit_log();
@@ -109,7 +109,7 @@ private:
   int try_submit_remained_log_replay_task_(ObReplayServiceSubmitTask *submit_task);
   int fetch_and_submit_single_log_(ObReplayStatus &replay_status,
                                    ObReplayServiceSubmitTask *submit_task,
-                                   palf::LSN &cur_lsn,
+                                   wal::LSN &cur_lsn,
                                    share::SCN &cur_log_submit_scn,
                                    int64_t &log_size);
   int fetch_pre_barrier_log_(ObReplayStatus &replay_status,
@@ -117,7 +117,7 @@ private:
                              ObLogReplayTask *&replay_task,
                              const ObLogBaseHeader &header,
                              const char *log_buf,
-                             const palf::LSN &cur_lsn,
+                             const wal::LSN &cur_lsn,
                              const share::SCN &cur_log_submit_scn,
                              const int64_t log_size);
   bool is_tenant_out_of_memory_(const ObReplayStatus &replay_status) const;
@@ -156,7 +156,7 @@ private:
   bool is_running_;
   ReplayProcessStat replay_stat_;
   ObILogStorage *log_storage_;
-  palf::PalfEnv *palf_env_;
+  wal::Env *wal_env_;
   ObILogAllocator *allocator_;
   mutable common::ObSpinLock status_lock_;
   ObReplayStatus *replay_status_;

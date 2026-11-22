@@ -155,7 +155,7 @@ public:
   int print_all_tx_ctx(const int64_t print_num);
 
 public:
-  int replay(const void *buffer, const int64_t nbytes, const palf::LSN &lsn, const share::SCN &scn);
+  int replay(const void *buffer, const int64_t nbytes, const wal::LSN &lsn, const share::SCN &scn);
   void deactivate() override;
   int activate() override;
 

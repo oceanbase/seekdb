@@ -17,7 +17,7 @@
 #include "share/log/types/lsn.h"
 
 namespace oceanbase {
-namespace palf{
+namespace wal{
 using namespace common;
 LSN::LSN()
 {
@@ -138,5 +138,5 @@ DEFINE_GET_SERIALIZE_SIZE(LSN)
   size += serialization::encoded_length_i64(val_);
   return size;
 }
-} // end namespace palf
+} // end namespace wal
 } // end namespace oceanbase

@@ -33,23 +33,23 @@ LOGSERVICE_UNITY_GROUPS = [
         ],
     ),
     struct(
-        name = "ob_logservice_palf_0",
+        name = "ob_logservice_wal_0",
         language = "c++",
         srcs = [
-            "src/logservice/palf_adapter/log_meta.cpp",
-            "src/logservice/palf_adapter/log_meta_info.cpp",
+            "src/logservice/wal_adapter/log_meta.cpp",
+            "src/logservice/wal_adapter/log_meta_info.cpp",
         ],
     ),
     struct(
-        name = "ob_logservice_palf_1",
+        name = "ob_logservice_wal_1",
         language = "c++",
         srcs = [
-            "src/logservice/palf_adapter/palf_callback_wrapper.cpp",
-            "src/logservice/palf_adapter/palf_env.cpp",
-            "src/logservice/palf_adapter/palf_env_impl.cpp",
-            "src/logservice/palf_adapter/palf_handle.cpp",
-            "src/logservice/palf_adapter/palf_handle_impl.cpp",
-            "src/logservice/palf_adapter/directory_utils.cpp",
+            "src/logservice/wal_adapter/callback_wrapper.cpp",
+            "src/logservice/wal_adapter/env.cpp",
+            "src/logservice/wal_adapter/env_impl.cpp",
+            "src/logservice/wal_adapter/handle.cpp",
+            "src/logservice/wal_adapter/handle_impl.cpp",
+            "src/logservice/wal_adapter/directory_utils.cpp",
         ],
     ),
 ]

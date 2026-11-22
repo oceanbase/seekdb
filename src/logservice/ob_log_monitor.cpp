@@ -23,8 +23,8 @@ namespace logservice
 {
 #define LOG_MONITOR_EVENT_FMT_PREFIX "LOG", type_to_string_(event)
 
-// =========== PALF Event Reporting ===========
-int ObLogMonitor::record_set_base_lsn_event(const palf::LSN &new_base_lsn)
+// =========== WAL Event Reporting ===========
+int ObLogMonitor::record_set_base_lsn_event(const wal::LSN &new_base_lsn)
 {
   int ret = OB_SUCCESS;
   const EventType event = EventType::SET_BASE_LSN;
@@ -33,16 +33,16 @@ int ObLogMonitor::record_set_base_lsn_event(const palf::LSN &new_base_lsn)
   return ret;
 }
 
-int ObLogMonitor::record_advance_base_info_event(const palf::PalfBaseInfo &palf_base_info)
+int ObLogMonitor::record_advance_base_info_event(const wal::BaseInfo &wal_base_info)
 {
   int ret = OB_SUCCESS;
   const EventType event = EventType::ADVANCE_BASE_INFO;
   SERVER_EVENT_ADD(LOG_MONITOR_EVENT_FMT_PREFIX,
-      "PALF_BASE_INFO", palf_base_info);
+      "WAL_BASE_INFO", wal_base_info);
   return ret;
 }
 
-int ObLogMonitor::record_truncate_event(const palf::LSN &lsn,
+int ObLogMonitor::record_truncate_event(const wal::LSN &lsn,
                                         const int64_t min_block_id,
                                         const int64_t max_block_id,
                                         const int64_t truncate_end_block_id)
@@ -57,7 +57,7 @@ int ObLogMonitor::record_truncate_event(const palf::LSN &lsn,
   return ret;
 }
 
-// =========== PALF Event Reporting ===========
+// =========== WAL Event Reporting ===========
 
 
 #undef LOG_MONITOR_EVENT_FMT_PREFIX

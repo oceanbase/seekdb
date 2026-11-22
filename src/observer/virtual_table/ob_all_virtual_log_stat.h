@@ -14,30 +14,27 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_PALF_STAT_
-#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_PALF_STAT_
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_WAL_STAT_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_WAL_STAT_
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
-#include "logservice/palf_adapter/palf_handle.h"
+#include "logservice/wal_adapter/handle.h"
 
 namespace oceanbase
 {
 namespace observer
 {
-class ObAllVirtualPalfStat: public common::ObVirtualTableScannerIterator
+class ObAllVirtualWalStat: public common::ObVirtualTableScannerIterator
 {
 public:
-  ObAllVirtualPalfStat() = default;
-  virtual ~ObAllVirtualPalfStat();
+  ObAllVirtualWalStat() = default;
+  virtual ~ObAllVirtualWalStat();
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   void destroy();
 private:
-  int insert_log_stat_(const palf::PalfStat &palf_stat);
-private:
-  static const int64_t VARCHAR_32 = 32;
-  char access_mode_str_[VARCHAR_32] = {'\0'};
+  int insert_log_stat_(const wal::Stat &wal_stat);
 };
 }//namespace observer
 }//namespace oceanbase

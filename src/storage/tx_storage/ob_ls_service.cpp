@@ -35,7 +35,7 @@
 namespace oceanbase
 {
 using namespace share;
-using namespace palf;
+using namespace wal;
 using namespace lib;
 using namespace logservice;
 namespace storage
@@ -182,7 +182,7 @@ int ObLSService::start()
 
 int ObLSService::inner_create_ls_(const ObRestoreStatus &restore_status,
                                   const SCN &create_scn,
-                                  const palf::LSN &clog_base_lsn,
+                                  const wal::LSN &clog_base_lsn,
                                   ObLS *&ls)
 {
   int ret = OB_SUCCESS;
@@ -239,8 +239,8 @@ int ObLSService::create_ls(const share::ObServerRole &server_role)
   arg.server_role_ = server_role;
   arg.restore_status_ = ObRestoreStatus(ObRestoreStatus::Status::NONE);
   arg.create_scn_ = SCN::base_scn();
-  arg.palf_base_info_.generate_by_default();
-  arg.palf_base_info_.prev_log_info_.scn_ = arg.create_scn_;
+  arg.wal_base_info_.generate_by_default();
+  arg.wal_base_info_.prev_log_info_.scn_ = arg.create_scn_;
   arg.need_create_inner_tablet_ = true;
   if (OB_FAIL(create_ls_(arg))) {
   }
@@ -249,20 +249,20 @@ int ObLSService::create_ls(const share::ObServerRole &server_role)
 }
 
 int ObLSService::create_ls_for_restore(
-    const palf::PalfBaseInfo &palf_base_info,
+    const wal::BaseInfo &wal_base_info,
     const SCN &restore_checkpoint_scn)
 {
   int ret = OB_SUCCESS;
   ObCreateLSCommonArg arg;
-  if (!palf_base_info.is_valid() || !restore_checkpoint_scn.is_valid()) {
+  if (!wal_base_info.is_valid() || !restore_checkpoint_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid physical restore replay base",
-        K(ret), K(palf_base_info), K(restore_checkpoint_scn));
+        K(ret), K(wal_base_info), K(restore_checkpoint_scn));
   } else {
     arg.server_role_ = share::RESTORE_SERVER_ROLE;
     arg.restore_status_ = ObRestoreStatus(ObRestoreStatus::Status::RESTORE_DOING);
     arg.create_scn_ = restore_checkpoint_scn;
-    arg.palf_base_info_ = palf_base_info;
+    arg.wal_base_info_ = wal_base_info;
     arg.need_create_inner_tablet_ = false;
   }
   if (OB_SUCC(ret) && OB_FAIL(create_ls_(arg))) {
@@ -613,7 +613,7 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
       LOG_WARN("the local log stream already exists", K(ret));
     } else if (OB_BREAK_FAIL(inner_create_ls_(arg.restore_status_,
                                               arg.create_scn_,
-                                              arg.palf_base_info_.curr_lsn_,
+                                              arg.wal_base_info_.curr_lsn_,
                                               ls))) {
     } else {
       state = ObLSCreateState::CREATE_STATE_LS_ALLOCATED;
@@ -622,9 +622,9 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
       if (OB_BREAK_FAIL(publish_ls_(ls))) {
         LOG_WARN("publish log stream failed", K(ret), K(ls_meta));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PUBLISHED)) {
-      } else if (OB_BREAK_FAIL(ls->create_ls(arg.palf_base_info_))) {
-        LOG_WARN("enable ls palf failed", K(ret), K(ls_meta));
-      } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PALF_ENABLED)) {
+      } else if (OB_BREAK_FAIL(ls->create_ls(arg.wal_base_info_))) {
+        LOG_WARN("enable ls wal failed", K(ret), K(ls_meta));
+      } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_WAL_ENABLED)) {
       } else if (arg.need_create_inner_tablet_ && OB_FAIL(ls->create_ls_inner_tablet(arg.create_scn_))) {
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_INNER_TABLET_CREATED)) {
       } else if (OB_BREAK_FAIL(ls->finish_create_ls())) {
@@ -664,11 +664,11 @@ void ObLSService::del_ls_after_create_ls_failed_(ObLSCreateState& in_ls_create_s
             need_retry = true;
             LOG_WARN("remove ls inner tablet failed", K(tmp_ret));
           } else {
-            ls_create_state = ObLSCreateState::CREATE_STATE_PALF_ENABLED;
+            ls_create_state = ObLSCreateState::CREATE_STATE_WAL_ENABLED;
           }
         }
         if (OB_TMP_FAIL(tmp_ret)) {
-        } else if (ls_create_state >= ObLSCreateState::CREATE_STATE_PALF_ENABLED) {
+        } else if (ls_create_state >= ObLSCreateState::CREATE_STATE_WAL_ENABLED) {
           if (OB_TMP_FAIL(ls->remove_ls())) {
             need_retry = true;
             LOG_WARN("ls inner remove failed", K(tmp_ret));

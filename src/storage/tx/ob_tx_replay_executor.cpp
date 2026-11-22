@@ -37,7 +37,7 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
                                 const char *buf,
                                 const int64_t size,
                                 const int skip_pos,
-                                const palf::LSN &lsn,
+                                const wal::LSN &lsn,
                                 const SCN &log_timestamp,
                                 const logservice::ObLogBaseHeader &base_header)
 {

@@ -139,10 +139,10 @@ SCN SCN::plus(const SCN &ref, uint64_t delta)
   uint64_t new_val = OB_INVALID_SCN_VAL;
   if (OB_UNLIKELY(delta >= OB_MAX_SCN_TS_NS || !ref.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(delta), K(ref), K(ret));
+    WAL_LOG(ERROR, "invalid argument", K(delta), K(ref), K(ret));
   } else if (OB_UNLIKELY((new_val = ref.val_ + delta) > OB_MAX_SCN_TS_NS)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR , "new_val is not valid", K(new_val), K(ref), K(delta), K(ret));
+    WAL_LOG(ERROR , "new_val is not valid", K(new_val), K(ref), K(delta), K(ret));
   } else {
     result.val_ = new_val;
   }
@@ -155,10 +155,10 @@ SCN SCN::minus(const SCN &ref, uint64_t delta)
   SCN result;
   if (OB_UNLIKELY(delta >= OB_MAX_SCN_TS_NS || !ref.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(delta), K(ref), K(lbt()));
+    WAL_LOG(ERROR, "invalid argument", K(delta), K(ref), K(lbt()));
   } else if (OB_UNLIKELY(ref.val_ < delta)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "new_val is not valid", K(delta), K(ret), K(lbt()));
+    WAL_LOG(ERROR, "new_val is not valid", K(delta), K(ret), K(lbt()));
   } else {
     result.val_ = ref.val_ - delta;
   }
@@ -222,9 +222,9 @@ int64_t SCN::convert_to_ts(bool ignore_invalid) const
     ts_us = ts_ns_ / 1000UL;
   } else {
     if (ignore_invalid) {
-      PALF_LOG_RET(WARN, OB_ERR_UNEXPECTED, "invalid scn should not convert to ts ", K(val_));
+      WAL_LOG_RET(WARN, OB_ERR_UNEXPECTED, "invalid scn should not convert to ts ", K(val_));
     } else {
-      PALF_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "invalid scn should not convert to ts ", K(val_), K(lbt()));
+      WAL_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "invalid scn should not convert to ts ", K(val_), K(lbt()));
     }
   }
   return ts_us;
@@ -250,7 +250,7 @@ int SCN::convert_for_gts(int64_t ts_ns)
   if (OB_UNLIKELY(0 > ts_ns
                   || OB_MAX_SCN_TS_NS < ts_ns)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(ts_ns), K(ret));
+    WAL_LOG(WARN, "invalid argument", K(ts_ns), K(ret));
   } else {
     ts_ns_ = ts_ns;
     v_ = SCN_VERSION;
@@ -263,7 +263,7 @@ int SCN::convert_for_logservice(uint64_t scn_val)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_MAX_SCN_TS_NS < scn_val)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(scn_val), K(ret), K(lbt()));
+    WAL_LOG(WARN, "invalid argument", K(scn_val), K(ret), K(lbt()));
   } else {
     val_ = scn_val;
   }
@@ -275,7 +275,7 @@ int SCN::convert_for_inner_table_field(uint64_t value)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_MAX_SCN_TS_NS < value)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(value), K(ret));
+    WAL_LOG(WARN, "invalid argument", K(value), K(ret));
   } else {
     val_ = value;
   }
@@ -287,7 +287,7 @@ int SCN::convert_for_sql(uint64_t value)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_MAX_SCN_TS_NS < value)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(value), K(ret));
+    WAL_LOG(WARN, "invalid argument", K(value), K(ret));
   } else {
     val_ = value;
   }
@@ -301,7 +301,7 @@ int SCN::convert_for_tx(int64_t val)
     val_ = OB_MAX_SCN_TS_NS;
   } else if (OB_UNLIKELY(val < 0 || OB_MAX_SCN_TS_NS < val)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(val), K(lbt()));
+    WAL_LOG(ERROR, "invalid argument", K(val), K(lbt()));
   } else {
     val_ = val;
   }
@@ -319,9 +319,9 @@ int64_t SCN::get_val_for_tx(const bool ignore_invalid_scn) const
     }
   } else {
     if (!ignore_invalid_scn) {
-      PALF_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "invalid SCN", K(val_));
+      WAL_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "invalid SCN", K(val_));
     } else {
-      PALF_LOG_RET(WARN, OB_INVALID_ARGUMENT, "invalid SCN", K(val_));
+      WAL_LOG_RET(WARN, OB_INVALID_ARGUMENT, "invalid SCN", K(val_));
     }
   }
   return result_val;
@@ -393,7 +393,7 @@ int SCN::fixed_serialize(char* buf, const int64_t buf_len, int64_t& pos) const
   int64_t new_pos = pos;
   if (NULL == buf || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(buf), K(buf_len), K(ret));
+    WAL_LOG(WARN, "invalid argument", K(buf), K(buf_len), K(ret));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, val_))) {
   } else {
     pos = new_pos;
@@ -412,7 +412,7 @@ int SCN::fixed_deserialize_without_transform(const char* buf, const int64_t data
   int64_t new_pos = pos;
   if (NULL == buf || data_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(buf), K(data_len), K(ret));
+    WAL_LOG(WARN, "invalid argument", K(buf), K(data_len), K(ret));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos,
                                                reinterpret_cast<int64_t*>(&val_)))) {
   } else {
@@ -444,7 +444,7 @@ int SCN::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
   int64_t new_pos = pos;
   if (NULL == buf || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(buf), K(buf_len), K(ret));
+    WAL_LOG(WARN, "invalid argument", K(buf), K(buf_len), K(ret));
   } else if (OB_FAIL(serialization::encode(buf, buf_len, new_pos, val_))) {
   } else {
     pos = new_pos;
@@ -458,7 +458,7 @@ int SCN::deserialize(const char* buf, const int64_t data_len, int64_t& pos)
   int64_t new_pos = pos;
   if (NULL == buf || data_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(buf), K(data_len), K(ret));
+    WAL_LOG(WARN, "invalid argument", K(buf), K(data_len), K(ret));
   } else if (OB_FAIL(serialization::decode(buf, data_len, new_pos, val_))) {
   } else {
     pos = new_pos;

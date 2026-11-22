@@ -6085,8 +6085,8 @@ def_local_table(
 )
 
 def_local_table(
-  table_name = '__all_palf_meta',
-  namespace = 'palf_meta',
+  table_name = '__all_wal_meta',
+  namespace = 'wal_meta',
   namespace_id = 9,
   columns = [
     ('id', 'int', 'false'),

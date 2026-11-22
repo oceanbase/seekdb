@@ -61,7 +61,7 @@ public:
 
 public:
   // for replay, do nothing
-  int replay(const void *buffer, const int64_t nbytes, const palf::LSN &lsn, const share::SCN &scn) override
+  int replay(const void *buffer, const int64_t nbytes, const wal::LSN &lsn, const share::SCN &scn) override
   {
     UNUSED(buffer);
     UNUSED(nbytes);

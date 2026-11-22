@@ -41,11 +41,11 @@ namespace share
 class SCN;
 }
 
-namespace palf
+namespace wal
 {
-class PalfHandleGuard;
-class PalfDiskOptions;
-class PalfEnv;
+class HandleGuard;
+class DiskOptions;
+class Env;
 }
 
 namespace logservice
@@ -63,7 +63,7 @@ public:
   virtual ~ObLogService();
   static int server_module_init(
       ObLogService *&logservice,
-      const palf::PalfOptions &options,
+      const wal::Options &options,
       share::LocalStore &store,
       const char *runtime_clog_dir,
       const char *clog_dir,
@@ -79,7 +79,7 @@ public:
   void wait();
   void destroy();
 public:
-  int init(const palf::PalfOptions &options,
+  int init(const wal::Options &options,
            share::LocalStore &store,
            const char *base_dir,
            const common::ObAddr &self,
@@ -90,28 +90,28 @@ public:
            int64_t replay_thread_quota,
            const ObLogRuntimeConfig &runtime_config);
   // Create the unique log stream from its persisted base point.
-  int create_ls(const palf::PalfBaseInfo &palf_base_info,
+  int create_ls(const wal::BaseInfo &wal_base_info,
                 ObLogHandler &log_handler);
   //Delete log stream interface: After the outer call to create_ls(), if subsequent processes fail, remove_ls() needs to be called
   int remove_ls(ObLogHandler &log_handler);
 
-  int check_palf_exist(bool &exist) const;
+  int check_wal_exist(bool &exist) const;
   // Restart recovery interface for the single log stream.
   int add_ls(ObLogHandler &log_handler);
 
-  int open_palf(palf::PalfHandleGuard &palf_handle);
+  int open_wal(wal::HandleGuard &wal_handle);
 
   int update_replayable_point(const share::SCN &replayable_point);
 
-  // @brief get palf disk usage
+  // @brief get wal disk usage
   // @param [out] used_size_byte
   // @param [out] total_size_byte, the configured soft target for checkpoint and recycling.
-  int get_palf_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
+  int get_wal_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
 
   int update_log_runtime_config(const ObLogRuntimeConfig &runtime_config);
   int update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size);
-  int get_palf_options(palf::PalfOptions &options);
-  int stat_palf(palf::PalfStat &palf_stat);
+  int get_wal_options(wal::Options &options);
+  int stat_wal(wal::Stat &wal_stat);
   int stat_apply(LSApplyStat &apply_stat);
   int stat_replay(LSReplayStat &replay_stat);
 
@@ -119,7 +119,7 @@ public:
   int diagnose_apply(ApplyDiagnoseInfo &diagnose_info);
   int get_io_start_time(int64_t &last_working_time);
 
-  palf::PalfEnv *get_palf_env() { return palf_env_; }
+  wal::Env *get_wal_env() { return wal_env_; }
   bool is_replay_enabled() const;
   // The recovered watermark has been handed to apply and replay status detached.
   bool is_replay_handoff_complete() const;
@@ -127,11 +127,11 @@ public:
   int get_max_replayed_scn(share::SCN &scn);
   int get_min_unreplayed_scn(share::SCN &scn);
   int has_replay_fatal_error(bool &has_error);
-  int enable_replay(const palf::LSN &lsn, const share::SCN &scn);
+  int enable_replay(const wal::LSN &lsn, const share::SCN &scn);
   int disable_replay();
   int finish_replay(int64_t deadline_us);
   // Query live replay progress; returns OB_STATE_NOT_MATCH after status retirement.
-  int is_replayed_to(const palf::LSN &target_lsn, bool &reached);
+  int is_replayed_to(const wal::LSN &target_lsn, bool &reached);
   int block_submit_replay();
   int unblock_submit_replay();
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
@@ -149,7 +149,7 @@ public:
 private:
   void destroy_replay_();
   int get_replay_status_(ObReplayStatusGuard &guard) const;
-  int create_ls_(const palf::PalfBaseInfo &palf_base_info,
+  int create_ls_(const wal::BaseInfo &wal_base_info,
                  ObLogHandler &log_handler);
   int get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_size);
 private:
@@ -158,7 +158,7 @@ private:
   bool enable_shared_storage_;
 
   common::ObAddr self_;
-  palf::PalfEnv *palf_env_;
+  wal::Env *wal_env_;
   common::ObILogAllocator *alloc_mgr_;
 
   ObLogApplyService apply_service_;
@@ -173,7 +173,7 @@ private:
   ObILogStorage *log_storage_;
   ObLogRuntimeConfig runtime_config_;
   ObLogMonitor monitor_;
-  ObSpinLock update_palf_opts_lock_;
+  ObSpinLock update_wal_opts_lock_;
   // Restore service for standby log sync
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogService);

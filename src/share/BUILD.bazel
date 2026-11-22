@@ -205,8 +205,8 @@ grouped_unity_cc_library(
         "log/ob_log_base_type.h",
         "log/types/log_define.h",
         "log/types/lsn.h",
-        "log/types/palf_base_info.h",
-        "log/types/palf_options.h",
+        "log/types/base_info.h",
+        "log/types/options.h",
     ],
     deps = [
         ":error_codes",
@@ -900,7 +900,7 @@ grouped_unity_cc_library(
     ],
 )
 
-# PalfOptions is a complete value member, so this initialization vocabulary is
+# Options is a complete value member, so this initialization vocabulary is
 # the one deliberate Share -> Logservice base edge.  Keeping it out of
 # tenant_runtime prevents the ubiquitous runtime interface from inheriting the
 # Logservice compile closure.

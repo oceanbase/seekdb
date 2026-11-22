@@ -26,7 +26,7 @@ namespace oceanbase
 using namespace common;
 using namespace obcall;
 using namespace share::schema;
-using namespace palf;
+using namespace wal;
 
 namespace share
 {

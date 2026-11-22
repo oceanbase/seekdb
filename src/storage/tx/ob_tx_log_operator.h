@@ -149,7 +149,7 @@ public:
                      typename T::ConstructArg *construct_arg,
                      const typename T::ReplayArg &replay_arg,
                      const share::SCN scn,
-                     const palf::LSN lsn)
+                     const wal::LSN lsn)
       : tx_ctx_(tx_ctx_ptr), log_object_ptr_(nullptr), log_block_(log_block_ptr),
         construct_arg_(construct_arg), scn_(scn), lsn_(lsn)
   {
@@ -170,7 +170,7 @@ public:
 
 public:
   const share::SCN &get_scn() { return scn_; }
-  const palf::LSN &get_lsn() { return lsn_; }
+  const wal::LSN &get_lsn() { return lsn_; }
 
 private:
   ObTxCtx *tx_ctx_;
@@ -180,7 +180,7 @@ private:
   typename T::ConstructArg *construct_arg_;
 
   share::SCN scn_;
-  palf::LSN lsn_;
+  wal::LSN lsn_;
 
   union LogOpArg
   {
@@ -424,7 +424,7 @@ OB_INLINE int ObTxCtxLogOperator<T>::operator()(const ObTxLogOpType op_type)
       if (OB_FAIL(pre_check_for_log_submiting_())) {
         TRANS_LOG(WARN, "pre check for log submitting",K(ret), K(T::LOG_TYPE), KPC(this));
       } else if (OB_FAIL(submit_log_block_out_())) {
-        TRANS_LOG(WARN, "submit tx log block into palf failed", K(ret), K(T::LOG_TYPE), KPC(this));
+        TRANS_LOG(WARN, "submit tx log block into wal failed", K(ret), K(T::LOG_TYPE), KPC(this));
       } else if (OB_TMP_FAIL(common_submit_log_succ_())) {
         TRANS_LOG(WARN, "common after_submit_log_succ failed", K(ret), K(T::LOG_TYPE), KPC(this));
       } else {

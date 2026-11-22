@@ -18,7 +18,7 @@
 #define OCEANBASE_STANDBY_OB_STANDBY_BOOTSTRAP_SERVICE_H_
 
 #include "lib/net/ob_addr.h"
-#include "share/log/types/palf_base_info.h"
+#include "share/log/types/base_info.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -55,7 +55,7 @@ public:
 private:
   static int create_sys_ls_(
       const ObStandbyBootstrapParam &param,
-      const palf::PalfBaseInfo &palf_base_info,
+      const wal::BaseInfo &wal_base_info,
       const share::SCN &restore_checkpoint_scn);
 };
 

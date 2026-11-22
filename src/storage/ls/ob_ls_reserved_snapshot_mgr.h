@@ -30,7 +30,7 @@ namespace oceanbase
 namespace logservice
 {
 class ObLogHandler;
-} // namespace palf
+} // namespace wal
 
 namespace storage
 {

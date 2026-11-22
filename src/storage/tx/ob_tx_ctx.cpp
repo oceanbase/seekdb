@@ -40,7 +40,7 @@ using namespace memtable;
 using namespace share;
 using namespace sql;
 using namespace storage;
-using namespace palf;
+using namespace wal;
 
 namespace transaction {
 using namespace tablelock;
@@ -1880,7 +1880,7 @@ int ObTxCtx::on_success_ops_(ObTxLogCb *log_cb)
 {
   int ret = OB_SUCCESS;
   const SCN log_ts = log_cb->get_log_ts();
-  const palf::LSN log_lsn = log_cb->get_lsn();
+  const wal::LSN log_lsn = log_cb->get_lsn();
   const ObTxCbArgArray &cb_arg_array = log_cb->get_cb_arg_array();
 
   if (OB_FAIL(common_on_success_(log_cb))) {
@@ -1956,7 +1956,7 @@ int ObTxCtx::common_on_success_(ObTxLogCb *log_cb)
   int tmp_ret = OB_SUCCESS;
 
   const SCN log_ts = log_cb->get_log_ts();
-  const palf::LSN lsn = log_cb->get_lsn();
+  const wal::LSN lsn = log_cb->get_lsn();
   const ObTxLogType last_log_type = log_cb->get_last_log_type();
   if (log_ts > exec_info_.max_applying_log_ts_) {
     exec_info_.max_applying_log_ts_ = log_ts;
@@ -2037,10 +2037,10 @@ int ObTxCtx::on_failure(ObTxLogCb *log_cb)
   int ret = OB_SUCCESS;
   share::SCN max_committed_scn;
   if (OB_FAIL(ls_tx_ctx_mgr_->get_ls_log_adapter()->get_max_decided_scn(max_committed_scn))) {
-    TRANS_LOG(ERROR, "get palf max committed scn fail, need retry", K(ret), KPC(this));
+    TRANS_LOG(ERROR, "get wal max committed scn fail, need retry", K(ret), KPC(this));
     OB_SAFE_ABORT();
   } else {
-    TRANS_LOG(INFO, "succ get palf max_commited_scn", K(max_committed_scn), KPC(log_cb));
+    TRANS_LOG(INFO, "succ get wal max_commited_scn", K(max_committed_scn), KPC(log_cb));
   }
   if (OB_SUCC(ret)) {
     {
@@ -2506,7 +2506,7 @@ int ObTxCtx::submit_commit_log_()
 {
   int ret = OB_SUCCESS;
   ObTxLogBlock log_block;
-  palf::LSN prev_lsn;
+  wal::LSN prev_lsn;
   bool has_redo = false;
   ObRedoLogSubmitHelper helper;
   const int64_t replay_hint = trans_id_.get_id();
@@ -2859,7 +2859,7 @@ int ObTxCtx::submit_big_segment_log_()
 
   // TODO set replay_barrier_type
 
-  // if one part of big segment log submit into palf failed , the transaction must drive into abort
+  // if one part of big segment log submit into wal failed , the transaction must drive into abort
   // phase.
   if (OB_FAIL(init_log_block_(log_block))) {
   }
@@ -3263,11 +3263,11 @@ int ObTxCtx::after_submit_log_(ObTxLogBlock &log_block,
   return ret;
 }
 
-int ObTxCtx::get_max_submitting_log_info_(palf::LSN &lsn, SCN &log_ts)
+int ObTxCtx::get_max_submitting_log_info_(wal::LSN &lsn, SCN &log_ts)
 {
   int ret = OB_SUCCESS;
   ObTxLogCb *log_cb = NULL;
-  lsn = LSN(palf::PALF_INITIAL_LSN_VAL);
+  lsn = LSN(wal::WAL_INITIAL_LSN_VAL);
   log_ts.reset();
   if (!busy_cbs_.is_empty()) {
     log_cb = busy_cbs_.get_last();
@@ -3291,10 +3291,10 @@ int ObTxCtx::get_max_submitting_log_info_(palf::LSN &lsn, SCN &log_ts)
 
 int ObTxCtx::get_prev_log_lsn_(const ObTxLogBlock &log_block,
                                       ObTxPrevLogType &prev_log_type,
-                                      palf::LSN &lsn)
+                                      wal::LSN &lsn)
 {
   int ret = OB_SUCCESS;
-  palf::LSN tmp_lsn;
+  wal::LSN tmp_lsn;
   SCN tmp_log_ts;
   bool in_same_block = false;
 
@@ -3346,7 +3346,7 @@ int ObTxCtx::try_submit_next_log()
 }
 
 //***************************** for 4.0
-int ObTxCtx::check_replay_avaliable_(const palf::LSN &offset,
+int ObTxCtx::check_replay_avaliable_(const wal::LSN &offset,
                                             const SCN &timestamp,
                                             const int64_t &part_log_no,
                                             bool &need_replay)
@@ -3415,7 +3415,7 @@ int ObTxCtx::push_replaying_log_ts(const SCN log_ts_ns, const int64_t log_entry_
 }
 
 int ObTxCtx::push_replayed_log_ts(const SCN log_ts_ns,
-                                         const palf::LSN &offset,
+                                         const wal::LSN &offset,
                                          const int64_t log_entry_no)
 {
   int ret = OB_SUCCESS;
@@ -3502,7 +3502,7 @@ int ObTxCtx::iter_next_log_for_replay(ObTxLogBlock &log_block,
   return ret;
 }
 
-int ObTxCtx::replay_one_part_of_big_segment(const palf::LSN &offset,
+int ObTxCtx::replay_one_part_of_big_segment(const wal::LSN &offset,
                                                    const share::SCN &timestamp,
                                                    const int64_t &part_log_no)
 {
@@ -3664,7 +3664,7 @@ void ObTxCtx::check_no_need_replay_checksum(const SCN &log_ts, const int index)
  *
  */
 int ObTxCtx::replay_redo_in_ctx(const ObTxRedoLog &redo_log,
-                                       const palf::LSN &offset,
+                                       const wal::LSN &offset,
                                        const SCN &timestamp,
                                        const int64_t &part_log_no,
                                        const bool is_tx_log_queue,
@@ -3725,7 +3725,7 @@ int ObTxCtx::replay_redo_in_ctx(const ObTxRedoLog &redo_log,
 //
 //
 int ObTxCtx::replay_rollback_to(const ObTxRollbackToLog &log,
-                                       const palf::LSN &offset,
+                                       const wal::LSN &offset,
                                        const SCN &timestamp,
                                        const int64_t &part_log_no,
                                        const bool is_tx_log_queue,
@@ -3864,7 +3864,7 @@ int ObTxCtx::replay_rollback_to(const ObTxRollbackToLog &log,
 }
 
 int ObTxCtx::replay_commit_info(const ObTxCommitInfoLog &commit_info_log,
-                                       const palf::LSN &offset,
+                                       const wal::LSN &offset,
                                        const SCN &timestamp,
                                        const int64_t &part_log_no,
                                        const bool pre_barrier)
@@ -3927,7 +3927,7 @@ ERRSIM_POINT_DEF(TX_REPLAY_COMMIT_FAIL_AFTER_NOTIFY_TABLELOCK)
 ERRSIM_POINT_DEF(TX_REPLAY_COMMIT_FAIL_AFTER_NOTIFY_ON_COMMIT)
 ERRSIM_POINT_DEF(TX_REPLAY_COMMIT_FAIL_AFTER_COMMIT)
 int ObTxCtx::replay_commit(const ObTxCommitLog &commit_log,
-                                  const palf::LSN &offset,
+                                  const wal::LSN &offset,
                                   const SCN &timestamp,
                                   const int64_t &part_log_no,
                                   const SCN &replay_compact_version)
@@ -4012,7 +4012,7 @@ int ObTxCtx::replay_commit(const ObTxCommitLog &commit_log,
 }
 
 int ObTxCtx::replay_clear(const ObTxClearLog &clear_log,
-                                 const palf::LSN &offset,
+                                 const wal::LSN &offset,
                                  const SCN &timestamp,
                                  const int64_t &part_log_no)
 {
@@ -4064,7 +4064,7 @@ ERRSIM_POINT_DEF(TX_REPLAY_ABORT_FAIL_AFTER_ABORT)
 ERRSIM_POINT_DEF(TX_REPLAY_ABORT_FAIL_AFTER_CLEAR)
 ERRSIM_POINT_DEF(TX_REPLAY_ABORT_FAIL_AFTER_NOTIFY_ON_ABORT)
 int ObTxCtx::replay_abort(const ObTxAbortLog &abort_log,
-                                 const palf::LSN &offset,
+                                 const wal::LSN &offset,
                                  const SCN &timestamp,
                                  const int64_t &part_log_no)
 {
@@ -4142,7 +4142,7 @@ int ObTxCtx::replay_abort(const ObTxAbortLog &abort_log,
 }
 
 int ObTxCtx::replay_multi_data_source(const ObTxMultiDataSourceLog &log,
-                                             const palf::LSN &lsn,
+                                             const wal::LSN &lsn,
                                              const SCN &timestamp,
                                              const int64_t &part_log_no)
 {
@@ -4226,7 +4226,7 @@ int ObTxCtx::replay_multi_data_source(const ObTxMultiDataSourceLog &log,
 }
 
 int ObTxCtx::replay_record(const ObTxRecordLog &log,
-                                  const palf::LSN &lsn,
+                                  const wal::LSN &lsn,
                                   const SCN &timestamp,
                                   const int64_t &part_log_no)
 {
@@ -5912,7 +5912,7 @@ int ObTxCtx::submit_redo_log_out(ObTxLogBlock &log_block,
   } else if (FALSE_IT(time_guard.click("before_submit_log_block"))) {
   } else if (OB_FAIL(submit_log_block_out_(log_block, share::SCN::min_scn(), log_cb, replay_hint))) {
   } else {
-    time_guard.click("submit_out_to_palf");
+    time_guard.click("submit_out_to_wal");
     submitted_scn = log_cb->get_log_ts();
     ret = after_submit_log_(log_block, log_cb, &helper);
     time_guard.click("after_submit");

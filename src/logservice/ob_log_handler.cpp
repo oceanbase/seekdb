@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define USING_LOG_PREFIX PALF
+#define USING_LOG_PREFIX WAL
 #include "ob_log_handler.h"
 #include "logservice/ob_i_log_storage.h"
 #include "logservice/ob_log_service.h"
@@ -26,19 +26,19 @@ using namespace common;
 using namespace obcall;
 namespace logservice
 {
-using namespace palf;
+using namespace wal;
 
 ObLogHandler::ObLogHandler() : self_(),
                                lock_(),
-                               palf_handle_(),
-                               palf_env_(NULL),
+                               wal_handle_(),
+                               wal_env_(NULL),
                                is_in_stop_state_(true),
                                is_inited_(false),
                                apply_status_(NULL),
                                apply_service_(NULL),
                                log_service_(NULL),
                                deps_lock_(),
-                               append_cost_stat_("[PALF STAT APPEND COST TIME]", 1 * 1000 * 1000),
+                               append_cost_stat_("[WAL STAT APPEND COST TIME]", 1 * 1000 * 1000),
                                local_append_enabled_(false),
                                is_offline_(false),
                                get_max_decided_scn_debug_time_(OB_INVALID_TIMESTAMP)
@@ -53,22 +53,22 @@ ObLogHandler::~ObLogHandler()
 int ObLogHandler::init(const common::ObAddr &self,
                        ObLogApplyService *apply_service,
                        ObLogService *log_service,
-                       PalfEnv *palf_env)
+                       Env *wal_env)
 {
   int ret = OB_SUCCESS;
   ObApplyStatus *apply_status = NULL;
   ObApplyStatusGuard guard;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(palf_env) ||
+  } else if (OB_ISNULL(wal_env) ||
              OB_ISNULL(apply_service) || OB_ISNULL(log_service)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid arguments", KP(palf_env));
+    CLOG_LOG(WARN, "invalid arguments", KP(wal_env));
   } else if (OB_FAIL(apply_service->get_apply_status(guard))) {
   } else if (NULL == (apply_status_ = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
-  } else if (OB_FAIL(palf_env->open(palf_handle_))) {
+  } else if (OB_FAIL(wal_env->open(wal_handle_))) {
   } else {
     get_max_decided_scn_debug_time_ = OB_INVALID_TIMESTAMP;
     apply_service_ = apply_service;
@@ -77,7 +77,7 @@ int ObLogHandler::init(const common::ObAddr &self,
     append_cost_stat_.set_extra_info("");
     local_append_enabled_.store(false, std::memory_order_release);
     self_ = self;
-    palf_env_ = palf_env;
+    wal_env_ = wal_env;
     is_in_stop_state_ = false;
     is_offline_ = true; // offline at default.
     is_inited_ = true;
@@ -94,8 +94,8 @@ bool ObLogHandler::is_valid() const
   return true == is_inited_ &&
          false == is_in_stop_state_ &&
          self_.is_valid() &&
-         true == palf_handle_.is_valid() &&
-         NULL != palf_env_ &&
+         true == wal_handle_.is_valid() &&
+         NULL != wal_env_ &&
          NULL != apply_status_ &&
          NULL != apply_service_ &&
          NULL != log_service_;
@@ -114,11 +114,11 @@ int ObLogHandler::stop()
     apply_status_->unregister_file_size_cb();
     tg.click("unreg cb end");
     if (OB_FAIL(apply_status_->stop())) {
-    } else if (false == palf_handle_.is_valid()) {
+    } else if (false == wal_handle_.is_valid()) {
     } else {
       tg.click("apply stop end");
-      palf_env_->close(palf_handle_);
-      tg.click("palf close end");
+      wal_env_->close(wal_handle_);
+      tg.click("wal close end");
     }
     CLOG_LOG(INFO, "stop log handler finish", KPC(this), KPC(apply_status_), KR(ret), K(tg));
   }
@@ -138,10 +138,10 @@ void ObLogHandler::destroy()
   apply_status_ = NULL;
   apply_service_ = NULL;
   log_service_ = NULL;
-  if (NULL != palf_env_ && true == palf_handle_.is_valid()) {
-    palf_env_->close(palf_handle_);
+  if (NULL != wal_env_ && true == wal_handle_.is_valid()) {
+    wal_env_->close(wal_handle_);
   }
-  palf_env_ = NULL;
+  wal_env_ = NULL;
   get_max_decided_scn_debug_time_ = OB_INVALID_TIMESTAMP;
 }
 
@@ -164,7 +164,7 @@ int ObLogHandler::append(const void *buffer,
   return ret;
 }
 
-int ObLogHandler::append_imported_groups(const palf::ImportedGroups &groups)
+int ObLogHandler::append_imported_groups(const wal::ImportedGroups &groups)
 {
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
@@ -173,7 +173,7 @@ int ObLogHandler::append_imported_groups(const palf::ImportedGroups &groups)
     ret = OB_NOT_INIT;
   } else if (is_in_stop_state_ || is_offline_) {
     ret = OB_NOT_RUNNING;
-  } else if (OB_FAIL(palf_handle_.append_imported_groups(groups))) {
+  } else if (OB_FAIL(wal_handle_.append_imported_groups(groups))) {
     if (OB_EAGAIN != ret) {
       CLOG_LOG(WARN, "appending imported groups failed", K(ret), K(groups.size()));
     }
@@ -181,30 +181,10 @@ int ObLogHandler::append_imported_groups(const palf::ImportedGroups &groups)
   return ret;
 }
 
-int ObLogHandler::get_append_mode_initial_scn(share::SCN &ref_scn) const
+int ObLogHandler::seek(const LSN &lsn, EntryIterator &iter)
 {
   int ret = OB_SUCCESS;
-  AccessMode access_mode = AccessMode::INVALID_ACCESS_MODE;
-  share::SCN curr_ref_scn;
-  ref_scn.reset();
-  RLockGuard guard(lock_);
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (is_in_stop_state_) {
-    ret = OB_NOT_RUNNING;
-  } else if (OB_FAIL(palf_handle_.get_access_mode_ref_scn(access_mode, curr_ref_scn))) {
-  } else if (AccessMode::APPEND == access_mode) {
-    ref_scn = curr_ref_scn;
-  } else {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  return ret;
-}
-
-int ObLogHandler::seek(const LSN &lsn, PalfBufferIterator &iter)
-{
-  int ret = OB_SUCCESS;
-  constexpr int64_t default_suggested_max_read_buf_size = PALF_BLOCK_SIZE;
+  constexpr int64_t default_suggested_max_read_buf_size = WAL_BLOCK_SIZE;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
@@ -213,10 +193,10 @@ int ObLogHandler::seek(const LSN &lsn, PalfBufferIterator &iter)
   return ret;
 }
 
-int ObLogHandler::seek(const LSN &lsn, PalfGroupBufferIterator &iter)
+int ObLogHandler::seek(const LSN &lsn, GroupIterator &iter)
 {
   int ret = OB_SUCCESS;
-  constexpr int64_t default_suggested_max_read_buf_size = PALF_BLOCK_SIZE;
+  constexpr int64_t default_suggested_max_read_buf_size = WAL_BLOCK_SIZE;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
@@ -229,7 +209,7 @@ int ObLogHandler::locate_by_scn_coarsely(const SCN &scn, LSN &result_lsn)
 {
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
-  if (OB_FAIL(palf_handle_.locate_by_scn_coarsely(scn, result_lsn))) {
+  if (OB_FAIL(wal_handle_.locate_by_scn_coarsely(scn, result_lsn))) {
   }
 
   return ret;
@@ -243,7 +223,7 @@ int ObLogHandler::locate_by_lsn_coarsely(const LSN &lsn, SCN &result_scn)
     ret = OB_NOT_INIT;
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
-  } else if (OB_FAIL(palf_handle_.locate_by_lsn_coarsely(lsn, result_scn))) {
+  } else if (OB_FAIL(wal_handle_.locate_by_lsn_coarsely(lsn, result_scn))) {
   }
   return ret;
 }
@@ -257,41 +237,41 @@ int ObLogHandler::get_begin_lsn(LSN &lsn) const
 {
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
-  ret = palf_handle_.get_begin_lsn(lsn);
+  ret = wal_handle_.get_begin_lsn(lsn);
   return ret;
 }
 
 int ObLogHandler::get_base_lsn(LSN &lsn) const
 {
   RLockGuard guard(lock_);
-  return palf_handle_.get_base_lsn(lsn);
+  return wal_handle_.get_base_lsn(lsn);
 }
 
 int ObLogHandler::get_end_lsn(LSN &lsn) const
 {
   RLockGuard guard(lock_);
-  return palf_handle_.get_end_lsn(lsn);
+  return wal_handle_.get_end_lsn(lsn);
 }
 
 int ObLogHandler::get_max_lsn(LSN &lsn) const
 {
   RLockGuard guard(lock_);
-  return palf_handle_.get_max_lsn(lsn);
+  return wal_handle_.get_max_lsn(lsn);
 }
 
 int ObLogHandler::get_max_scn(SCN &scn) const
 {
   RLockGuard guard(lock_);
-  return palf_handle_.get_max_scn(scn);
+  return wal_handle_.get_max_scn(scn);
 }
 
 int ObLogHandler::get_end_scn(SCN &scn) const
 {
   RLockGuard guard(lock_);
-  return palf_handle_.get_end_scn(scn);
+  return wal_handle_.get_end_scn(scn);
 }
 
-int ObLogHandler::get_palf_base_info(const LSN &base_lsn, PalfBaseInfo &palf_base_info)
+int ObLogHandler::get_wal_base_info(const LSN &base_lsn, BaseInfo &wal_base_info)
 {
   int ret = OB_SUCCESS;
   LSN new_base_lsn;
@@ -303,10 +283,10 @@ int ObLogHandler::get_palf_base_info(const LSN &base_lsn, PalfBaseInfo &palf_bas
   } else if (false == base_lsn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "Invalid argument", K(ret), K(base_lsn), K(lbt()));
-  } else if (FALSE_IT(new_base_lsn.val_ = lsn_2_block(base_lsn, PALF_BLOCK_SIZE) * PALF_BLOCK_SIZE)) {
+  } else if (FALSE_IT(new_base_lsn.val_ = lsn_2_block(base_lsn, WAL_BLOCK_SIZE) * WAL_BLOCK_SIZE)) {
   } else {
-    ret = palf_handle_.get_base_info(new_base_lsn, palf_base_info);
-    CLOG_LOG(INFO, "get_palf_base_info finish", KR(ret), K(base_lsn), K(new_base_lsn), K(palf_base_info));
+    ret = wal_handle_.get_base_info(new_base_lsn, wal_base_info);
+    CLOG_LOG(INFO, "get_wal_base_info finish", KR(ret), K(base_lsn), K(new_base_lsn), K(wal_base_info));
   }
   return ret;
 }
@@ -316,12 +296,12 @@ int ObLogHandler::append_(const void *buffer,
                           const share::SCN &ref_scn,
                           const bool need_nonblock,
                           AppendCb *cb,
-                          palf::LSN &lsn,
+                          wal::LSN &lsn,
                           share::SCN &scn)
 {
   int ret = OB_SUCCESS;
   int64_t wait_times = 0;
-  PalfAppendOptions opts;
+  AppendOptions opts;
   opts.need_nonblock = need_nonblock;
   ObTimeGuard tg("ObLogHandler::append", 100000);
   while (true) {
@@ -337,7 +317,7 @@ int ObLogHandler::append_(const void *buffer,
         // Re-check inside the quiescent critical section so that
         // fence_local_append_ (set_local_append_enabled(false) +
         // WaitQuiescent(ls_qs_)) closes the window where a caller that
-        // already passed the entry check still commits via palf_handle_,
+        // already passed the entry check still commits via wal_handle_,
         // advancing end_scn past the cutover_scn captured by
         // prepare_to_standby and tripping the durably-fenced promotion check.
         ret = OB_NOT_MASTER;
@@ -345,9 +325,9 @@ int ObLogHandler::append_(const void *buffer,
           CLOG_LOG(INFO, "local append is disabled (checked in critical section)",
               K(ret), K(nbytes), K(ref_scn));
         }
-      } else if (OB_FAIL(palf_handle_.append(opts, buffer, nbytes, ref_scn, lsn, scn))) {
+      } else if (OB_FAIL(wal_handle_.append(opts, buffer, nbytes, ref_scn, lsn, scn))) {
         if (REACH_TIME_INTERVAL(1*1000*1000)) {
-          CLOG_LOG(WARN, "palf_handle_ append failed", K(ret), KPC(this));
+          CLOG_LOG(WARN, "wal_handle_ append failed", K(ret), KPC(this));
         }
       } else {
         cb->set_append_finish_ts(ObTimeUtility::fast_current_time());
@@ -383,7 +363,7 @@ void ObLogHandler::wait_append_sync() {
   WaitQuiescent(ls_qs_);
 }
 
-int ObLogHandler::enable_replay(const palf::LSN &lsn,
+int ObLogHandler::enable_replay(const wal::LSN &lsn,
                                 const SCN &scn)
 {
   int ret = OB_SUCCESS;
@@ -464,7 +444,7 @@ int ObLogHandler::offline()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    PALF_LOG(INFO, "ObLogHandler has already been destroyed", K(ret), KPC(this));
+    WAL_LOG(INFO, "ObLogHandler has already been destroyed", K(ret), KPC(this));
   } else if (OB_FAIL(disable_replay())) {
   } else {
     WLockGuard guard(lock_);
@@ -474,13 +454,13 @@ int ObLogHandler::offline()
   return ret;
 }
 
-int ObLogHandler::diagnose_palf(palf::PalfDiagnoseInfo &diagnose_info) const
+int ObLogHandler::diagnose_wal(wal::DiagnoseInfo &diagnose_info) const
 {
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(palf_handle_.diagnose(diagnose_info))) {
+  } else if (OB_FAIL(wal_handle_.diagnose(diagnose_info))) {
   } else {
     // do nothing
   }
@@ -499,7 +479,7 @@ int ObLogHandler::online(const LSN &lsn, const SCN &scn)
     WLockGuard guard(lock_);
     //reset_meta to avoid contributing excessively large max_decided_scn
     //reset_meta is placed here rather than offline() because after offline, callbacks will be
-    //handled after offline which may refer to palf_committed_end_lsn_
+    //handled after offline which may refer to wal_committed_end_lsn_
     apply_status_->reset_meta();
     is_offline_ = false;
     CLOG_LOG(INFO, "LogHander online success", K(ret), KPC(this), K(lsn), K(scn));
@@ -534,7 +514,7 @@ int ObLogHandler::advance_base_lsn_impl_(const LSN &lsn)
   if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
     CLOG_LOG(WARN, "ObLogHandler is not running", KR(ret));
-  } else if (OB_FAIL(palf_handle_.advance_base_lsn(lsn))) {
+  } else if (OB_FAIL(wal_handle_.advance_base_lsn(lsn))) {
   } else {}
   return ret;
 }

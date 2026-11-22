@@ -343,7 +343,7 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
   ObDDLRedoLog tmp_log;
   int64_t log_start_pos = 0;
 
-  palf::LSN lsn;
+  wal::LSN lsn;
   const bool need_nonblock= false;
   SCN base_scn = SCN::min_scn();
   SCN scn;
@@ -423,7 +423,7 @@ int ObDDLRedoLogWriter::write_auto_fork_log(
   int64_t pos = 0;
   ObDDLClogCb *cb = nullptr;
 
-  palf::LSN lsn;
+  wal::LSN lsn;
   const bool need_nonblock = false;
   ObLS *ls = nullptr;
   if (OB_UNLIKELY(ObDDLClogType::DDL_TABLE_FORK_FREEZE_LOG != clog_type &&

@@ -266,7 +266,7 @@ public:
   bool is_stopped();
   int wait_until_refreshed(
       int64_t abs_timeout_us) override;
-  int get_min_dep_lsn(palf::LSN &min_dep_lsn) override;
+  int get_min_dep_lsn(wal::LSN &min_dep_lsn) override;
 
 public:
   //Refer to ObPurgeCompletedMonitorInfoTask

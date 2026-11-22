@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace palf;
+using namespace wal;
 using namespace share;
 namespace logservice
 {
@@ -87,7 +87,7 @@ bool ObReplayServiceTask::need_replay_immediately() const
 }
 
 //---------------ObReplayServiceSubmitTask---------------//
-int ObReplayServiceSubmitTask::init(const palf::LSN &base_lsn,
+int ObReplayServiceSubmitTask::init(const wal::LSN &base_lsn,
                                     const SCN &base_scn,
                                     ObReplayStatus *replay_status)
 {
@@ -97,7 +97,7 @@ int ObReplayServiceSubmitTask::init(const palf::LSN &base_lsn,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(type_), K(ret), K(replay_status));
   } else if (OB_FAIL(seek_log_iterator_no_shared_storage(
-                 replay_status->palf_env_, base_lsn, iterator_))) {
+                 replay_status->wal_env_, base_lsn, iterator_))) {
   } else if (OB_UNLIKELY(!base_scn.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "base_scn is invalid", K(type_), K(base_lsn), K(base_scn), KR(ret));
@@ -173,7 +173,7 @@ int ObReplayServiceSubmitTask::need_skip(const SCN &scn, bool &need_skip)
   return ret;
 }
 
-int ObReplayServiceSubmitTask::get_log(const char *&buffer, int64_t &nbytes, SCN &scn, palf::LSN &offset)
+int ObReplayServiceSubmitTask::get_log(const char *&buffer, int64_t &nbytes, SCN &scn, wal::LSN &offset)
 {
   return iterator_.get_entry(buffer, nbytes, scn, offset);
 }
@@ -195,7 +195,7 @@ int ObReplayServiceSubmitTask::next_log(const SCN &replayable_point,
           || !replayable_point.is_valid()) {
         // do nothing
       } else if (!next_min_scn.is_valid()) {
-        // should only occurs when palf has no log
+        // should only occurs when wal has no log
         CLOG_LOG(INFO, "next_min_scn is invalid", K(type_), K(replayable_point),
                  K(next_min_scn), K(next_to_submit_scn), K(ret), K(iterator_));
       } else if (next_min_scn < base_scn) {
@@ -463,8 +463,8 @@ ObReplayStatus::ObReplayStatus():
     pending_size_(0),
     pending_count_(0),
     submit_log_task_(),
-    palf_env_(NULL),
-    palf_handle_(),
+    wal_env_(NULL),
+    wal_handle_(),
     fs_cb_(),
     get_log_info_debug_time_(OB_INVALID_TIMESTAMP),
     try_wrlock_debug_time_(OB_INVALID_TIMESTAMP),
@@ -477,7 +477,7 @@ ObReplayStatus::~ObReplayStatus()
   destroy();
 }
 
-int ObReplayStatus::init(PalfEnv *palf_env,
+int ObReplayStatus::init(Env *wal_env,
                          ObLogReplayService *rp_sv)
 {
   //TODO: use replica type init need_replay
@@ -485,19 +485,19 @@ int ObReplayStatus::init(PalfEnv *palf_env,
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "replay status has already been inited", K(ret));
-  } else if (OB_ISNULL(palf_env) || OB_ISNULL(rp_sv)) {
+  } else if (OB_ISNULL(wal_env) || OB_ISNULL(rp_sv)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", K(rp_sv), KP(palf_env), K(ret));
-  } else if (OB_FAIL(palf_env->open(palf_handle_))) {
+    CLOG_LOG(WARN, "invalid argument", K(rp_sv), KP(wal_env), K(ret));
+  } else if (OB_FAIL(wal_env->open(wal_handle_))) {
   } else {
     get_log_info_debug_time_ = OB_INVALID_TIMESTAMP;
     try_wrlock_debug_time_ = OB_INVALID_TIMESTAMP;
     check_enable_debug_time_ = OB_INVALID_TIMESTAMP;
-    palf_env_ = palf_env;
+    wal_env_ = wal_env;
     rp_sv_ = rp_sv;
     IGNORE_RETURN new (&fs_cb_) ObReplayFsCb(this);
     is_inited_ = true;
-    if (OB_FAIL(palf_handle_.register_file_size_cb(&fs_cb_))) {
+    if (OB_FAIL(wal_handle_.register_file_size_cb(&fs_cb_))) {
     } else {
       CLOG_LOG(INFO, "replay status init success", K(ret), KPC(this));
     }
@@ -513,7 +513,7 @@ void ObReplayStatus::destroy()
 {
   int ret = OB_SUCCESS;
   // Note: Although the reference count of replay status has been set to 0, fs_cb_ may still access replay status at this time, so unregister_file_size_cb must be called first
-  if (OB_FAIL(palf_handle_.unregister_file_size_cb())) {
+  if (OB_FAIL(wal_handle_.unregister_file_size_cb())) {
   }
   WLockGuard wlock_guard(rwlock_);
   CLOG_LOG(INFO, "destuct replay status", KPC(this));
@@ -522,8 +522,8 @@ void ObReplayStatus::destroy()
     CLOG_LOG(ERROR, "is_enable when destucting", K(this));
   } else {
     is_inited_ = false;
-    if (palf_handle_.is_valid()) {
-      palf_env_->close(palf_handle_);
+    if (wal_handle_.is_valid()) {
+      wal_env_->close(wal_handle_);
     }
     submit_log_task_.destroy();
     for (int64_t i = 0; i < REPLAY_TASK_QUEUE_SIZE; ++i) {
@@ -536,7 +536,7 @@ void ObReplayStatus::destroy()
     get_log_info_debug_time_ = OB_INVALID_TIMESTAMP;
     try_wrlock_debug_time_ = OB_INVALID_TIMESTAMP;
     check_enable_debug_time_ = OB_INVALID_TIMESTAMP;
-    palf_env_ = NULL;
+    wal_env_ = NULL;
     rp_sv_ = NULL;
   }
 }
@@ -609,7 +609,7 @@ int ObReplayStatus::disable()
       rwlock_.unlock();
     } else {
       ret = OB_EAGAIN;
-      if (palf_reach_time_interval(1000 * 1000, try_wrlock_debug_time_)) {
+      if (wal_reach_time_interval(1000 * 1000, try_wrlock_debug_time_)) {
         CLOG_LOG(INFO, "try lock failed in disable", KPC(this), K(ret));
       }
     }
@@ -687,9 +687,9 @@ bool ObReplayStatus::is_idle() const
 int ObReplayStatus::stop_fetching()
 {
   block_submit();
-  // PALF dispatch holds its callback lock before entering replay status.
+  // WAL dispatch holds its callback lock before entering replay status.
   // Unregister outside rwlock_ to preserve that lock order.
-  return palf_handle_.unregister_file_size_cb();
+  return wal_handle_.unregister_file_size_cb();
 }
 
 int ObReplayStatus::update_end_offset(const LSN &lsn)
@@ -701,7 +701,7 @@ int ObReplayStatus::update_end_offset(const LSN &lsn)
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "replay status is not init", K(lsn), K(ret));
   } else if (!is_active_) {
-    if (palf_reach_time_interval(100 * 1000, check_enable_debug_time_)) {
+    if (wal_reach_time_interval(100 * 1000, check_enable_debug_time_)) {
       CLOG_LOG(INFO, "replay status is not enabled", K(this), K(ret), K(lsn));
     }
   } else if (OB_UNLIKELY(!lsn.is_valid())) {
@@ -743,7 +743,7 @@ int ObReplayStatus::get_replay_process(int64_t &submitted_log_size,
     replayed_log_size = min_unreplayed_lsn.val_ - base_lsn.val_;
     unreplayed_log_size = 0;
     CLOG_LOG(INFO, "local replay is disabled", K(min_unreplayed_lsn), K(base_lsn), KPC(this));
-  } else if (OB_FAIL(palf_handle_.get_end_lsn(committed_end_lsn))) {
+  } else if (OB_FAIL(wal_handle_.get_end_lsn(committed_end_lsn))) {
   } else {
     submitted_log_size = next_to_submit_lsn.val_ - base_lsn.val_;
     unsubmitted_log_size = committed_end_lsn.val_ - base_lsn.val_;
@@ -787,7 +787,7 @@ int ObReplayStatus::push_log_replay_task(ObLogReplayTask &task)
     if (OB_SUCC(ret)) {
       int index = 0;
       ObLogBaseType log_type = task.log_type_;
-      palf::LSN lsn = task.lsn_;
+      wal::LSN lsn = task.lsn_;
       share::SCN scn = task.scn_;
       bool is_pre_barrier = task.is_pre_barrier_;
       bool is_post_barrier = task.is_post_barrier_;
@@ -870,12 +870,12 @@ void ObReplayStatus::free_replay_task_log_buf(ObLogReplayTask *task)
   rp_sv_->free_replay_task_log_buf(task);
 }
 
-void ObReplayStatus::set_post_barrier_submitted(const palf::LSN &lsn)
+void ObReplayStatus::set_post_barrier_submitted(const wal::LSN &lsn)
 {
   ATOMIC_STORE(&post_barrier_lsn_.val_, lsn.val_);
 }
 
-int ObReplayStatus::set_post_barrier_finished(const palf::LSN &lsn)
+int ObReplayStatus::set_post_barrier_finished(const wal::LSN &lsn)
 {
   int ret = OB_SUCCESS;
   offset_t post_barrier_lsn_val = ATOMIC_LOAD(&post_barrier_lsn_.val_);
@@ -1123,7 +1123,7 @@ int ObReplayStatus::stat(LSReplayStat &stat) const
   stat.pending_cnt_ = ATOMIC_LOAD(&pending_count_);
   stat.unsubmitted_lsn_ = next_to_submit_lsn_;
   stat.unsubmitted_scn_ = next_to_submit_scn_;
-  // LogService fills the live PALF tail without retaining the replay executor.
+  // LogService fills the live WAL tail without retaining the replay executor.
   stat.end_lsn_.reset();
   return OB_SUCCESS;
 }

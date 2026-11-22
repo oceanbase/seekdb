@@ -1016,10 +1016,10 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             break;
           }
           case OB_ALL_VIRTUAL_LOG_STAT_TID: {
-            ObAllVirtualPalfStat *palf_stat = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualPalfStat, palf_stat))) {
+            ObAllVirtualWalStat *wal_stat = NULL;
+            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualWalStat, wal_stat))) {
             } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(palf_stat);
+              vt_iter = static_cast<ObVirtualTableIterator *>(wal_stat);
             }
             break;
           }
