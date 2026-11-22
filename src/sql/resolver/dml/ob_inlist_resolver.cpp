@@ -20,6 +20,9 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashmap.h"
+#include "sql/ob_sql_context.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
 
 namespace oceanbase
 {
@@ -275,10 +278,12 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObStmt *stmt,
                                                   ObIAllocator &alloc,
                                                   bool &is_question_mark,
-                                                  bool &is_enable)
+                                                  bool &is_enable,
+                                                  const ParseNode *&resolved_in_list)
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  resolved_in_list = &in_list;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -350,6 +355,118 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+    }
+  }
+  // 3. duplicate values do not change IN semantics. Compare the number of
+  //    distinct values, not the raw element count, with the threshold, so a
+  //    duplicate-heavy list still keeps the compact predicate that can be
+  //    pushed into a vector index scan.
+  if (OB_SUCC(ret) && is_enable && !is_prepare_stmt && threshold > 1
+      && T_OP_ROW != left_expr.get_expr_type()) {
+    if (OB_FAIL(compact_duplicate_inlist(in_list,
+                                         threshold,
+                                         param_store,
+                                         NULL == stmt ? NULL : stmt->get_query_ctx(),
+                                         alloc,
+                                         resolved_in_list))) {
+    } else if (resolved_in_list != &in_list) {
+      // The distinct values are below the threshold, resolve the compact list
+      // as an ordinary IN expression instead of a values table subquery.
+      is_enable = false;
+    }
+  }
+  return ret;
+}
+
+namespace {
+
+// Extracts the value of an integer IN-list element. Only exact integers are
+// accepted: removing any other element could change coercion or collation.
+bool get_int_inlist_value(const ParseNode &node,
+                          const ParamStore *param_store,
+                          int64_t &value)
+{
+  bool valid = false;
+  if (T_INT == node.type_) {
+    value = node.value_;
+    valid = true;
+  } else if (T_QUESTIONMARK == node.type_ && NULL != param_store
+             && node.value_ >= 0 && node.value_ < param_store->count()) {
+    const ObObjParam &param = param_store->at(node.value_);
+    if (ObIntType == param.get_type() && ObIntType == param.get_param_meta().get_type()) {
+      value = param.get_int();
+      valid = true;
+    }
+  }
+  return valid;
+}
+
+}  // namespace
+
+int ObInListResolver::compact_duplicate_inlist(const ParseNode &in_list,
+                                               const int64_t threshold,
+                                               const ParamStore *param_store,
+                                               ObQueryCtx *query_ctx,
+                                               ObIAllocator &alloc,
+                                               const ParseNode *&resolved_in_list)
+{
+  int ret = OB_SUCCESS;
+  hash::ObHashMap<int64_t, int64_t> first_positions;
+  ObSEArray<ParseNode *, 8> distinct_nodes;
+  ObSEArray<ObPCParamEqualInfo, 8> equal_params;
+  bool can_compact = threshold > 1
+                     && T_EXPR_LIST == in_list.type_
+                     && in_list.num_child_ >= threshold
+                     && NULL != in_list.children_;
+  if (can_compact && OB_FAIL(first_positions.create(in_list.num_child_))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && can_compact && i < in_list.num_child_; ++i) {
+    ParseNode *node = in_list.children_[i];
+    int64_t value = 0;
+    int64_t first_pos = -1;
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!get_int_inlist_value(*node, param_store, value)) {
+      // Mixed or non-constant lists keep their original representation.
+      can_compact = false;
+    } else {
+      const int hash_ret = first_positions.get_refactored(value, first_pos);
+      if (OB_HASH_NOT_EXIST == hash_ret) {
+        if (OB_FAIL(first_positions.set_refactored(value, i))) {
+        } else if (OB_FAIL(distinct_nodes.push_back(node))) {
+        } else if (distinct_nodes.count() >= threshold) {
+          // Enough distinct values remain, the values table is still useful.
+          can_compact = false;
+        }
+      } else if (OB_SUCCESS != hash_ret) {
+        ret = hash_ret;
+      } else if (T_QUESTIONMARK == node->type_) {
+        // A parameter can be removed only while it equals the retained one,
+        // so make the plan cache key enforce that equality.
+        ObPCParamEqualInfo equal_info;
+        equal_info.first_param_idx_ = in_list.children_[first_pos]->value_;
+        equal_info.second_param_idx_ = node->value_;
+        if (OB_FAIL(equal_params.push_back(equal_info))) {
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && can_compact && !distinct_nodes.empty()
+      && distinct_nodes.count() < in_list.num_child_) {
+    ParseNode *compact_list = NULL;
+    if (OB_ISNULL(compact_list = new_node(&alloc,
+                                          T_EXPR_LIST,
+                                          static_cast<int>(distinct_nodes.count())))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, &in_list, compact_list))) {
+    } else if (NULL != query_ctx
+               && OB_FAIL(append(query_ctx->all_equal_param_constraints_, equal_params))) {
+    } else {
+      compact_list->num_child_ = static_cast<int32_t>(distinct_nodes.count());
+      for (int64_t i = 0; i < distinct_nodes.count(); ++i) {
+        compact_list->children_[i] = distinct_nodes.at(i);
+      }
+      resolved_in_list = compact_list;
     }
   }
   return ret;
