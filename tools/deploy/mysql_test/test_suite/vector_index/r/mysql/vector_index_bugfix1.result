@@ -752,4 +752,12 @@ operator	cardinality	hit_count
 VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
+select distinct p.operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1471_all_match') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+operator
+VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)
+drop table t_issue1471_all_match;
 alter system set vector_memory_limit = 0;
