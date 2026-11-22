@@ -597,11 +597,8 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
     }
   } else if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
              ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
-    // change to black filter in below situation
-    // 1. if need project lob column and micro block has outrow lob  
-    // 2. if it is semistruct_filter_node, but not cs decoder (beacuase semistrcut white filter only support cs decoder)
-    if ((param_->has_lob_column_out() && reader_->has_lob_out_row())
-        || (filter->is_semistruct_filter_node() && ObIMicroBlockReader::CSDecoder != reader_->get_type())) {
+    // Change to a black filter when projecting an out-row LOB column.
+    if (param_->has_lob_column_out() && reader_->has_lob_out_row()) {
       sql::ObPhysicalFilterExecutor *physical_filter = static_cast<sql::ObPhysicalFilterExecutor *>(filter);
       if (OB_FAIL(decoder_->filter_pushdown_filter(parent,
                                                    *physical_filter,

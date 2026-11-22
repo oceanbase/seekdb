@@ -70,7 +70,6 @@ unity_cc_library(
         "//src/share:schema_model_interface",
         "//src/share:schema_registry",
         "//src/share:scn_interface",
-        "//src/share:semistruct",
         "//src/share:session_state",
         "//src/share:statement_type",
         "//src/share:system_variable_metadata",

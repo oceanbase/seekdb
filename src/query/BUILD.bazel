@@ -28,7 +28,6 @@ cc_library(
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_base",
         "//src/share:diagnostics",
-        "//src/share:semistruct",
     ],
     includes = ["api"],
     tags = ["manual"],
