@@ -1,0 +1,27 @@
+.github/scripts/package.py
+  s_99bd9318300c1c::t_96fcb00f13b902 45-47,67,94-96,107-118,120-130,164-165,238
+.github/packaging.json
+  s_99bd9318300c1c::t_96fcb00f13b902 6-27
+.github/workflows/package.yml
+  s_99bd9318300c1c::t_b2448123ff182f 129
+  s_99bd9318300c1c::t_d01aead9c75d64 112-113,115-128,130-136,140
+  s_99bd9318300c1c::t_c3c5caedd326a7 114
+package/README.md
+  s_99bd9318300c1c::t_d01aead9c75d64 27-32,41-43,51-52,56,69-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "30685f5c71c9690a1bd6c45dd9fb71b2d88e1fd6",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+MODULE.bazel
+  s_bf1541616e25c1::t_460672ba73057f 37,113
+MODULE.bazel.lock
+  s_bf1541616e25c1::t_e73098aa424211 208,211,218,225,232,518,572
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "599b5ff793ca26fb860c1ae6110bbf5602ca55a2",
+  "prompts": {},
+  "sessions": {
+    "s_bf1541616e25c1": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "c3fde286-c3a4-4e02-b5cd-53b0b2d3f70d",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

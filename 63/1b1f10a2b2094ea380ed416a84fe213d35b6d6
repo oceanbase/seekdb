@@ -1,0 +1,21 @@
+package/binary.py
+  s_99bd9318300c1c::t_4a37c751e10740 94,104,118,123,125-130,132,143,181
+package/pkg/bundle_dylibs.py
+  s_99bd9318300c1c::t_4a37c751e10740 20,23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "631b1f10a2b2094ea380ed416a84fe213d35b6d6",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

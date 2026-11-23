@@ -1,0 +1,25 @@
+.github/workflows/package.yml
+  s_99bd9318300c1c::t_98f6223e351adf 198,301
+.github/scripts/check_windows.ps1
+  s_99bd9318300c1c::t_98f6223e351adf 1-6
+.github/scripts/check_deb.py
+  s_99bd9318300c1c::t_98f6223e351adf 1-112
+.github/scripts/fixtures/seekdb-smoke.cnf
+  s_99bd9318300c1c::t_98f6223e351adf 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c9d0ee316a161a8c594bd1ab1c445e8520305fe5",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai <5187215+hnwyllmm@users.noreply.github.com>"
+    }
+  }
+}

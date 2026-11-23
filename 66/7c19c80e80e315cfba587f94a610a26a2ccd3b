@@ -1,0 +1,21 @@
+tests/mysqltest/t/array_avg_integer_bounds.test
+  s_1450aec9a62cfa::t_40c45bf338a80b 4-13
+tests/mysqltest/r/array_avg_integer_bounds.result
+  s_1450aec9a62cfa::t_40c45bf338a80b 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "667c19c80e80e315cfba587f94a610a26a2ccd3b",
+  "prompts": {},
+  "sessions": {
+    "s_1450aec9a62cfa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e8a1-2018-73d3-957b-6e23cb3716ec",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

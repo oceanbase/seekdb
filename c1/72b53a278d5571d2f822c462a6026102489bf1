@@ -1,0 +1,33 @@
+package/binary.py
+  s_99bd9318300c1c::t_d14cc3729157ef 16,87,92,101,109,112-116,125,131-148,157-158,160-170,175-176,180,182-183,186-187,197-199,201-204,208-212,231-236,238-239,246-256,259,262-264,269,277-278,401,411
+  s_99bd9318300c1c::t_f0142d32423ed7 126-127,159,178-179
+package/package.py
+  s_99bd9318300c1c::t_d14cc3729157ef 283,287
+package/README.md
+  s_99bd9318300c1c::t_42b50dba5306a4 65,117-121,171-172
+package/msi/build_msi.py
+  s_99bd9318300c1c::t_4b84b512dc818d 11,16,97
+bazel/toolchains/cc/linux_cc_toolchain_repo.bzl
+  s_99bd9318300c1c::t_4b84b512dc818d 73-89,120
+  s_99bd9318300c1c::t_f0142d32423ed7 51
+.github/workflows/package.yml
+  s_99bd9318300c1c::t_4b84b512dc818d 117
+package/tgz/seekdb-build.sh
+  s_99bd9318300c1c::t_4b84b512dc818d 3-4,9-25,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c172b53a278d5571d2f822c462a6026102489bf1",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

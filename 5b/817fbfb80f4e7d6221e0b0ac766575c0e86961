@@ -1,0 +1,26 @@
+unittest/include/windows-process-utils.ps1
+  s_f87238b17c0588::t_c2692e7a7be361 27-28,46-62,65-69
+unittest/include/nodejs/seekdb.js
+  s_f87238b17c0588::t_4e009bc2d678ea 245-248
+unittest/include/rust/src/lib.rs
+  s_f87238b17c0588::t_511bca4244a152 87-99,106
+  s_f87238b17c0588::t_41acf8c743d293 52
+unittest/include/go/seekdb/seekdb.go
+  s_f87238b17c0588::t_30de390f6bec79 46-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5b817fbfb80f4e7d6221e0b0ac766575c0e86961",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

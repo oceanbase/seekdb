@@ -1,0 +1,27 @@
+src/observer/BUILD.bazel
+  s_7966c2b79dc7d9::t_aa3b9e1f6fcd12 647-656
+bazel/final_link.bzl
+  s_7966c2b79dc7d9::t_a723c6e442ce6d 121-129
+  s_7966c2b79dc7d9::t_ad11bfe970e7a0 224
+  s_7966c2b79dc7d9::t_00f7029abf50c4 261-266
+  s_7966c2b79dc7d9::t_dae085eab09a8f 295
+  s_7966c2b79dc7d9::t_081040dbd6a62e 307
+  s_7966c2b79dc7d9::t_a8086da5c2586b 408
+  s_7966c2b79dc7d9::t_9b55af8f058df1 255-260,267-280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4ef507aadbc3ed4fed98171f9f9f99f74a071fd0",
+  "prompts": {},
+  "sessions": {
+    "s_7966c2b79dc7d9": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "3375ffcb-47f8-4626-a108-c5811ec63525",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}
