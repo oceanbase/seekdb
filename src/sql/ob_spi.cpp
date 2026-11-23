@@ -1642,7 +1642,10 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
             if (OB_SUCC(ret) && is_select) {
               ObPhysicalPlan *plan = OB_NOT_NULL(spi_result.get_result_set())
                   ? spi_result.get_result_set()->get_physical_plan() : NULL;
-              select_accesses_tables = OB_NOT_NULL(plan) && plan->get_access_table_num() > 0;
+              select_accesses_tables =
+                  OB_NOT_NULL(plan)
+                  && (plan->get_table_access_plans().count() > 0
+                      || plan->get_das_table_access_plans().count() > 0);
               if (select_accesses_tables) {
                 ob_reset_tsi_warning_buffer();
               }
