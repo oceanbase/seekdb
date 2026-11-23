@@ -47,6 +47,9 @@
 - Do not add unit tests for any other component, including C++ code and Rust FFI or CXX bridge layers exposed to C++, even when those layers live in a product Rust crate.
 - Validate other components through integration tests, mysqltest cases, or actual execution instead of adding unit tests. Use the repository's established test suites and test directories where applicable.
 - Keep test-only and benchmark-only files out of `tools/`.
+  SEEK-1510 has an explicit exception: keep `vector_index.hybrid_rebuild_null`,
+  its expected result, and its required embedding fixture in the established
+  `tools/deploy/mysql_test/` suite, as requested for that issue.
 - Validate tool and script changes by running the relevant commands and inspecting their outputs or generated artifacts.
 
 ### Downstream integration tests
