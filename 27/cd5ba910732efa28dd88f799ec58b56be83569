@@ -1,0 +1,36 @@
+tools/deploy/mysql_test/test_suite/vector_index/t/hybrid_rebuild_null.test
+  s_316c61c2ca7b50::t_671557f83165bf 1-8,10-71
+  s_316c61c2ca7b50::t_dce878e15a8f65 9
+AGENTS.md
+  s_316c61c2ca7b50::t_547c3c5406907a 43-45
+src/observer/vector_index/ob_vector_index_async_task_util.cpp
+  s_316c61c2ca7b50::t_f0854f58df2865 40,1885-1888,1890-1891
+tools/deploy/mysql_test/embedding_fixture.py
+  s_316c61c2ca7b50::t_fb644e6d109042 1-44
+src/observer/vector_index/ob_hybrid_vector_refresh_task.h
+  s_316c61c2ca7b50::t_d7181998fcec0c 69,99
+tools/deploy/mysqltest.py
+  s_316c61c2ca7b50::t_fb644e6d109042 8,19,410-425
+src/observer/vector_index/ob_hybrid_vector_refresh_task.cpp
+  s_316c61c2ca7b50::t_d7181998fcec0c 498-505,524-525,1007
+.github/workflows/seekdb.yml
+  s_316c61c2ca7b50::t_0a2c1b5226729b 9
+tools/deploy/mysql_test/test_suite/vector_index/r/mysql/hybrid_rebuild_null.result
+  s_316c61c2ca7b50::t_934bc7757e7b87 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "27cd5ba910732efa28dd88f799ec58b56be83569",
+  "prompts": {},
+  "sessions": {
+    "s_316c61c2ca7b50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20832-b996-7773-825e-2cb6868d3222",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
