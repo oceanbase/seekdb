@@ -333,6 +333,10 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
     ret_bool = true;
   } else if (T_INTO_FILE_LIST == tree->type_) {
     ret_bool = true;
+  } else if (T_FILE_SCAN_TABLE == tree->type_ || T_FILE_LIST_TABLE == tree->type_
+             || (T_INTO_OUTFILE == tree->type_ && 2 == tree->num_child_)) {
+    // File paths and options determine the schema and format during resolution.
+    ret_bool = true;
   } else if (T_EXTERNAL_FILE_FORMAT == tree->type_) {
     ret_bool = true;
   } else if (T_CHAR_CHARSET == tree->type_) {

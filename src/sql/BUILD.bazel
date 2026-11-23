@@ -426,3 +426,11 @@ cc_library(
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )
+
+cc_library(
+    name = "file_sql_test_headers",
+    testonly = True,
+    hdrs = ["engine/basic/ob_file_scan_utils.h"],
+    deps = [":sql_runtime_interface"],
+    visibility = ["//unittest/sql:__pkg__"],
+)

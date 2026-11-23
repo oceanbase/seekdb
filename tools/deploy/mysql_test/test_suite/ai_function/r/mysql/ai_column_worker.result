@@ -15,7 +15,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_worker_fail_ep',
 drop table if exists ai_column_p0_worker.docs;
 Warnings:
 Note	1051	Unknown table 'ai_column_p0_worker.docs'
-create table ai_column_p0_worker.docs(
+create table ai_column_p0_worker.docs_source(
 id bigint primary key,
 content varchar(200),
 tags json AI COLUMN (
@@ -25,6 +25,8 @@ score bigint AI COLUMN (
 AI_COMPLETE('p0_worker_complete', concat('Score: ', content))
 ) WITH (sync_mode='async', max_retries=2)
 );
+fork table ai_column_p0_worker.docs_source to ai_column_p0_worker.docs;
+truncate table ai_column_p0_worker.docs;
 start transaction;
 insert into ai_column_p0_worker.docs(id, content) values(1, 'typed-prompts');
 select tags is null and score is null as group_starts_hidden
@@ -124,6 +126,7 @@ drop table ai_column_p0_worker.independent_docs;
 drop table ai_column_p0_worker.fail_docs;
 drop table ai_column_p0_worker.retry_docs;
 drop table ai_column_p0_worker.docs;
+drop table ai_column_p0_worker.docs_source;
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_fail_ep');
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_complete_ep');
 call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_fail');

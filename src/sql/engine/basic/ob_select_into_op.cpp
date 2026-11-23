@@ -18,7 +18,10 @@
 
 #include <cmath>
 #include <inttypes.h>
+#include <cerrno>
 #include <memory>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "ob_select_into_op.h"
 #include "lib/utility/ob_platform_io.h"
@@ -40,7 +43,7 @@ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+    external_properties_, is_copy_, write_header_, copy_nullstr_, copy_header_names_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -185,12 +188,67 @@ int ObSelectIntoOp::calc_outfile_path()
   }
   if (OB_SUCC(ret) && (T_INTO_OUTFILE == into_type || T_INTO_DUMPFILE == into_type)
       && OB_FAIL(check_secure_file_path(basic_url_))) {
+    LOG_WARN("failed to check secure file path", K(ret));
+  } else if (OB_SUCC(ret) && MY_SPEC.is_copy_ && OB_FAIL(prepare_copy_temp_file())) {
+    LOG_WARN("failed to prepare COPY temporary file", K(ret));
   }
   return ret;
 }
+
+int ObSelectIntoOp::prepare_copy_temp_file()
+{
+  int ret = OB_SUCCESS;
+  struct stat target_stat;
+  const std::string target(basic_url_.ptr(), basic_url_.length());
+  if (0 == lstat(target.c_str(), &target_stat)) {
+    ret = OB_FILE_ALREADY_EXIST;
+    LOG_WARN("COPY target already exists", K(ret), K(basic_url_));
+  } else if (ENOENT != errno) {
+    ret = OB_IO_ERROR;
+    LOG_WARN("failed to inspect COPY target", K(ret), K(errno), K(basic_url_));
+  } else {
+    ObSqlString temp_path;
+    if (OB_FAIL(temp_path.append_fmt("%.*s.seekdb-copy-%d-%p.tmp",
+                                     basic_url_.length(), basic_url_.ptr(),
+                                     static_cast<int>(getpid()), this))) {
+      LOG_WARN("failed to format COPY temporary path", K(ret));
+    } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), temp_path.string(), copy_temp_url_))) {
+      LOG_WARN("failed to store COPY temporary path", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObSelectIntoOp::publish_or_cleanup_copy_file()
+{
+  int ret = OB_SUCCESS;
+  if (copy_temp_url_.empty() || !copy_temp_created_) {
+  } else {
+    const std::string temp(copy_temp_url_.ptr(), copy_temp_url_.length());
+    const std::string target(basic_url_.ptr(), basic_url_.length());
+    if (need_commit_ && !copy_published_) {
+      if (0 != link(temp.c_str(), target.c_str())) {
+        ret = EEXIST == errno ? OB_FILE_ALREADY_EXIST : OB_IO_ERROR;
+        LOG_WARN("failed to atomically publish COPY target", K(ret), K(errno), K(basic_url_));
+      } else {
+        copy_published_ = true;
+      }
+    }
+    if (0 != unlink(temp.c_str()) && ENOENT != errno) {
+      if (OB_SUCC(ret)) {
+        ret = OB_IO_ERROR;
+      }
+      LOG_WARN("failed to remove COPY temporary file", K(ret), K(errno), K(copy_temp_url_));
+    } else {
+      copy_temp_created_ = false;
+    }
+  }
+  return ret;
+}
+
 int ObSelectIntoOp::inner_get_next_row()
 {
-  int ret = 0 == top_limit_cnt_ ? OB_ITER_END : OB_SUCCESS;
+  int ret = OB_SUCCESS;
   int64_t row_count = 0;
   const ObItemType into_type = MY_SPEC.into_type_;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
@@ -201,6 +259,13 @@ int ObSelectIntoOp::inner_get_next_row()
   if (OB_SUCC(ret) && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
       && T_INTO_VARIABLES != into_type
       && OB_FAIL(create_the_only_data_writer(data_writer))) {
+    LOG_WARN("failed to create the only data writer", K(ret));
+  } else if (OB_SUCC(ret) && MY_SPEC.is_copy_ && MY_SPEC.write_header_
+             && OB_FAIL(write_copy_header(data_writer))) {
+    LOG_WARN("failed to write COPY header", K(ret));
+  }
+  if (OB_SUCC(ret) && 0 == top_limit_cnt_) {
+    ret = OB_ITER_END;
   }
   while (OB_SUCC(ret) && row_count < top_limit_cnt_) {
     clear_evaluated_flag();
@@ -255,6 +320,10 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_FAIL(create_the_only_data_writer(data_writer))) {
     } else if (OB_ISNULL(data_writer)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret));
+    } else if (MY_SPEC.is_copy_ && MY_SPEC.write_header_
+               && OB_FAIL(write_copy_header(data_writer))) {
+      LOG_WARN("failed to write COPY header", K(ret));
     }
   }
 
@@ -328,6 +397,15 @@ int ObSelectIntoOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(data_writer_) && OB_FAIL(data_writer_->close_data_writer())) {
+  }
+  if (MY_SPEC.is_copy_) {
+    if (OB_FAIL(ret)) {
+      need_commit_ = false;
+    }
+    const int publish_ret = publish_or_cleanup_copy_file();
+    if (OB_SUCCESS != publish_ret && OB_SUCC(ret)) {
+      ret = publish_ret;
+    }
   }
   return ret;
 }
@@ -935,7 +1013,12 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
   }
-  if (!has_escape_) {
+  if (MY_SPEC.is_copy_ && obj.is_null()) {
+    ObObj null_obj;
+    null_obj.set_varchar(MY_SPEC.copy_nullstr_);
+    null_obj.set_collation_type(cs_type_);
+    OZ(write_obj_to_file(null_obj, data_writer, true));
+  } else if (!has_escape_) {
     OZ(write_obj_to_file(obj, data_writer, false));
   } else if (obj.is_null()) {
     OZ(write_single_char_to_file(&char_escape_, data_writer));
@@ -945,6 +1028,29 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
   }
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
+  }
+  return ret;
+}
+
+int ObSelectIntoOp::write_copy_header(ObExternalFileWriter *data_writer)
+{
+  int ret = OB_SUCCESS;
+  ObCsvFileWriter *csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer);
+  if (OB_ISNULL(csv_data_writer)) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.copy_header_names_.count(); ++i) {
+    ObObj name_obj;
+    name_obj.set_varchar(MY_SPEC.copy_header_names_.at(i));
+    name_obj.set_collation_type(cs_type_);
+    OZ(print_field(name_obj, *csv_data_writer));
+    if (OB_SUCC(ret) && i + 1 < MY_SPEC.copy_header_names_.count()) {
+      OZ(write_obj_to_file(field_str_, *csv_data_writer));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    OZ(write_obj_to_file(line_str_, *csv_data_writer));
+    OZ(csv_data_writer->flush_shared_buf(shared_buf_));
   }
   return ret;
 }
@@ -1165,6 +1271,7 @@ int ObSelectIntoOp::prepare_escape_printer()
   OZ(print_wchar_to_buf(buf, buf_len, pos, wchar_field, escape_printer_.field_terminator_, cs_type_));
   OZ(print_wchar_to_buf(buf, buf_len, pos, wchar_line, escape_printer_.line_terminator_, cs_type_));
   OZ(print_wchar_to_buf(buf, buf_len, pos, wchar_replace, escape_printer_.convert_replacer_, cs_type_));
+  escape_printer_.escape_nul_ = !MY_SPEC.is_copy_;
   escape_printer_.coll_type_ = cs_type_;
   escape_printer_.ignore_convert_failed_ = true; // todo@linyi provide user-defined interface
   return ret;
@@ -1239,13 +1346,18 @@ int ObSelectIntoOp::create_the_only_data_writer(ObExternalFileWriter *&data_writ
   } else if (OB_ISNULL(data_writer)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    data_writer->url_ = basic_url_;
+    data_writer->url_ = MY_SPEC.is_copy_ ? copy_temp_url_ : basic_url_;
     data_writer_ = data_writer;
   }
-  if (OB_FAIL(ret)) {
-  } else if (T_INTO_OUTFILE == MY_SPEC.into_type_ && MY_SPEC.is_single_
-             && OB_FAIL(data_writer->open_file())) {
-  } else if (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_ && MY_SPEC.buffer_size_ > 0) {
+  if (OB_SUCC(ret) && T_INTO_OUTFILE == MY_SPEC.into_type_ && MY_SPEC.is_single_
+      && OB_FAIL(data_writer->open_file())) {
+    LOG_WARN("failed to open file", K(ret));
+  }
+  if (OB_SUCC(ret) && MY_SPEC.is_copy_) {
+    copy_temp_created_ = true;
+  }
+  if (OB_SUCC(ret) && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
+      && MY_SPEC.buffer_size_ > 0) {
     csv_data_writer = static_cast<ObCsvFileWriter*>(data_writer);
     if (OB_FAIL(csv_data_writer->alloc_buf(ctx_.get_allocator(), MY_SPEC.buffer_size_))) {
     }

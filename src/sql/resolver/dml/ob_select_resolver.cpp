@@ -30,6 +30,10 @@
 #include "sql/parser/ob_parser_utils.h"
 
 #include "sql/executor/ob_memory_tracker.h"
+
+#include <algorithm>
+#include <cctype>
+#include <set>
 namespace oceanbase
 {
 using namespace common;
@@ -1646,6 +1650,19 @@ int ObSelectResolver::expand_target_list(
   } else if (table_item.is_function_table()) {
     if (OB_FAIL(resolve_all_function_table_columns(table_item, &column_items))) {
     }
+  } else if (table_item.is_file_table()) {
+    ObDMLStmt *stmt = get_stmt();
+    if (OB_ISNULL(stmt)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_column_size(); ++i) {
+        const ColumnItem *column = stmt->get_column_item(i);
+        if (OB_NOT_NULL(column) && column->table_id_ == table_item.table_id_
+            && OB_FAIL(column_items.push_back(*column))) {
+          LOG_WARN("failed to append file table column", K(ret), K(i));
+        }
+      }
+    }
   } else if (table_item.is_json_table()) {
     if (OB_FAIL(resolve_all_json_table_columns(table_item, &column_items))) {
     }
@@ -3080,6 +3097,131 @@ int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
   return ret;
 }
 
+int ObSelectResolver::resolve_copy_outfile(const ParseNode *node,
+                                           ObSelectIntoItem &into_item)
+{
+  int ret = OB_SUCCESS;
+  ObSelectStmt *select_stmt = get_select_stmt();
+  char delimiter = ',';
+  char quote = '"';
+  char escape = '"';
+  bool write_header = true;
+  bool has_format = false;
+  std::string nullstr;
+  std::set<std::string> seen_options;
+  if (OB_ISNULL(node) || 2 != node->num_child_ || OB_ISNULL(node->children_[0])
+      || OB_ISNULL(select_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
+    LOG_WARN("failed to resolve COPY target path", K(ret));
+  }
+  const ParseNode *options = OB_SUCC(ret) ? node->children_[1] : NULL;
+  if (OB_SUCC(ret) && OB_NOT_NULL(options) && T_ARGUMENT_LIST != options->type_) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && OB_NOT_NULL(options) && i < options->num_child_; ++i) {
+    const ParseNode *option = options->children_[i];
+    const ParseNode *name_node = OB_ISNULL(option) || 2 != option->num_child_ ? NULL : option->children_[0];
+    const ParseNode *value_node = OB_ISNULL(option) || 2 != option->num_child_ ? NULL : option->children_[1];
+    if (OB_ISNULL(name_node) || OB_ISNULL(value_node) || OB_ISNULL(name_node->str_value_)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      std::string name(name_node->str_value_, name_node->str_len_);
+      std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) { return std::tolower(ch); });
+      if (!seen_options.insert(name).second) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if ("format" == name) {
+        has_format = true;
+        ObString format(value_node->str_len_, value_node->str_value_);
+        if (0 != format.case_compare("csv")) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this COPY format");
+        }
+      } else if ("header" == name) {
+        if (T_BOOL != value_node->type_) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          write_header = 0 != value_node->value_;
+        }
+      } else if ("delimiter" == name || "delim" == name || "sep" == name
+                 || "quote" == name || "escape" == name) {
+        ObString value;
+        if (OB_FAIL(resolve_str_const(*value_node, value)) || 1 != value.length()) {
+          ret = OB_INVALID_ARGUMENT;
+        } else if ("quote" == name) {
+          quote = value.ptr()[0];
+        } else if ("escape" == name) {
+          escape = value.ptr()[0];
+        } else {
+          delimiter = value.ptr()[0];
+        }
+      } else if ("nullstr" == name) {
+        ObString value;
+        if (OB_FAIL(resolve_str_const(*value_node, value))) {
+        } else {
+          nullstr.assign(value.ptr(), value.length());
+        }
+      } else if ("encoding" == name) {
+        ObString value(value_node->str_len_, value_node->str_value_);
+        if (0 != value.case_compare("utf8") && 0 != value.case_compare("utf8mb4")) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this COPY encoding");
+        }
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this COPY option");
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !has_format) {
+    const ObString target_path = into_item.outfile_name_.get_varchar();
+    const char *unsupported_suffixes[] = {".parquet", ".json", ".jsonl", ".ndjson"};
+    for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(unsupported_suffixes); ++i) {
+      const int32_t suffix_len = static_cast<int32_t>(strlen(unsupported_suffixes[i]));
+      if (target_path.length() >= suffix_len
+          && 0 == ObString(suffix_len, target_path.ptr() + target_path.length() - suffix_len)
+                    .case_compare(unsupported_suffixes[i])) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this COPY target format");
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    char *csv_chars = static_cast<char *>(allocator_->alloc(3));
+    if (OB_ISNULL(csv_chars)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      csv_chars[0] = delimiter;
+      csv_chars[1] = quote;
+      csv_chars[2] = escape;
+      into_item.is_copy_ = true;
+      into_item.write_header_ = write_header;
+      into_item.is_single_ = true;
+      into_item.is_optional_ = true;
+      into_item.field_str_.set_varchar(ObString(1, csv_chars));
+      into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
+      into_item.closed_cht_.set_char_value(csv_chars + 1, 1);
+      into_item.closed_cht_.set_collation_type(ObCharset::get_system_collation());
+      into_item.escaped_cht_.set_char_value(csv_chars + 2, 1);
+      into_item.escaped_cht_.set_collation_type(ObCharset::get_system_collation());
+    }
+    const ObString null_value(static_cast<int32_t>(nullstr.length()), nullstr.data());
+    if (OB_SUCC(ret) && OB_FAIL(ob_write_string(*allocator_, null_value, into_item.copy_nullstr_))) {
+      LOG_WARN("failed to copy COPY null string", K(ret));
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_select_item_size(); ++i) {
+    const SelectItem &select_item = select_stmt->get_select_item(i);
+    ObString header_name;
+    if (OB_FAIL(ob_write_string(*allocator_, select_item.alias_name_, header_name))) {
+      LOG_WARN("failed to copy COPY header name", K(ret), K(i));
+    } else if (OB_FAIL(into_item.copy_header_names_.push_back(header_name))) {
+      LOG_WARN("failed to append COPY header name", K(ret), K(i));
+    }
+  }
+  return ret;
+}
+
 int ObSelectResolver::resolve_into_clause(const ParseNode *node)
 {
   int ret = OB_SUCCESS;
@@ -3106,6 +3248,11 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
       if (T_INTO_OUTFILE == node->type_) { // into outfile
         if (is_in_set_query()) {
           ret = OB_INAPPROPRIATE_INTO;
+          LOG_WARN("select into outfile can not in set query", K(ret));
+        } else if (2 == node->num_child_) {
+          if (OB_FAIL(resolve_copy_outfile(node, *into_item))) {
+            LOG_WARN("resolve COPY TO failed", K(ret));
+          }
         } else if (node->num_child_ == 3 && NULL != node->children_[1]
             && T_EXTERNAL_FILE_FORMAT == node->children_[1]->type_) { // Handle with `FORMAT`
           if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item))) {

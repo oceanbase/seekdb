@@ -71,7 +71,8 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
-      external_properties_(alloc)
+      external_properties_(alloc),
+      is_copy_(false), write_header_(false), copy_nullstr_(), copy_header_names_(alloc)
   {
   }
 
@@ -91,6 +92,10 @@ public:
   int64_t buffer_size_;
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
+  bool is_copy_;
+  bool write_header_;
+  common::ObString copy_nullstr_;
+  common::ObFixedArray<common::ObString, common::ObIAllocator> copy_header_names_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
 };
@@ -126,7 +131,10 @@ public:
       external_properties_(),
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
       block_id_(0),
-      need_commit_(true)
+      need_commit_(true),
+      copy_temp_url_(),
+      copy_temp_created_(false),
+      copy_published_(false)
   {
   }
 
@@ -136,7 +144,7 @@ public:
     ObEscapePrinter():
       enclose_(), escape_(), zero_(), field_terminator_(), line_terminator_(), convert_replacer_(),
       need_enclose_(false), do_encode_(false), do_escape_(false), print_hex_(false),
-      ignore_convert_failed_(false) {}
+      ignore_convert_failed_(false), escape_nul_(true) {}
     int operator() (const ObString &src_str, const ob_wc_t &unicode_value) {
       int ret = OB_SUCCESS;
       ObString dst_str = src_str;
@@ -152,7 +160,7 @@ public:
         }
       }
       if (OB_FAIL(ret) || !do_escape_ || print_hex_) {
-      } else if (dst_str.compare(zero_) == 0
+      } else if ((escape_nul_ && dst_str.compare(zero_) == 0)
                  || dst_str.compare(enclose_) == 0
                  || dst_str.compare(escape_) == 0
                  || (!need_enclose_ && (dst_str.compare(field_terminator_) == 0
@@ -162,7 +170,7 @@ public:
       if (OB_FAIL(ret)) {
       } else if (print_hex_) {
         ret = hex_print(dst_str.ptr(), dst_str.length(), buf_, buf_len_, pos_);
-      } else if (do_escape_ && dst_str.compare(zero_) == 0) {
+      } else if (do_escape_ && escape_nul_ && dst_str.compare(zero_) == 0) {
         char zero = '0';
         ret = databuff_memcpy(buf_, buf_len_, pos_, 1, &zero);
       } else {
@@ -182,6 +190,7 @@ public:
     bool do_escape_;
     bool print_hex_;
     bool ignore_convert_failed_;
+    bool escape_nul_;
     char *buf_;
     int64_t buf_len_;
     int64_t pos_;
@@ -203,6 +212,7 @@ private:
   int into_dumpfile(ObExternalFileWriter *data_writer);
   int into_outfile(ObExternalFileWriter *data_writer);
   int into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFileWriter *data_writer);
+  int write_copy_header(ObExternalFileWriter *data_writer);
   int extract_fisrt_wchar_from_varhcar(const ObObj &obj, int32_t &wchar);
   int print_wchar_to_buf(char *buf,
                          const int64_t buf_len,
@@ -256,6 +266,8 @@ private:
   int create_the_only_data_writer(ObExternalFileWriter *&data_writer);
   int new_data_writer(ObExternalFileWriter *&data_writer);
   int check_secure_file_path(ObString file_name);
+  int prepare_copy_temp_file();
+  int publish_or_cleanup_copy_file();
   char *get_json_buf() { return json_buf_; }
   int64_t get_json_buf_len() { return json_buf_len_; }
   char *get_shared_buf() { return shared_buf_; }
@@ -292,6 +304,9 @@ private:
   ObExternalFileFormat::FormatType format_type_;
   uint32_t block_id_;
   bool need_commit_;
+  ObString copy_temp_url_;
+  bool copy_temp_created_;
+  bool copy_published_;
   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
 
 };

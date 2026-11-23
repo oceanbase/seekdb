@@ -549,6 +549,12 @@ final_link(
         "@platforms//os:linux": [":_unittest_in_process_entry", ":in_process_api"],
         "//conditions:default": [],
     }),
+    # The Rust staticlib bundles native bridges and their SDK dependencies.
+    # Resolve these archives on demand instead of force-loading them twice.
+    sdk_deps = select({
+        "@platforms//os:linux": ["//rust:bridges"],
+        "//conditions:default": [],
+    }),
     ordered_link_files = _ORDERED_LINK_FILES,
     extra_inputs = _EXTRA_LINK_INPUTS,
     linkopts = _SYSTEM_LINKOPTS + _SHARED_LINKOPTS + sanity_linkopts(),

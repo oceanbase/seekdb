@@ -297,6 +297,7 @@ SQL_INTERFACE_CLOSURE_HEADERS = [
     "monitor/ob_sql_plan.h",
     "ob_end_trans_callback.h",
     "ob_end_trans_cb_packet_param.h",
+    "ob_file_scan_common.h",
     "ob_i_end_trans_callback.h",
     "ob_optimizer_trace_impl.h",
     "ob_sql_config_provider.h",

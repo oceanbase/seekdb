@@ -16252,6 +16252,7 @@ int ObDDLService::generate_table_schemas(const ObIArray<const ObTableSchema*> &o
     } else {
       new_schema_version = gen_schema_version_array.at(schema_index++);
       tmp_schema->set_schema_version(new_schema_version);
+      tmp_schema->sync_ai_column_schema_version(new_schema_version);
       // to improve
       if (OB_FAIL(generate_tablet_id(*tmp_schema))) {
       } else if (tmp_schema->is_partitioned_table()) {
@@ -16339,6 +16340,7 @@ int ObDDLService::new_truncate_table_in_trans(const ObIArray<const ObTableSchema
       ObSchemaOperationType operation_type = OB_DDL_UPDATE_TABLE_SCHEMA_VERSION;
       if (OB_SUCC(ret)) {
         new_table_schemas.at(0)->set_schema_version(latest_table_schema_version);
+        new_table_schemas.at(0)->sync_ai_column_schema_version(latest_table_schema_version);
         if (OB_FAIL(schema_service->get_table_sql_service()
                                     .update_table_attribute(trans,
                                                             *new_table_schemas.at(0),
@@ -16799,8 +16801,10 @@ int ObDDLService::truncate_table(const ObTruncateTableArg &arg,
             false/*need_redistribute_column_id, to avoid column_id mismatched between data table and index ones.*/,
             new_table_schema))) {
           } else if (OB_FAIL(schema_service->fetch_new_table_id(new_table_id))) {
+          } else if (FALSE_IT(new_table_schema.set_table_id(new_table_id))) {
+          } else if (OB_FAIL(new_table_schema.bind_ai_column_schema_ids())) {
+            LOG_WARN("failed to rebind AI columns to new table", K(ret), K(new_table_id));
           } else {
-            new_table_schema.set_table_id(new_table_id);
             // reset auto increment after truncate table
             new_table_schema.set_auto_increment(1);
             if (OB_FAIL(table_schemas.push_back(new_table_schema))) {
@@ -17031,8 +17035,10 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
   } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(check_inner_stat())) {
   } else if (OB_FAIL(schema_service.fetch_new_table_id(new_table_id))) {
+  } else if (FALSE_IT(new_table_schema.set_table_id(new_table_id))) {
+  } else if (OB_FAIL(new_table_schema.bind_ai_column_schema_ids())) {
+    LOG_WARN("failed to rebind AI columns to new table", K(ret), K(new_table_id));
   } else {
-    new_table_schema.set_table_id(new_table_id);
     new_table_schema.set_table_name(new_table_name);
     new_table_schema.set_database_id(new_database_schema.get_database_id());
     new_table_schema.set_define_user_id(define_user_id);

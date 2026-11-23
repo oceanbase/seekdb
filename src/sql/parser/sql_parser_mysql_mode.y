@@ -41,6 +41,30 @@
 #include "sql/parser/sql_parser_mysql_mode_lex.h"
 #include "sql/parser/sql_parser_base.h"
 
+// DESCRIBE SELECT * FROM a file reader exposes its inferred schema.
+static ParseNode *get_described_file_table(ParseNode *stmt)
+{
+  if (NULL == stmt || T_SELECT != stmt->type_) {
+    return NULL;
+  }
+  ParseNode *from = stmt->children_[PARSE_SELECT_FROM];
+  ParseNode *list = stmt->children_[PARSE_SELECT_SELECT];
+  ParseNode *project = NULL != list && 1 == list->num_child_ ? list->children_[0] : NULL;
+  ParseNode *star = NULL != project && T_PROJECT_STRING == project->type_
+      && 1 == project->num_child_ ? project->children_[0] : NULL;
+  ParseNode *file = NULL != from && T_FROM_LIST == from->type_ && 1 == from->num_child_
+      ? from->children_[0] : NULL;
+  if (NULL == file || T_FILE_SCAN_TABLE != file->type_ || NULL == star || T_STAR != star->type_) {
+    return NULL;
+  }
+  for (int i = 0; i < stmt->num_child_; ++i) {
+    if (i != PARSE_SELECT_SELECT && i != PARSE_SELECT_FROM && NULL != stmt->children_[i]) {
+      return NULL;
+    }
+  }
+  return file;
+}
+
 #define GEN_EXPLAN_STMT(no_use, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
   (void)(no_use); \
   ParseNode *type_node = NULL; \
@@ -286,8 +310,8 @@ END_P SET_VAR DELIMITER
         ERROR_CODE ERROR_P ERRORS ESCAPE EXCHANGE EXCLUDING EXECUTE EXPANSION EXPORT OUTLINE
         EXTENDED EXCLUSIVE EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN
 
-        FAIL FAILOVER FAST FAULTS FIELDS FILEX FIRST FIRST_VALUE FIXED FLUSH FORMAT
-        FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
+        FAIL FAILOVER FAST FAULTS FIELDS FILEX FILE_SCAN FILE_LIST FILE_SCHEMA FIRST FIRST_VALUE FIXED FLUSH FORMAT
+        FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER GLOB
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GROUP_CONCAT GROUPING
@@ -337,7 +361,8 @@ END_P SET_VAR DELIMITER
         REPEATABLE RESET RESPECT RESTART RESTORE RETRY RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE
         REWRITE ROLLBACK ROLLUP ROUTINE ROW ROWID ROW_COUNT ROW_FORMAT ROWS RTREE
         RUN RECYCLEBIN REPLICATION ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS
-        RANK READ_ONLY RECOVERY REJECT ROLE
+        RANK READ_ONLY READ_CSV READ_CSV_AUTO READ_JSON READ_JSON_AUTO READ_NDJSON READ_NDJSON_AUTO READ_PARQUET
+        RECOVERY REJECT ROLE PARQUET_SCAN
 
         SAMPLE SAVEPOINT SCALARS SCHEMA_NAME SCN SCOPE SCORE SECOND SECURITY SEED
         SEMISTRUCT_ENCODING_TYPE SERIAL SERIALIZABLE SESSION SESSION_USER SET_TP SHARE SHARED SHUTDOWN SIGNED
@@ -385,7 +410,7 @@ END_P SET_VAR DELIMITER
 %type <node> date_unit date_params timestamp_params
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
 %type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
-%type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
+%type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate pl_expr_stmt
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
 %type <node> case_arg when_clause_list when_clause case_default
@@ -512,6 +537,12 @@ END_P SET_VAR DELIMITER
 %type <node> column_list_with_boost with_param_column_ref
 %type <node> es_sql_opt
 %type <node> hybrid_search_expr hybrid_search_param
+%type <node> file_reader_expr file_reader_name file_reader_options file_reader_option_list
+%type <node> file_reader_option file_reader_option_name glob_expr
+%type <node> copy_stmt copy_to_clause copy_options copy_option_list copy_option
+%type <node> copy_option_name copy_option_value
+%type <node> copy_projection copy_projection_list
+%type <ival> explain_or_desc
 %type <node> vector_similarity_expr vector_similarity_metric
 %type <node> algorithm_opt lock_opt
 %type <node> flush_privileges_stmt opt_flush_privileges_scope
@@ -557,6 +588,7 @@ opt_end_p:
 /* only preparable statement will set question mark size */
 stmt:
     select_stmt             { $$ = $1; question_mark_issue($$, result); }
+  | copy_stmt               { $$ = $1; question_mark_issue($$, result); }
   | insert_stmt             { $$ = $1; question_mark_issue($$, result); }
   | create_table_stmt       {
     $$ = $1;
@@ -8469,6 +8501,143 @@ expr { $$ = $1;}
  *
  *****************************************************************************/
 
+copy_stmt:
+COPY '(' select_no_parens ')' copy_to_clause
+{
+  $$ = $3;
+  if (OB_NOT_NULL($$->children_[PARSE_SELECT_INTO])
+      || OB_NOT_NULL($$->children_[PARSE_SELECT_INTO_EXTRA])) {
+    yyerror(&@5, result, "COPY query must not contain INTO\n");
+    YYERROR;
+  } else {
+    $$->children_[PARSE_SELECT_INTO_EXTRA] = $5;
+  }
+}
+| COPY relation_factor copy_to_clause
+{
+  ParseNode *star_node = NULL;
+  ParseNode *project_node = NULL;
+  ParseNode *project_list = NULL;
+  ParseNode *table_node = NULL;
+  ParseNode *from_list = NULL;
+  malloc_terminal_node(star_node, result->malloc_pool_, T_STAR);
+  malloc_non_terminal_node(project_node, result->malloc_pool_, T_PROJECT_STRING, 1, star_node);
+  merge_nodes(project_list, result, T_PROJECT_LIST, project_node);
+  malloc_non_terminal_node(table_node, result->malloc_pool_, T_ORG, 4, $2, NULL, NULL, NULL);
+  merge_nodes(from_list, result, T_FROM_LIST, table_node);
+  malloc_select_node($$, result->malloc_pool_);
+  $$->children_[PARSE_SELECT_SELECT] = project_list;
+  $$->children_[PARSE_SELECT_FROM] = from_list;
+  $$->children_[PARSE_SELECT_INTO_EXTRA] = $3;
+}
+| COPY relation_factor '(' copy_projection_list ')' copy_to_clause
+{
+  ParseNode *project_list = NULL;
+  ParseNode *table_node = NULL;
+  ParseNode *from_list = NULL;
+  merge_nodes(project_list, result, T_PROJECT_LIST, $4);
+  malloc_non_terminal_node(table_node, result->malloc_pool_, T_ORG, 4, $2, NULL, NULL, NULL);
+  merge_nodes(from_list, result, T_FROM_LIST, table_node);
+  malloc_select_node($$, result->malloc_pool_);
+  $$->children_[PARSE_SELECT_SELECT] = project_list;
+  $$->children_[PARSE_SELECT_FROM] = from_list;
+  $$->children_[PARSE_SELECT_INTO_EXTRA] = $6;
+}
+;
+
+copy_projection_list:
+copy_projection
+{
+  $$ = $1;
+}
+| copy_projection_list ',' copy_projection
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+copy_projection:
+relation_name
+{
+  ParseNode *column_ref = NULL;
+  malloc_non_terminal_node(column_ref, result->malloc_pool_, T_COLUMN_REF, 3, NULL, NULL, $1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_PROJECT_STRING, 1, column_ref);
+}
+;
+
+copy_to_clause:
+TO STRING_VALUE copy_options
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INTO_OUTFILE, 2, $2, $3);
+}
+;
+
+copy_options:
+/* EMPTY */
+{
+  $$ = NULL;
+}
+| '(' copy_option_list ')'
+{
+  merge_nodes($$, result, T_ARGUMENT_LIST, $2);
+}
+| WITH '(' copy_option_list ')'
+{
+  merge_nodes($$, result, T_ARGUMENT_LIST, $3);
+}
+;
+
+copy_option_list:
+copy_option
+{
+  $$ = $1;
+}
+| copy_option_list ',' copy_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+copy_option:
+copy_option_name COMP_EQ copy_option_value
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ASSIGN_ITEM, 2, $1, $3);
+}
+| copy_option_name copy_option_value
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ASSIGN_ITEM, 2, $1, $2);
+}
+| copy_option_name
+{
+  ParseNode *true_node = NULL;
+  malloc_terminal_node(true_node, result->malloc_pool_, T_BOOL);
+  true_node->value_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ASSIGN_ITEM, 2, $1, true_node);
+}
+;
+
+copy_option_name:
+relation_name
+{
+  $$ = $1;
+}
+| DELIMITER
+{
+  make_name_node($$, result->malloc_pool_, "delimiter");
+}
+;
+
+copy_option_value:
+signed_literal
+{
+  $$ = $1;
+}
+| relation_name
+{
+  $$ = $1;
+}
+;
+
 select_stmt:
 select_no_parens opt_when
 {
@@ -10889,6 +11058,14 @@ tbl_name
 {
   $$ = $1;
 }
+| file_reader_expr
+{
+  $$ = $1;
+}
+| glob_expr
+{
+  $$ = $1;
+}
 ;
 
 tbl_name:
@@ -12305,8 +12482,16 @@ explain_or_desc relation_factor opt_desc_column_option
   $$->value_ = 0;
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS, 4, $$, $2, NULL, $3);
 }
-
-| explain_or_desc explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);}
+| explain_or_desc explainable_stmt
+{
+  ParseNode *file_node = $1[0] != EXPLAIN ? get_described_file_table($2) : NULL;
+  if (NULL != file_node) {
+    file_node->value_ = 1;
+    $$ = $2;
+  } else {
+    GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);
+  }
+}
 | explain_or_desc PRETTY explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY, $3, NULL, NULL);}
 | explain_or_desc PRETTY_COLOR explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY_COLOR, $3, NULL, NULL);}
 
@@ -12346,9 +12531,9 @@ explain_or_desc relation_factor opt_desc_column_option
 ;
 
 explain_or_desc:
-EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+EXPLAIN  { $$[0] = EXPLAIN; }
+| DESCRIBE { $$[0] = DESCRIBE; }
+| DESC     { $$[0] = DESC; }
 ;
 
 explainable_stmt:
@@ -17500,6 +17685,107 @@ literal
 }
 ;
 
+file_reader_expr:
+file_reader_name '(' literal file_reader_options ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 4, $3, $1, $4, NULL);
+}
+| file_reader_name '(' literal file_reader_options ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 4, $3, $1, $4, $6);
+}
+| file_reader_name '(' literal file_reader_options ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 4, $3, $1, $4, $7);
+}
+;
+
+file_reader_name:
+READ_CSV
+{
+  make_name_node($$, result->malloc_pool_, "read_csv");
+}
+| READ_CSV_AUTO
+{
+  make_name_node($$, result->malloc_pool_, "read_csv_auto");
+}
+| READ_JSON
+{
+  make_name_node($$, result->malloc_pool_, "read_json");
+}
+| READ_JSON_AUTO
+{
+  make_name_node($$, result->malloc_pool_, "read_json_auto");
+}
+| READ_NDJSON
+{
+  make_name_node($$, result->malloc_pool_, "read_ndjson");
+}
+| READ_NDJSON_AUTO
+{
+  make_name_node($$, result->malloc_pool_, "read_ndjson_auto");
+}
+| READ_PARQUET
+{
+  make_name_node($$, result->malloc_pool_, "read_parquet");
+}
+| PARQUET_SCAN
+{
+  make_name_node($$, result->malloc_pool_, "parquet_scan");
+}
+;
+
+file_reader_options:
+/* EMPTY */
+{
+  $$ = NULL;
+}
+| ',' file_reader_option_list
+{
+  merge_nodes($$, result, T_ARGUMENT_LIST, $2);
+}
+;
+
+file_reader_option_list:
+file_reader_option
+{
+  $$ = $1;
+}
+| file_reader_option_list ',' file_reader_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+file_reader_option:
+file_reader_option_name COMP_EQ signed_literal
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ASSIGN_ITEM, 2, $1, $3);
+}
+;
+
+file_reader_option_name:
+relation_name
+{
+  $$ = $1;
+}
+;
+
+glob_expr:
+GLOB '(' literal ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_LIST_TABLE, 2, $3, NULL);
+}
+| GLOB '(' literal ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_LIST_TABLE, 2, $3, $5);
+}
+| GLOB '(' literal ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_LIST_TABLE, 2, $3, $6);
+}
+;
+
 unreserved_keyword:
 unreserved_keyword_for_role_name { $$=$1;}
 | unreserved_keyword_ambiguous_roles { $$=$1;}
@@ -18203,6 +18489,18 @@ ACCOUNT
 |       INCONSISTENT 
 |       INDIVIDUAL
 |       HYBRID_SEARCH
+|       FILE_SCAN
+|       FILE_LIST
+|       FILE_SCHEMA
+|       GLOB
+|       READ_CSV
+|       READ_CSV_AUTO
+|       READ_JSON
+|       READ_JSON_AUTO
+|       READ_NDJSON
+|       READ_NDJSON_AUTO
+|       READ_PARQUET
+|       PARQUET_SCAN
 ;
 
 unreserved_keyword_special:
