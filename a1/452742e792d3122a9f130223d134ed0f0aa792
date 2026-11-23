@@ -1,0 +1,19 @@
+src/sql/ob_spi.cpp
+  s_fa53ea079f3123::t_27608b57340cf8 1602-1604,1702-1715,1738-1746
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a1452742e792d3122a9f130223d134ed0f0aa792",
+  "prompts": {},
+  "sessions": {
+    "s_fa53ea079f3123": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20771-0c72-7270-8c9b-f05d3eb07e79",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}
