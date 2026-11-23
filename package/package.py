@@ -325,7 +325,11 @@ def main():
                 metadata["build_config"] = options.build_config
                 debug = work / "debug-info"
                 primary = Path("bin/seekdb.exe" if options.layout == "windows" else "bin/seekdb")
-                records = debug_symbols.separate(binary_package, debug, options.layout, original.resolve(), primary)
+                # Bazel produces the executable and PDB in the same link action.
+                records = debug_symbols.separate(
+                    binary_package, debug, options.layout, original.resolve(), primary,
+                    verify_pdb=options.seekdb_bin is not None,
+                )
                 built_at = datetime.now(timezone.utc).replace(microsecond=0)
                 related = {}
                 if records:
