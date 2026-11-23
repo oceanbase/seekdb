@@ -83,7 +83,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
 {
   int ret = OB_SUCCESS;
   storage::ObFTParseHelper tokenize_helper;
-  const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
   storage::ObFTWordMap token_map;
 
@@ -92,7 +91,7 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
-  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+  } else if (OB_FAIL(token_map.create(param.token_map_bucket_count_, common::ObMemAttr("FTWordMap")))) {
   } else if (
       (0 != param.fulltext_.length())
       && OB_FAIL(tokenize_helper.segment(
@@ -129,6 +128,7 @@ ObExprTokenize::TokenizeParam ::TokenizeParam()
     parser_name_(ObString(OB_DEFAULT_FULLTEXT_PARSER_NAME)),
     meta_(),
     fulltext_(),
+    token_map_bucket_count_(2),
     output_mode_(OUTPUT_MODE::DEFAULT)
 {
 }
@@ -310,6 +310,10 @@ int ObExprTokenize::parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeP
                    expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(),
                    param.fulltext_))) {
       LOG_WARN("failed to read tokenize fulltext", K(ret));
+    } else {
+      // Preserve inline input sizing while accounting for materialized LOB data.
+      const int64_t size_hint = MAX(fulltext_datum->get_string().length(), param.fulltext_.length());
+      param.token_map_bucket_count_ = MIN(MAX(size_hint / 2, 2), 997);
     }
     param.meta_.set_varchar(); // as we hardcoded in fts_index
     param.meta_.set_collation_type(expr.args_[0]->obj_meta_.get_collation_type());

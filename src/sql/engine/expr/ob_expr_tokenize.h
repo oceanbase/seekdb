@@ -73,6 +73,7 @@ private:
     ObString properties_;
     ObObjMeta meta_;
     ObString fulltext_;
+    int64_t token_map_bucket_count_;
     enum OUTPUT_MODE
     {
       DEFAULT,
