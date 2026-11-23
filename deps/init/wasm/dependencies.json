@@ -1,10 +1,4 @@
 {
-  "openssl": {
-    "version": "1.1.1u",
-    "url": "https://codeload.github.com/openssl/openssl/tar.gz/refs/tags/OpenSSL_1_1_1u",
-    "sha256": "fafe27202bde4238dce258d82ec8a8592a657842e5431264620a933a0c9436b7",
-    "source_directory": "openssl-OpenSSL_1_1_1u"
-  },
   "boost_mpl_backport": {
     "version": "1.74.0 native header bundle",
     "path": "boost/mpl/aux_/integral_wrapper.hpp",

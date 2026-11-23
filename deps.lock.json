@@ -5,18 +5,42 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-android-arm64-v8a-api26-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "1c56becb2d54655fdc79f3edf3a78e1ea2705f700481f58d8a9c1c5cc261e9b1"
       },
+      "libcurl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-android-arm64-v8a-api26-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
+        "sha256": "dc1d6fc023c8721a519689b159e335ec746dd996a4ea8c990e8a460ed50dc7f6"
+      },
+      "openssl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-android-arm64-v8a-api26-20261120T071231%2B0000-c79e60669ad8.tar.gz",
+        "sha256": "c8cf77720b754f3badb35ce2e217b56a014b3922295a9e0cd1aa0e835c1e5a4e"
+      },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-android-arm64-v8a-api26-20261116T070344%2B0000-97588f036a3a.tar.gz",
         "sha256": "6508edba1550b02f8e11c8d898b9bb79f69dd376158452f7ed13123357c51868"
       }
     },
     "ios-arm64-device-min18": {
+      "libcurl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-ios-arm64-device-min18-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
+        "sha256": "d25e4d0036e8bbe06060b41c588067f22bf28ff4d0ee77ca70bbbb60c77cf56c"
+      },
+      "openssl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-ios-arm64-device-min18-20261120T071231%2B0000-c79e60669ad8.tar.gz",
+        "sha256": "855dbe6a3e1e5f60ead1a3b27f537c8082e4c6caf65fd83746acd39c09444da0"
+      },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-ios-arm64-device-min18-20261116T070344%2B0000-97588f036a3a.tar.gz",
         "sha256": "f3da41f8752b0781377b7283c0112bbf81c3f24b7c68c6c3a949ceb1bfdaed33"
       }
     },
     "ios-arm64-simulator-min18": {
+      "libcurl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-ios-arm64-simulator-min18-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
+        "sha256": "016840289d6a03ddc646f8da109220fd9a53d0292fb2424178b19e0eaf6fc40f"
+      },
+      "openssl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-ios-arm64-simulator-min18-20261120T071231%2B0000-c79e60669ad8.tar.gz",
+        "sha256": "ba6fd3cbd8808fc7acb7249788d78370857857c690cf17bd994b622cf7dd23e4"
+      },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-ios-arm64-simulator-min18-20261116T070344%2B0000-97588f036a3a.tar.gz",
         "sha256": "e708ec65aecaea1ed45e799990fa08147b12ea97f399d241192405c358ac9908"
@@ -34,6 +58,14 @@
       "jemalloc": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-linux-aarch64-glibc217-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "80343fd4b97c62c9689007d3229f0ea05f8d062b10136a6f094787e154d678ee"
+      },
+      "libcurl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-linux-aarch64-glibc217-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
+        "sha256": "f7c1cc019fc513df585f9bf61dda71336f0a0228c265f45c6bad7b2be37e2568"
+      },
+      "openssl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-linux-aarch64-glibc217-20261120T071231%2B0000-c79e60669ad8.tar.gz",
+        "sha256": "4ed1c5b31af2ac66b0fae861f7520e840297b58845b2d7e500b52d948bbdc9ed"
       },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-linux-aarch64-glibc217-20261116T070344%2B0000-97588f036a3a.tar.gz",
@@ -53,6 +85,14 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-linux-x86_64-glibc217-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "041ae2dce281770af17c18bec4dbcb3b0524e88366217eca38c0f797c15e64d9"
       },
+      "libcurl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-linux-x86_64-glibc217-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
+        "sha256": "2d9b870b5df738596c8d3d50525911631acc81be57ecbad60d932af53c364d70"
+      },
+      "openssl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-linux-x86_64-glibc217-20261120T071231%2B0000-c79e60669ad8.tar.gz",
+        "sha256": "dc2b745ce912ccff3359c1beb3418111acfcd19d696d4cf269b5965e7cd43d6e"
+      },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-linux-x86_64-glibc217-20261116T070344%2B0000-97588f036a3a.tar.gz",
         "sha256": "d9b9d2d7f6122d6e4a2e60c46afa2ec7d3e3858db42c194687d234fd4f086a53"
@@ -63,9 +103,17 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-macos-arm64-min13-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "9acb925380fdb1c326513f1fe2a718cbccefa196bc12cf7e36aaa02d131c3473"
       },
+      "libcurl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-macos-arm64-min13-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
+        "sha256": "aa2a52401e5f2c40d6aa8012a05df2773e9e532de6c4853f78c1852103c5627a"
+      },
       "llvm": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/llvm-17.0.6/llvm-17.0.6-bin-macos-arm64-min13-20261123T022610%2B0000-8516872bda60.tar.gz",
         "sha256": "8cce39f189c2fa59b5609b3b25db247a2666adbdaee6ec82d3501399ba15c2d9"
+      },
+      "openssl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-macos-arm64-min13-20261120T071231%2B0000-c79e60669ad8.tar.gz",
+        "sha256": "16ef56becc490a61ed545d9c1d50493254753c5a91fedbaebf0306c113637ae3"
       },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-macos-arm64-min13-20261116T070344%2B0000-97588f036a3a.tar.gz",
@@ -73,6 +121,10 @@
       }
     },
     "wasm32-emscripten": {
+      "openssl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-wasm32-emscripten-20261120T071231%2B0000-c79e60669ad8.tar.gz",
+        "sha256": "8e3983d9e4db79cb93f47fb9ce64f3405f0baaf524b9c5f04f1c52aaff02abe5"
+      },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-wasm32-emscripten-20261117T020514%2B0000-696998510ad2.tar.gz",
         "sha256": "bed161ba48217216dea31d3750abc992302457f2e3b69e0b5fd076d3a81ec3a2"
@@ -83,9 +135,17 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-windows-x86_64-md-20261114T020301%2B0000-845c8920ddfb.tar.gz",
         "sha256": "c4613853aabe251fa5abf12dec68bd468cf47551735185f1270ae228bd9cef49"
       },
+      "libcurl": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-windows-x86_64-md-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
+        "sha256": "634e632830e7d4509b3d3b80a638cf93c3ed84a239c791b94dc0a8976c513774"
+      },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-windows-x86_64-md-20261116T070344%2B0000-97588f036a3a.tar.gz",
         "sha256": "e1f27d782f614caad7a24ae19a2fcb40f64a63405b1ae9ea1cfd427b7c8191aa"
+      },
+      "zlib": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/zlib-1.4/zlib-1.4-bin-windows-x86_64-md-20261105-011c485ba4bf.tar.gz",
+        "sha256": "dcb67fdba7ab3c827329bf90f11cdcca57ae5d30fa8482a3804c4b2c1fecd681"
       }
     }
   }

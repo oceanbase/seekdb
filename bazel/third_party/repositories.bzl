@@ -99,34 +99,19 @@ def _third_party_headers_repository_impl(repository_ctx):
         "omp.h", "ompx.h", "omp-tools.h", "ompt.h", "lapack.h", "lapacke.h",
         "lapacke_config.h", "lapacke_mangling.h", "lapacke_utils.h", "cblas.h",
     ]
-    if ios_sdk:
-        prefix = str(repository_ctx.workspace_root) + "/deps/ios/" + ios_sdk + "/devel"
-        if not repository_ctx.path(prefix + "/lib/libssl.a").exists:
-            fail("Missing iOS dependencies; run ./build.py init --ios" + (" --simulator" if ios_sdk == "iphonesimulator" else ""))
-        target_headers = repository_ctx.path(prefix + "/include")
-        target_names = [child.basename for child in target_headers.readdir()]
-        locked_headers = locked_sdk + "/include"
-        if repository_ctx.path(locked_headers).exists:
-            for child in repository_ctx.path(locked_headers).readdir():
-                repository_ctx.symlink(child, "include/" + child.basename)
-                target_names.append(child.basename)
-        for child in repository_ctx.path(headers).readdir():
-            if child.basename not in target_names and child.basename not in source_headers + ["boost"]:
-                repository_ctx.symlink(child, "include/" + child.basename)
-        for child in target_headers.readdir():
-            if child.basename not in source_headers + ["boost"]:
-                repository_ctx.symlink(child, "include/" + child.basename)
-        repository_ctx.symlink(prefix + "/verified", "verified")
-        repository_ctx.symlink(prefix + "/licenses", "licenses")
-        libraries = prefix + "/lib"
+    if ios_sdk or platform == "wasm":
+        libraries = locked_sdk + "/lib"
         libraries64 = libraries
-    elif platform == "wasm":
-        locked_headers = locked_sdk + "/include"
-        if repository_ctx.path(locked_headers).exists:
-            for child in repository_ctx.path(locked_headers).readdir():
-                repository_ctx.symlink(child, "include/" + child.basename)
+        if not repository_ctx.path(libraries + "/libssl.a").exists:
+            option = ("--ios" + (" --simulator" if ios_sdk == "iphonesimulator" else "")) if ios_sdk else "--wasm"
+            fail("Missing target dependencies; run ./build.py init " + option)
+        locked_names = []
+        for child in repository_ctx.path(locked_sdk + "/include").readdir():
+            repository_ctx.symlink(child, "include/" + child.basename)
+            locked_names.append(child.basename)
+        skipped = source_headers + locked_names + (["boost"] if ios_sdk else [])
         for child in repository_ctx.path(headers).readdir():
-            if child.basename not in source_headers:
+            if child.basename not in skipped:
                 repository_ctx.symlink(child, "include/" + child.basename)
     else:
         locked_headers = locked_sdk + "/include"
@@ -136,12 +121,12 @@ def _third_party_headers_repository_impl(repository_ctx):
             repository_ctx.symlink(headers, "include")
     repository_ctx.symlink(sdk + "/devtools", "devtools")
     locked_libraries = locked_sdk + "/lib"
-    if repository_ctx.path(locked_libraries).exists:
+    if locked_libraries != libraries and repository_ctx.path(locked_libraries).exists:
         _link_directory_contents(repository_ctx, [locked_libraries, libraries], "lib")
     else:
         repository_ctx.symlink(libraries, "lib")
     if ios_sdk:
-        repository_ctx.symlink(locked_sdk + "/manifest.json", "locked_manifest.json")
+        repository_ctx.symlink(locked_sdk + "/manifests", "locked_manifests")
         repository_ctx.symlink(locked_sdk + "/share/licenses", "locked_licenses")
     repository_ctx.symlink(libraries64, "lib64")
     repository_ctx.file("BUILD.bazel", '''load("@seekdb//bazel/third_party:targets.bzl", "sdk_targets")

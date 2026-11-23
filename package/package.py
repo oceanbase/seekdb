@@ -125,7 +125,8 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
             copy(ROOT / "package/msi/seekdb.cnf", config / "seekdb.cnf")
             sdk = dependencies.parent / "prebuilt/native"
             shutil.copytree(sdk / "share/licenses", destination / "licenses", dirs_exist_ok=True)
-            copy(sdk / "manifest.json", share / "dependencies/sdk-manifest.json")
+            copy(sdk / "manifests/vsag.json", share / "dependencies/sdk-manifest.json")
+            shutil.copytree(sdk / "manifests", share / "dependencies/sdk-manifests", dirs_exist_ok=True)
             copy(ROOT / "deps.lock.json", share / "dependencies/deps.lock.json")
         helpers.mkdir(parents=True, exist_ok=True)
         return

@@ -351,7 +351,8 @@ def install(profile, destination, cache_directory):
 
 def install_locked(lock_file, destination, cache_directory, system, architecture):
     packages = locked_packages(lock_file, system, architecture)
-    key = hashlib.sha256(json.dumps(packages, sort_keys=True).encode("utf-8")).hexdigest()
+    layout = {"version": 2, "packages": packages}
+    key = hashlib.sha256(json.dumps(layout, sort_keys=True).encode("utf-8")).hexdigest()
     if ready(destination, key):
         print("Locked dependencies ready: " + str(destination), flush=True)
         return
@@ -370,6 +371,12 @@ def install_locked(lock_file, destination, cache_directory, system, architecture
             archive = locked_archive(package, archive_directory)
             print("Preparing locked package " + package["name"], flush=True)
             unpack(archive, prefix, ignore_owner=platform.system() == "Linux")
+            # Each archive uses the same manifest filename at its root.
+            manifest = prefix / "manifest.json"
+            if prefix == stage and manifest.is_file():
+                manifests = stage / "manifests"
+                manifests.mkdir(exist_ok=True)
+                manifest.rename(manifests / (package["name"] + ".json"))
         (stage / key).touch()
         (stage / "DONE").touch()
         remove_directory(destination)
@@ -460,9 +467,6 @@ def main(arguments):
         install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/android", cache_directory,
                        "Android", "arm64")
     if options.ios:
-        subprocess.run([
-            sys.executable, str(PROFILES / "ios/build.py"), "--reuse", "--jobs", str(os.cpu_count() or 1),
-        ] + (["--simulator"] if options.simulator else []), cwd=ROOT, check=True)
         install_locked(ROOT / "deps.lock.json",
                        ROOT / "deps/prebuilt" / ("ios_simulator" if options.simulator else "ios"),
                        cache_directory, "iOSSimulator" if options.simulator else "iOSDevice", "arm64")

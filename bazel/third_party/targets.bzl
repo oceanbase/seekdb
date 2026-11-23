@@ -52,9 +52,7 @@ SDK_IMPORTS = {
 }
 
 SDK_FILEGROUPS = {
-    "ios_base_metadata": {"srcs": ["verified/*.json"]},
-    "ios_base_licenses": {"srcs": ["licenses/**/*"]},
-    "ios_locked_metadata": {"srcs": ["locked_manifest.json"]},
+    "ios_locked_metadata": {"srcs": ["locked_manifests/*.json"]},
     "ios_locked_licenses": {"srcs": ["locked_licenses/**/*"]},
     "sanity_pass": {"srcs": ["devtools/lib64/libsanitypass.so"]},
 }
@@ -74,9 +72,6 @@ NATIVE_LINK_FILES = [
 _WINDOWS_SHARED = {
     "libcrypto": ("openssl/libcrypto.lib", "openssl_bin/libcrypto-3-x64.dll", []),
     "libssl": ("openssl/libssl.lib", "openssl_bin/libssl-3-x64.dll", [":libcrypto"]),
-    "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":curl_headers", ":curl_zlib_runtime"]),
-    "curl_zlib_runtime": ("lib/zlib.lib", "bin/zlib1.dll", []),
-    "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
     "pthreads": ("lib/pthreadVC3.lib", "bin/pthreadVC3.dll", []),
@@ -101,6 +96,13 @@ def _windows_libraries():
             hdrs = native.glob(["include/openssl/*.h"]) if name == "libcrypto" else [],
             includes = ["include"] if name == "libcrypto" else [],
         )
+    cc_import(name = "_curl_archive", static_library = "lib/libcurl.lib", visibility = ["//visibility:private"])
+    cc_import(name = "_zlib_archive", static_library = "lib/libzs.lib", visibility = ["//visibility:private"])
+    cc_library(
+        name = "curl",
+        deps = [":curl_headers", ":_curl_archive", ":_zlib_archive"],
+        linkopts = ["ws2_32.lib", "iphlpapi.lib", "bcrypt.lib", "advapi32.lib", "crypt32.lib", "secur32.lib"],
+    )
     # Archives within one upstream package stay private to its library target.
     archives = {
         "absl": (native.glob(["lib/absl_*.lib"]), [":abseil_dll"]),
@@ -131,6 +133,8 @@ def sdk_targets(windows = False):
             attributes = attributes | {"deps": _WINDOWS_HEADER_LIBRARIES[name]}
         if windows and name == "absl_headers":
             attributes = attributes | {"defines": ["ABSL_CONSUME_DLL"]}
+        if windows and name == "curl_headers":
+            attributes = attributes | {"defines": ["CURL_STATICLIB"]}
         cc_library(name = name, **(attributes | {"hdrs": native.glob(attributes["hdrs"], allow_empty = True)}))
     for name, attributes in SDK_IMPORTS.items():
         if windows:
