@@ -39,6 +39,37 @@ using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::blocksstable;
 
+namespace {
+
+int append_quoted_identifier(
+    const ObString &identifier,
+    const char *prefix,
+    ObSqlString &sql_string)
+{
+  int ret = OB_SUCCESS;
+  int64_t start = 0;
+  if (OB_UNLIKELY(OB_ISNULL(identifier.ptr()))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql_string.append_fmt("`%s", nullptr == prefix ? "" : prefix))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < identifier.length(); ++i) {
+      if ('`' == identifier[i]) {
+        if (OB_FAIL(sql_string.append(identifier.ptr() + start, i - start))) {
+        } else if (OB_FAIL(sql_string.append("``", 2))) {
+        } else {
+          start = i + 1;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(sql_string.append(identifier.ptr() + start, identifier.length() - start))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(sql_string.append("`"))) {
+    }
+  }
+  return ret;
+}
+
+}
+
 ObDDLTaskSerializeField::ObDDLTaskSerializeField()
 {
   reset();
@@ -549,7 +580,6 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
   // append comma
   if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
@@ -559,9 +589,11 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append("cast("))) {
+      } else if (OB_FAIL(append_quoted_identifier(column_name_info.column_name_, nullptr, sql_string))) {
+      } else if (OB_FAIL(sql_string.append(" as unsigned)"))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(append_quoted_identifier(column_name_info.column_name_, nullptr, sql_string))) {
     }
   }
   // append AS
@@ -571,8 +603,10 @@ int ObDDLUtil::generate_column_name_str(
   }
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_quoted_identifier(
+        column_name_info.column_name_,
+        column_name_info.is_shadow_column_ ? "__SHADOW_" : nullptr,
+        sql_string))) {
     }
   }
   return ret;
