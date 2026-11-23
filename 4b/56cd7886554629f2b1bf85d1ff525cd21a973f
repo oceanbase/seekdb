@@ -1,0 +1,19 @@
+src/sql/ob_spi.cpp
+  s_de4df3b0d83d68::t_6b4077d57f691c 1610-1611,1616-1624,1668-1677
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4b56cd7886554629f2b1bf85d1ff525cd21a973f",
+  "prompts": {},
+  "sessions": {
+    "s_de4df3b0d83d68": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f6f2-fea2-7a72-86a2-8f9d6c6fdf86",
+        "model": "deepseek-flash"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

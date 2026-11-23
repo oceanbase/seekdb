@@ -1,0 +1,28 @@
+src/sql/ob_spi.cpp
+  s_97c0d0bd2c1536::t_b0f059dbb2ceeb 1609-1612,1615,1632-1642,1660-1690
+  s_a768317b8a1c82::t_680c5569b258c5 1691
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f11ae552f3f6be65889b115825f7d11a1d1ad40c",
+  "prompts": {},
+  "sessions": {
+    "s_97c0d0bd2c1536": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f84c-ba34-7521-a7ae-e26873e74e84",
+        "model": "deepseek-flash"
+      },
+      "human_author": "unknown"
+    },
+    "s_a768317b8a1c82": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f84c-ba06-7f83-bed1-d90889d91d33",
+        "model": "deepseek-flash"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
