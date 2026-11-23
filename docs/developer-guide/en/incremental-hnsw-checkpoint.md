@@ -115,6 +115,18 @@ Two locking consequences matter, and neither is visible from the insert path alo
   contents. Both bitmaps remain mutable after the lock is released, so a later
   pass over those handles is not reading the state that was captured.
 
+The hybrid embedded-table writer has the same graph/membership gap through a
+separate entry point. The embedded-table branch of
+`ObLSTabletService::insert_vector_index_rows()` calls
+`handle_insert_embedded_table_rows()` directly
+(`src/storage/ls/ob_ls_tablet_service.cpp:3160`, call at `:3207`). That helper
+calls `obvectorutil::add_index(incr_data_->index_, ...)` at
+`ob_plugin_vector_index_adaptor.cpp:1259-1264`, before taking
+`incr_data_->bitmap_rwlock_` at `:1269` and updating `vid_bound_` and
+`insert_bitmap_` at `:1270-1275`. It does not pass through `insert_rows()` or
+`write_into_delta_mem()`, and no existing lock spans its graph, VID-bound and
+membership mutations.
+
 The asynchronous writer has the same exclusion problem at a higher level.
 `ObCSAsyncIndexProcessor::write_to_vsag_()`
 (`src/observer/change_stream/ob_cs_plugin_async_index.cpp`) advances
@@ -219,8 +231,8 @@ them:
 
 | State | Advanced by | Lock held today |
 | --- | --- | --- |
-| `incr_data_->index_` | `insert_rows()` (`:1512`, `:1522`), `write_into_delta_mem()` (`:2160`, `:2173`), and `ObCSAsyncIndexProcessor::write_to_vsag_()` | no common graph lock; the asynchronous caller invokes `add_index()` directly |
-| `incr_data_->bitmap_->insert_bitmap_` | `insert_rows()` (`:1533`), `update_incr_bitmap()` (`:3011`), `write_into_delta_mem()` (`:2179`), and the asynchronous caller through that helper | `bitmap_rwlock_` |
+| `incr_data_->index_` | `insert_rows()` (`:1512`, `:1522`), `handle_insert_embedded_table_rows()` (`:1259-1264`), `write_into_delta_mem()` (`:2160`, `:2173`), and `ObCSAsyncIndexProcessor::write_to_vsag_()` | no common graph lock; the hybrid embedded and asynchronous callers invoke `add_index()` directly |
+| `incr_data_->bitmap_->insert_bitmap_` | `insert_rows()` (`:1533`), `handle_insert_embedded_table_rows()` (`:1270-1275`), `update_incr_bitmap()` (`:3011`), `write_into_delta_mem()` (`:2179`), and the asynchronous caller through that helper | `bitmap_rwlock_` |
 | `vbitmap_data_->bitmap_`, `vbitmap_data_->scn_` | replay in `complete_index_mem_data_incremental()` (`:2849-2856`, `:2944-2951`) and query paths | `vbitmap_data_`'s own lock pair |
 
 `vbitmap_data_->scn_` is advanced by replay, not by `insert_rows()`, so no single
@@ -367,6 +379,14 @@ Writer participation is therefore part of the contract, not an optimisation:
 - `insert_rows()` (`ob_plugin_vector_index_adaptor.cpp:1361`) must hold the gate for
   read across its whole mutation, `:1509-1544`. Today it takes only
   `bitmap_rwlock_`, and only at `:1533`, after the graph has already changed.
+- `handle_insert_embedded_table_rows()` (`:1175`), reached directly from the
+  hybrid embedded-table branch of `ObLSTabletService::insert_vector_index_rows()`
+  (`ob_ls_tablet_service.cpp:3207`), must hold the same adapter gate for read
+  across its whole mutation at `:1257-1277`. Acquisition precedes the graph
+  `add_index()` call, and release follows `set_vid_bound()` and every vector and
+  null-vector membership-bit addition. The existing `bitmap_rwlock_` at `:1269`
+  remains nested inside that guard; taking only the bitmap lock, or guarding only
+  the membership loop, leaves the graph and VID bound outside the barrier.
 - `write_into_delta_mem()` (`:2130`) must hold it across `:2145-2186`.
 - `update_incr_bitmap()` (`:3001`) must hold it across `:3011-3015` when entered
   without an outer mutation guard.
@@ -619,6 +639,43 @@ checkpoint restore. While `initial_tail_scan_required` is set:
   `can_omit_4th_table_scan` as false, regardless of the restored watermark
   comparison.
 
+A tail-only iterator also requires an explicit per-query visibility seed. For
+every query that enters the synchronous path while
+`initial_tail_scan_required` is set, before either cached-bitmap branch or the
+first iterator `get_next_row`, initialize its initially empty
+`ctx->bitmaps_->insert_bitmap_` and `delete_bitmap_` from the restored
+`vbitmap_data_` baseline. Take `vbitmap_data_`'s mem-data and bitmap read locks
+and either install deep copies or OR the baseline contents into those
+query-owned empty bitmaps; copying the roaring pointers is not sufficient.
+Require `coverage_scn <= query_scn`. Seeding is idempotent if entry is repeated,
+but it must never clear tail bits already applied to that query. The resulting
+query view is:
+
+```
+query_insert = restored_visibility.insert ∪ tail_insert
+query_delete = restored_visibility.delete ∪ tail_delete
+query_live = query_insert − query_delete
+```
+
+The cached copy at `check_index_id_table_readnext_status()`
+(`ob_plugin_vector_index_adaptor.cpp:2403-2408`) is therefore only an optional,
+idempotent OR, never the sole injection of the checkpoint prefix. When the first
+tail row has `read_scn > vbitmap_data_->scn_`, that copy is skipped and
+`complete_index_mem_data()` adds the tail inserts and deletes to the
+**already-seeded** `ctx->bitmaps_`; it must not replace them with a tail-only
+view. An empty tail likewise leaves the seeded prefix intact. Set
+`bitmap_view_ready_` only after this seed has succeeded and the mandatory scan
+and materialization have completed, so `merge_and_generate_bitmap()` (`:3226-3232`)
+cannot discard the checkpoint prefix.
+
+A cached-bitmap-copy early return has the same invariant: it may mark the query
+view ready only after the baseline seed/copy has succeeded. While the one-shot
+state is set, no cached early return substitutes for reaching tail iterator end
+or clears that state. After the mandatory scan, the normal cached fast path may
+return early because its copied shared baseline contains both the checkpoint
+prefix and the replayed tail, not because `ctx->bitmaps_` contains tail rows
+alone.
+
 The scan starts strictly above `coverage_scn` and reads the durable index-id
 table through the replay's `query_scn`. It must apply all committed tail inserts
 and deletes to visibility and finish their vector materialization before the
@@ -867,11 +924,13 @@ from the outside.
 
 The mutation paths below do not share a single lock. The asynchronous caller and
 its bitmap helper are listed separately because guarding only the helper leaves
-the caller's watermark and graph insertion unprotected:
+the caller's watermark and graph insertion unprotected. The direct hybrid
+embedded helper is listed separately for the same reason:
 
 | Call site | Takes | Does not take |
 | --- | --- | --- |
 | `insert_rows()` (`ob_plugin_vector_index_adaptor.cpp:1361`) | `bitmap_rwlock_`, at `:1533`, after the graph changed | `mem_data_rwlock_` |
+| `handle_insert_embedded_table_rows()` (`:1175`) | `bitmap_rwlock_` at `:1269`, after the graph changed | any lock across graph, VID-bound and membership updates |
 | `write_into_delta_mem()` (`:2130`) | `mem_data_rwlock_` at `:2145`, `bitmap_rwlock_` at `:2179` | `vbitmap_data_` locks |
 | `update_incr_bitmap()` (`:3001`) | `bitmap_rwlock_` at `:3011` | `mem_data_rwlock_` |
 | `ObCSAsyncIndexProcessor::write_to_vsag_()` | `bitmap_rwlock_` only inside the later bitmap helper | any lock across its watermark update and direct `add_index()` |
@@ -879,7 +938,8 @@ the caller's watermark and graph insertion unprotected:
 
 Consequently "take `mem_data_rwlock_` for read and `bitmap_rwlock_` for read" excludes
 `write_into_delta_mem()` and nothing else: not `insert_rows()`, which is the main
-foreground writer, not `update_incr_bitmap()`, and not the direct asynchronous
+foreground writer, not the direct hybrid embedded graph/VID-bound/membership
+sequence, not `update_incr_bitmap()`, and not the direct asynchronous
 `add_index()`. It also says nothing about the visibility view, which has its own
 lock pair on `vbitmap_data_`.
 
@@ -892,11 +952,13 @@ The contract needs one gate that every mutator takes:
   not change.
 - **If the barrier is rejected** in favour of an existing lock, then
   `incr_data_->mem_data_rwlock_` must be added to `insert_rows()`,
-  `update_incr_bitmap()`, and the full `write_to_vsag_()` watermark/graph/bitmap
-  sequence. The checkpoint must hold it for write across the whole capture
-  including the serialize, with `bitmap_rwlock_` and `vbitmap_data_`'s pair nested
-  inside for the copies. Holding it for read, holding it only until the handles
-  are copied, or taking it only inside the asynchronous bitmap helper does not
+  `handle_insert_embedded_table_rows()` across its complete
+  graph/VID-bound/membership sequence, `update_incr_bitmap()`, and the full
+  `write_to_vsag_()` watermark/graph/bitmap sequence. The checkpoint must hold it
+  for write across the whole capture including the serialize, with
+  `bitmap_rwlock_` and `vbitmap_data_`'s pair nested inside for the copies.
+  Holding it for read, holding it only until the handles are copied, or taking it
+  only inside the asynchronous or embedded bitmap critical section does not
   satisfy the contract.
 
 The order is stated once, in the adapter header, before checkpointing is enabled by
@@ -947,14 +1009,19 @@ one-to-one:
    performs background catch-up outside the exclusive serialization hold, publishes
    a checkpoint, and restores with `tail_rows=0`. The first post-restart query must
    return the inserted rows without rebuilding or adding any covered graph vertex.
-6. **Capture consistency and asynchronous writer participation.** Insert
-   continuously through both the foreground path and
-   `ObCSAsyncIndexProcessor::write_to_vsag_()` while checkpoints run. Include test
+6. **Capture consistency and writer participation.** Insert continuously through
+   the foreground path, `ObCSAsyncIndexProcessor::write_to_vsag_()`, and the
+   hybrid embedded-table branch of `ObLSTabletService::insert_vector_index_rows()`
+   into `handle_insert_embedded_table_rows()` while checkpoints run. Include test
    suspension points after the asynchronous watermark update and after direct
-   `add_index()` but before `update_incr_bitmap()`. No capture may serialize that
-   partial mutation. For every published checkpoint assert that restore validation
-   passes, no durable record whose preserved row SCN is at or below `coverage_scn`
-   is missing, and no record above that row-SCN frontier is claimed as covered.
+   `add_index()` but before `update_incr_bitmap()`. For the embedded helper, pause
+   after its direct `add_index()` but before `bitmap_rwlock_`, and separately after
+   `set_vid_bound()` but before the final membership-bit addition. No capture may
+   serialize any of those partial mutations. For every published checkpoint assert
+   that restore validation passes, the captured graph, VID bounds, membership and
+   visibility come from one gated generation, no durable record whose preserved
+   row SCN is at or below `coverage_scn` is missing, and no record above that
+   row-SCN frontier is claimed as covered.
 7. **Visibility/materialization inter-stage race.** Pause after
    `complete_index_mem_data_incremental()` publishes a non-empty live visibility
    baseline and watermark but before `QUERY_ROWKEY_VEC` materializes its vectors,
@@ -968,16 +1035,26 @@ one-to-one:
    subset of membership. Assert full fallback to replay in both cases, that both
    `incr_data_` and `vbitmap_data_` are left empty with `last_read_scn_` cleared,
    and that post-restart results still match the pre-restart results.
-9. **Durable tail with no post-restart write.** Checkpoint a committed prefix,
-   then commit at least one insert and one delete above `coverage_scn`. Restart
-   and issue no further DML before the first ANN query. Assert that the one-shot
+9. **Durable tail with no post-restart write.** Checkpoint a committed prefix
+   containing a live VID `p` and a resolved tombstone `t`, then commit at least
+   one insert and one delete for other VIDs above `coverage_scn`. Restart and
+   issue no further DML before the first ANN query. Assert that the one-shot
    initial scan reads the index-id table through that query's SCN, both skip
    paths remain disabled until it completes, and `tail_rows` equals the durable
-   post-checkpoint row count. The inserted row must be visible, the deleted row
-   must remain invisible, and results must match a full-replay control. Run the
-   fixture in both `sync_mode=immediate` and asynchronous modes so each bypass
-   is covered. Repeat with an empty tail and assert exactly one empty scan
-   rather than a bypass.
+   post-checkpoint row count. In `sync_mode=immediate`, make the first tail row's
+   `read_scn` greater than the restored `vbitmap_data_->scn_` and instrument the
+   conditional cached copy to confirm that it is skipped. Before
+   `merge_and_generate_bitmap()`, assert that the ready query-owned view still
+   contains `p` in `insert_bitmap_ − delete_bitmap_` and `t` in `delete_bitmap_`,
+   as well as the replayed tail; this fails if `bitmap_view_ready_` describes a
+   tail-only bitmap. The inserted row must be visible, the deleted row must
+   remain invisible, and results must match a full-replay control. After the
+   one-shot state clears, run a second immediate-mode query through the
+   cached-bitmap-copy early return and assert the same checkpoint-prefix
+   visibility. Run the fixture in both `sync_mode=immediate` and asynchronous
+   modes so each bypass is covered. Repeat with an empty tail and assert exactly
+   one empty scan rather than a bypass, with `p` and `t` still resolved by the
+   seeded query view.
 10. **Rollback reconciliation and flush.** On an already-loaded immediate-mode
     index, run **BEGIN → INSERT → ROLLBACK → committed INSERT → flush**, with no
     intervening ANN query and with distinct VIDs for the rolled-back and committed
@@ -1078,9 +1155,13 @@ observes it but before the previous generation is retired.
    the one-shot initial durable tail scan. Make `check_if_complete_delta()` and
    `prepare_delta_mem_data()` consume `completion_live`, not raw insert membership.
    Add the mutation gate to every writer, including the complete asynchronous
-   `write_to_vsag_()` sequence, and add background catch-up through delta-buffer
-   reconcile, split `(F, O)` index-id replay, closed-frontier publication after
-   non-empty and empty scans, and vector materialization. Checkpointing stays off
+   `write_to_vsag_()` sequence and the hybrid embedded
+   `handle_insert_embedded_table_rows()` graph/VID-bound/membership sequence.
+   Seed each forced synchronous replay query from the restored visibility
+   baseline before its tail scan or any cached early return. Add background
+   catch-up through delta-buffer reconcile, split `(F, O)` index-id replay,
+   closed-frontier publication after non-empty and empty scans, and vector
+   materialization. Checkpointing stays off
    by default; the only behaviour change is that a valid checkpoint is restored
    when present. Phase 1 is not shippable without every piece: the gate makes
    capture atomic, the committed-membership and live-set proofs make the claimed
@@ -1192,3 +1273,14 @@ mutation-gate hold justifies building the immutable-generation option.
     `(visibility.insert − visibility.delete) − membership`. The delete fixture
     now requires `covered_vid_lookups=0`, so restored tombstones cannot trigger
     foreground prefix completion when `tail_rows=0`.
+- Revision 7:
+  - Required each forced synchronous replay query to seed its own
+    `ctx->bitmaps_` from the restored visibility baseline before reading the
+    tail. The later conditional cached copy is only an idempotent OR, and both
+    it and cached early returns must preserve the checkpoint prefix before
+    `bitmap_view_ready_` is set. Added non-empty-tail and cached-early-return
+    assertions for covered live and tombstoned VIDs.
+  - Added the direct hybrid embedded writer to the mutation barrier across its
+    complete graph, VID-bound and membership sequence, with concurrent-capture
+    suspension points after graph insertion and before the final membership
+    update.
