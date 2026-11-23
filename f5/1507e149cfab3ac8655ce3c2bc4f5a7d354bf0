@@ -1,0 +1,19 @@
+src/observer/virtual_table/ob_table_columns.cpp
+  s_62c3696cea967f::t_889460c5b782c8 877
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f51507e149cfab3ac8655ce3c2bc4f5a7d354bf0",
+  "prompts": {},
+  "sessions": {
+    "s_62c3696cea967f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20974-8e39-78b1-bf3a-ab5402037901",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
