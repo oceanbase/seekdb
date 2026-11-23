@@ -224,3 +224,27 @@ result
 {"args": [], "template": "bbb"}
 {"args": [], "template": "bb"}
 drop table t1;
+drop table t2;
+select ai_prompt('Hello {0}, data: {1}', 'World', json_array(1, 2, 3));
+ai_prompt('Hello {0}, data: {1}', 'World', json_array(1, 2, 3))
+{"args": ["World", [1, 2, 3]], "template": "Hello {0}, data: {1}"}
+select ai_prompt('Obj: {0}', json_object('key', 'val'));
+ai_prompt('Obj: {0}', json_object('key', 'val'))
+{"args": [{"key": "val"}], "template": "Obj: {0}"}
+select ai_prompt('Outer {0}', ai_prompt('Inner {0}', 'test'));
+ai_prompt('Outer {0}', ai_prompt('Inner {0}', 'test'))
+{"args": [{"args": ["test"], "template": "Inner {0}"}], "template": "Outer {0}"}
+select ai_prompt('Repeat {0} and {0} again', 'alpha');
+ai_prompt('Repeat {0} and {0} again', 'alpha')
+{"args": ["alpha"], "template": "Repeat {0} and {0} again"}
+select ai_prompt('Unicode: 世界 🚀 \n \t \" \\ \0');
+ai_prompt('Unicode: 世界 🚀 \n \t \" \\ \0')
+{"args": [], "template": "Unicode: 世界 🚀 \n \t \" \\ \0"}
+select ai_prompt('Out of bounds {5}', 'a');
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('Negative {-1}', 'a');
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('Malformed {abc}', 'a');
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('Malformed {}', 'a');
+ERROR 22000: Invalid data type for the operation

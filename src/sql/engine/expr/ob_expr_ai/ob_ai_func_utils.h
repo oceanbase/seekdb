@@ -124,7 +124,7 @@ public:
   private:
     DISALLOW_COPY_AND_ASSIGN(ObOllamaEmbed);
   };
-  static int get_header(common::ObIAllocator &allocator, common::ObArray<ObString> &headers);
+  static int get_header(common::ObIAllocator &allocator, common::ObString &api_key, common::ObArray<ObString> &headers);
   DISALLOW_COPY_AND_ASSIGN(ObOllamaUtils);
 };
 

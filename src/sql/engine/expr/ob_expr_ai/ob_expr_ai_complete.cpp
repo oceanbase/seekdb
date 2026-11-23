@@ -109,7 +109,7 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     const share::ObAiModelEndpointInfo *endpoint_info = &resolved_endpoint;
     query::ObIAiEndpointResolver *endpoint_resolver =
         ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
-    ObExpr *arg_expr_prompt = expr.args_[1];
+    ObExpr *arg_expr_prompt = expr.args_[PROMPT_IDX];
     if ( OB_ISNULL(arg_expr_prompt) ) {
       ret = OB_ERR_UNEXPECTED;
     } else if (arg_expr_prompt->datum_meta_.type_ == ObJsonType) {
@@ -117,6 +117,8 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
       ObIJsonBase *prompt_object = nullptr;
       bool is_null = false;
       if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, PROMPT_IDX, j_base, is_null))) {
+      } else if (is_null) {
+        ret = OB_INVALID_ARGUMENT;
       } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FALSE_IT(prompt_object = j_base)) {
@@ -129,20 +131,35 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "prompt object is not support");
       } else if (OB_FAIL(ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(temp_allocator, prompt_object, prompt))) {
       }
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_prompt, expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), prompt))) {
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_prompt, arg_expr_prompt->datum_meta_, arg_expr_prompt->obj_meta_.has_lob_header(), prompt))) {
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(arg_config)) {
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_config, expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), config_str))) {
-      } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
+    } else if (OB_NOT_NULL(arg_config) && !arg_config->is_null()) {
+      ObExpr *arg_expr_config = expr.args_[CONFIG_IDX];
+      if (arg_expr_config->datum_meta_.type_ == ObJsonType) {
+        ObIJsonBase *j_base = nullptr;
+        bool is_null = false;
+        if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, CONFIG_IDX, j_base, is_null))) {
+        } else if (is_null) {
+        } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          config = static_cast<ObJsonObject *>(j_base);
+        }
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_config, arg_expr_config->datum_meta_, arg_expr_config->obj_meta_.has_lob_header(), config_str))) {
+      } else if (!config_str.empty() && OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
       }
     }
 
     if (OB_FAIL(ret)) {
-    } else if (model_id.empty() || prompt.empty()) {
+    } else if (model_id.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, model id or input is empty");
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, model id is empty");
+      res.set_null();
+    } else if (prompt.empty()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, input is empty");
       res.set_null();
     }
 

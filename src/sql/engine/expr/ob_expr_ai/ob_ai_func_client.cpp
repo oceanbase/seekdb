@@ -186,20 +186,21 @@ int ObAIFuncClient::send_post(ObIJsonBase *data, ObIJsonBase *&response)
     if (OB_FAIL(ret)) {
     } else if (oceanbase::http::Code::Ok != last_result->code) {
       ret = error_handle(last_result.value());
-    } else if (last_result->http_status / 100 != 2) {
-      ret = OB_CURL_ERROR;
-      char message[1024];
-      snprintf(message, sizeof(message), "http status code: %u", last_result->http_status);
-      FORWARD_USER_ERROR(ret, message);
     } else {
       ObIJsonBase *tree = nullptr;
       const auto body_bytes = oceanbase::http::http_reply_body(*reply.value());
       const ObString response_string = response_body(body_bytes);
-      if (OB_FAIL(ObJsonBaseFactory::get_json_base(
+      if (last_result->http_status / 100 != 2) {
+        ret = OB_CURL_ERROR;
+        char message[1024];
+        snprintf(message, sizeof(message), "http status code: %u, response: %.*s",
+                 last_result->http_status, response_string.length(), response_string.ptr());
+        FORWARD_USER_ERROR(ret, message);
+      } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(
               allocator_, response_string, ObJsonInType::JSON_TEXT, tree))) {
         ret = OB_ERR_INVALID_JSON_TEXT;
       } else {
-        response = static_cast<ObIJsonBase *>(tree);
+        response = tree;
       }
     }
   }
