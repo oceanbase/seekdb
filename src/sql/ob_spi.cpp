@@ -1599,9 +1599,6 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
           bool can_retry = true;
           int64_t row_count = 0;
           ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_STATIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE);
-          ObWarningBuffer *saved_wb = NULL;
-          ObWarningBuffer select_wb;
-          bool select_accesses_tables = false;
           {
             ObPLSPITraceIdGuard trace_id_guard(sql, ps_sql, *session, ret);
             ObPLSubPLSqlTimeGuard guard(ctx);
@@ -1609,20 +1606,8 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
 
             OX (session->get_pl_sqlcode_info()->set_sqlcode(OB_SUCCESS));
 
-            const bool is_select = ObStmt::is_select_stmt(stmt_type);
-            if (OB_SUCC(ret)
-                && !ObStmt::is_diagnostic_stmt(stmt_type)
-                && !is_select) {
+            if (OB_SUCC(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)) {
               ob_reset_tsi_warning_buffer();
-            } else if (OB_SUCC(ret) && is_select && OB_NOT_NULL(ob_get_tsi_warning_buffer())) {
-              // A SELECT must not expose caller diagnostics while it resolves,
-              // opens, or fetches nested expressions. In particular, a nested
-              // assignment can reset the warning buffer, so a saved count from
-              // the outer buffer cannot identify this statement's conditions.
-              // Execute against a private buffer, then apply the SQL diagnostics
-              // area rules after both open and fetch have completed.
-              saved_wb = ob_get_tsi_warning_buffer();
-              ob_setup_tsi_warning_buffer(&select_wb);
             }
 
             OZ (inner_open(ctx,
@@ -1638,27 +1623,6 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
                            spi_result.get_out_params(),
                            is_dynamic_sql,
                            is_cursor_params), K(sql), K(ps_sql));
-
-            if (OB_SUCC(ret) && is_select) {
-              ObPhysicalPlan *plan = OB_NOT_NULL(spi_result.get_result_set())
-                  ? spi_result.get_result_set()->get_physical_plan() : NULL;
-              select_accesses_tables =
-                  OB_NOT_NULL(plan)
-                  && (plan->get_table_access_plans().count() > 0
-                      || plan->get_das_table_access_plans().count() > 0);
-              if (OB_NOT_NULL(plan) && !select_accesses_tables) {
-                const ObIArray<share::schema::ObSchemaObjVersion> &dependencies =
-                    plan->get_dependency_table();
-                for (int64_t i = 0; !select_accesses_tables && i < dependencies.count(); ++i) {
-                  const share::schema::ObSchemaObjVersion &dependency = dependencies.at(i);
-                  select_accesses_tables =
-                      dependency.is_base_table()
-                      && dependency.is_existed()
-                      && !common::is_cte_table(dependency.get_object_id());
-                }
-              }
-            }
-
             OZ (inner_fetch(ctx,
                             can_retry,
                             spi_result,
@@ -1699,20 +1663,6 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
           }
           spi_result.destruct_exec_params(*session);
 
-          if (OB_NOT_NULL(saved_wb)) {
-            ob_setup_tsi_warning_buffer(saved_wb);
-            // Discard retried attempts without modifying caller diagnostics.
-            // Only a successful, table-free final attempt with no conditions
-            // preserves the previous diagnostics area.
-            if (RETRY_TYPE_NONE == retry_ctrl.get_retry_type()
-                && (OB_FAIL(ret)
-                    || select_accesses_tables
-                    || select_wb.get_total_warning_count() > 0
-                    || select_wb.get_err_code() != OB_MAX_ERROR_CODE)) {
-              *saved_wb = select_wb;
-            }
-          }
-
         } while (RETRY_TYPE_NONE != retry_ctrl.get_retry_type()); // SPI only does LOCAL retry
       }
 
@@ -1735,15 +1685,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
       }
       if (OB_FAIL(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)) {
         // support `SHOW WARNINGS` in mysql PL
-        ObWarningBuffer *active_wb = ob_get_tsi_warning_buffer();
-        if (OB_NOT_NULL(active_wb) && strlen(active_wb->get_err_msg()) <= 0) {
-          active_wb->set_error(ob_errpkt_strerror(ret), ret);
-        }
-        // A nested SELECT owns a private diagnostics area. Updating the session
-        // buffer here would overwrite the caller's saved area before publication.
-        if (NULL == active_wb || active_wb == &session->get_warnings_buffer()) {
-          session->set_show_warnings_buf(ret);
-        }
+        session->set_show_warnings_buf(ret);
       }
 
       spi_result.end_nested_stmt_if_need(ctx, ret);

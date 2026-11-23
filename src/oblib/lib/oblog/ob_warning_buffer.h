@@ -115,7 +115,7 @@ public:
    * if len(str) > STR_LEN, cut it.
    */
   inline void append_warning(const char *str, int errcode, const char *sql_state = nullptr);
-  inline void append_note(const char *str, int errcode, const char *sql_state = nullptr);
+  inline void append_note(const char *str, int errcode);
 
   inline void reset_err() {err_.reset();}
   inline void set_error(const char *str, int error_code = OB_MAX_ERROR_CODE) {err_.set(str); err_.set_code(error_code);}
@@ -228,9 +228,9 @@ inline void ObWarningBuffer::append_warning(const char *str, int code, const cha
   append_msg(USER_WARN, str, code, sql_state);
 }
 
-inline void ObWarningBuffer::append_note(const char *str, int code, const char *sql_state)
+inline void ObWarningBuffer::append_note(const char *str, int code)
 {
-  append_msg(USER_NOTE, str, code, sql_state);
+  append_msg(USER_NOTE, str, code);
 }
 
 ////////////////////////////////////////////////////////////////

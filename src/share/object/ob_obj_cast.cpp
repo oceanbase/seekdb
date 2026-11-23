@@ -5517,6 +5517,9 @@ static int cast_string_integer_bits(const ObString &str, const ObCastMode cast_m
 
   int ret = OB_SUCCESS;
   const bool no_digits = end == str.ptr();
+  while (end < str.ptr() + str.length() && ObCharset::is_space(CS_TYPE_BINARY, *end)) {
+    ++end;
+  }
   if (err != 0 || no_digits || end != str.ptr() + str.length()) {
     ret = OB_ERR_TRUNCATED_WRONG_VALUE;
     if (CM_IS_WARN_ON_FAIL(cast_mode)) {
