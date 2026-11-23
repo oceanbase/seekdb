@@ -1646,6 +1646,17 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
                   OB_NOT_NULL(plan)
                   && (plan->get_table_access_plans().count() > 0
                       || plan->get_das_table_access_plans().count() > 0);
+              if (OB_NOT_NULL(plan) && !select_accesses_tables) {
+                const ObIArray<share::schema::ObSchemaObjVersion> &dependencies =
+                    plan->get_dependency_table();
+                for (int64_t i = 0; !select_accesses_tables && i < dependencies.count(); ++i) {
+                  const share::schema::ObSchemaObjVersion &dependency = dependencies.at(i);
+                  select_accesses_tables =
+                      dependency.is_base_table()
+                      && dependency.is_existed()
+                      && !common::is_cte_table(dependency.get_object_id());
+                }
+              }
             }
 
             OZ (inner_fetch(ctx,
