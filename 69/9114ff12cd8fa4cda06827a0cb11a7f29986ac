@@ -1,0 +1,25 @@
+src/share/object/ob_obj_cast.cpp
+  s_fa53ea079f3123::t_0f48b6ab1b2c62 5520-5522
+src/sql/ob_spi.cpp
+  s_fa53ea079f3123::t_cd0040b5537094 1609,1688
+src/observer/virtual_table/ob_virtual_warning.cpp
+  s_fa53ea079f3123::t_cd0040b5537094 83-85
+src/oblib/lib/oblog/ob_warning_buffer.h
+  s_fa53ea079f3123::t_cd0040b5537094 118,231,233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "699114ff12cd8fa4cda06827a0cb11a7f29986ac",
+  "prompts": {},
+  "sessions": {
+    "s_fa53ea079f3123": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20771-0c72-7270-8c9b-f05d3eb07e79",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}
