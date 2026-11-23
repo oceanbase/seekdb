@@ -45,3 +45,39 @@
 - Validate other components through integration tests, mysqltest cases, or actual execution instead of adding unit tests. Use the repository's established test suites and test directories where applicable.
 - Keep test-only and benchmark-only files out of `tools/`.
 - Validate tool and script changes by running the relevant commands and inspecting their outputs or generated artifacts.
+
+### Downstream integration tests
+
+Before submitting a PR that changes any of these areas, check the relevant
+cases in the `seekdb_test` repository. The paths below are examples.
+
+- Instance parameter definitions in `rust/config/parameters.yaml`, or code
+  that changes a parameter's default, accepted values, or when it takes
+  effect.
+- Global or session variable definitions in
+  `src/share/system_variable/ob_system_variable_init.json`, or variable
+  initialization, assignment, inheritance, or reset in `src/sql/session/`.
+- SQL and client behavior such as syntax, results, warnings, error codes,
+  execution plans, metadata, or protocol responses. Examples include
+  `src/sql/parser/`, `src/sql/optimizer/`, `src/sql/engine/`, and
+  `src/observer/mysql/`.
+- Critical runtime paths such as transaction commit and rollback in
+  `src/storage/tx/`, MVCC in `src/storage/memtable/mvcc/`, compaction in
+  `src/storage/compaction/`, and log replay in `src/logservice/replayservice/`.
+  Check changes to ordering, concurrency, retries, timeouts, and recovery.
+- Server startup, shutdown, or readiness, for example in
+  `src/observer/ob_server.cpp`. Check changes to binaries, startup options,
+  or deployment that affect how `seekdb_test` starts or connects to SeekDB.
+
+Update affected cases and preserve assertions that still apply. In the PR's
+`验证` section, provide one of the following.
+
+- A link to the `seekdb_test` MR or commit that updates the affected cases.
+  List the cases and report the result of running them against a build that
+  includes the SeekDB PR changes.
+- An explicit statement that `seekdb_test` needs no update. Identify the
+  relevant suite, case, or behavior you checked and explain why no update
+  is needed.
+
+If you lack access to `seekdb_test`, ask a maintainer with access to confirm
+the test impact. Record any pending validation.
