@@ -23,14 +23,18 @@ use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
 const MANIFEST_FILE_SIZE: usize = MANIFEST_SIZE * 2;
 const MANIFEST_MAGIC: &[u8; 8] = b"WALMAN01";
-const MAX_APPEND_BATCH_REQUESTS: usize = 32;
+const DIO_ALIGNMENT: usize = 4096;
+const MAX_APPEND_BATCH_REQUESTS: usize = 128;
 const MAX_APPEND_BATCH_BYTES: usize = 2 * 1024 * 1024;
+const MAX_RECENT_RECORDS: usize = 4096;
+const MAX_RECENT_RECORD_BYTES: usize = 64 * 1024 * 1024;
 
 pub struct ImportedGroup<'a> {
     pub source_lsn: u64,
@@ -106,45 +110,66 @@ impl RecordMeta {
 }
 
 struct PendingAppend {
-    id: u64,
     payload: Vec<u8>,
     ref_scn: u64,
+    completion: Option<Arc<AppendCompletion>>,
+    result: AppendResult,
+    bytes_len: usize,
+}
+
+impl PendingAppend {
+    fn complete_durable(self, result: Result<AppendResult>) {
+        if let Some(completion) = self.completion {
+            completion.complete_durable(result);
+        }
+    }
+}
+
+#[derive(Default)]
+struct AppendCompletion {
+    durable: Mutex<Option<Result<AppendResult>>>,
+    durable_changed: Condvar,
+}
+
+impl AppendCompletion {
+    fn complete_durable(&self, result: Result<AppendResult>) {
+        if let Ok(mut slot) = self.durable.lock() {
+            *slot = Some(result);
+            self.durable_changed.notify_one();
+        }
+    }
+
+    fn wait_durable(&self) -> Result<AppendResult> {
+        let mut result = self.durable.lock().map_err(|_| Error::Io)?;
+        loop {
+            if let Some(result) = result.take() {
+                return result;
+            }
+            result = self.durable_changed.wait(result).map_err(|_| Error::Io)?;
+        }
+    }
 }
 
 struct PlannedRecord {
     lsn: u64,
-    bytes: Vec<u8>,
-    meta: Option<RecordMeta>,
+    bytes: Arc<Vec<u8>>,
     new_segment: Option<SegmentHeader>,
+    meta: Option<RecordMeta>,
+}
+
+struct AppendFile {
+    id: u64,
+    file: File,
+    tail: Vec<u8>,
 }
 
 struct AppendBatch {
     records: Vec<PlannedRecord>,
-    appends: Vec<(u64, u64, u64, u64)>,
     segments: BTreeMap<u64, SegmentMeta>,
     last_record: Option<RecordMeta>,
     end_lsn: u64,
     end_scn: u64,
     next_log_id: i64,
-    accumulated_checksum: u64,
-}
-
-struct BatchCheckpoint {
-    records_len: usize,
-    appends_len: usize,
-    segments: BTreeMap<u64, SegmentMeta>,
-    last_record: Option<RecordMeta>,
-    end_lsn: u64,
-    end_scn: u64,
-    next_log_id: i64,
-    accumulated_checksum: u64,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct CommittedTail {
-    end_lsn: u64,
-    end_scn: u64,
-    log_id: i64,
     accumulated_checksum: u64,
 }
 
@@ -153,7 +178,6 @@ struct Manifest {
     base_lsn: u64,
     previous: BaseInfo,
     ref_scn: u64,
-    committed: CommittedTail,
 }
 
 struct ManifestWriter {
@@ -166,33 +190,50 @@ struct ManifestWriter {
 struct State {
     directory: PathBuf,
     manifest_writer: Option<ManifestWriter>,
-    append_file: Option<(u64, File)>,
+    append_file: Option<AppendFile>,
     manifest: Manifest,
     segments: BTreeMap<u64, SegmentMeta>,
+    recent_records: BTreeMap<u64, (RecordMeta, Arc<Vec<u8>>)>,
+    recent_record_bytes: usize,
     last_record: Option<RecordMeta>,
     end_lsn: u64,
     end_scn: u64,
+    reserved_end_lsn: u64,
+    reserved_end_scn: u64,
     next_log_id: i64,
     accumulated_checksum: u64,
     integrity: bool,
     closed: bool,
+    io_in_progress: bool,
+    unflushed_appends: usize,
     failed: Option<Error>,
 }
 
 #[derive(Default)]
 struct AppendQueue {
-    next_append_id: u64,
     pending_appends: Vec<PendingAppend>,
     pending_append_bytes: usize,
-    append_leader: bool,
-    append_results: BTreeMap<u64, Result<AppendResult>>,
+    closed: bool,
+}
+
+#[derive(Default)]
+struct FlushState {
+    generation: u64,
+    end_lsn: u64,
+    end_scn: u64,
+    closed: bool,
+    failed: Option<Error>,
 }
 
 struct StreamInner {
     state: Mutex<State>,
     appends: Mutex<AppendQueue>,
+    flushes: Mutex<FlushState>,
     changed: Condvar,
     append_changed: Condvar,
+    flush_changed: Condvar,
+    worker_started: AtomicBool,
+    handle_count: AtomicUsize,
 }
 
 pub struct Stream {
@@ -201,8 +242,17 @@ pub struct Stream {
 
 impl Clone for Stream {
     fn clone(&self) -> Self {
+        self.inner.handle_count.fetch_add(1, Ordering::Relaxed);
         Self {
             inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
+impl Drop for Stream {
+    fn drop(&mut self) {
+        if self.inner.handle_count.fetch_sub(1, Ordering::AcqRel) == 1 {
+            let _ = self.close();
         }
     }
 }
@@ -246,29 +296,33 @@ impl Stream {
                     prev_accumulated_checksum: 0,
                 },
                 ref_scn: 0,
-                committed: CommittedTail {
-                    end_lsn: 0,
-                    end_scn: 0,
-                    log_id: 0,
-                    accumulated_checksum: 0,
-                },
             },
             segments: BTreeMap::new(),
+            recent_records: BTreeMap::new(),
+            recent_record_bytes: 0,
             last_record: None,
             end_lsn: 0,
             end_scn: 0,
+            reserved_end_lsn: 0,
+            reserved_end_scn: 0,
             next_log_id: 1,
             accumulated_checksum: 0,
             integrity: false,
             closed: false,
+            io_in_progress: false,
+            unflushed_appends: 0,
             failed: Some(error),
         });
         Self {
             inner: Arc::new(StreamInner {
                 state: Mutex::new(state),
                 appends: Mutex::new(AppendQueue::default()),
+                flushes: Mutex::new(FlushState::default()),
                 changed: Condvar::new(),
                 append_changed: Condvar::new(),
+                flush_changed: Condvar::new(),
+                worker_started: AtomicBool::new(false),
+                handle_count: AtomicUsize::new(1),
             }),
         }
     }
@@ -290,7 +344,10 @@ impl Stream {
     }
 
     fn lock_for_write(&self) -> Result<MutexGuard<'_, State>> {
-        let state = self.lock()?;
+        let mut state = self.lock()?;
+        while state.io_in_progress || state.unflushed_appends != 0 {
+            state = self.inner.changed.wait(state).map_err(|_| Error::Io)?;
+        }
         state.check_writable()?;
         Ok(state)
     }
@@ -302,72 +359,167 @@ impl Stream {
     }
 
     pub fn append(&self, payload: &[u8], ref_scn: u64) -> Result<AppendResult> {
+        let (_, completion) = self.enqueue_append(payload, ref_scn, true)?;
+        let completion = completion.ok_or(Error::Io)?;
+        completion.wait_durable()
+    }
+
+    pub fn submit(&self, payload: &[u8], ref_scn: u64) -> Result<AppendResult> {
+        self.enqueue_append(payload, ref_scn, false)
+            .map(|(result, _)| result)
+    }
+
+    fn enqueue_append(
+        &self,
+        payload: &[u8],
+        ref_scn: u64,
+        wait_for_durable: bool,
+    ) -> Result<(AppendResult, Option<Arc<AppendCompletion>>)> {
         if payload.is_empty() || payload.len() > MAX_LOG_BODY_SIZE || ref_scn == u64::MAX {
             return Err(Error::Invalid);
         }
+        let payload = copied_bytes(payload)?;
+        let bytes_len = payload.len();
+        self.ensure_worker()?;
+        let completion = wait_for_durable.then(|| Arc::new(AppendCompletion::default()));
         let mut queue = self.lock_appends()?;
-        let id = queue.next_append_id;
-        queue.next_append_id = queue.next_append_id.checked_add(1).ok_or(Error::Invalid)?;
-        let mut queued = false;
+        while !queue.closed && !queue.can_queue_append(payload.len()) {
+            queue = self
+                .inner
+                .append_changed
+                .wait(queue)
+                .map_err(|_| Error::Io)?;
+        }
+        if queue.closed {
+            return Err(Error::Closed);
+        }
+        let mut state = self.lock()?;
+        state.check_writable()?;
+        let result = state.reserve_append(payload.len(), ref_scn)?;
+        state.unflushed_appends += 1;
+        drop(state);
+        queue.enqueue_append(PendingAppend {
+            payload,
+            ref_scn,
+            completion: completion.clone(),
+            result,
+            bytes_len,
+        });
+        drop(queue);
+        self.inner.append_changed.notify_one();
+        Ok((result, completion))
+    }
+
+    fn ensure_worker(&self) -> Result<()> {
+        if self.inner.worker_started.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        self.lock()?.check_writable()?;
+        if self
+            .inner
+            .worker_started
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Ok(());
+        }
+        let inner = Arc::clone(&self.inner);
+        std::thread::Builder::new()
+            .name("wal-io".into())
+            .spawn(move || Self::run_append_worker(inner))
+            .map_err(|_| {
+                self.inner.worker_started.store(false, Ordering::Release);
+                Error::Io
+            })?;
+        Ok(())
+    }
+
+    fn run_append_worker(inner: Arc<StreamInner>) {
         loop {
-            if let Some(result) = queue.append_results.remove(&id) {
-                return result;
+            let mut queue = match inner.appends.lock() {
+                Ok(queue) => queue,
+                Err(_) => break,
+            };
+            while queue.pending_appends.is_empty() && !queue.closed {
+                queue = match inner.append_changed.wait(queue) {
+                    Ok(queue) => queue,
+                    Err(_) => return Self::finish_append_worker(&inner),
+                };
             }
-            if !queued {
-                if queue.can_queue_append(payload.len()) {
-                    queue.enqueue_append(PendingAppend {
-                        id,
-                        payload: copied_bytes(payload)?,
-                        ref_scn,
-                    });
-                    queued = true;
-                    self.inner.append_changed.notify_all();
-                } else {
-                    queue = self
-                        .inner
-                        .append_changed
-                        .wait(queue)
-                        .map_err(|_| Error::Io)?;
-                    continue;
-                }
+            if queue.pending_appends.is_empty() && queue.closed {
+                break;
             }
-            if !queue.append_leader && !queue.pending_appends.is_empty() {
-                queue.append_leader = true;
-                let requests = queue.take_append_batch();
-                drop(queue);
-                let (results, retry) = self.execute_append_batch(requests);
-                queue = self.lock_appends()?;
-                queue.requeue_appends(retry);
-                queue.append_results.extend(results);
-                queue.append_leader = false;
-                self.inner.append_changed.notify_all();
-            } else {
-                queue = self
-                    .inner
-                    .append_changed
-                    .wait(queue)
-                    .map_err(|_| Error::Io)?;
+            let requests = queue.take_append_batch();
+            inner.append_changed.notify_all();
+            drop(queue);
+            Self::execute_append_batch(&inner, requests);
+        }
+        Self::finish_append_worker(&inner);
+    }
+
+    fn finish_append_worker(inner: &Arc<StreamInner>) {
+        if let Ok(mut queue) = inner.appends.lock() {
+            queue.closed = true;
+            let drained = queue.pending_appends.len();
+            for request in queue.pending_appends.drain(..) {
+                request.complete_durable(Err(Error::Io));
             }
+            queue.pending_append_bytes = 0;
+            if let Ok(mut state) = inner.state.lock() {
+                state.unflushed_appends = state.unflushed_appends.saturating_sub(drained);
+            }
+        }
+        if let Ok(mut state) = inner.state.lock() {
+            state.closed = true;
+            inner.changed.notify_all();
+        }
+        if let Ok(mut flush) = inner.flushes.lock() {
+            flush.closed = true;
+            inner.flush_changed.notify_all();
+        }
+        inner.append_changed.notify_all();
+    }
+
+    pub fn wait_flush(&self, after: u64) -> Result<(u64, u64, u64)> {
+        let mut flush = self.inner.flushes.lock().map_err(|_| Error::Io)?;
+        loop {
+            if flush.generation > after {
+                return Ok((flush.generation, flush.end_lsn, flush.end_scn));
+            }
+            if let Some(error) = flush.failed {
+                return Err(error);
+            }
+            if flush.closed {
+                return Err(Error::Closed);
+            }
+            flush = self.inner.flush_changed.wait(flush).map_err(|_| Error::Io)?;
         }
     }
 
     fn execute_append_batch(
-        &self,
+        inner: &Arc<StreamInner>,
         requests: Vec<PendingAppend>,
-    ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
-        let mut state = match self.lock_for_write() {
+    ) {
+        let mut state = match inner.state.lock() {
             Ok(state) => state,
-            Err(error) => {
-                return (
-                    requests
-                        .into_iter()
-                        .map(|request| (request.id, Err(error)))
-                        .collect(),
-                    Vec::new(),
-                );
+            Err(_) => {
+                for request in requests {
+                    request.complete_durable(Err(Error::Io));
+                }
+                State::publish_flush_error(inner, Error::Io);
+                return;
             }
         };
-        state.execute_append_batch(requests)
+        if let Err(error) = state.check_writable() {
+            state.unflushed_appends = state.unflushed_appends.saturating_sub(requests.len());
+            inner.changed.notify_all();
+            drop(state);
+            for request in requests {
+                request.complete_durable(Err(error));
+            }
+            return;
+        }
+        State::execute_append_batch(state, inner, requests);
     }
 
     pub fn append_imported(&self, groups: &[ImportedGroup]) -> Result<AppendResult> {
@@ -384,6 +536,8 @@ impl Stream {
             state.failed = Some(error);
             return Err(error);
         }
+        state.reserved_end_lsn = state.end_lsn;
+        state.reserved_end_scn = state.end_scn;
         Ok(AppendResult {
             lsn: last.source_lsn,
             scn: last.source_scn,
@@ -415,7 +569,7 @@ impl Stream {
     }
 
     pub fn base_info(&self, lsn: u64) -> Result<BaseInfo> {
-        let state = self.lock()?;
+        let state = self.lock_for_write()?;
         state.check_open()?;
         if lsn > state.end_lsn || lsn < state.manifest.base_lsn {
             return Err(Error::Invalid);
@@ -428,8 +582,7 @@ impl Stream {
     }
 
     pub fn set_base_lsn(&self, lsn: u64) -> Result<Progress> {
-        let mut state = self.lock()?;
-        state.check_open()?;
+        let mut state = self.lock_for_write()?;
         if lsn > state.end_lsn || lsn < state.manifest.base_lsn || block_offset(lsn) != 0 {
             return Err(Error::Invalid);
         }
@@ -446,7 +599,7 @@ impl Stream {
         if state
             .append_file
             .as_ref()
-            .is_some_and(|(id, _)| *id < minimum_block)
+            .is_some_and(|file| file.id < minimum_block)
         {
             state.append_file = None;
         }
@@ -470,6 +623,12 @@ impl Stream {
         if lsn == state.end_lsn {
             state.last_record = None;
         }
+        state.recent_records = state.recent_records.split_off(&lsn);
+        state.recent_record_bytes = state
+            .recent_records
+            .values()
+            .map(|(_, bytes)| bytes.len())
+            .sum();
         drop(state);
         self.inner.changed.notify_all();
         self.progress()
@@ -497,10 +656,24 @@ impl Stream {
     }
 
     pub fn close(&self) -> Result<()> {
-        let mut state = self.lock()?;
-        state.closed = true;
-        self.inner.changed.notify_all();
+        {
+            let mut queue = self.lock_appends()?;
+            queue.closed = true;
+        }
         self.inner.append_changed.notify_all();
+        if !self.inner.worker_started.load(Ordering::Acquire) {
+            let mut state = self.lock()?;
+            state.closed = true;
+            self.inner.changed.notify_all();
+            let mut flush = self.inner.flushes.lock().map_err(|_| Error::Io)?;
+            flush.closed = true;
+            self.inner.flush_changed.notify_all();
+            return Ok(());
+        }
+        let mut flush = self.inner.flushes.lock().map_err(|_| Error::Io)?;
+        while !flush.closed {
+            flush = self.inner.flush_changed.wait(flush).map_err(|_| Error::Io)?;
+        }
         Ok(())
     }
 
@@ -707,7 +880,6 @@ impl AppendBatch {
     fn new(state: &State) -> Self {
         Self {
             records: Vec::new(),
-            appends: Vec::new(),
             segments: state.segments.clone(),
             last_record: state.last_record.clone(),
             end_lsn: state.end_lsn,
@@ -715,30 +887,6 @@ impl AppendBatch {
             next_log_id: state.next_log_id,
             accumulated_checksum: state.accumulated_checksum,
         }
-    }
-
-    fn checkpoint(&self) -> BatchCheckpoint {
-        BatchCheckpoint {
-            records_len: self.records.len(),
-            appends_len: self.appends.len(),
-            segments: self.segments.clone(),
-            last_record: self.last_record.clone(),
-            end_lsn: self.end_lsn,
-            end_scn: self.end_scn,
-            next_log_id: self.next_log_id,
-            accumulated_checksum: self.accumulated_checksum,
-        }
-    }
-
-    fn rollback(&mut self, checkpoint: BatchCheckpoint) {
-        self.records.truncate(checkpoint.records_len);
-        self.appends.truncate(checkpoint.appends_len);
-        self.segments = checkpoint.segments;
-        self.last_record = checkpoint.last_record;
-        self.end_lsn = checkpoint.end_lsn;
-        self.end_scn = checkpoint.end_scn;
-        self.next_log_id = checkpoint.next_log_id;
-        self.accumulated_checksum = checkpoint.accumulated_checksum;
     }
 
     fn note_write(&mut self, lsn: u64, length: usize) -> Result<()> {
@@ -796,16 +944,16 @@ impl AppendBatch {
         }
         self.records.push(PlannedRecord {
             lsn,
-            bytes,
-            meta,
+            bytes: Arc::new(bytes),
             new_segment,
+            meta,
         });
         Ok(())
     }
 
-    fn push(&mut self, state: &State, request: &PendingAppend) -> Result<()> {
-        let scn = request.ref_scn.max(self.end_scn.saturating_add(1));
-        let entry = encode_entry(&request.payload, scn, false)?;
+    fn push(&mut self, state: &State, payload: &[u8], ref_scn: u64) -> Result<AppendResult> {
+        let scn = ref_scn.max(self.end_scn.saturating_add(1));
+        let entry = encode_entry(payload, scn, false)?;
         let group_len = GROUP_HEADER_SIZE + entry.len();
         let mut lsn = self.end_lsn;
         let remaining = BLOCK_SIZE - block_offset(lsn);
@@ -862,15 +1010,14 @@ impl AppendBatch {
         )?;
         self.end_lsn = lsn + group_len as u64;
         self.end_scn = scn;
-        self.appends.push((
-            request.id,
-            lsn + GROUP_HEADER_SIZE as u64,
-            scn,
-            self.end_lsn,
-        ));
         self.accumulated_checksum = header.accumulated_checksum;
         self.next_log_id = self.next_log_id.checked_add(1).ok_or(Error::Invalid)?;
-        Ok(())
+        Ok(AppendResult {
+            lsn: lsn + GROUP_HEADER_SIZE as u64,
+            scn,
+            end_lsn: self.end_lsn,
+            end_scn: scn,
+        })
     }
 
     fn push_imported(&mut self, state: &State, group: &ImportedGroup) -> Result<()> {
@@ -920,7 +1067,7 @@ impl AppendQueue {
     fn enqueue_append(&mut self, request: PendingAppend) {
         self.pending_append_bytes = self
             .pending_append_bytes
-            .saturating_add(request.payload.len());
+            .saturating_add(request.bytes_len);
         self.pending_appends.push(request);
     }
 
@@ -930,25 +1077,17 @@ impl AppendQueue {
         for request in &self.pending_appends {
             if count == MAX_APPEND_BATCH_REQUESTS
                 || (count > 0
-                    && bytes.saturating_add(request.payload.len()) > MAX_APPEND_BATCH_BYTES)
+                    && bytes.saturating_add(request.bytes_len) > MAX_APPEND_BATCH_BYTES)
             {
                 break;
             }
             count += 1;
-            bytes = bytes.saturating_add(request.payload.len());
+            bytes = bytes.saturating_add(request.bytes_len);
         }
         self.pending_append_bytes = self.pending_append_bytes.saturating_sub(bytes);
         self.pending_appends.drain(..count).collect()
     }
 
-    fn requeue_appends(&mut self, requests: Vec<PendingAppend>) {
-        let mut requests = requests;
-        requests.append(&mut self.pending_appends);
-        self.pending_append_bytes = requests.iter().fold(0usize, |bytes, request| {
-            bytes.saturating_add(request.payload.len())
-        });
-        self.pending_appends = requests;
-    }
 }
 
 impl State {
@@ -973,123 +1112,224 @@ impl State {
         self.check_open()
     }
 
-    fn execute_append_batch(
-        &mut self,
-        requests: Vec<PendingAppend>,
-    ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
-        if let Err(error) = self.check_writable() {
-            return (
-                requests
-                    .into_iter()
-                    .map(|request| (request.id, Err(error)))
-                    .collect(),
-                Vec::new(),
-            );
+    fn reserve_append(&mut self, payload_len: usize, ref_scn: u64) -> Result<AppendResult> {
+        let scn = ref_scn.max(self.reserved_end_scn.saturating_add(1));
+        let group_len = GROUP_HEADER_SIZE
+            .checked_add(ENTRY_HEADER_SIZE)
+            .and_then(|len| len.checked_add(payload_len))
+            .ok_or(Error::Invalid)? as u64;
+        let mut lsn = self.reserved_end_lsn;
+        if BLOCK_SIZE - block_offset(lsn) < group_len {
+            lsn = (block_id(lsn) + 1) * BLOCK_SIZE;
         }
-        let mut plan = AppendBatch::new(self);
-        let mut results = Vec::new();
-        let mut requests = requests.into_iter();
-        while let Some(request) = requests.next() {
-            let checkpoint = plan.checkpoint();
-            if let Err(error) = plan.push(self, &request) {
-                plan.rollback(checkpoint);
-                results.push((request.id, Err(error)));
-                return self.finish_append_batch(plan, results, requests.collect());
-            }
-        }
-        self.finish_append_batch(plan, results, Vec::new())
+        self.reserved_end_lsn = lsn.checked_add(group_len).ok_or(Error::Invalid)?;
+        self.reserved_end_scn = scn;
+        Ok(AppendResult {
+            lsn: lsn + GROUP_HEADER_SIZE as u64,
+            scn,
+            end_lsn: self.reserved_end_lsn,
+            end_scn: scn,
+        })
     }
 
-    fn finish_append_batch(
-        &mut self,
-        plan: AppendBatch,
-        mut results: Vec<(u64, Result<AppendResult>)>,
-        retry: Vec<PendingAppend>,
-    ) -> (Vec<(u64, Result<AppendResult>)>, Vec<PendingAppend>) {
-        if plan.appends.is_empty() {
-            return (results, retry);
+    fn execute_append_batch(
+        mut state: MutexGuard<'_, State>,
+        inner: &Arc<StreamInner>,
+        requests: Vec<PendingAppend>,
+    ) {
+        let request_count = requests.len();
+        let mut plan = AppendBatch::new(&state);
+        for request in &requests {
+            let result = match plan.push(&state, &request.payload, request.ref_scn) {
+                Ok(result) => result,
+                Err(error) => {
+                    state.failed = Some(error);
+                    state.unflushed_appends = state.unflushed_appends.saturating_sub(request_count);
+                    inner.changed.notify_all();
+                    drop(state);
+                    for request in requests {
+                        request.complete_durable(Err(error));
+                    }
+                    Self::publish_flush_error(inner, error);
+                    return;
+                }
+            };
+            if result != request.result {
+                state.failed = Some(Error::Corrupt);
+                state.unflushed_appends = state.unflushed_appends.saturating_sub(request_count);
+                inner.changed.notify_all();
+                drop(state);
+                for request in requests {
+                        request.complete_durable(Err(Error::Corrupt));
+                }
+                Self::publish_flush_error(inner, Error::Corrupt);
+                return;
+            }
         }
-        if let Err(error) = self.persist_append_batch(&plan) {
-            self.failed = Some(error);
-            results.extend(plan.appends.iter().map(|(id, _, _, _)| (*id, Err(error))));
-            results.extend(retry.into_iter().map(|request| (request.id, Err(error))));
-            return (results, Vec::new());
+        state.publish_append_batch(&plan);
+        state.io_in_progress = true;
+        let directory = state.directory.clone();
+        let mut append_file = state.append_file.take();
+        drop(state);
+        let write_result = Self::write_planned_records(&directory, &mut append_file, &plan.records);
+        let mut state = match inner.state.lock() {
+            Ok(state) => state,
+            Err(_) => {
+                for request in requests {
+                    request.complete_durable(Err(Error::Io));
+                }
+                Self::publish_flush_error(inner, Error::Io);
+                return;
+            }
+        };
+        state.append_file = append_file;
+        state.io_in_progress = false;
+        state.unflushed_appends = state.unflushed_appends.saturating_sub(request_count);
+        inner.changed.notify_all();
+        if let Err(error) = write_result {
+            state.failed = Some(error);
+            drop(state);
+            for request in requests {
+                request.complete_durable(Err(error));
+            }
+            Self::publish_flush_error(inner, error);
+            return;
         }
-        results.extend(plan.appends.into_iter().map(|(id, lsn, scn, end_lsn)| {
-            (
-                id,
-                Ok(AppendResult {
-                    lsn,
-                    scn,
-                    end_lsn,
-                    end_scn: scn,
-                }),
-            )
-        }));
-        (results, retry)
+        let flush_result = requests.last().map(|request| request.result);
+        drop(state);
+        for request in requests {
+            let result = request.result;
+            request.complete_durable(Ok(result));
+        }
+        if let Some(result) = flush_result {
+            Self::publish_flush(inner, result.end_lsn, result.end_scn);
+        }
+    }
+
+    fn publish_flush(inner: &Arc<StreamInner>, end_lsn: u64, end_scn: u64) {
+        if let Ok(mut flush) = inner.flushes.lock() {
+            flush.generation = flush.generation.wrapping_add(1);
+            flush.end_lsn = end_lsn;
+            flush.end_scn = end_scn;
+            inner.flush_changed.notify_all();
+        }
+    }
+
+    fn publish_flush_error(inner: &Arc<StreamInner>, error: Error) {
+        if let Ok(mut flush) = inner.flushes.lock() {
+            flush.failed = Some(error);
+            inner.flush_changed.notify_all();
+        }
     }
 
     fn persist_append_batch(&mut self, plan: &AppendBatch) -> Result<()> {
-        self.write_planned_records(&plan.records)?;
-        let committed = plan
-            .records
-            .iter()
-            .rev()
-            .find_map(|record| record.meta.as_ref())
-            .ok_or(Error::Invalid)?;
-        let mut manifest = self.manifest.clone();
-        manifest.committed = CommittedTail {
-            end_lsn: plan.end_lsn,
-            end_scn: plan.end_scn,
-            log_id: committed.header.log_id,
-            accumulated_checksum: committed.header.accumulated_checksum,
-        };
-        self.publish_manifest(&manifest)?;
-        self.manifest = manifest;
+        let directory = self.directory.clone();
+        Self::write_planned_records(&directory, &mut self.append_file, &plan.records)?;
+        self.publish_append_batch(plan);
+        Ok(())
+    }
+
+    fn publish_append_batch(&mut self, plan: &AppendBatch) {
+        for record in &plan.records {
+            if let Some(meta) = &record.meta {
+                self.recent_record_bytes = self
+                    .recent_record_bytes
+                    .saturating_add(record.bytes.len());
+                if let Some((_, previous)) = self.recent_records.insert(
+                    meta.lsn,
+                    (meta.clone(), Arc::clone(&record.bytes)),
+                ) {
+                    self.recent_record_bytes = self
+                        .recent_record_bytes
+                        .saturating_sub(previous.len());
+                }
+            }
+        }
+        while self.recent_records.len() > MAX_RECENT_RECORDS
+            || self.recent_record_bytes > MAX_RECENT_RECORD_BYTES
+        {
+            if let Some((_, (_, bytes))) = self.recent_records.pop_first() {
+                self.recent_record_bytes = self.recent_record_bytes.saturating_sub(bytes.len());
+            } else {
+                break;
+            }
+        }
         self.segments = plan.segments.clone();
         self.last_record = plan.last_record.clone();
         self.end_lsn = plan.end_lsn;
         self.end_scn = plan.end_scn;
         self.next_log_id = plan.next_log_id;
         self.accumulated_checksum = plan.accumulated_checksum;
-        Ok(())
     }
 
-    fn write_planned_records(&mut self, records: &[PlannedRecord]) -> Result<()> {
+    fn write_planned_records(
+        directory: &Path,
+        append_file: &mut Option<AppendFile>,
+        records: &[PlannedRecord],
+    ) -> Result<()> {
         let mut index = 0;
         let mut new_segment = false;
         while index < records.len() {
             let id = block_id(records[index].lsn);
-            let create = !self.segments.contains_key(&id);
-            if self
-                .append_file
-                .as_ref()
-                .is_none_or(|(open_id, _)| *open_id != id)
-            {
-                let file = OpenOptions::new()
-                    .create(true)
-                    .truncate(false)
-                    .read(true)
-                    .write(true)
-                    .open(segment_path(&self.directory, id))?;
-                self.append_file = Some((id, file));
+            let create = records[index].new_segment.is_some();
+            let start = if create {
+                0
+            } else {
+                physical_offset(records[index].lsn)
+            };
+            let mut end = index;
+            let mut write_len = if create {
+                SEGMENT_HEADER_SIZE as usize
+            } else {
+                0
+            };
+            while end < records.len() && block_id(records[end].lsn) == id {
+                write_len = write_len
+                    .checked_add(records[end].bytes.len())
+                    .ok_or(Error::Invalid)?;
+                end += 1;
             }
-            let file = &mut self.append_file.as_mut().ok_or(Error::Io)?.1;
+            let mut bytes = Vec::new();
+            bytes.try_reserve_exact(write_len).map_err(|_| Error::NoMemory)?;
             if create {
                 let header = records[index].new_segment.as_ref().ok_or(Error::Invalid)?;
-                file.write_all(&encode_segment_header(id, header)?)?;
-                new_segment = true;
+                bytes.extend_from_slice(&encode_segment_header(id, header)?);
             }
-            while index < records.len() && block_id(records[index].lsn) == id {
+            let mut expected = if create {
+                SEGMENT_HEADER_SIZE
+            } else {
+                start
+            };
+            while index < end {
                 let record = &records[index];
-                file.seek(SeekFrom::Start(physical_offset(record.lsn)))?;
-                file.write_all(&record.bytes)?;
+                if physical_offset(record.lsn) != expected {
+                    return Err(Error::Invalid);
+                }
+                bytes.extend_from_slice(&record.bytes);
+                expected = expected
+                    .checked_add(record.bytes.len() as u64)
+                    .ok_or(Error::Invalid)?;
                 index += 1;
             }
-            file.sync_data()?;
+            if append_file
+                .as_ref()
+                .is_none_or(|file| file.id != id)
+            {
+                *append_file = Some(open_append_file(
+                    id,
+                    &segment_path(directory, id),
+                    true,
+                    Vec::new(),
+                )?);
+            }
+            append_file
+                .as_mut()
+                .ok_or(Error::Io)?
+                .write(start, &bytes)?;
+            new_segment |= create;
         }
         if new_segment {
-            sync_directory(&self.directory)?;
+            sync_directory(directory)?;
         }
         Ok(())
     }
@@ -1097,6 +1337,9 @@ impl State {
     fn read_record(&self, lsn: u64) -> Result<(RecordMeta, Vec<u8>)> {
         let id = block_id(lsn);
         let segment = self.segments.get(&id).ok_or(Error::OutLower)?;
+        if let Some((meta, bytes)) = self.recent_records.get(&lsn) {
+            return Ok((meta.clone(), bytes.as_ref().clone()));
+        }
         let mut file = File::open(segment_path(&self.directory, id))?;
         read_record_from(
             &mut file,
@@ -1135,6 +1378,11 @@ impl State {
                 Error::OutUpper
             });
         };
+        if let Some((_, (record, bytes))) = self.recent_records.range(..=lsn).next_back() {
+            if lsn < record.end_lsn() {
+                return Ok((record.clone(), bytes.as_ref().clone()));
+            }
+        }
         let mut scanner = SegmentScanner::new(
             &self.directory,
             id,
@@ -1309,6 +1557,26 @@ impl SegmentScanner {
     }
 }
 
+fn tail_can_be_truncated(scanner: &SegmentScanner) -> Result<bool> {
+    let mut file = scanner.file.try_clone()?;
+    let mut offset = physical_offset(scanner.lsn);
+    file.seek(SeekFrom::Start(offset))?;
+    let mut saw_zero = false;
+    let mut bytes = [0; 16384];
+    while offset < scanner.segment_length {
+        let count = bytes.len().min((scanner.segment_length - offset) as usize);
+        file.read_exact(&mut bytes[..count])?;
+        for byte in &bytes[..count] {
+            if saw_zero && *byte != 0 {
+                return Ok(false);
+            }
+            saw_zero |= *byte == 0;
+        }
+        offset += count as u64;
+    }
+    Ok(saw_zero)
+}
+
 fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64) -> Result<State> {
     if base.curr_lsn < base.prev_lsn || ref_scn == u64::MAX {
         return Err(Error::Invalid);
@@ -1323,12 +1591,6 @@ fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64) -> Result<State>
         base_lsn: base.curr_lsn,
         previous: base,
         ref_scn,
-        committed: CommittedTail {
-            end_lsn: base.curr_lsn,
-            end_scn: base.prev_scn,
-            log_id: base.prev_log_id,
-            accumulated_checksum: base.prev_accumulated_checksum,
-        },
     };
     let manifest_writer = ManifestWriter::create(directory, &manifest)?;
     sync_directory(directory)?;
@@ -1338,23 +1600,25 @@ fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64) -> Result<State>
         append_file: None,
         end_lsn: base.curr_lsn,
         end_scn: base.prev_scn,
+        reserved_end_lsn: base.curr_lsn,
+        reserved_end_scn: base.prev_scn,
         next_log_id: base.prev_log_id.checked_add(1).ok_or(Error::Invalid)?,
         accumulated_checksum: base.prev_accumulated_checksum,
         manifest,
         segments: BTreeMap::new(),
+        recent_records: BTreeMap::new(),
+        recent_record_bytes: 0,
         last_record: None,
         integrity: true,
         closed: false,
+        io_in_progress: false,
+        unflushed_appends: 0,
         failed: None,
     })
 }
 
 fn open_state(directory: &Path) -> Result<State> {
     let (manifest, manifest_writer) = ManifestWriter::open(directory)?;
-    let committed = manifest.committed;
-    if committed.end_lsn < manifest.base_lsn {
-        return Err(Error::Corrupt);
-    }
     let mut ids = Vec::new();
     for item in fs::read_dir(directory)? {
         let item = item?;
@@ -1376,98 +1640,120 @@ fn open_state(directory: &Path) -> Result<State> {
         return Err(Error::Corrupt);
     }
     let first_required = block_id(manifest.base_lsn);
-    let last_required =
-        (committed.end_lsn > manifest.base_lsn).then(|| block_id(committed.end_lsn - 1));
-    let required_count = last_required.map_or(0, |last| last - first_required + 1);
-    let mut required_seen = 0u64;
     let mut segments = BTreeMap::new();
+    let mut removed_segment = false;
     for id in ids.iter().copied() {
-        if last_required.is_none_or(|last| id > last) {
-            continue;
-        }
-        if id != first_required + required_seen {
+        if id != first_required + segments.len() as u64 {
             return Err(Error::Corrupt);
         }
-        required_seen += 1;
         let path = segment_path(directory, id);
-        let mut file = File::open(&path)?;
-        let length = file.metadata()?.len();
-        if !(SEGMENT_HEADER_SIZE..=PHYSICAL_BLOCK_SIZE).contains(&length) {
-            return Err(Error::Corrupt);
+        let metadata = (|| {
+            let mut file = File::open(&path)?;
+            let length = file.metadata()?.len();
+            if !(SEGMENT_HEADER_SIZE..=PHYSICAL_BLOCK_SIZE).contains(&length) {
+                return Err(Error::Corrupt);
+            }
+            let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
+            file.read_exact(&mut segment_header)?;
+            let header = validate_segment_header(&segment_header, id)?;
+            if block_id(header.start_lsn) != id
+                || header.start_lsn < manifest.base_lsn
+                || header.first_scn < header.prev_scn
+                || (id != first_required && block_offset(header.start_lsn) != 0)
+            {
+                return Err(Error::Corrupt);
+            }
+            Ok(SegmentMeta { length, header })
+        })();
+        match metadata {
+            Ok(metadata) => {
+                segments.insert(id, metadata);
+            }
+            Err(_) if Some(id) == ids.last().copied() => {
+                fs::remove_file(path)?;
+                removed_segment = true;
+            }
+            Err(error) => return Err(error),
         }
-        if last_required.is_some_and(|last| id < last) && length != PHYSICAL_BLOCK_SIZE {
-            return Err(Error::Corrupt);
-        }
-        let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
-        file.read_exact(&mut segment_header)?;
-        let header = validate_segment_header(&segment_header, id)?;
-        if block_id(header.start_lsn) != id
-            || header.start_lsn < manifest.base_lsn
-            || header.first_scn < header.prev_scn
-            || (id != first_required && block_offset(header.start_lsn) != 0)
-        {
-            return Err(Error::Corrupt);
-        }
-        segments.insert(id, SegmentMeta { length, header });
     }
-    if required_seen != required_count {
+    if segments
+        .keys()
+        .next()
+        .is_some_and(|id| *id != first_required)
+    {
         return Err(Error::Corrupt);
     }
     if let Some(segment) = segments.get(&first_required) {
         if segment.base_info() != manifest.previous {
             return Err(Error::Corrupt);
         }
-    } else if last_required.is_some() {
-        return Err(Error::Corrupt);
     }
-    let mut last_record = None;
-    if let Some(last) = last_required {
-        let segment = segments.get(&last).ok_or(Error::Corrupt)?;
-        let mut scanner = SegmentScanner::new(directory, last, segment, committed.end_lsn)?;
+    let mut recovered = None;
+    let segment_ids: Vec<u64> = segments.keys().rev().copied().collect();
+    for id in segment_ids {
+        let segment = segments.get(&id).ok_or(Error::Corrupt)?;
+        let mut scanner = SegmentScanner::new(directory, id, segment, (id + 1) * BLOCK_SIZE)?;
         let mut first = true;
-        while let Some((record, _)) = scanner.next()? {
-            if first && record.header.max_scn != segment.header.first_scn {
-                return Err(Error::Corrupt);
+        loop {
+            match scanner.next() {
+                Ok(Some((record, _))) => {
+                    if first && record.header.max_scn != segment.header.first_scn {
+                        return Err(Error::Corrupt);
+                    }
+                    first = false;
+                }
+                Ok(None) | Err(Error::OutUpper) => break,
+                Err(Error::Corrupt | Error::UnknownVersion) if tail_can_be_truncated(&scanner)? => {
+                    break;
+                }
+                Err(error) => return Err(error),
             }
-            first = false;
         }
-        if first
-            || scanner.lsn != committed.end_lsn
-            || scanner.end_scn != committed.end_scn
-            || scanner.next_log_id != committed.log_id.checked_add(1).ok_or(Error::Corrupt)?
-            || scanner.accumulated_checksum != committed.accumulated_checksum
-        {
-            return Err(Error::Corrupt);
+        if scanner.last_record.is_none() {
+            fs::remove_file(segment_path(directory, id))?;
+            segments.remove(&id);
+            removed_segment = true;
+            continue;
         }
-        last_record = scanner.last_record;
-    } else if committed.end_scn != manifest.previous.prev_scn
-        || committed.log_id != manifest.previous.prev_log_id
-        || committed.accumulated_checksum != manifest.previous.prev_accumulated_checksum
-    {
-        return Err(Error::Corrupt);
+        recovered = Some(scanner);
+        break;
     }
-    let mut removed_segment = false;
     let mut append_file = None;
-    for id in ids {
-        if Some(id) == last_required {
-            let valid_length = if id == block_id(committed.end_lsn) {
-                physical_offset(committed.end_lsn)
+    let (end_lsn, end_scn, next_log_id, accumulated_checksum, last_record) =
+        if let Some(scanner) = recovered {
+            let id = block_id(scanner.last_record.as_ref().ok_or(Error::Corrupt)?.lsn);
+            let end_lsn = scanner.lsn;
+            let valid_length = if block_id(end_lsn) == id {
+                physical_offset(end_lsn)
             } else {
                 PHYSICAL_BLOCK_SIZE
             };
             let path = segment_path(directory, id);
-            let file = OpenOptions::new().write(true).open(&path)?;
+            let tail = read_append_tail(&path, valid_length)?;
+            let file = open_append_file(id, &path, false, tail)?;
             file.set_len(valid_length)?;
-            append_file = Some((id, file));
+            file.allocate()?;
+            file.set_len(PHYSICAL_BLOCK_SIZE)?;
+            append_file = Some(file);
             if let Some(segment) = segments.get_mut(&id) {
                 segment.length = valid_length;
             }
-        } else if last_required.is_none_or(|last| id > last) {
-            fs::remove_file(segment_path(directory, id))?;
-            segments.remove(&id);
-            removed_segment = true;
-        }
-    }
+            (
+                end_lsn,
+                scanner.end_scn,
+                scanner.next_log_id,
+                scanner.accumulated_checksum,
+                scanner.last_record,
+            )
+        } else {
+            (
+                manifest.base_lsn,
+                manifest.previous.prev_scn,
+                manifest.previous.prev_log_id.checked_add(1).ok_or(Error::Corrupt)?,
+                manifest.previous.prev_accumulated_checksum,
+                None,
+            )
+        };
     if removed_segment {
         sync_directory(directory)?;
     }
@@ -1477,13 +1763,19 @@ fn open_state(directory: &Path) -> Result<State> {
         append_file,
         manifest,
         segments,
+        recent_records: BTreeMap::new(),
+        recent_record_bytes: 0,
         last_record,
-        end_lsn: committed.end_lsn,
-        end_scn: committed.end_scn,
-        next_log_id: committed.log_id.checked_add(1).ok_or(Error::Corrupt)?,
-        accumulated_checksum: committed.accumulated_checksum,
+        end_lsn,
+        end_scn,
+        reserved_end_lsn: end_lsn,
+        reserved_end_scn: end_scn,
+        next_log_id,
+        accumulated_checksum,
         integrity: true,
         closed: false,
+        io_in_progress: false,
+        unflushed_appends: 0,
         failed: None,
     })
 }
@@ -1565,10 +1857,6 @@ impl ManifestWriter {
         bytes[32..40].copy_from_slice(&manifest.previous.prev_log_id.to_le_bytes());
         bytes[40..48].copy_from_slice(&manifest.previous.prev_accumulated_checksum.to_le_bytes());
         bytes[48..56].copy_from_slice(&manifest.ref_scn.to_le_bytes());
-        bytes[56..64].copy_from_slice(&manifest.committed.end_lsn.to_le_bytes());
-        bytes[64..72].copy_from_slice(&manifest.committed.end_scn.to_le_bytes());
-        bytes[72..80].copy_from_slice(&manifest.committed.log_id.to_le_bytes());
-        bytes[80..88].copy_from_slice(&manifest.committed.accumulated_checksum.to_le_bytes());
         bytes[88..96].copy_from_slice(&generation.to_le_bytes());
         let checksum = crc64(&bytes[..96]);
         bytes[96..104].copy_from_slice(&checksum.to_le_bytes());
@@ -1602,18 +1890,181 @@ impl ManifestWriter {
                 base_lsn,
                 previous,
                 ref_scn: number(48),
-                committed: CommittedTail {
-                    end_lsn: number(56),
-                    end_scn: number(64),
-                    log_id: signed(72),
-                    accumulated_checksum: number(80),
-                },
             },
         ))
     }
 }
 
 #[cfg(unix)]
+#[cfg(unix)]
+fn read_append_tail(path: &Path, valid_length: u64) -> Result<Vec<u8>> {
+    let tail_len = valid_length as usize % DIO_ALIGNMENT;
+    if tail_len == 0 {
+        return Ok(Vec::new());
+    }
+    let mut file = OpenOptions::new().read(true).open(path)?;
+    file.seek(SeekFrom::Start(valid_length - tail_len as u64))?;
+    let mut tail = zeroed_bytes(tail_len)?;
+    file.read_exact(&mut tail)?;
+    Ok(tail)
+}
+
+#[cfg(not(unix))]
+fn read_append_tail(_path: &Path, _valid_length: u64) -> Result<Vec<u8>> {
+    Ok(Vec::new())
+}
+
+fn open_append_file(id: u64, path: &Path, create: bool, tail: Vec<u8>) -> Result<AppendFile> {
+    let mut options = OpenOptions::new();
+    options
+        .create(create)
+        .truncate(false)
+        .read(true)
+        .write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_DIRECT | libc::O_DSYNC);
+    }
+    let file = AppendFile {
+        id,
+        file: options.open(path)?,
+        tail,
+    };
+    if create {
+        file.allocate()?;
+        file.set_len(PHYSICAL_BLOCK_SIZE)?;
+        file.file.sync_all()?;
+    }
+    Ok(file)
+}
+
+impl AppendFile {
+    #[cfg(target_os = "linux")]
+    fn allocate(&self) -> Result<()> {
+        use std::os::fd::AsRawFd;
+
+        if unsafe {
+            libc::fallocate(
+                self.file.as_raw_fd(),
+                0,
+                0,
+                PHYSICAL_BLOCK_SIZE as libc::off_t,
+            )
+        } != 0
+        {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn allocate(&self) -> Result<()> {
+        self.set_len(PHYSICAL_BLOCK_SIZE)
+    }
+
+    fn set_len(&self, len: u64) -> Result<()> {
+        Ok(self.file.set_len(len)?)
+    }
+
+    #[cfg(unix)]
+    fn write(&mut self, start: u64, bytes: &[u8]) -> Result<()> {
+        let prefix_len = self.tail.len();
+        let aligned_start = start
+            .checked_sub(prefix_len as u64)
+            .filter(|offset| *offset % DIO_ALIGNMENT as u64 == 0)
+            .ok_or(Error::Invalid)?;
+        let logical_len = prefix_len.checked_add(bytes.len()).ok_or(Error::Invalid)?;
+        let write_len = logical_len
+            .checked_add(DIO_ALIGNMENT - 1)
+            .map(|len| len / DIO_ALIGNMENT * DIO_ALIGNMENT)
+            .ok_or(Error::Invalid)?;
+        let mut buffer = AlignedBuffer::new(write_len)?;
+        let output = buffer.as_mut_slice();
+        output[..prefix_len].copy_from_slice(&self.tail);
+        output[prefix_len..logical_len].copy_from_slice(bytes);
+        output[logical_len..].fill(0);
+        pwrite_all(&self.file, aligned_start, output)?;
+        let tail_len = logical_len % DIO_ALIGNMENT;
+        let mut tail = Vec::new();
+        tail.try_reserve_exact(tail_len).map_err(|_| Error::NoMemory)?;
+        tail.extend_from_slice(&output[logical_len - tail_len..logical_len]);
+        self.tail = tail;
+        Ok(())
+    }
+
+    #[cfg(not(unix))]
+    fn write(&mut self, start: u64, bytes: &[u8]) -> Result<()> {
+        self.file.seek(SeekFrom::Start(start))?;
+        self.file.write_all(bytes)?;
+        self.file.sync_data()?;
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+struct AlignedBuffer {
+    pointer: *mut u8,
+    len: usize,
+}
+
+#[cfg(unix)]
+impl AlignedBuffer {
+    fn new(len: usize) -> Result<Self> {
+        let mut pointer = std::ptr::null_mut();
+        if unsafe { libc::posix_memalign(&mut pointer, DIO_ALIGNMENT, len) } != 0 {
+            return Err(Error::NoMemory);
+        }
+        Ok(Self {
+            pointer: pointer.cast(),
+            len,
+        })
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.pointer, self.len) }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for AlignedBuffer {
+    fn drop(&mut self) {
+        unsafe { libc::free(self.pointer.cast()) };
+    }
+}
+
+#[cfg(unix)]
+fn pwrite_all(file: &File, offset: u64, bytes: &[u8]) -> Result<()> {
+    use std::os::fd::AsRawFd;
+
+    let mut written = 0;
+    while written < bytes.len() {
+        let result = unsafe {
+            libc::pwrite(
+                file.as_raw_fd(),
+                bytes.as_ptr().add(written).cast(),
+                bytes.len() - written,
+                (offset + written as u64) as libc::off_t,
+            )
+        };
+        if result < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error.into());
+        }
+        if result == 0 {
+            return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "short WAL write").into());
+        }
+        written += result as usize;
+        if written < bytes.len() && written % DIO_ALIGNMENT != 0 {
+            return Err(Error::Io);
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn sync_directory(directory: &Path) -> Result<()> {
     File::open(directory)?.sync_all()?;
     Ok(())
@@ -1693,12 +2144,10 @@ mod tests {
         assert_eq!(second.lsn, first.end_lsn + GROUP_HEADER_SIZE as u64);
         drop(stream);
         let segment = segment_path(&directory.0, 0);
-        OpenOptions::new()
-            .append(true)
-            .open(&segment)
-            .unwrap()
-            .write_all(b"torn")
+        let mut file = OpenOptions::new().write(true).open(&segment).unwrap();
+        file.seek(SeekFrom::Start(physical_offset(second.end_lsn)))
             .unwrap();
+        file.write_all(b"torn").unwrap();
         let reopened = Stream::open(&path);
         assert!(reopened.status().unwrap());
         let progress = reopened.progress().unwrap();
@@ -1714,11 +2163,12 @@ mod tests {
     }
 
     #[test]
-    fn complete_but_unconfirmed_group_is_removed() {
+    fn complete_tail_group_survives_reopen() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0);
         let confirmed = stream.append(b"confirmed", 10).unwrap();
+        let complete_end_lsn;
         {
             let mut state = stream.inner.state.lock().unwrap();
             let lsn = state.end_lsn;
@@ -1739,17 +2189,23 @@ mod tests {
             file.seek(SeekFrom::Start(physical_offset(lsn))).unwrap();
             file.write_all(&group).unwrap();
             file.sync_data().unwrap();
-            let length = file.metadata().unwrap().len();
+            complete_end_lsn = lsn + group.len() as u64;
+            let length = physical_offset(lsn) + group.len() as u64;
             state.segments.get_mut(&block_id(lsn)).unwrap().length = length;
         }
         drop(stream);
 
         let reopened = Stream::open(&path);
-        assert_eq!(reopened.progress().unwrap().end_lsn, confirmed.end_lsn);
-        reopened.append(b"next", 11).unwrap();
+        assert_eq!(
+            reopened.progress().unwrap().end_lsn,
+            complete_end_lsn
+        );
+        reopened.append(b"next", 12).unwrap();
         let mut cursor = reopened.cursor(confirmed.lsn, false);
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"confirmed");
+        cursor.next(u64::MAX).unwrap();
+        assert_eq!(cursor.payload(), b"unconfirmed");
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"next");
         assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
@@ -1782,7 +2238,7 @@ mod tests {
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0);
         stream.append(b"one", 10).unwrap();
-        let second = stream.append(b"two", 11).unwrap();
+        stream.append(b"two", 11).unwrap();
         drop(stream);
         let segment = segment_path(&directory.0, 0);
         let original_length = fs::metadata(&segment).unwrap().len();
@@ -1799,7 +2255,7 @@ mod tests {
         assert_eq!(fs::metadata(segment).unwrap().len(), original_length);
         assert_eq!(
             fs::metadata(segment_path(&directory.0, 0)).unwrap().len(),
-            physical_offset(second.end_lsn)
+            original_length
         );
     }
 
@@ -1921,7 +2377,7 @@ mod tests {
                 .unwrap()
                 .append_file
                 .as_ref()
-                .map(|(id, _)| *id),
+                .map(|file| file.id),
             Some(0)
         );
 
@@ -2007,7 +2463,7 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .generation,
-            3
+            1
         );
         drop(stream);
 
@@ -2389,6 +2845,33 @@ mod tests {
             }
         }
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn submitted_appends_are_drained_by_close() {
+        const APPENDS: u64 = 256;
+
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0);
+        let mut expected_end_lsn = 0;
+        for index in 0..APPENDS {
+            expected_end_lsn = stream
+                .submit(index.to_string().as_bytes(), index + 1)
+                .unwrap()
+                .end_lsn;
+        }
+        stream.close().unwrap();
+        drop(stream);
+
+        let reopened = Stream::open(&path);
+        assert_eq!(reopened.progress().unwrap().end_lsn, expected_end_lsn);
+        let mut cursor = reopened.cursor(GROUP_HEADER_SIZE as u64, false);
+        for index in 0..APPENDS {
+            cursor.next(u64::MAX).unwrap();
+            assert_eq!(cursor.payload(), index.to_string().as_bytes());
+        }
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
     }
 
     #[test]
