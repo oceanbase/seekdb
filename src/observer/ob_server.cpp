@@ -194,10 +194,15 @@ public:
       LOG_WARN("failed to wait for schema readiness", KR(ret));
     } else if (OB_FAIL(server_.check_if_timezone_usable())) {
       LOG_WARN("failed to wait for timezone readiness", KR(ret));
-    } else if (OB_FAIL(server_.ob_service_.ensure_system_packages())) {
+    } else if (OB_FAIL(ensure_system_packages())) {
       LOG_WARN("failed to install system packages before SQL startup", KR(ret));
     }
     return ret;
+  }
+
+  int ensure_system_packages() override
+  {
+    return server_.ob_service_.ensure_system_packages();
   }
 
   int start_timezone_manager() override

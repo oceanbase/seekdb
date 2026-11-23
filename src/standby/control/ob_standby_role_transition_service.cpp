@@ -179,20 +179,28 @@ int stop_recovery_tasks(
   return ret;
 }
 
-int finish_committed_promotion()
+int finish_committed_promotion(IStandbyHost &host)
 {
   int ret = OB_SUCCESS;
   storage::ObLSService *ls_service = nullptr;
-  if (OB_FAIL(get_ls_service(ls_service))) {
-  } else if (OB_FAIL(ls_service->activate_local_append())) {
-    LOG_WARN("failed to activate primary local append runtime", KR(ret));
+  if (!share::server_is_write_enabled()) {
+    if (OB_FAIL(get_ls_service(ls_service))) {
+    } else if (OB_FAIL(ls_service->activate_local_append())) {
+      LOG_WARN("failed to activate primary local append runtime", KR(ret));
+    } else {
+      share::set_server_recovery_mode(false);
+      share::set_server_switchover_epoch(common::ObTimeUtility::current_time());
+      share::set_server_role(share::ObServerRole::PRIMARY_ROLE);
+      share::set_server_write_enabled(true);
+    }
+  }
+  // Package installation performs internal writes and must follow runtime
+  // activation. Repeated promotion commands retry package readiness without
+  // restarting the services that were already started in the standby profile.
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(host.ensure_system_packages())) {
+    LOG_WARN("failed to prepare metadata after online promotion", KR(ret));
   } else {
-    share::set_server_recovery_mode(false);
-    share::set_server_switchover_epoch(common::ObTimeUtility::current_time());
-    share::set_server_role(share::ObServerRole::PRIMARY_ROLE);
-    // This is the only operation that makes newly started transactions
-    // writable. Every durable and fallible promotion step precedes it.
-    share::set_server_write_enabled(true);
     LOG_INFO("online standby promotion completed");
   }
   return ret;
@@ -231,7 +239,7 @@ int complete_promotion(
       LOG_WARN("failed to commit primary role after runtime preparation", KR(ret));
     } else if (OB_FAIL(DEBUG_SYNC(common::AFTER_STANDBY_PRIMARY_ROLE_COMMITTED))) {
       LOG_WARN("debug sync failed after primary role commit", KR(ret));
-    } else if (OB_FAIL(finish_committed_promotion())) {
+    } else if (OB_FAIL(finish_committed_promotion(host))) {
       LOG_WARN("failed to publish committed primary runtime", KR(ret));
     }
   }
@@ -301,8 +309,7 @@ int prepare_to_primary(
   share::ObServerInfo server_info;
   if (OB_FAIL(load_server_info(state_store, server_info))) {
   } else if (server_info.is_primary() && !server_info.has_pending_role()) {
-    if (!is_verify && !share::server_is_write_enabled()
-        && OB_FAIL(finish_committed_promotion())) {
+    if (!is_verify && OB_FAIL(finish_committed_promotion(host))) {
       LOG_WARN("failed to resume committed primary publication", KR(ret), K(server_info));
     } else {
       LOG_INFO("server is already running with primary profile", K(server_info), K(is_verify));
@@ -458,8 +465,7 @@ int ObStandbyRoleTransitionService::resume_pending_promotion()
   } else if (OB_FAIL(load_server_info(*state_store_, server_info))) {
     LOG_WARN("failed to load pending standby promotion", KR(ret));
   } else if (server_info.is_primary() && !server_info.has_pending_role()) {
-    if (!share::server_is_write_enabled()
-        && OB_FAIL(finish_committed_promotion())) {
+    if (OB_FAIL(finish_committed_promotion(*host_))) {
       LOG_WARN("failed to resume committed primary publication", KR(ret));
     }
   } else if (!server_info.is_standby()
