@@ -23,6 +23,10 @@
       }
     },
     "linux-aarch64-glibc217": {
+      "gcc": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gcc-12.3.0/gcc-12.3.0-bin-linux-aarch64-glibc217-20261123T063139%2B0000-812180f4fe02.tar.gz",
+        "sha256": "cc14c38a900696e7cbecf84038b4aa98887f015dfa5e35796dc86c225a5fe9a8"
+      },
       "gtest": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-aarch64-glibc217-20261106-8f0a0a8e9fe6.tar.gz",
         "sha256": "6db9db8c31b26a5e52392ac4848d16681470c8554154ac046b47b78a2f65bac6"
@@ -37,6 +41,10 @@
       }
     },
     "linux-x86_64-glibc217": {
+      "gcc": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gcc-12.3.0/gcc-12.3.0-bin-linux-x86_64-glibc217-20261123T063139%2B0000-812180f4fe02.tar.gz",
+        "sha256": "a2a9e2e04457a6dd4d5a17c3ff04bbf38cf37a998266abf29cc713cf45f1bade"
+      },
       "gtest": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-x86_64-glibc217-20261106-8f0a0a8e9fe6.tar.gz",
         "sha256": "403ff0e270fffeb5a5336696966963cf5e146fb96c70d9cf81b1383d7d0f8efa"
@@ -54,6 +62,10 @@
       "jemalloc": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-macos-arm64-min13-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "9acb925380fdb1c326513f1fe2a718cbccefa196bc12cf7e36aaa02d131c3473"
+      },
+      "llvm": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/llvm-17.0.6/llvm-17.0.6-bin-macos-arm64-min13-20261123T022610%2B0000-8516872bda60.tar.gz",
+        "sha256": "8cce39f189c2fa59b5609b3b25db247a2666adbdaee6ec82d3501399ba15c2d9"
       },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-macos-arm64-min13-20261116T070344%2B0000-97588f036a3a.tar.gz",

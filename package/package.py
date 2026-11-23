@@ -312,8 +312,11 @@ def main():
             fallbacks = [options.dependencies.resolve() / path for path in (
                 "usr/local/oceanbase/devtools/lib64", "usr/local/oceanbase/deps/devel/lib",
                 "usr/local/oceanbase/deps/devel/lib/vsag_lib")]
-            fallbacks.insert(0, options.dependencies.resolve().parent / "prebuilt" /
-                             ("android" if options.layout == "android" else "native") / "lib")
+            prebuilt = options.dependencies.absolute().parent / "prebuilt"
+            locked = prebuilt / ("android" if options.layout == "android" else "native")
+            fallbacks.insert(0, locked / "lib")
+            if options.layout == "linux":
+                fallbacks.insert(0, locked / "gcc" / "lib64")
             metadata = binary_distribution.prepare(binary_package, original.resolve(), options.layout, directories,
                                       options.extra_library, options.glibc_version, fallbacks)
             if options.format == "binary":

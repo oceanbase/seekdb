@@ -362,9 +362,14 @@ def install_locked(lock_file, destination, cache_directory, system, architecture
         stage = Path(temporary) / "prebuilt"
         stage.mkdir()
         for package in packages:
+            prefix = stage
+            if package["name"] in ("gcc", "llvm"):
+                # Keep toolchain headers and runtimes outside the library SDK.
+                prefix = stage / package["name"]
+                prefix.mkdir()
             archive = locked_archive(package, archive_directory)
             print("Preparing locked package " + package["name"], flush=True)
-            unpack(archive, stage, ignore_owner=platform.system() == "Linux")
+            unpack(archive, prefix, ignore_owner=platform.system() == "Linux")
         (stage / key).touch()
         (stage / "DONE").touch()
         remove_directory(destination)

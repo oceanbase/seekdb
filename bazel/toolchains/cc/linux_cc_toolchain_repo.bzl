@@ -112,13 +112,18 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
             fail("bundled tool is missing: %s" % tool)
 
     repository_ctx.symlink(devtools, "devtools")
+    gcc = repository_ctx.workspace_root.get_child("deps", "prebuilt", "native", "gcc")
+    if not gcc.get_child("lib", "gcc").exists:
+        fail("GCC runtime is missing: %s; run ./build.py init" % gcc)
+    repository_ctx.symlink(gcc, "gcc")
+    gcc_directory = repository_ctx.path("gcc")
     sysroot = repository_ctx.getenv("SEEKDB_SYSROOT")
-    flags = []
+    flags = ["--gcc-toolchain=" + str(gcc_directory)]
     if sysroot:
         if not repository_ctx.path(sysroot).get_child("usr/include/stdlib.h").exists:
             fail("SEEKDB_SYSROOT is missing usr/include/stdlib.h: %s" % sysroot)
         _stage_sysroot(repository_ctx, repository_ctx.path(sysroot))
-        flags = ["--sysroot=" + str(repository_ctx.path("sysroot"))]
+        flags.append("--sysroot=" + str(repository_ctx.path("sysroot")))
 
     repository_ctx.template(
         "validate_static_library.sh",
@@ -142,6 +147,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
         substitutions = {
             "@CXX_BUILTIN_INCLUDE_DIRECTORIES@": repr(builtin_include_directories),
             "@HOST_CPU@": architecture,
+            "@GCC_TOOLCHAIN@": "external/" + repository_ctx.name + "/gcc",
             "@BAZEL_CPU@": "aarch64" if architecture == "aarch64" else "k8",
             "@BUILTIN_SYSROOT@": repr("external/" + repository_ctx.name + "/sysroot" if sysroot else None),
         },

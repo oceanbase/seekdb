@@ -7,10 +7,10 @@ package(default_visibility = ["//visibility:public"])
 filegroup(
     name = "clang_compiler_files",
     srcs = ["devtools/bin/clang"] + glob([
-        "devtools/include/c++/**",
+        "gcc/include/c++/**",
         "devtools/lib/clang/**/include/**",
         "devtools/lib/clang/**/share/**",
-        "devtools/lib/gcc/**",
+        "gcc/lib/gcc/**",
         "sysroot/**",
     ], allow_empty = True) + [
         "builtin_include_directory_paths",
@@ -35,15 +35,15 @@ filegroup(
         "devtools/bin/lld",
     ] + glob([
         "devtools/lib/clang/**/lib/**",
-        "devtools/lib64/**",
+        "gcc/lib64/**",
     ], allow_empty = True),
 )
 
 filegroup(
     name = "static_cpp_runtime",
     srcs = glob(
-        ["devtools/lib64/libstdc++.a"] + (
-            ["devtools/lib64/libatomic.a"] if "@HOST_CPU@" == "aarch64" else []
+        ["gcc/lib64/libstdc++.a"] + (
+            ["gcc/lib64/libatomic.a"] if "@HOST_CPU@" == "aarch64" else []
         ),
         allow_empty = True,
     ),
@@ -51,7 +51,7 @@ filegroup(
 
 filegroup(
     name = "dynamic_cpp_runtime",
-    srcs = glob(["devtools/lib64/libstdc++.so", "devtools/lib64/libstdc++.so.*"], exclude = ["**/*-gdb.py"], allow_empty = True),
+    srcs = glob(["gcc/lib64/libstdc++.so", "gcc/lib64/libstdc++.so.*"], exclude = ["**/*-gdb.py"], allow_empty = True),
 )
 
 filegroup(
@@ -96,6 +96,7 @@ cc_toolchain_config(
     abi_version = "@HOST_CPU@",
     builtin_sysroot = @BUILTIN_SYSROOT@,
     compile_flags = [
+        "--gcc-toolchain=@GCC_TOOLCHAIN@",
         "-Wall",
         "-Wthread-safety",
         "-Wself-assign",
@@ -123,6 +124,7 @@ cc_toolchain_config(
     extra_enabled_features = [":static_cpp_runtime_feature"],
     host_system_name = "local",
     link_flags = [
+        "--gcc-toolchain=@GCC_TOOLCHAIN@",
         "-fuse-ld=lld",
         "-Wl,-no-as-needed",
         "-Wl,-z,relro,-z,now",
