@@ -15,6 +15,7 @@
  */
 
 #include "sql/engine/expr/ob_expr_tokenize.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
@@ -304,8 +305,11 @@ int ObExprTokenize::parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeP
     if (fulltext_datum->is_null()) {
       // do nothing, return empty result
       param.fulltext_ = ObString::make_empty_string();
-    } else {
-      param.fulltext_ = fulltext_datum->get_string();
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                   ctx.exec_ctx_, param.allocator_, *fulltext_datum,
+                   expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(),
+                   param.fulltext_))) {
+      LOG_WARN("failed to read tokenize fulltext", K(ret));
     }
     param.meta_.set_varchar(); // as we hardcoded in fts_index
     param.meta_.set_collation_type(expr.args_[0]->obj_meta_.get_collation_type());
