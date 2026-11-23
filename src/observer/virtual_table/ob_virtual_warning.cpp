@@ -80,9 +80,13 @@ int ObVirtualWarning::fill_scanner()
   } else {
     // be compatible with mysql, show error firs, then warnings;
     cells = cur_row_.cells_;
-    const common::ObWarningBuffer &warn_buff = (NULL == session_->get_pl_context()) ?
-                                                session_->get_show_warnings_buffer() :
-                                                session_->get_warnings_buffer();
+    const common::ObWarningBuffer *active_warn_buff = ob_get_tsi_warning_buffer();
+    const common::ObWarningBuffer &warn_buff =
+        (NULL == session_->get_pl_context())
+            ? session_->get_show_warnings_buffer()
+            : (OB_NOT_NULL(active_warn_buff)
+                   ? *active_warn_buff
+                   : session_->get_warnings_buffer());
     uint32_t warn_buff_count = warn_buff.get_readable_warning_count();
     // fill error row(jus one row)
     if (OB_SUCC(ret)) {
