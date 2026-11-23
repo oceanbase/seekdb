@@ -1,8 +1,15 @@
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false','1');
 ai_prompt('{0}+{1}={2} 吗？请回答true或false','1')
 {"args": ["1"], "template": "{0}+{1}={2} 吗？请回答true或false"}
-select ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"));
-ERROR 0A000: json type is not supported not supported
+select ai_prompt('{0}',json_object('a','1'));
+ai_prompt('{0}',json_object('a','1'))
+{"args": [{"a": "1"}], "template": "{0}"}
+select ai_prompt('{0}|{1}',json_array('中文',1,true,null),json_object('b',json_array(2)));
+ai_prompt('{0}|{1}',json_array('中文',1,true,null),json_object('b',json_array(2)))
+{"args": [["中文", 1, true, null], {"b": [2]}], "template": "{0}|{1}"}
+select ai_prompt('outer {0}',ai_prompt('inner {0}', 'x'));
+ai_prompt('outer {0}',ai_prompt('inner {0}', 'x'))
+{"args": [{"args": ["x"], "template": "inner {0}"}], "template": "outer {0}"}
 select ai_prompt();
 ERROR 42000: Incorrect parameter count in the call to native function 'ai_prompt'
 select ai_prompt(1);
@@ -50,12 +57,22 @@ select ai_prompt(nr) from t1;
 ERROR 22000: Invalid data type for the operation
 select ai_prompt(a) from t1;
 ERROR 22000: Invalid data type for the operation
-select ai_prompt(b) from t1;
-ERROR 22000: Invalid data type for the operation
+select ai_prompt(b) from t1 order by nr;
+ai_prompt(b)
+{"args": [], "template": "b"}
+{"args": [], "template": "bb"}
+{"args": [], "template": "bbb"}
+{"args": [], "template": "BBB"}
+{"args": [], "template": "bb"}
 select ai_prompt(c) from t1;
 ERROR 22000: Invalid data type for the operation
-select ai_prompt(d) from t1;
-ERROR 22000: Invalid data type for the operation
+select ai_prompt(d) from t1 order by nr;
+ai_prompt(d)
+{"args": [], "template": "d"}
+{"args": [], "template": "dd"}
+{"args": [], "template": "ddd"}
+{"args": [], "template": "DDD"}
+{"args": [], "template": "dd"}
 drop table t1;
 drop table if exists t1;
 create table t1 (nr char(5), a varchar(10), b BINARY(20), c VARBINARY(20));
