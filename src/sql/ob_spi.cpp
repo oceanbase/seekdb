@@ -1646,9 +1646,6 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
                   OB_NOT_NULL(plan)
                   && (plan->get_table_access_plans().count() > 0
                       || plan->get_das_table_access_plans().count() > 0);
-              if (select_accesses_tables) {
-                ob_reset_tsi_warning_buffer();
-              }
             }
 
             OZ (inner_fetch(ctx,
