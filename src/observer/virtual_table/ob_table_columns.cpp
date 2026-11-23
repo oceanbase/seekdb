@@ -1036,6 +1036,8 @@ int ObTableColumns::set_col_attrs_according_binary_expr(const ObSelectStmt *sele
     // first_id in ObBinaryRefRawExpr is not the real table_id, TableItem::ref_id is the correct one
     if (OB_UNLIKELY(NULL == (tbl_item = select_stmt->get_table_item_by_id(bexpr->get_table_id())))) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (tbl_item->is_generated_table()) {
+      nullable |= !bexpr->get_result_type().is_not_null_for_read();
     } else if (OB_INVALID_ID == tbl_item->ref_id_) {
       // do nothing
     } else if (OB_FAIL(schema_guard->get_table_schema( tbl_item->ref_id_, table_schema))
