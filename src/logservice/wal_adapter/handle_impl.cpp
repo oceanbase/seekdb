@@ -38,6 +38,7 @@ void assign_scn(SCN &scn, const uint64_t value)
 HandleImpl::HandleImpl()
     : lock_(common::ObLatchIds::WAL_HANDLE_IMPL_LOCK),
       stream_(),
+      flush_thread_(),
       fs_cb_wrapper_(),
       io_lock_(common::ObLatchIds::WAL_HANDLE_IMPL_LOCK),
       active_io_count_(0),
@@ -59,6 +60,19 @@ int HandleImpl::init(::rust::Box<wal_rs::Stream> stream)
     stream_.emplace(std::move(stream));
     ret = from_rust_code(wal_rs::status_ffi(**stream_));
     if (OB_SUCC(ret)) {
+      flush_thread_ = std::thread([this, stream = wal_rs::clone_stream_ffi(**stream_)]() mutable {
+        uint64_t generation = 0;
+        for (;;) {
+          const auto flushed = wal_rs::wait_flush_ffi(*stream, generation);
+          if (wal_rs::Code::Ok != flushed.code) {
+            break;
+          }
+          generation = flushed.generation;
+          SCN end_scn;
+          assign_scn(end_scn, flushed.end_scn);
+          (void)fs_cb_wrapper_.update_end_lsn(LSN(flushed.end_lsn), end_scn);
+        }
+      });
       is_inited_ = true;
     } else {
       stream_.reset();
@@ -78,6 +92,7 @@ void HandleImpl::destroy()
   WLockGuard guard(lock_);
   if (is_inited_) {
     (void)wal_rs::close_ffi(**stream_);
+    flush_thread_.join();
     stream_.reset();
     is_inited_ = false;
   }
@@ -87,27 +102,20 @@ int HandleImpl::submit_log(const char *buf, const int64_t buf_len, const SCN &re
     LSN &lsn, SCN &scn)
 {
   int ret = OB_SUCCESS;
-  LSN end_lsn;
-  SCN end_scn;
   RLockGuard guard(lock_);
   if (!is_inited_ || OB_ISNULL(buf) || buf_len <= 0 || buf_len > MAX_LOG_BODY_SIZE
       || !ref_scn.is_valid()) {
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
   } else {
     IoScope io_scope(*this);
-    const auto result = wal_rs::append_ffi(**stream_,
+    const auto result = wal_rs::submit_ffi(**stream_,
         ::rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buf), buf_len),
         ref_scn.get_val_for_logservice());
     ret = from_rust_code(result.code);
     if (OB_SUCC(ret)) {
       lsn = LSN(result.lsn);
       assign_scn(scn, result.scn);
-      end_lsn = LSN(result.end_lsn);
-      assign_scn(end_scn, result.end_scn);
     }
-  }
-  if (OB_SUCC(ret)) {
-    (void)fs_cb_wrapper_.update_end_lsn(end_lsn, end_scn);
   }
   return ret;
 }

@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <optional>
+#include <thread>
 #include <vector>
 #include "common/ob_role.h"
 #include "lib/lock/ob_spin_lock.h"
@@ -100,6 +101,7 @@ private:
 private:
   mutable RWLock lock_;
   std::optional<::rust::Box<wal_rs::Stream>> stream_;
+  std::thread flush_thread_;
   wal::FsyncCallbackWrapper fs_cb_wrapper_;
   mutable common::ObSpinLock io_lock_;
   int64_t active_io_count_;
