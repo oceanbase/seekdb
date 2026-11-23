@@ -1,0 +1,21 @@
+src/sql/engine/expr/ob_expr_tokenize.h
+  s_e1bc5a5c0f15ab::t_cd111ed6aae27f 76
+src/sql/engine/expr/ob_expr_tokenize.cpp
+  s_e1bc5a5c0f15ab::t_cd111ed6aae27f 94,131,313-316
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bfa78c48b34c2e99aa23bab34c6f1c9d209f787c",
+  "prompts": {},
+  "sessions": {
+    "s_e1bc5a5c0f15ab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20a7f-9d93-7d20-bf0c-34944bd702d9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
