@@ -86,7 +86,7 @@ int ObStandbyWalBaseInfoBuilder::build(
         LOG_WARN("failed to get source end scn", K(ret), K(ls_id), K(arg));
       } else if (OB_FAIL(log_handler->locate_by_scn_coarsely(arg.replay_start_scn_, scan_lsn))) {
         if (OB_ERR_OUT_OF_LOWER_BOUND == ret) {
-          if (OB_FAIL(log_handler->get_begin_lsn(scan_lsn))) {
+          if (OB_FAIL(log_handler->get_base_lsn(scan_lsn))) {
             if (OB_ENTRY_NOT_EXIST == ret) {
               need_scan = false;
               ret = OB_SUCCESS;

@@ -28,13 +28,12 @@ class SCN;
 }
 namespace wal
 {
-class AppendOptions;
 class FsyncCallback;
 class Handle
 {
 public:
   friend class Env;
-  friend class EnvImpl;
+  friend class Env;
   friend class HandleGuard;
   Handle();
   Handle(const Handle &rhs);
@@ -49,8 +48,7 @@ public:
   Handle& operator=(Handle &&rhs);
   bool operator==(const Handle &rhs) const;
   //================ File access related interfaces =======================
-  int append(const AppendOptions &opts,
-             const void *buffer,
+  int append(const void *buffer,
              const int64_t nbytes,
              const share::SCN &ref_scn,
              LSN &lsn,
@@ -115,8 +113,6 @@ public:
   int locate_by_lsn_coarsely(const LSN &lsn, share::SCN &result_scn);
   // Advance the file's recyclable point
   int advance_base_lsn(const LSN &lsn);
-  // Return the position information of the earliest readable log in the file
-  int get_begin_lsn(LSN &lsn) const;
   // return the max recyclable point of WAL
   int get_base_lsn(LSN &lsn) const;
 
@@ -129,8 +125,6 @@ public:
   // In the scenario without new writes, the returned end_lsn is not readable
   int get_end_lsn(LSN &lsn) const;
   int get_end_scn(share::SCN &scn) const;
-  int get_max_lsn(LSN &lsn) const;
-  int get_max_scn(share::SCN &scn) const;
 	//================= Callback function registration ===========================
   // @brief: register a callback to HandleImpl, and do something in
   // this callback when file size has changed.
@@ -143,13 +137,9 @@ public:
 
 	//================= Dependency function registration ===========================
   int stat(Stat &wal_stat) const;
-
-
-  int diagnose(DiagnoseInfo &diagnose_info) const;
-
-  TO_STRING_KV(KP(wal_handle_impl_), KP(fs_cb_));
+  TO_STRING_KV(KP(wal_handle_impl_.get()), KP(fs_cb_));
 private:
-  wal::HandleImpl *wal_handle_impl_;
+  wal::HandleImplPtr wal_handle_impl_;
   wal::FsyncCallbackNode *fs_cb_;
 };
 } // end namespace oceanbase

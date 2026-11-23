@@ -57,7 +57,6 @@ pub struct AppendResult {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Progress {
-    pub begin_lsn: u64,
     pub begin_scn: u64,
     pub base_lsn: u64,
     pub end_lsn: u64,
@@ -66,6 +65,13 @@ pub struct Progress {
     pub used_disk: u64,
     pub unrecyclable_disk: u64,
     pub integrity: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Next {
+    Entry,
+    End,
+    BlockedByReplayablePoint,
 }
 
 #[derive(Clone, Debug)]
@@ -193,6 +199,14 @@ pub struct Stream {
     inner: Arc<StreamInner>,
 }
 
+impl Clone for Stream {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
 pub struct Cursor {
     inner: Arc<StreamInner>,
     next_lsn: u64,
@@ -213,6 +227,10 @@ pub struct Cursor {
 }
 
 impl Stream {
+    pub(crate) fn failed(error: Error) -> Self {
+        Self::from_result(Err(error))
+    }
+
     fn from_result(result: Result<State>) -> Self {
         let state = result.unwrap_or_else(|error| State {
             directory: PathBuf::new(),
@@ -377,16 +395,14 @@ impl Stream {
     pub fn progress(&self) -> Result<Progress> {
         let state = self.lock()?;
         state.check_open()?;
-        let begin_lsn = state.manifest.base_lsn;
         let begin_scn = state
             .segments
-            .range(block_id(begin_lsn)..)
+            .range(block_id(state.manifest.base_lsn)..)
             .next()
             .map(|(_, segment)| segment.header.first_scn)
             .unwrap_or(state.manifest.previous.prev_scn);
         let unrecyclable_disk = state.end_lsn.saturating_sub(state.manifest.base_lsn);
         Ok(Progress {
-            begin_lsn,
             begin_scn,
             base_lsn: state.manifest.base_lsn,
             end_lsn: state.end_lsn,
@@ -491,11 +507,6 @@ impl Stream {
     pub fn cursor(&self, lsn: u64, group_mode: bool) -> Cursor {
         Cursor::new(Arc::clone(&self.inner), lsn, group_mode)
     }
-
-    pub fn cursor_by_scn(&self, scn: u64, group_mode: bool) -> Result<Cursor> {
-        let lsn = self.locate_by_scn(scn)?;
-        Ok(self.cursor(lsn, group_mode))
-    }
 }
 
 impl Cursor {
@@ -532,7 +543,7 @@ impl Cursor {
         Ok(())
     }
 
-    pub fn next(&mut self, replayable_point: u64) -> Result<()> {
+    pub fn next(&mut self, replayable_point: u64) -> Result<Next> {
         loop {
             if !self.group_mode && !self.bytes.is_empty() {
                 let entries = group_entries(&self.bytes[GROUP_HEADER_SIZE..], self.group_lsn)?;
@@ -541,11 +552,11 @@ impl Cursor {
                     let entry = &entries[index];
                     if entry.header.scn > replayable_point {
                         self.next_min_scn = entry.header.scn;
-                        return Err(Error::End);
+                        return Ok(Next::BlockedByReplayablePoint);
                     }
                     if !entry.header.padding {
                         self.entry_offset = index;
-                        return self.set_entry(entry);
+                        return self.set_entry(entry).map(|_| Next::Entry);
                     }
                     index += 1;
                 }
@@ -556,7 +567,7 @@ impl Cursor {
                 return Err(Error::OutLower);
             }
             if self.next_lsn >= state.end_lsn {
-                return Err(Error::End);
+                return Ok(Next::End);
             }
             let remaining = BLOCK_SIZE - block_offset(self.next_lsn);
             if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64
@@ -596,7 +607,7 @@ impl Cursor {
                 self.next_lsn = meta.end_lsn();
                 self.next_min_scn = 0;
                 self.seek_required = false;
-                return Ok(());
+                return Ok(Next::Entry);
             }
             let entries = group_entries(&bytes[GROUP_HEADER_SIZE..], meta.lsn)?;
             let mut index = entries
@@ -618,7 +629,7 @@ impl Cursor {
             if entries[index].header.scn > replayable_point {
                 drop(state);
                 self.next_min_scn = entries[index].header.scn;
-                return Err(Error::End);
+                return Ok(Next::BlockedByReplayablePoint);
             }
             drop(state);
             self.bytes = bytes;
@@ -628,7 +639,7 @@ impl Cursor {
             self.current_end_lsn = meta.end_lsn();
             self.next_lsn = meta.end_lsn();
             self.seek_required = false;
-            return self.set_entry(&entries[index]);
+            return self.set_entry(&entries[index]).map(|_| Next::Entry);
         }
     }
 
@@ -689,12 +700,6 @@ impl Cursor {
     }
     pub fn next_min_scn(&self) -> u64 {
         self.next_min_scn
-    }
-
-    pub fn is_last(&self) -> Result<bool> {
-        let state = self.lock()?;
-        state.check_open()?;
-        Ok(self.current_end_lsn >= state.end_lsn)
     }
 }
 
@@ -1308,7 +1313,12 @@ fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64) -> Result<State>
     if base.curr_lsn < base.prev_lsn || ref_scn == u64::MAX {
         return Err(Error::Invalid);
     }
-    fs::create_dir_all(directory)?;
+    if !directory.try_exists()? {
+        return Err(Error::NotFound);
+    }
+    if !directory_is_empty(directory)? {
+        return Err(Error::Duplicate);
+    }
     let manifest = Manifest {
         base_lsn: base.curr_lsn,
         previous: base,
@@ -1604,9 +1614,13 @@ impl ManifestWriter {
 }
 
 #[cfg(unix)]
-fn sync_directory(directory: &Path) -> Result<()> {
+pub(crate) fn sync_directory(directory: &Path) -> Result<()> {
     File::open(directory)?.sync_all()?;
     Ok(())
+}
+
+pub(crate) fn directory_is_empty(directory: &Path) -> Result<bool> {
+    Ok(fs::read_dir(directory)?.next().transpose()?.is_none())
 }
 
 #[cfg(not(unix))]
@@ -1629,6 +1643,7 @@ mod tests {
             let path =
                 std::env::temp_dir().join(format!("seekdb-wal-{}-{sequence}", std::process::id()));
             let _ = fs::remove_dir_all(&path);
+            fs::create_dir(&path).unwrap();
             Self(path)
         }
     }
@@ -1655,6 +1670,16 @@ mod tests {
             source_scn: scn,
             bytes,
         }])
+    }
+
+    #[test]
+    fn creation_requires_an_existing_directory() {
+        let directory = Directory::new();
+        fs::remove_dir(&directory.0).unwrap();
+        let path = directory.0.to_string_lossy().into_owned();
+
+        assert_eq!(Stream::create(&path, base(), 0).status(), Err(Error::NotFound));
+        assert!(!directory.0.exists());
     }
 
     #[test]
@@ -1685,7 +1710,7 @@ mod tests {
         assert_eq!(cursor.payload(), b"one");
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"two");
-        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
     }
 
     #[test]
@@ -1727,7 +1752,7 @@ mod tests {
         assert_eq!(cursor.payload(), b"confirmed");
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"next");
-        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
     }
 
     #[test]
@@ -1810,7 +1835,7 @@ mod tests {
         let mut old = reopened.cursor(0, true);
         assert_eq!(old.next(u64::MAX), Err(Error::Corrupt));
         let mut tail_cursor = reopened.cursor(block_id(tail.lsn) * BLOCK_SIZE, true);
-        while tail_cursor.next(u64::MAX).is_ok() {}
+        while matches!(tail_cursor.next(u64::MAX), Ok(Next::Entry)) {}
         assert_eq!(tail_cursor.current_lsn, tail.lsn - GROUP_HEADER_SIZE as u64);
     }
 
@@ -1839,7 +1864,7 @@ mod tests {
         assert_eq!(cursor.payload(), vec![7; payload_len]);
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"next");
-        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
     }
 
     #[test]
@@ -1915,7 +1940,7 @@ mod tests {
         let mut cursor = reopened.cursor(BLOCK_SIZE, false);
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"after-checkpoint");
-        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
     }
 
     #[test]
@@ -2006,7 +2031,7 @@ mod tests {
         assert_eq!(cursor.payload(), b"one");
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"two");
-        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
     }
 
     #[test]
@@ -2085,7 +2110,7 @@ mod tests {
         source.append(b"three", 12).unwrap();
         let mut cursor = source.cursor(0, true);
         let mut records = Vec::new();
-        while cursor.next(u64::MAX).is_ok() {
+        while matches!(cursor.next(u64::MAX), Ok(Next::Entry)) {
             records.push((cursor.lsn(), cursor.scn(), cursor.bytes().to_vec()));
         }
         let groups: Vec<_> = records
@@ -2189,7 +2214,7 @@ mod tests {
                 cursor.next(u64::MAX).unwrap();
                 assert_eq!(cursor.payload(), payload);
             }
-            assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+            assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
         };
         let reopened = Stream::open(&path);
         assert_eq!(reopened.status(), Ok(true));
@@ -2205,7 +2230,7 @@ mod tests {
             assert_eq!(groups.scn(), *scn);
             import(&target, groups.lsn(), *scn, groups.bytes()).unwrap();
         }
-        assert_eq!(groups.next(u64::MAX), Err(Error::End));
+        assert_eq!(groups.next(u64::MAX), Ok(Next::End));
         drop(target);
         let target = Stream::open(&target_path);
         assert_eq!(target.status(), Ok(true));
@@ -2246,7 +2271,7 @@ mod tests {
         assert_eq!(cursor.lsn(), first_entry_len + GROUP_HEADER_SIZE as u64);
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"three");
-        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
         drop(stream);
 
         let reopened = Stream::open(&path);
@@ -2257,7 +2282,7 @@ mod tests {
         assert_eq!(cursor.payload(), b"two");
         cursor.next(u64::MAX).unwrap();
         assert_eq!(cursor.payload(), b"three");
-        assert_eq!(cursor.next(u64::MAX), Err(Error::End));
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
     }
 
     #[test]
@@ -2274,11 +2299,11 @@ mod tests {
         let mut cursor = stream.cursor(GROUP_HEADER_SIZE as u64, false);
         cursor.next(10).unwrap();
         assert_eq!(cursor.payload(), b"one");
-        assert_eq!(cursor.next(10), Err(Error::End));
+        assert_eq!(cursor.next(10), Ok(Next::BlockedByReplayablePoint));
         assert_eq!(cursor.next_min_scn(), 11);
         cursor.next(11).unwrap();
         assert_eq!(cursor.payload(), b"two");
-        assert_eq!(cursor.next(11), Err(Error::End));
+        assert_eq!(cursor.next(11), Ok(Next::BlockedByReplayablePoint));
         assert_eq!(cursor.next_min_scn(), 12);
         cursor.next(12).unwrap();
         assert_eq!(cursor.payload(), b"three");
@@ -2356,10 +2381,10 @@ mod tests {
         let mut cursor = reopened.cursor(GROUP_HEADER_SIZE as u64, false);
         loop {
             match cursor.next(u64::MAX) {
-                Ok(()) => {
+                Ok(Next::Entry) => {
                     actual.insert(String::from_utf8(cursor.payload().to_vec()).unwrap());
                 }
-                Err(Error::End) => break,
+                Ok(Next::End) => break,
                 error => panic!("unexpected cursor result: {error:?}"),
             }
         }

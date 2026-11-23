@@ -344,7 +344,6 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
   int64_t log_start_pos = 0;
 
   wal::LSN lsn;
-  const bool need_nonblock= false;
   SCN base_scn = SCN::min_scn();
   SCN scn;
   int64_t real_sleep_us = 0;
@@ -385,7 +384,6 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
   } else if (OB_FAIL(log_handler->append(buffer,
                                          buffer_size,
                                          base_scn,
-                                         need_nonblock,
                                          cb,
                                          lsn,
                                          scn))) {
@@ -424,7 +422,6 @@ int ObDDLRedoLogWriter::write_auto_fork_log(
   ObDDLClogCb *cb = nullptr;
 
   wal::LSN lsn;
-  const bool need_nonblock = false;
   ObLS *ls = nullptr;
   if (OB_UNLIKELY(ObDDLClogType::DDL_TABLE_FORK_FREEZE_LOG != clog_type &&
                           ObDDLClogType::DDL_TABLE_FORK_START_LOG != clog_type &&
@@ -444,7 +441,6 @@ int ObDDLRedoLogWriter::write_auto_fork_log(
   } else if (OB_FAIL(ls->get_log_handler()->append(buffer,
                                          buffer_size,
                                          SCN::min_scn(),
-                                         need_nonblock,
                                          cb,
                                          lsn,
                                          scn))) {

@@ -3772,7 +3772,6 @@ int ObTablet::write_sync_tablet_seq_log(ObTabletAutoincSeq &autoinc_seq,
   ObSyncTabletSeqMdsLogCb *cb = nullptr;
   ObLogHandler *log_handler = get_log_handler();
   wal::LSN lsn;
-  const bool need_nonblock = true; // log_handler->append may return OB_EAGAIN, caller is responsible for retry
   const SCN ref_scn = SCN::min_scn();
   uint64_t new_autoinc_seq = 0;
   if (OB_FAIL(autoinc_seq.get_autoinc_seq_value(new_autoinc_seq))) {
@@ -3786,7 +3785,6 @@ int ObTablet::write_sync_tablet_seq_log(ObTabletAutoincSeq &autoinc_seq,
   } else if (OB_FAIL(log_handler->append(buffer,
                                          buffer_size,
                                          ref_scn,
-                                         need_nonblock,
                                          cb,
                                          lsn,
                                          scn))) {
@@ -3980,7 +3978,6 @@ int ObTablet::write_tablet_schema_version_change_clog(
     ObLogHandler *log_handler = get_log_handler();
 
     wal::LSN lsn;
-    const bool need_nonblock= false;
     SCN ref_scn;
     ref_scn.set_min();
     scn.reset();
@@ -3993,7 +3990,6 @@ int ObTablet::write_tablet_schema_version_change_clog(
     } else if (OB_FAIL(log_handler->append(buffer,
                                            buffer_size,
                                            ref_scn,
-                                           need_nonblock,
                                            cb,
                                            lsn,
                                            scn))) {

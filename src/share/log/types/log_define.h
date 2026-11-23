@@ -131,26 +131,6 @@ constexpr mode_t FILE_OPEN_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 constexpr offset_t LOG_CACHE_ALIGN_SIZE = 64 * 1024;
 // ========== LogCache end =================
 
-enum LogState {
-  INVALID_STATE = 0,
-  INIT = 1,
-  ACTIVE = 2,
-  RECOVERING = 3,
-};
-inline const char *log_state_to_string(const LogState state)
-{
-  #define CHECK_LOG_STATE(x) case(LogState::x): return #x
-  switch (state)
-  {
-    CHECK_LOG_STATE(INIT);
-    CHECK_LOG_STATE(ACTIVE);
-    CHECK_LOG_STATE(RECOVERING);
-    default:
-      return "INVALID_STATE";
-  }
-  #undef CHECK_LOG_STATE
-}
-
 enum LogType
 {
   LOG_UNKNOWN = 0,

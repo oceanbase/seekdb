@@ -321,7 +321,7 @@ OB_INLINE int ObTxCtxLogOperator<T>::submit_log_block_out_()
       TRANS_LOG(WARN, "seal log block fail", K(ret));
     } else if (OB_SUCC(tx_ctx_->ls_tx_ctx_mgr_->get_ls_log_adapter()->submit_log(
                    log_block_->get_buf(), log_block_->get_size(), log_op_arg_.submit_arg_.base_scn_,
-                   log_op_arg_.submit_arg_.log_cb_, false))) {
+                   log_op_arg_.submit_arg_.log_cb_))) {
       tx_ctx_->busy_cbs_.add_last(log_op_arg_.submit_arg_.log_cb_);
       scn_ = log_op_arg_.submit_arg_.log_cb_->get_log_ts();
       lsn_ = log_op_arg_.submit_arg_.log_cb_->get_lsn();

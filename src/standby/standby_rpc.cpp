@@ -888,7 +888,7 @@ int StandbyRpcService::fetch_log(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("log stream or handler is null", K(ret), KP(ls), KP(log_handler));
       } else if (request->max_bytes() > 0
-                 && OB_FAIL(log_handler->get_begin_lsn(begin_lsn))) {
+                 && OB_FAIL(log_handler->get_base_lsn(begin_lsn))) {
         LOG_WARN("failed to get source log begin lsn", K(ret), K(start_lsn));
       } else if (request->max_bytes() > 0
                  && OB_FAIL(log_handler->get_end_lsn(end_lsn))) {

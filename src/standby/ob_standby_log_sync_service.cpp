@@ -419,7 +419,7 @@ int ObStandbyLogSyncService::sync_once_(
   made_progress = false;
   if (OB_SUCCESS != (ret = get_fatal_error_())) {
   } else if (OB_FAIL(get_log_handler(log_handler))) {
-  } else if (OB_FAIL(log_handler->get_max_lsn(start_lsn))) {
+  } else if (OB_FAIL(log_handler->get_end_lsn(start_lsn))) {
     LOG_WARN("failed to get local standby log import position", KR(ret));
   } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
     LOG_WARN("failed to init standby RPC client", KR(ret), K(source_addr));

@@ -226,7 +226,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
     } else if (schema_state.has_async_index_) {
       storage::ObLS *ls = nullptr;
       if (OB_FAIL(share::server_service<storage::ObLSService>()->get_ls(ls))
-          || OB_FAIL(ls->get_log_handler()->get_max_lsn(fence_lsn))) {
+          || OB_FAIL(ls->get_log_handler()->get_end_lsn(fence_lsn))) {
         LOG_WARN("failed to capture refresh fence_lsn", KR(ret), K(target_scn));
       }
     }

@@ -18,6 +18,7 @@
 #define OCEANBASE_LOGSERVICE_OB_LOG_REPLAY_SERVICE_
 
 #include "ob_replay_status.h"
+#include "logservice/ob_log_allocator.h"
 #include "share/log/ob_log_base_header.h"
 #include "lib/task/ob_timer.h"
 #include "lib/thread/ob_simple_thread_pool.h"

@@ -421,7 +421,6 @@ SHARE_UNITY_GROUPS = [
             "src/share/log/types/log_define.cpp",
             "src/share/log/types/lsn.cpp",
             "src/share/log/types/base_info.cpp",
-            "src/share/log/types/options.cpp",
         ],
     ),
     struct(

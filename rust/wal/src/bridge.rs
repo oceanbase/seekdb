@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::env::Env;
 use crate::format::{copied_bytes, Error, Result};
-use crate::stream::{self, Cursor, Stream};
+use crate::stream::{self, Cursor, Next, Stream};
 
 #[cxx::bridge(namespace = "oceanbase::wal::wal_rs")]
 mod ffi {
@@ -22,6 +23,7 @@ mod ffi {
         Ok,
         Invalid,
         NotInit,
+        NotFound,
         End,
         OutLower,
         OutUpper,
@@ -64,7 +66,6 @@ mod ffi {
 
     struct Progress {
         code: Code,
-        begin_lsn: u64,
         begin_scn: u64,
         base_lsn: u64,
         end_lsn: u64,
@@ -86,12 +87,26 @@ mod ffi {
         scn: u64,
     }
 
+    struct DiskUsageResult {
+        code: Code,
+        used: u64,
+        total: u64,
+    }
+
     extern "Rust" {
+        type Env;
+        fn create_env(path: &str, disk_soft_target: u64) -> Box<Env>;
+        fn start_env_ffi(env: &Env) -> Code;
+        fn stop_env_ffi(env: &Env);
+        fn create_env_stream_ffi(env: &Env, base: BaseInfo, ref_scn: u64) -> Box<Stream>;
+        fn open_env_stream_ffi(env: &Env) -> Box<Stream>;
+        fn remove_env_ffi(env: &Env) -> Code;
+        fn disk_usage_env_ffi(env: &Env) -> DiskUsageResult;
+        fn update_disk_soft_target_env_ffi(env: &Env, disk_soft_target: u64);
+        fn disk_soft_target_env_ffi(env: &Env) -> u64;
+
         type Stream;
-        fn create_stream(path: &str, base: BaseInfo, ref_scn: u64) -> Box<Stream>;
-        fn open_stream(path: &str) -> Box<Stream>;
         fn status_ffi(stream: &Stream) -> Code;
-        fn integrity_ffi(stream: &Stream) -> bool;
         fn append_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult;
         fn copy_imported_group(source_lsn: u64, source_scn: u64, bytes: &[u8])
             -> ImportedGroupResult;
@@ -113,17 +128,13 @@ mod ffi {
         fn end_lsn(cursor: &Cursor) -> u64;
         fn scn(cursor: &Cursor) -> u64;
         fn log_id(cursor: &Cursor) -> i64;
-        fn committed_end_lsn(cursor: &Cursor) -> u64;
-        fn accumulated_checksum(cursor: &Cursor) -> u64;
-        fn padding(cursor: &Cursor) -> bool;
         fn next_min_scn(cursor: &Cursor) -> u64;
-        fn is_last_ffi(cursor: &Cursor) -> bool;
     }
 }
 
 pub use ffi::{
-    AppendResult, BaseInfo, BaseInfoResult, Code, ImportedGroup, ImportedGroupResult, PositionResult,
-    Progress,
+    AppendResult, BaseInfo, BaseInfoResult, Code, DiskUsageResult, ImportedGroup,
+    ImportedGroupResult, PositionResult, Progress,
 };
 
 fn code(result: Result<()>) -> Code {
@@ -138,6 +149,7 @@ impl From<Error> for Code {
         match error {
             Error::Invalid => Self::Invalid,
             Error::NotInit => Self::NotInit,
+            Error::NotFound => Self::NotFound,
             Error::End => Self::End,
             Error::OutLower => Self::OutLower,
             Error::OutUpper => Self::OutUpper,
@@ -177,12 +189,57 @@ impl From<stream::BaseInfo> for BaseInfo {
     }
 }
 
-fn create_stream(path: &str, base: BaseInfo, ref_scn: u64) -> Box<Stream> {
-    Box::new(Stream::create(path, base.into(), ref_scn))
+fn create_env(path: &str, disk_soft_target: u64) -> Box<Env> {
+    Box::new(Env::new(path, disk_soft_target))
 }
 
-fn open_stream(path: &str) -> Box<Stream> {
-    Box::new(Stream::open(path))
+fn start_env_ffi(env: &Env) -> Code {
+    code(env.start())
+}
+
+fn stop_env_ffi(env: &Env) {
+    env.stop();
+}
+
+fn create_env_stream_ffi(env: &Env, base: BaseInfo, ref_scn: u64) -> Box<Stream> {
+    Box::new(match env.create(base.into(), ref_scn) {
+        Ok(stream) => stream,
+        Err(error) => Stream::failed(error),
+    })
+}
+
+fn open_env_stream_ffi(env: &Env) -> Box<Stream> {
+    Box::new(match env.open() {
+        Ok(stream) => stream,
+        Err(error) => Stream::failed(error),
+    })
+}
+
+fn remove_env_ffi(env: &Env) -> Code {
+    code(env.remove())
+}
+
+fn disk_usage_env_ffi(env: &Env) -> DiskUsageResult {
+    match env.disk_usage() {
+        Ok((used, total)) => DiskUsageResult {
+            code: Code::Ok,
+            used,
+            total,
+        },
+        Err(error) => DiskUsageResult {
+            code: error.into(),
+            used: 0,
+            total: 0,
+        },
+    }
+}
+
+fn update_disk_soft_target_env_ffi(env: &Env, disk_soft_target: u64) {
+    env.update_disk_soft_target(disk_soft_target);
+}
+
+fn disk_soft_target_env_ffi(env: &Env) -> u64 {
+    env.disk_soft_target()
 }
 
 fn status_ffi(stream: &Stream) -> Code {
@@ -190,10 +247,6 @@ fn status_ffi(stream: &Stream) -> Code {
         Ok(_) => Code::Ok,
         Err(error) => error.into(),
     }
-}
-
-fn integrity_ffi(stream: &Stream) -> bool {
-    stream.status().unwrap_or(false)
 }
 
 fn append_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult {
@@ -269,7 +322,6 @@ fn progress_ffi(stream: &Stream) -> Progress {
     match stream.progress() {
         Ok(progress) => Progress {
             code: Code::Ok,
-            begin_lsn: progress.begin_lsn,
             begin_scn: progress.begin_scn,
             base_lsn: progress.base_lsn,
             end_lsn: progress.end_lsn,
@@ -281,7 +333,6 @@ fn progress_ffi(stream: &Stream) -> Progress {
         },
         Err(error) => Progress {
             code: error.into(),
-            begin_lsn: 0,
             begin_scn: 0,
             base_lsn: 0,
             end_lsn: 0,
@@ -318,7 +369,6 @@ fn set_base_lsn_ffi(stream: &Stream, lsn: u64) -> Progress {
         Ok(_) => progress_ffi(stream),
         Err(error) => Progress {
             code: error.into(),
-            begin_lsn: 0,
             begin_scn: 0,
             base_lsn: 0,
             end_lsn: 0,
@@ -374,7 +424,11 @@ fn reuse_ffi(cursor: &mut Cursor, lsn: u64) -> Code {
 }
 
 fn next_ffi(cursor: &mut Cursor, replayable_point: u64) -> Code {
-    code(cursor.next(replayable_point).map(|_| ()))
+    match cursor.next(replayable_point) {
+        Ok(Next::Entry) => Code::Ok,
+        Ok(Next::End | Next::BlockedByReplayablePoint) => Code::End,
+        Err(error) => error.into(),
+    }
 }
 
 fn bytes(cursor: &Cursor) -> &[u8] {
@@ -395,18 +449,6 @@ fn scn(cursor: &Cursor) -> u64 {
 fn log_id(cursor: &Cursor) -> i64 {
     cursor.log_id()
 }
-fn committed_end_lsn(cursor: &Cursor) -> u64 {
-    cursor.committed_end_lsn()
-}
-fn accumulated_checksum(cursor: &Cursor) -> u64 {
-    cursor.accumulated_checksum()
-}
-fn padding(cursor: &Cursor) -> bool {
-    cursor.padding()
-}
 fn next_min_scn(cursor: &Cursor) -> u64 {
     cursor.next_min_scn()
-}
-fn is_last_ffi(cursor: &Cursor) -> bool {
-    cursor.is_last().unwrap_or(false)
 }

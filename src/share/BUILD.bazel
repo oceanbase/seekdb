@@ -218,7 +218,6 @@ grouped_unity_cc_library(
         "log/types/log_define.h",
         "log/types/lsn.h",
         "log/types/base_info.h",
-        "log/types/options.h",
     ],
     deps = [
         ":error_codes",

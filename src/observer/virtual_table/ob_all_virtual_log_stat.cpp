@@ -73,7 +73,7 @@ int ObAllVirtualWalStat::insert_log_stat_(const wal::Stat &wal_stat)
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 2: {
-        cur_row_.cells_[i].set_uint64(wal_stat.begin_lsn_.val_);
+        cur_row_.cells_[i].set_uint64(wal_stat.base_lsn_.val_);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 3: {
@@ -89,11 +89,11 @@ int ObAllVirtualWalStat::insert_log_stat_(const wal::Stat &wal_stat)
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 6: {
-        cur_row_.cells_[i].set_uint64(wal_stat.max_lsn_.val_);
+        cur_row_.cells_[i].set_uint64(wal_stat.end_lsn_.val_);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 7: {
-        cur_row_.cells_[i].set_uint64(wal_stat.max_scn_.get_val_for_inner_table_field());
+        cur_row_.cells_[i].set_uint64(wal_stat.end_scn_.get_val_for_inner_table_field());
         break;
       }
       default:

@@ -21,7 +21,6 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/list/ob_dlink_node.h"
 #include "lib/utility/ob_print_utils.h"
-#include "log_meta_info.h"
 #include "share/log/types/lsn.h"
 namespace oceanbase
 {
@@ -36,18 +35,6 @@ class FsyncCallback
 public:
   // end_lsn returns the position of the next log after the last confirmed log
   virtual int update_end_lsn(const LSN &end_lsn, const share::SCN &end_scn) = 0;
-};
-
-class MonitorCallback
-{
-public:
-  // record events
-  virtual int record_set_base_lsn_event(const LSN &new_base_lsn) = 0;
-  virtual int record_advance_base_info_event(const BaseInfo &wal_base_info) = 0;
-  virtual int record_truncate_event(const LSN &lsn,
-                                    const int64_t min_block_id,
-                                    const int64_t max_block_id,
-                                    const int64_t truncate_end_block_id) = 0;
 };
 
 } // end namespace wal

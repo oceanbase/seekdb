@@ -59,52 +59,5 @@ int FsyncCallbackWrapper::update_end_lsn(const LSN &end_lsn, const share::SCN &e
   return ret;
 }
 
-LogPlugins::LogPlugins()
-  : wal_monitor_lock_(),
-    wal_monitor_(NULL) { }
-
-LogPlugins::~LogPlugins()
-{
-  destroy();
-}
-
-void LogPlugins::destroy()
-{
-  {
-    common::RWLock::WLockGuard guard(wal_monitor_lock_);
-    wal_monitor_ = NULL;
-  }
-}
-
-template<>
-int LogPlugins::add_plugin(MonitorCallback *plugin)
-{
-  int ret = OB_SUCCESS;
-  common::RWLock::WLockGuard guard(wal_monitor_lock_);
-  if (OB_ISNULL(plugin)) {
-    ret = OB_INVALID_ARGUMENT;
-    WAL_LOG(WARN, "WAL plugin is NULL", KP(plugin));
-  } else if (OB_NOT_NULL(wal_monitor_)) {
-    ret = OB_OP_NOT_ALLOW;
-    WAL_LOG(INFO, "WAL plugin is not NULL", KP(plugin), KP_(wal_monitor));
-  } else {
-    wal_monitor_ = plugin;
-    WAL_LOG(INFO, "add_plugin success", KP(plugin));
-  }
-  return ret;
-}
-
-template<>
-int LogPlugins::del_plugin(MonitorCallback *plugin)
-{
-  int ret = OB_SUCCESS;
-  common::RWLock::WLockGuard guard(wal_monitor_lock_);
-  if (OB_NOT_NULL(wal_monitor_)) {
-    WAL_LOG(INFO, "del_plugin success", KP_(wal_monitor));
-    wal_monitor_ = NULL;
-  }
-  return ret;
-}
-
 }; // end namespace wal
 }; // end namespace oceanbase

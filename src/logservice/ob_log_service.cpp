@@ -18,6 +18,7 @@
 #include "ob_log_service.h"
 #include "logservice/wal_handle_guard.h"
 #include "logservice/ob_log_allocator_mgr.h"
+#include "lib/file/file_directory_utils.h"
 #include "lib/ob_running_mode.h"
 #include "share/ob_share_util.h"
 
@@ -49,7 +50,6 @@ ObLogService::ObLogService() :
   replay_thread_quota_(1),
   log_storage_(NULL),
   runtime_config_(),
-  monitor_(),
   update_wal_opts_lock_()
 {}
 
@@ -60,8 +60,7 @@ ObLogService::~ObLogService()
 
 int ObLogService::server_module_init(
     ObLogService *&logservice,
-    const wal::Options &wal_options,
-    share::LocalStore &store,
+    const int64_t wal_disk_soft_target,
     const char *runtime_clog_dir,
     const char *clog_dir,
     const common::ObAddr &self,
@@ -81,8 +80,7 @@ int ObLogService::server_module_init(
         KP(runtime_clog_dir), KP(clog_dir), KP(log_storage),
         KP(io_manager), K(self));
   } else if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
-  } else if (OB_FAIL(logservice->init(wal_options, store,
-                                      runtime_clog_dir,
+  } else if (OB_FAIL(logservice->init(wal_disk_soft_target, runtime_clog_dir,
                                       self,
                                       alloc_mgr,
                                       log_storage,
@@ -353,8 +351,7 @@ int check_and_prepare_dir(const char *dir)
   return ret;
 }
 
-int ObLogService::init(const Options &options,
-                       share::LocalStore &store,
+int ObLogService::init(const int64_t wal_disk_soft_target,
                        const char *base_dir,
                        const common::ObAddr &self,
                        common::ObILogAllocator *alloc_mgr,
@@ -371,14 +368,13 @@ int ObLogService::init(const Options &options,
   } else if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
-  } else if (false == options.is_valid() || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
+  } else if (wal_disk_soft_target < 0 || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
       || OB_ISNULL(alloc_mgr) || OB_ISNULL(log_storage)
       || OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
+    CLOG_LOG(WARN, "invalid arguments", K(ret), K(wal_disk_soft_target), KP(base_dir), K(self),
              KP(alloc_mgr), KP(log_storage), KP(io_manager));
-  } else if (OB_FAIL(Env::create_wal_env(options, store, base_dir, self,
-                                              &monitor_, wal_env_))) {
+  } else if (OB_FAIL(Env::create_wal_env(wal_disk_soft_target, base_dir, wal_env_))) {
   } else if (OB_ISNULL(wal_env_)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "wal_env_ is NULL", K(ret));
@@ -544,25 +540,22 @@ int ObLogService::update_log_disk_usage_limit_size(const int64_t log_disk_usage_
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(update_wal_opts_lock_);
-  Options wal_opts;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(wal_env_->get_options(wal_opts))) {
-  } else if (FALSE_IT(wal_opts.disk_options_.log_disk_usage_limit_size_ = log_disk_usage_limit_size)) {
-  } else if (OB_FAIL(wal_env_->update_options(wal_opts))) {
+  } else if (OB_FAIL(wal_env_->update_disk_soft_target(log_disk_usage_limit_size))) {
   } else {
     CLOG_LOG(INFO, "update_log_disk_usage_limit_size success", K(log_disk_usage_limit_size));
   }
   return ret;
 }
 
-int ObLogService::get_wal_options(wal::Options &opts)
+int ObLogService::get_wal_disk_soft_target(int64_t &disk_soft_target)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    ret = wal_env_->get_options(opts);
+    ret = wal_env_->get_disk_soft_target(disk_soft_target);
   }
   return ret;
 }

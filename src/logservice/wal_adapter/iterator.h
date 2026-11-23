@@ -19,7 +19,6 @@
 
 #include <optional>
 #include <type_traits>
-#include "lib/function/ob_function.h"
 #include "rust/wal.h"
 #include "share/ob_errno.h"
 
@@ -30,14 +29,13 @@ namespace wal
 struct PayloadEntry {};
 struct GroupEntry {};
 
-typedef common::ObFunction<void()> DestroyStorageFunctor;
-
 inline int from_rust_code(const wal_rs::Code code)
 {
   switch (code) {
     case wal_rs::Code::Ok: return OB_SUCCESS;
     case wal_rs::Code::Invalid: return OB_INVALID_ARGUMENT;
     case wal_rs::Code::NotInit: return OB_NOT_INIT;
+    case wal_rs::Code::NotFound: return OB_ENTRY_NOT_EXIST;
     case wal_rs::Code::End: return OB_ITER_END;
     case wal_rs::Code::OutLower: return OB_ERR_OUT_OF_LOWER_BOUND;
     case wal_rs::Code::OutUpper: return OB_ERR_OUT_OF_UPPER_BOUND;
@@ -96,10 +94,6 @@ public:
     cursor_.reset();
     has_entry_ = false;
     is_inited_ = false;
-    if (destroy_storage_functor_.is_valid()) {
-      destroy_storage_functor_();
-      destroy_storage_functor_.reset();
-    }
   }
 
   int next()
@@ -160,29 +154,11 @@ public:
 
   bool is_inited() const { return is_inited_; }
   bool is_valid() const { return is_inited_ && cursor_.has_value() && has_entry_; }
-  bool check_is_the_last_entry()
-  {
-    return is_valid() && wal_rs::is_last_ffi(**cursor_);
-  }
-  int set_destroy_iterator_storage_functor(const DestroyStorageFunctor &destroy_func)
-  {
-    int ret = OB_SUCCESS;
-    if (!is_inited_ || !destroy_func.is_valid()) {
-      ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
-    } else {
-      destroy_storage_functor_ = destroy_func;
-      if (!destroy_storage_functor_.is_valid()) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-    }
-    return ret;
-  }
 
   TO_STRING_KV(K_(is_inited), K_(has_entry));
 
 private:
   std::optional<::rust::Box<wal_rs::Cursor>> cursor_;
-  DestroyStorageFunctor destroy_storage_functor_;
   bool has_entry_ = false;
   bool is_inited_ = false;
 };

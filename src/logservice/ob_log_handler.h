@@ -60,7 +60,6 @@ public:
   virtual int append(const void *buffer,
                      const int64_t nbytes,
                      const share::SCN &ref_scn,
-                     const bool need_nonblock,
                      AppendCb *cb,
                      wal::LSN &lsn,
                      share::SCN &scn) = 0;
@@ -71,12 +70,9 @@ public:
   virtual int locate_by_scn_coarsely(const share::SCN &scn, wal::LSN &result_lsn) = 0;
   virtual int locate_by_lsn_coarsely(const wal::LSN &lsn, share::SCN &result_scn) = 0;
   virtual int advance_base_lsn(const wal::LSN &lsn) = 0;
-  virtual int get_begin_lsn(wal::LSN &lsn) const = 0;
   virtual int get_base_lsn(wal::LSN &lsn) const = 0;
   virtual int get_end_lsn(wal::LSN &lsn) const = 0;
-  virtual int get_max_lsn(wal::LSN &lsn) const = 0;
 
-  virtual int get_max_scn(share::SCN &scn) const = 0;
   virtual int get_end_scn(share::SCN &scn) const = 0;
   virtual int get_wal_base_info(const wal::LSN &base_lsn, wal::BaseInfo &wal_base_info) = 0;
   virtual void wait_append_sync() = 0;
@@ -120,7 +116,6 @@ public:
   int append(const void *buffer,
              const int64_t nbytes,
              const share::SCN &ref_scn,
-             const bool need_nonblock,
              AppendCb *cb,
              wal::LSN &lsn,
              share::SCN &scn) override final;
@@ -223,19 +218,10 @@ public:
   // @brief, set the recycable lsn, wal will ensure that the data before recycable lsn readable.
   // @param[in] const LSN&, recycable lsn.
   int advance_base_lsn(const wal::LSN &lsn) override final;
-  // @brief, get begin lsn
-  // @param[out] LSN&, begin lsn
-  int get_begin_lsn(wal::LSN &lsn) const override final;
   // @brief, get the persisted recyclable boundary of WAL.
   // @param[out] LSN&, base lsn
   int get_base_lsn(wal::LSN &lsn) const override final;
   int get_end_lsn(wal::LSN &lsn) const override final;
-  // @brief, get max lsn.
-  // @param[out] LSN&, max lsn.
-  int get_max_lsn(wal::LSN &lsn) const override final;
-  // @brief, get max log ts.
-  // @param[out] int64_t&, max log ts.
-  int get_max_scn(share::SCN &scn) const override final;
   // @brief, get timestamp of end lsn.
   // @param[out] int64_t, timestamp.
   int get_end_scn(share::SCN &scn) const override final;
@@ -276,7 +262,6 @@ public:
   // OB_STATE_NOT_MATCH: ls is offline or stopped
   // OB_SUCCESS
   int get_max_decided_scn(share::SCN &scn) override final;
-  int diagnose_wal(wal::DiagnoseInfo &diagnose_info) const;
   TO_STRING_KV(KP(wal_env_), K(is_in_stop_state_), K(is_inited_));
   int offline() override final;
   int online(const wal::LSN &lsn, const share::SCN &scn) override final;
@@ -303,7 +288,6 @@ private:
   int append_(const void *buffer,
               const int64_t nbytes,
               const share::SCN &ref_scn,
-              const bool need_nonblock,
               AppendCb *cb,
               wal::LSN &lsn,
               share::SCN &scn);
@@ -343,41 +327,6 @@ public:
 };
 
 // =============================== Iterator begin ===========================
-struct LogDestroyIteratorStorageFunctor {
-  LogDestroyIteratorStorageFunctor(wal::Env *wal_env,
-                                   const wal::Handle &handle)
-  : wal_env_(wal_env), handle_(handle) {}
-  ~LogDestroyIteratorStorageFunctor() {}
-  LogDestroyIteratorStorageFunctor(const LogDestroyIteratorStorageFunctor &rhs)
-  {
-    operator=(rhs);
-  }
-  LogDestroyIteratorStorageFunctor(LogDestroyIteratorStorageFunctor &&rhs) = delete;
-  LogDestroyIteratorStorageFunctor& operator=(const LogDestroyIteratorStorageFunctor &rhs)
-  {
-    if (*this == rhs) {
-      return *this;
-    }
-    wal_env_ = rhs.wal_env_;
-    handle_ = rhs.handle_;
-    return *this;
-  }
-  LogDestroyIteratorStorageFunctor& operator=(LogDestroyIteratorStorageFunctor &&rhs) = delete;
-  bool operator==(const LogDestroyIteratorStorageFunctor &rhs) const
-  {
-    return this->wal_env_ == rhs.wal_env_ && this->handle_ == rhs.handle_;
-  }
-  void operator()()
-  {
-    if (NULL != wal_env_) {
-      wal_env_->close(handle_);
-      wal_env_ = NULL;
-    }
-  }
-  wal::Env *wal_env_;
-  wal::Handle handle_;
-};
-
 template <typename StartPoint, typename IteratorType>
 int seek_log_iterator_no_shared_storage(wal::Env *wal_env,
                                         const StartPoint &start_point,
@@ -385,28 +334,13 @@ int seek_log_iterator_no_shared_storage(wal::Env *wal_env,
 {
   int ret = OB_SUCCESS;
   wal::Handle wal_handle;
-  const bool first_inited = !iterator.is_inited();
-  bool need_release_wal_handle = true;
   if (NULL == wal_env || !start_point.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", KP(wal_env), K(start_point));
   } else if (OB_FAIL(wal_env->open(wal_handle))) {
   } else if (OB_FAIL(wal_handle.seek(start_point, iterator))) {
-  } else if (first_inited) {
-    // NB: the ownership of wal_handle has transfered to iterator after set_destroy_iterator_storage_functor successfully,
-    //     set_destroy_iterator_storage_functor is atomic(i.e. return OB_SUCCESS means transfer ownership successfully,
-    //     otherwise, the ownership hasn't transfered.).
-    // To make code readable, add 'need_release_wal_handle' instead of using std::move and move constructor
-    LogDestroyIteratorStorageFunctor functor(wal_env, wal_handle);
-    if (OB_FAIL(iterator.set_destroy_iterator_storage_functor(functor))) {
-      CLOG_LOG(WARN, "set_destroy_iterator_storage_functor failed", KR(ret), KP(wal_env), K(start_point));
-      iterator.destroy();
-    } else {
-      need_release_wal_handle = false;
-    }
-  } else {
   }
-  if (need_release_wal_handle && wal_handle.is_valid()) {
+  if (wal_handle.is_valid()) {
     wal_env->close(wal_handle);
   }
   return ret;

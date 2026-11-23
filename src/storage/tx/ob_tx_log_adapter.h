@@ -63,9 +63,7 @@ public:
   virtual int submit_log(const char *buf,
                          const int64_t size,
                          const share::SCN &base_ts,
-                         ObTxBaseLogCb *cb,
-                         const bool need_nonblock,
-                         const int64_t retry_timeout_us = 1000) = 0;
+                         ObTxBaseLogCb *cb) = 0;
 
   virtual int get_max_decided_scn(share::SCN &scn) = 0;
 };
@@ -81,9 +79,7 @@ public:
   int submit_log(const char *buf,
                  const int64_t size,
                  const share::SCN &base_ts,
-                 ObTxBaseLogCb *cb,
-                 const bool need_nonblock,
-                 const int64_t retry_timeout_us = 1000);
+                 ObTxBaseLogCb *cb);
   int get_max_decided_scn(share::SCN &scn);
 
 private:

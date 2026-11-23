@@ -756,15 +756,15 @@ int ObApplyStatus::submit_task_to_apply_service_(ObApplyServiceTask &task)
 int ObApplyStatus::update_last_check_scn_()
 {
   int ret = OB_SUCCESS;
-  SCN wal_max_scn;
-  if (OB_FAIL(wal_handle_.get_max_scn(wal_max_scn))) {
+  SCN wal_end_scn;
+  if (OB_FAIL(wal_handle_.get_end_scn(wal_end_scn))) {
   } else if (OB_FAIL(ap_sv_->wait_append_sync())) {
   } else {
     for (int64_t i = 0; i < APPLY_TASK_QUEUE_SIZE; ++i) {
       cb_queues_[i].set_snapshot_check_submit_cb_cnt();
     }
     // Recovery may cover an empty SCN interval beyond the current physical tail.
-    last_check_scn_ = std::max(wal_max_scn, max_applied_cb_scn_);
+    last_check_scn_ = std::max(wal_end_scn, max_applied_cb_scn_);
   }
   return ret;
 }

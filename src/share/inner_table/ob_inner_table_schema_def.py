@@ -6085,18 +6085,6 @@ def_local_table(
 )
 
 def_local_table(
-  table_name = '__all_wal_meta',
-  namespace = 'wal_meta',
-  namespace_id = 9,
-  columns = [
-    ('id', 'int', 'false'),
-    ('payload', 'varbinary:65536', 'false'),
-    ('expected_next_block_id', 'int', 'false'),
-  ],
-  primary_key = ['id'],
-)
-
-def_local_table(
   table_name = '__all_telemetry',
   namespace = 'telemetry',
   namespace_id = 10,
