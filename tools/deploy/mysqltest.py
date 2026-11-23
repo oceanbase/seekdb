@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import argparse
 from collections import Counter, namedtuple
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import sys
 import time
 
 import sdb
+from mysql_test.embedding_fixture import embedding_endpoint
 
 
 CASE_TIMEOUT = 3600
@@ -405,16 +407,22 @@ def run_case(args, deploy_dir, case, tmp_dir, log_dir):
     print("[ RUN      ] {}".format(case_name), flush=True)
     started = time.monotonic()
     try:
-        result = subprocess.run(
-            command,
-            cwd=str(deploy_dir),
-            env=mysqltest_environment(args),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=CASE_TIMEOUT,
-            universal_newlines=True,
-            check=False,
-        )
+        with ExitStack() as fixtures:
+            environment = mysqltest_environment(args)
+            if case.name == "vector_index.hybrid_rebuild_null":
+                environment["SEEKDB_TEST_EMBEDDING_URL"] = fixtures.enter_context(
+                    embedding_endpoint()
+                )
+            result = subprocess.run(
+                command,
+                cwd=str(deploy_dir),
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=CASE_TIMEOUT,
+                universal_newlines=True,
+                check=False,
+            )
         return_code = result.returncode
         output = decode_output(result.stdout)
     except subprocess.TimeoutExpired as exc:

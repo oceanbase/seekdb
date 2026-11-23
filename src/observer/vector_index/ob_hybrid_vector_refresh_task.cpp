@@ -495,6 +495,14 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
     ObSEArray<int64_t, 4> tmp_embedding_vids;
     ObSEArray<blocksstable::ObDatumRow *, 4> tmp_embedding_rows;
     delta_delete_iter.init();
+    // Log keys are ordered by VID and operation. A batch can end on D while
+    // the matching I is the first row of the next batch.
+    if (OB_SUCC(ret) && task_ctx->trailing_delete_vid_ != OB_INVALID_ID) {
+      ret = task_ctx->delete_vids_.push_back(static_cast<int64_t>(task_ctx->trailing_delete_vid_));
+    }
+    if (OB_SUCC(ret)) {
+      task_ctx->trailing_delete_vid_ = OB_INVALID_ID;
+    }
     while (OB_SUCC(ret) && cur_row_count < task_ctx->batch_cnt_) {
       blocksstable::ObDatumRow *datum_row = nullptr;
       blocksstable::ObDatumRow *copied_row = nullptr;
@@ -513,6 +521,8 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
         if (op.length() != 1) {
           ret = OB_ERR_UNEXPECTED;
         } else {
+          task_ctx->trailing_delete_vid_ = op.ptr()[0] == sql::ObVecIndexDMLIterator::VEC_DELTA_DELETE[0]
+              ? static_cast<uint64_t>(copied_row->storage_datums_[0].get_int()) : OB_INVALID_ID;
           if (op.ptr()[0] == sql::ObVecIndexDMLIterator::VEC_DELTA_INSERT[0] && !copied_row->storage_datums_[2].is_null()) {
             if (OB_FAIL(tmp_chunk_array.push_back(copied_row->storage_datums_[2].get_string()))) {
             } else if (OB_FAIL(tmp_embedding_vids.push_back(copied_row->storage_datums_[0].get_int()))) {
@@ -994,6 +1004,7 @@ void ObHybridVectorRefreshTaskCtx::set_task_finish()
 {
   int ret = OB_SUCCESS;
   task_status_.all_finished_ = true;
+  trailing_delete_vid_ = OB_INVALID_ID;
   status_ = ObHybridVectorRefreshTaskStatus::TASK_FINISH;
   delta_delete_iter_.reset();
   ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();

@@ -40,6 +40,9 @@
 
 ## Testing
 
+- Before every pull request, run the `vector_index.hybrid_rebuild_null` mysqltest
+  case against the proposed product build and record its result. It covers hybrid
+  rebuild/refresh log pairing, NULL transitions, and refresh batch boundaries.
 - Add unit tests only for the internal Rust implementation of the seekdb product.
 - Do not add unit tests for any other component, including C++ code and Rust FFI or CXX bridge layers exposed to C++, even when those layers live in a product Rust crate.
 - Validate other components through integration tests, mysqltest cases, or actual execution instead of adding unit tests. Use the repository's established test suites and test directories where applicable.
