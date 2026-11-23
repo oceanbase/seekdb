@@ -57,6 +57,12 @@ cases in the `seekdb_test` repository. The paths below are examples.
 - Global or session variable definitions in
   `src/share/system_variable/ob_system_variable_init.json`, or variable
   initialization, assignment, inheritance, or reset in `src/sql/session/`.
+- Internal table schema changes, including system and virtual table
+  definitions in `src/share/inner_table/ob_inner_table_schema_def.py`.
+  Check column names, types, order, defaults, nullability, row keys, and
+  indexes. Update affected SQL and expected results in `seekdb_test`.
+  Check `DESC`, `SHOW CREATE TABLE`, and `SELECT *` cases in the `inner_table`
+  suite and other suites that query the changed tables.
 - SQL and client behavior such as syntax, results, warnings, error codes,
   execution plans, metadata, or protocol responses. Examples include
   `src/sql/parser/`, `src/sql/optimizer/`, `src/sql/engine/`, and
