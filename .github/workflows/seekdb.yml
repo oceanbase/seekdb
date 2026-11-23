@@ -6,7 +6,7 @@ on:
   workflow_call:
   workflow_dispatch:
   pull_request:
-    branches: [master, develop, release/1.4.1]
+    branches: [master, develop]
     types: [opened, reopened, synchronize, ready_for_review]
   schedule:
     - cron: '30 9 * * *'
