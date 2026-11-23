@@ -13,7 +13,9 @@
 // limitations under the License.
 
 mod bridge;
+mod env;
 mod format;
 mod stream;
 
-pub use stream::{Cursor, Stream};
+pub use env::Env;
+pub use stream::{Cursor, Next, Stream};

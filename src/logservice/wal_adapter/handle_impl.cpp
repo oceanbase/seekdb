@@ -18,6 +18,7 @@
 #include "logservice/wal_adapter/handle_impl.h"
 #include <cstring>
 #include "lib/time/ob_time_utility.h"
+#include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
 {
@@ -37,9 +38,7 @@ void assign_scn(SCN &scn, const uint64_t value)
 HandleImpl::HandleImpl()
     : lock_(common::ObLatchIds::WAL_HANDLE_IMPL_LOCK),
       stream_(),
-      self_(),
       fs_cb_wrapper_(),
-      plugins_(),
       io_lock_(common::ObLatchIds::WAL_HANDLE_IMPL_LOCK),
       active_io_count_(0),
       io_start_time_(OB_INVALID_TIMESTAMP),
@@ -51,46 +50,15 @@ HandleImpl::~HandleImpl()
   destroy();
 }
 
-int HandleImpl::init(const BaseInfo &wal_base_info, const char *log_dir, const common::ObAddr &self)
+int HandleImpl::init(::rust::Box<wal_rs::Stream> stream)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (!wal_base_info.is_valid() || OB_ISNULL(log_dir) || !self.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
   } else {
-    wal_rs::BaseInfo base {
-        static_cast<uint64_t>(wal_base_info.curr_lsn_.val_),
-        static_cast<uint64_t>(wal_base_info.prev_log_info_.lsn_.val_),
-        wal_base_info.prev_log_info_.scn_.get_val_for_logservice(),
-        wal_base_info.prev_log_info_.log_id_,
-        static_cast<uint64_t>(wal_base_info.prev_log_info_.accum_checksum_)};
-    stream_.emplace(wal_rs::create_stream(::rust::Str(log_dir), base, 0));
+    stream_.emplace(std::move(stream));
     ret = from_rust_code(wal_rs::status_ffi(**stream_));
     if (OB_SUCC(ret)) {
-      self_ = self;
-      is_inited_ = true;
-    } else {
-      stream_.reset();
-    }
-  }
-  return ret;
-}
-
-int HandleImpl::load(const char *log_dir, const common::ObAddr &self, bool &is_integrity)
-{
-  int ret = OB_SUCCESS;
-  is_integrity = false;
-  if (is_inited_) {
-    ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(log_dir) || !self.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    stream_.emplace(wal_rs::open_stream(::rust::Str(log_dir)));
-    ret = from_rust_code(wal_rs::status_ffi(**stream_));
-    if (OB_SUCC(ret)) {
-      is_integrity = wal_rs::integrity_ffi(**stream_);
-      self_ = self;
       is_inited_ = true;
     } else {
       stream_.reset();
@@ -112,17 +80,15 @@ void HandleImpl::destroy()
     (void)wal_rs::close_ffi(**stream_);
     stream_.reset();
     is_inited_ = false;
-    plugins_.destroy();
   }
 }
 
-int HandleImpl::submit_log(const AppendOptions &opts, const char *buf,
-    const int64_t buf_len, const SCN &ref_scn, LSN &lsn, SCN &scn)
+int HandleImpl::submit_log(const char *buf, const int64_t buf_len, const SCN &ref_scn,
+    LSN &lsn, SCN &scn)
 {
   int ret = OB_SUCCESS;
   LSN end_lsn;
   SCN end_scn;
-  (void)opts;
   RLockGuard guard(lock_);
   if (!is_inited_ || OB_ISNULL(buf) || buf_len <= 0 || buf_len > MAX_LOG_BODY_SIZE
       || !ref_scn.is_valid()) {
@@ -190,7 +156,7 @@ int HandleImpl::set_base_lsn(const LSN &lsn)
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
   } else if (OB_FAIL(from_rust_code(wal_rs::set_base_lsn_ffi(**stream_, block_lsn.val_).code))) {
   } else {
-    (void)plugins_.record_set_base_lsn_event(block_lsn);
+    SERVER_EVENT_ADD("LOG", "SET BASE LSN", "NEW_BASE_LSN", block_lsn);
   }
   return ret;
 }
@@ -314,32 +280,6 @@ int HandleImpl::unregister_file_size_cb(wal::FsyncCallbackNode *fs_cb)
   return ret;
 }
 
-int HandleImpl::set_monitor_cb(MonitorCallback *monitor_cb)
-{
-  return plugins_.add_plugin(monitor_cb);
-}
-
-int HandleImpl::reset_monitor_cb()
-{
-  return plugins_.del_plugin(static_cast<MonitorCallback *>(NULL));
-}
-
-int HandleImpl::get_begin_lsn(LSN &lsn) const
-{
-  RLockGuard guard(lock_);
-  int ret = OB_SUCCESS;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else {
-    const auto progress = wal_rs::progress_ffi(**stream_);
-    ret = from_rust_code(progress.code);
-    if (OB_SUCC(ret)) {
-      lsn = LSN(progress.begin_lsn);
-    }
-  }
-  return ret;
-}
-
 int HandleImpl::get_base_lsn(LSN &lsn) const
 {
   RLockGuard guard(lock_);
@@ -404,24 +344,6 @@ const SCN HandleImpl::get_end_scn() const
   return end_scn;
 }
 
-int HandleImpl::get_total_used_disk_space(int64_t &total_used_disk_space,
-    int64_t &unrecyclable_disk_space) const
-{
-  RLockGuard guard(lock_);
-  int ret = OB_SUCCESS;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else {
-    const auto progress = wal_rs::progress_ffi(**stream_);
-    ret = from_rust_code(progress.code);
-    if (OB_SUCC(ret)) {
-      total_used_disk_space = progress.used_disk;
-      unrecyclable_disk_space = progress.unrecyclable_disk;
-    }
-  }
-  return ret;
-}
-
 int HandleImpl::stat(Stat &wal_stat)
 {
   RLockGuard guard(lock_);
@@ -432,24 +354,13 @@ int HandleImpl::stat(Stat &wal_stat)
     const auto progress = wal_rs::progress_ffi(**stream_);
     ret = from_rust_code(progress.code);
     if (OB_SUCC(ret)) {
-      wal_stat.self_ = self_;
-      wal_stat.begin_lsn_ = LSN(progress.begin_lsn);
       assign_scn(wal_stat.begin_scn_, progress.begin_scn);
       wal_stat.base_lsn_ = LSN(progress.base_lsn);
       wal_stat.end_lsn_ = LSN(progress.end_lsn);
       assign_scn(wal_stat.end_scn_, progress.end_scn);
-      wal_stat.max_lsn_ = wal_stat.end_lsn_;
-      wal_stat.max_scn_ = wal_stat.end_scn_;
     }
   }
   return ret;
-}
-
-int HandleImpl::diagnose(DiagnoseInfo &diagnose_info) const
-{
-  RLockGuard guard(lock_);
-  diagnose_info.log_state_ = is_inited_ ? LogState::ACTIVE : LogState::INVALID_STATE;
-  return is_inited_ ? OB_SUCCESS : OB_NOT_INIT;
 }
 
 void HandleImpl::begin_io_()
@@ -476,25 +387,20 @@ int HandleImpl::get_io_start_time(int64_t &io_start_time) const
 }
 
 Stat::Stat()
-    : self_(), begin_lsn_(), begin_scn_(),
-      base_lsn_(), end_lsn_(), end_scn_(), max_lsn_(), max_scn_()
+    : begin_scn_(), base_lsn_(), end_lsn_(), end_scn_()
 {}
 
 bool Stat::is_valid() const
 {
-  return self_.is_valid();
+  return begin_scn_.is_valid() && base_lsn_.is_valid() && end_lsn_.is_valid() && end_scn_.is_valid();
 }
 
 void Stat::reset()
 {
-  self_.reset();
-  begin_lsn_.reset();
   begin_scn_.reset();
   base_lsn_.reset();
   end_lsn_.reset();
   end_scn_.reset();
-  max_lsn_.reset();
-  max_scn_.reset();
 }
 } // namespace wal
 } // namespace oceanbase

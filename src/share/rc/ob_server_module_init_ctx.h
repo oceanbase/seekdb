@@ -18,7 +18,6 @@
 #define OCEANBASE_SHARE_OB_SERVER_MODULE_INIT_CTX_H_
 
 #include "lib/ob_define.h"
-#include "share/log/types/options.h"
 
 namespace oceanbase
 {
@@ -27,10 +26,10 @@ namespace share
 class ObServerModuleInitCtx
 {
 public:
-  ObServerModuleInitCtx() : wal_options_()
+  ObServerModuleInitCtx() : wal_disk_soft_target_(-1)
   {}
 
-  wal::Options wal_options_;
+  int64_t wal_disk_soft_target_;
   char clog_dir_[common::MAX_PATH_SIZE] = {'\0'};
 };
 

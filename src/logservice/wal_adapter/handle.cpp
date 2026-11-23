@@ -24,8 +24,7 @@ namespace wal
 {
 #define CHECK_VALID if (NULL == wal_handle_impl_) { return OB_NOT_INIT; }
 
-Handle::Handle() : wal_handle_impl_(NULL),
-                           fs_cb_(NULL)
+Handle::Handle() : wal_handle_impl_(), fs_cb_(NULL)
 {
 }
 
@@ -36,13 +35,13 @@ Handle::Handle(const Handle& rhs)
 
 Handle::~Handle()
 {
-  wal_handle_impl_ = NULL;
+  wal_handle_impl_.reset();
   fs_cb_ = NULL;
 }
 
 bool Handle::is_valid() const
 {
-  return NULL != wal_handle_impl_;
+  return nullptr != wal_handle_impl_;
 }
 
 Handle& Handle::operator=(const Handle &rhs)
@@ -60,8 +59,7 @@ bool  Handle::operator==(const Handle &rhs) const
   return wal_handle_impl_ == rhs.wal_handle_impl_;
 }
 
-int Handle::append(const AppendOptions &opts,
-                       const void *buffer,
+int Handle::append(const void *buffer,
                        const int64_t nbytes,
                        const SCN &ref_scn,
                        LSN &lsn,
@@ -69,7 +67,7 @@ int Handle::append(const AppendOptions &opts,
 {
   int ret = OB_SUCCESS;
   CHECK_VALID;
-  ret = wal_handle_impl_->submit_log(opts, static_cast<const char*>(buffer), nbytes, ref_scn, lsn, scn);
+  ret = wal_handle_impl_->submit_log(static_cast<const char*>(buffer), nbytes, ref_scn, lsn, scn);
   return ret;
 }
 
@@ -141,12 +139,6 @@ int Handle::advance_base_lsn(const LSN &lsn)
   return wal_handle_impl_->set_base_lsn(lsn);
 }
 
-int Handle::get_begin_lsn(LSN &lsn) const
-{
-  CHECK_VALID;
-  return wal_handle_impl_->get_begin_lsn(lsn);
-}
-
 int Handle::get_base_lsn(LSN &lsn) const
 {
   CHECK_VALID;
@@ -166,22 +158,6 @@ int Handle::get_end_lsn(LSN &lsn) const
   int ret = OB_SUCCESS;
   CHECK_VALID;
   lsn = wal_handle_impl_->get_end_lsn();
-  return ret;
-}
-
-int Handle::get_max_lsn(LSN &lsn) const
-{
-  int ret = OB_SUCCESS;
-  CHECK_VALID;
-  lsn = wal_handle_impl_->get_max_lsn();
-  return ret;
-}
-
-int Handle::get_max_scn(SCN &scn) const
-{
-  int ret = OB_SUCCESS;
-  CHECK_VALID;
-  scn = wal_handle_impl_->get_max_scn();
   return ret;
 }
 
@@ -236,12 +212,6 @@ int Handle::stat(Stat &wal_stat) const
   return wal_handle_impl_->stat(wal_stat);
 }
 
-
-int Handle::diagnose(DiagnoseInfo &diagnose_info) const
-{
-  CHECK_VALID;
-  return wal_handle_impl_->diagnose(diagnose_info);
-}
 
 } // end namespace wal
 } // end namespace oceanbase

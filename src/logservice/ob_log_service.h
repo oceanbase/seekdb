@@ -25,7 +25,6 @@
 #include "replayservice/ob_log_replay_service.h"
 #include "ob_i_log_storage.h"
 #include "ob_log_handler.h"
-#include "ob_log_monitor.h"
 
 namespace oceanbase
 {
@@ -44,7 +43,6 @@ class SCN;
 namespace wal
 {
 class HandleGuard;
-class DiskOptions;
 class Env;
 }
 
@@ -63,8 +61,7 @@ public:
   virtual ~ObLogService();
   static int server_module_init(
       ObLogService *&logservice,
-      const wal::Options &options,
-      share::LocalStore &store,
+      int64_t wal_disk_soft_target,
       const char *runtime_clog_dir,
       const char *clog_dir,
       const common::ObAddr &self,
@@ -79,8 +76,7 @@ public:
   void wait();
   void destroy();
 public:
-  int init(const wal::Options &options,
-           share::LocalStore &store,
+  int init(int64_t wal_disk_soft_target,
            const char *base_dir,
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,
@@ -110,7 +106,7 @@ public:
 
   int update_log_runtime_config(const ObLogRuntimeConfig &runtime_config);
   int update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size);
-  int get_wal_options(wal::Options &options);
+  int get_wal_disk_soft_target(int64_t &disk_soft_target);
   int stat_wal(wal::Stat &wal_stat);
   int stat_apply(LSApplyStat &apply_stat);
   int stat_replay(LSReplayStat &replay_stat);
@@ -172,7 +168,6 @@ private:
   int64_t replay_thread_quota_;
   ObILogStorage *log_storage_;
   ObLogRuntimeConfig runtime_config_;
-  ObLogMonitor monitor_;
   ObSpinLock update_wal_opts_lock_;
   // Restore service for standby log sync
 private:

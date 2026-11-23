@@ -1081,7 +1081,6 @@ int ObPluginVectorIndexLoadScheduler::submit_log_()
     } else if (OB_FAIL(ls_->get_log_handler()->append(cb_.log_buffer_,
                                                       pos,
                                                       base_scn,
-                                                      false,
                                                       &cb_,
                                                       lsn,
                                                       scn))) {

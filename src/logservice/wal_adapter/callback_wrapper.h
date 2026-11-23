@@ -20,9 +20,7 @@
 #include "lib/list/ob_dlist.h"
 #include "lib/ob_errno.h"
 #include "lib/lock/ob_spin_lock.h"
-#include "lib/lock/ob_tc_rwlock.h"
 #include "callback.h"
-#include "share/ob_delegate.h"
 namespace oceanbase
 {
 namespace wal
@@ -49,39 +47,6 @@ private:
   ObSpinLock lock_;
 };
 
-#define WAL_PLUGINS_DELEGATE_PTR(delegate_obj, lock_, func_name)   \
-  template <typename ...Args>                                       \
-  int func_name(Args &&...args) {                                   \
-    int ret = OB_SUCCESS;                                           \
-    common::RWLock::RLockGuard guard(lock_);                        \
-    if (OB_UNLIKELY(OB_ISNULL(delegate_obj))) {                     \
-      ret = OB_NOT_INIT;                                            \
-    } else {                                                        \
-      ret = delegate_obj->func_name(std::forward<Args>(args)...);   \
-    }                                                               \
-    return ret;                                                     \
-  }
-
-class LogPlugins
-{
-public:
-  LogPlugins();
-  ~LogPlugins();
-  void destroy();
-  template<typename T>
-  int add_plugin(T *plugin);
-  template<typename T>
-  int del_plugin(T *plugin);
-
-  WAL_PLUGINS_DELEGATE_PTR(wal_monitor_, wal_monitor_lock_, record_set_base_lsn_event);
-  WAL_PLUGINS_DELEGATE_PTR(wal_monitor_, wal_monitor_lock_, record_advance_base_info_event);
-  WAL_PLUGINS_DELEGATE_PTR(wal_monitor_, wal_monitor_lock_, record_truncate_event);
-
-  TO_STRING_KV(KP_(wal_monitor));
-private:
-  common::RWLock wal_monitor_lock_;
-  MonitorCallback *wal_monitor_;
-};
 } // end namespace wal
 } // end namespace oceanbase
 #endif

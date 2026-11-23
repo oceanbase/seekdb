@@ -53,22 +53,8 @@ public:
   {
     wal_handle_ = wal_handle;
     wal_env_ = wal_env;
-    wal_handle.wal_handle_impl_ = NULL;
+    wal_handle.wal_handle_impl_.reset();
   }
-  // @brief append count bytes from the buffer starting at buf to the wal handle, return the LSN and timestamp
-  // @param[in] cost AppendOptions&, decide this append option whether need block thread.
-  // @param[in] const void *, the data buffer.
-  // @param[in] const uint64_t, the length of data buffer.
-  // @param[in] const int64_t, the base timestamp(ns), wal will ensure that the return tiemstamp will greater
-  //            or equal than this field.
-  // @param[out] LSN&, the append position.
-  // @param[out] int64_t&, the append timestamp.
-  // int append(const AppendOptions &options,
-  //            const void *buffer,
-  //            const int64_t nbytes,
-  //            const int64_t ref_scn,
-  //            LSN &lsn,
-  //            int64_t &scn);
   DELEGATE_WITH_RET(wal_handle_, append, int);
 
   // @breif, query lsn by timestamp, note that this function may be time-consuming
@@ -87,12 +73,6 @@ public:
   DELEGATE_WITH_RET(wal_handle_, advance_base_lsn, int);
 
   CONST_DELEGATE_WITH_RET(wal_handle_, get_base_lsn, int);
-  // @breif, get begin lsn, begin lsn maybe smaller than recycable lsn, because wal will not delete data before
-  //         recycable lsn immediately.
-  // @param[out] int64_t&, begin lsn.
-  // int get_base_scn(int64_t &ts) const;
-  // int get_begin_lsn(wal::LSN &lsn) const;
-  CONST_DELEGATE_WITH_RET(wal_handle_, get_begin_lsn, int);
   // @brief, get end lsn.
   // @param[out] LSN&, end lsn.
   // int get_end_lsn(LSN &lsn) const;
@@ -101,14 +81,6 @@ public:
   // @param[out] int64_t, timestamp.
   // int get_end_scn(int64_t &ts) const;
   CONST_DELEGATE_WITH_RET(wal_handle_, get_end_scn, int);
-  // @brief, get max timestamp.
-  // @param[out] int64_t, timestamp.
-  // int get_max_scn(int64_t &ts) const;
-  CONST_DELEGATE_WITH_RET(wal_handle_, get_max_scn, int);
-  // @brief, get max lsn.
-  // @param[out] int64_t, LSN.
-  // int get_max_lsn(LSN &lsn) const;
-  CONST_DELEGATE_WITH_RET(wal_handle_, get_max_lsn, int);
   // @brief get readable end lsn; all logs before it are readable.
   // @param[out] lsn, readable end lsn.
   // -- OB_NOT_INIT           not_init

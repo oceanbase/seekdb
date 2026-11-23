@@ -31,6 +31,7 @@ const SEGMENT_MAGIC: &[u8; 8] = b"PFALSEG2";
 pub enum Error {
     Invalid,
     NotInit,
+    NotFound,
     End,
     OutLower,
     OutUpper,

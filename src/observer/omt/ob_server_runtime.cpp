@@ -368,9 +368,8 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_server_clog_dir(ctx->clog_dir_))) {
   } else {
-    ctx->wal_options_.disk_options_.log_disk_usage_limit_size_ = meta.runtime_config_.resource_config_.log_disk_size();
-    LOG_INFO("construct_module_init_ctx success", "wal_options", ctx->wal_options_.disk_options_
-             );
+    ctx->wal_disk_soft_target_ = meta.runtime_config_.resource_config_.log_disk_size();
+    LOG_INFO("construct_module_init_ctx success", "wal_disk_soft_target", ctx->wal_disk_soft_target_);
   }
   return ret;
 }

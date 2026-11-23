@@ -33,6 +33,7 @@
 #include <thread>
 #include <cstdio>
 #include "observer/ob_server.h"
+#include "lib/file/file_directory_utils.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/allocator/ob_jemalloc.h"
 #include "rootserver/ob_ddl_service_launcher.h"
@@ -2136,8 +2137,7 @@ int ObServer::init_io()
         int64_t data_disk_percentage = 0;
         int64_t log_disk_percentage = 0;
 
-        if (OB_FAIL(log_block_mgr_.init(storage_env_.clog_dir_,
-            ObServerUtils::get_log_disk_info_in_config))) {
+        } else if (OB_FAIL(log_block_mgr_.init(ObServerUtils::get_log_disk_info_in_config))) {
           LOG_ERROR("log block mgr init failed", KR(ret));
         } else if (OB_FAIL(ObServerUtils::cal_all_part_disk_size(config::datafile_size(),
                                                   config::log_disk_size(),
@@ -2501,17 +2501,12 @@ int ObServer::init_storage()
   bool clogdir_is_empty = false;
 
   if (OB_SUCC(ret)) {
-    int64_t log_disk_in_use = 0;
     // Check if the clog directory is empty
-    if (OB_FAIL(log_block_mgr_.get_disk_usage(log_disk_in_use))) {
-    } else if (0 == log_disk_in_use
-        && OB_FAIL(logservice::ObServerLogBlockMgr::check_clog_directory_is_empty(
+    if (OB_FAIL(logservice::ObServerLogBlockMgr::check_clog_directory_is_empty(
             OB_FILE_SYSTEM_ROUTER.get_clog_dir(), clogdir_is_empty))) {
       LOG_ERROR("is_dir_empty fail", K(ret));
     } else if (clogdir_is_empty) {
       LOG_INFO("clog dir is empty");
-    } else {
-      clogdir_is_empty = log_disk_in_use == 0;
     }
   }
 

@@ -23,36 +23,35 @@ namespace oceanbase
 {
 namespace wal
 {
-Env::Env() : wal_env_impl_()
-{
-
-}
+Env::Env()
+    : lock_(common::ObLatchIds::WAL_ENV_LOCK),
+      rust_env_(),
+      wal_handle_(nullptr),
+      is_inited_(false)
+{}
 
 Env::~Env()
 {
-  stop_();
-  wait_();
   destroy_();
 }
 
 int Env::create_wal_env(
-    const Options &options,
-    share::LocalStore &store,
+    const int64_t disk_soft_target,
     const char *base_dir,
-    const common::ObAddr &self,
-    MonitorCallback *monitor,
     Env *&wal_env)
 {
   int ret = OB_SUCCESS;
   wal_env = SERVER_NEW(Env, "Env");
-  if (NULL == wal_env) {
+  if (OB_ISNULL(wal_env)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(FileDirectoryUtils::delete_tmp_file_or_directory_at(base_dir))) {
-  } else if (OB_FAIL(wal_env->wal_env_impl_.init(options, store, base_dir, self, monitor))) {
+  } else if (OB_ISNULL(base_dir) || disk_soft_target < 0) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
-    WAL_LOG(INFO, "create_wal_handle_impl success", K(base_dir));
+    wal_env->rust_env_.emplace(wal_rs::create_env(
+        ::rust::Str(base_dir), static_cast<uint64_t>(disk_soft_target)));
+    wal_env->is_inited_ = true;
   }
-  if (NULL != wal_env && OB_FAIL(ret)) {
+  if (OB_NOT_NULL(wal_env) && OB_FAIL(ret)) {
     SERVER_DELETE(Env, "Env", wal_env);
     wal_env = NULL;
   }
@@ -62,56 +61,110 @@ int Env::create_wal_env(
 void Env::destroy_wal_env(Env *&wal_env)
 {
   SERVER_DELETE(Env, "wal_env", wal_env);
-  WAL_LOG_RET(WARN, OB_SUCCESS, "destroy_wal_env success", K(wal_env));
 }
 
 int Env::start()
 {
+  WLockGuard guard(lock_);
   int ret = OB_SUCCESS;
-  ret = wal_env_impl_.start();
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(from_rust_code(wal_rs::start_env_ffi(**rust_env_)))) {
+  } else {
+    if (OB_NOT_NULL(wal_handle_)) {
+      wal_handle_->destroy();
+      wal_handle_.reset();
+    }
+    WAL_LOG(INFO, "Env start success");
+  }
   return ret;
 }
 
 void Env::stop_()
 {
-  wal_env_impl_.stop();
-}
-
-void Env::wait_()
-{
-  wal_env_impl_.wait();
+  WLockGuard guard(lock_);
+  if (OB_NOT_NULL(wal_handle_)) {
+    wal_handle_->destroy();
+    wal_handle_.reset();
+  }
+  if (rust_env_.has_value()) {
+    wal_rs::stop_env_ffi(**rust_env_);
+  }
 }
 
 void Env::destroy_()
 {
-  wal_env_impl_.destroy();
+  stop_();
+  WLockGuard guard(lock_);
+  rust_env_.reset();
+  is_inited_ = false;
+}
+
+int Env::wrap_stream_(::rust::Box<wal_rs::Stream> stream, HandleImplPtr &handle)
+{
+  int ret = OB_SUCCESS;
+  HandleImplPtr new_handle(SERVER_NEW(HandleImpl, "wal_env"), [](HandleImpl *ptr) {
+    SERVER_DELETE(HandleImpl, "wal_env", ptr);
+  });
+  if (OB_ISNULL(new_handle)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(new_handle->init(std::move(stream)))) {
+  } else {
+    handle = new_handle;
+  }
+  return ret;
 }
 
 int Env::create(const BaseInfo &wal_base_info, Handle &handle)
 {
+  WLockGuard guard(lock_);
   int ret = OB_SUCCESS;
-  wal::HandleImpl *wal_handle_impl = NULL;
-  if (OB_FAIL(wal_env_impl_.create_wal_handle_impl(wal_base_info, wal_handle_impl))) {
-  } else if (FALSE_IT(handle.wal_handle_impl_ = wal_handle_impl)) {
+  HandleImplPtr new_handle;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!wal_base_info.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
-    WAL_LOG(INFO, "create wal handle success");
+    wal_rs::BaseInfo base {
+        static_cast<uint64_t>(wal_base_info.curr_lsn_.val_),
+        static_cast<uint64_t>(wal_base_info.prev_log_info_.lsn_.val_),
+        wal_base_info.prev_log_info_.scn_.get_val_for_logservice(),
+        wal_base_info.prev_log_info_.log_id_,
+        static_cast<uint64_t>(wal_base_info.prev_log_info_.accum_checksum_)};
+    auto stream = wal_rs::create_env_stream_ffi(**rust_env_, base, 0);
+    if (OB_FAIL(from_rust_code(wal_rs::status_ffi(*stream)))) {
+    } else if (OB_FAIL(wrap_stream_(std::move(stream), new_handle))) {
+      (void)wal_rs::remove_env_ffi(**rust_env_);
+    } else {
+      wal_handle_ = new_handle;
+      handle.wal_handle_impl_ = new_handle;
+    }
   }
   if (OB_FAIL(ret)) {
-    handle.wal_handle_impl_ = NULL;
+    handle.wal_handle_impl_.reset();
   }
   return ret;
 }
 
 int Env::open(Handle &handle)
 {
+  WLockGuard guard(lock_);
   int ret = OB_SUCCESS;
-  wal::HandleImpl *wal_handle_impl = NULL;
-  if (OB_FAIL(wal_env_impl_.get_wal_handle_impl(wal_handle_impl))) {
-  } else if (FALSE_IT(handle.wal_handle_impl_ = wal_handle_impl)) {
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_NOT_NULL(wal_handle_) && wal_handle_->check_can_be_used()) {
+    handle.wal_handle_impl_ = wal_handle_;
   } else {
+    HandleImplPtr new_handle;
+    auto stream = wal_rs::open_env_stream_ffi(**rust_env_);
+    if (OB_FAIL(wrap_stream_(std::move(stream), new_handle))) {
+    } else {
+      wal_handle_ = new_handle;
+      handle.wal_handle_impl_ = new_handle;
+    }
   }
   if (OB_FAIL(ret)) {
-    handle.wal_handle_impl_ = NULL;
+    handle.wal_handle_impl_.reset();
   }
   return ret;
 }
@@ -119,33 +172,81 @@ int Env::open(Handle &handle)
 void Env::close(Handle &handle)
 {
   (void)handle.unregister_file_size_cb();
-  handle.wal_handle_impl_ = NULL;
+  handle.wal_handle_impl_.reset();
 }
 
 int Env::remove()
 {
-  return wal_env_impl_.remove_wal_handle_impl();
+  WLockGuard guard(lock_);
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else {
+    if (OB_NOT_NULL(wal_handle_)) {
+      wal_handle_->destroy();
+      wal_handle_.reset();
+    }
+    ret = from_rust_code(wal_rs::remove_env_ffi(**rust_env_));
+  }
+  return ret;
 }
 
 int Env::get_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte)
 {
-  return wal_env_impl_.get_disk_usage(used_size_byte, total_size_byte);
+  RLockGuard guard(lock_);
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else {
+    const auto usage = wal_rs::disk_usage_env_ffi(**rust_env_);
+    ret = from_rust_code(usage.code);
+    if (OB_SUCC(ret)) {
+      used_size_byte = static_cast<int64_t>(usage.used);
+      total_size_byte = static_cast<int64_t>(usage.total);
+    }
+  }
+  return ret;
 }
 
-int Env::get_options(Options &options)
+int Env::get_disk_soft_target(int64_t &disk_soft_target)
 {
-  return wal_env_impl_.get_options(options);
+  RLockGuard guard(lock_);
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else {
+    disk_soft_target = static_cast<int64_t>(wal_rs::disk_soft_target_env_ffi(**rust_env_));
+  }
+  return ret;
 }
 
-int Env::update_options(const Options &options)
+int Env::update_disk_soft_target(const int64_t disk_soft_target)
 {
-  return wal_env_impl_.update_options(options);
+  WLockGuard guard(lock_);
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (disk_soft_target < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    wal_rs::update_disk_soft_target_env_ffi(
+        **rust_env_, static_cast<uint64_t>(disk_soft_target));
+  }
+  return ret;
 }
 
 int Env::get_io_start_time(int64_t &last_working_time)
 {
-  return wal_env_impl_.get_io_start_time(last_working_time);
+  RLockGuard guard(lock_);
+  int ret = OB_SUCCESS;
+  last_working_time = OB_INVALID_TIMESTAMP;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_NOT_NULL(wal_handle_)) {
+    ret = wal_handle_->get_io_start_time(last_working_time);
+  }
+  return ret;
 }
 
-} // end namespace wal
-} // end namespace oceanbase
+} // namespace wal
+} // namespace oceanbase

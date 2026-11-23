@@ -9,7 +9,6 @@ LOGSERVICE_UNITY_GROUPS = [
             "src/logservice/ob_log_handler.cpp",
             "src/logservice/ob_log_service.cpp",
             "src/logservice/ob_server_log_block_mgr.cpp",
-            "src/logservice/ob_log_monitor.cpp",
         ],
     ),
     struct(
@@ -33,23 +32,13 @@ LOGSERVICE_UNITY_GROUPS = [
         ],
     ),
     struct(
-        name = "ob_logservice_wal_0",
-        language = "c++",
-        srcs = [
-            "src/logservice/wal_adapter/log_meta.cpp",
-            "src/logservice/wal_adapter/log_meta_info.cpp",
-        ],
-    ),
-    struct(
         name = "ob_logservice_wal_1",
         language = "c++",
         srcs = [
             "src/logservice/wal_adapter/callback_wrapper.cpp",
             "src/logservice/wal_adapter/env.cpp",
-            "src/logservice/wal_adapter/env_impl.cpp",
             "src/logservice/wal_adapter/handle.cpp",
             "src/logservice/wal_adapter/handle_impl.cpp",
-            "src/logservice/wal_adapter/directory_utils.cpp",
         ],
     ),
 ]

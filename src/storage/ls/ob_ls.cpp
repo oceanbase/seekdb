@@ -187,7 +187,8 @@ int ObLS::load_ls()
 
   if (OB_FAIL(logservice->check_wal_exist(is_wal_exist))) {
   } else if (!is_wal_exist) {
-    LOG_WARN("there is no ls at disk, skip load", K_(ls_meta));
+    ret = OB_LOG_MISSING;
+    LOG_WARN("wal is missing", KR(ret), K_(ls_meta));
   } else if (OB_FAIL(logservice->add_ls(log_handler_))) {
   } else {
     // TODO: add_ls has no interface to rollback now, something can not rollback.

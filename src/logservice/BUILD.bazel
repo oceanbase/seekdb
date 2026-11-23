@@ -24,16 +24,11 @@ _PUBLIC_HDRS = [
     "applyservice/ob_log_apply_service.h",
     "ob_i_log_storage.h",
     "ob_log_handler.h",
-    "ob_log_monitor.h",
     "ob_log_service.h",
     "ob_server_log_block_mgr.h",
-    "wal_adapter/directory_utils.h",
-    "wal_adapter/log_meta.h",
-    "wal_adapter/log_meta_info.h",
     "wal_adapter/callback.h",
     "wal_adapter/callback_wrapper.h",
     "wal_adapter/env.h",
-    "wal_adapter/env_impl.h",
     "wal_adapter/handle.h",
     "wal_adapter/handle_impl.h",
     "wal_adapter/iterator.h",
@@ -50,7 +45,7 @@ _PRIVATE_HDRS = glob(
     exclude = _PUBLIC_HDRS,
 )
 
-# One semantic module and one archive, retaining five independent Unity compile
+# One semantic module and one archive, retaining four independent Unity compile
 # actions for parallelism and incremental rebuild granularity.
 grouped_unity_cc_library(
     name = "logservice",

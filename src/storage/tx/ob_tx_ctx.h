@@ -361,8 +361,7 @@ private:
                             const share::SCN &base_scn,
                             ObTxLogCb *&log_cb,
                             const int64_t replay_hint = 0,
-                            const ObReplayBarrierType barrier = ObReplayBarrierType::NO_NEED_BARRIER,
-                            const int64_t retry_timeout_us = 1000);
+                            const ObReplayBarrierType barrier = ObReplayBarrierType::NO_NEED_BARRIER);
   int after_submit_log_(ObTxLogBlock &log_block,
                         ObTxLogCb *log_cb,
                         memtable::ObRedoLogSubmitHelper *redo_helper);
@@ -514,13 +513,6 @@ private:
   int post_tx_commit_resp_(const int status);
 
   int get_stat_for_virtual_table(bool &has_write_state, int &busy_cbs_cnt);
-
-  int submit_log_if_allow(const char *buf,
-                          const int64_t size,
-                          const share::SCN &base_ts,
-                          ObTxBaseLogCb *cb,
-                          const bool need_nonblock,
-                          const ObTxCbArgArray &cb_arg_array);
 
 private:
   // int tx_end_(const bool commit, const int64_t commit_version);

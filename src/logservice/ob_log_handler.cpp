@@ -148,7 +148,6 @@ void ObLogHandler::destroy()
 int ObLogHandler::append(const void *buffer,
                          const int64_t nbytes,
                          const SCN &ref_scn,
-                         const bool need_nonblock,
                          AppendCb *cb,
                          LSN &lsn,
                          SCN &scn)
@@ -159,7 +158,7 @@ int ObLogHandler::append(const void *buffer,
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
       CLOG_LOG(INFO, "local append is disabled", K(ret), K(nbytes), K(ref_scn));
     }
-  } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
+  } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, cb, lsn, scn))) {
   }
   return ret;
 }
@@ -233,14 +232,6 @@ int ObLogHandler::advance_base_lsn(const LSN &lsn)
   return advance_base_lsn_impl_(lsn);
 }
 
-int ObLogHandler::get_begin_lsn(LSN &lsn) const
-{
-  int ret = OB_SUCCESS;
-  RLockGuard guard(lock_);
-  ret = wal_handle_.get_begin_lsn(lsn);
-  return ret;
-}
-
 int ObLogHandler::get_base_lsn(LSN &lsn) const
 {
   RLockGuard guard(lock_);
@@ -251,18 +242,6 @@ int ObLogHandler::get_end_lsn(LSN &lsn) const
 {
   RLockGuard guard(lock_);
   return wal_handle_.get_end_lsn(lsn);
-}
-
-int ObLogHandler::get_max_lsn(LSN &lsn) const
-{
-  RLockGuard guard(lock_);
-  return wal_handle_.get_max_lsn(lsn);
-}
-
-int ObLogHandler::get_max_scn(SCN &scn) const
-{
-  RLockGuard guard(lock_);
-  return wal_handle_.get_max_scn(scn);
 }
 
 int ObLogHandler::get_end_scn(SCN &scn) const
@@ -294,64 +273,41 @@ int ObLogHandler::get_wal_base_info(const LSN &base_lsn, BaseInfo &wal_base_info
 int ObLogHandler::append_(const void *buffer,
                           const int64_t nbytes,
                           const share::SCN &ref_scn,
-                          const bool need_nonblock,
                           AppendCb *cb,
                           wal::LSN &lsn,
                           share::SCN &scn)
 {
   int ret = OB_SUCCESS;
-  int64_t wait_times = 0;
-  AppendOptions opts;
-  opts.need_nonblock = need_nonblock;
   ObTimeGuard tg("ObLogHandler::append", 100000);
-  while (true) {
-    do {
-      RLockGuard guard(lock_);
-      CriticalGuard(ls_qs_);
-      cb->set_append_start_ts(ObTimeUtility::fast_current_time());
-      if (IS_NOT_INIT) {
-        ret = OB_NOT_INIT;
-      } else if (is_in_stop_state_ || is_offline_) {
-        ret = OB_NOT_RUNNING;
-      } else if (!local_append_enabled_.load(std::memory_order_acquire)) {
-        // Re-check inside the quiescent critical section so that
-        // fence_local_append_ (set_local_append_enabled(false) +
-        // WaitQuiescent(ls_qs_)) closes the window where a caller that
-        // already passed the entry check still commits via wal_handle_,
-        // advancing end_scn past the cutover_scn captured by
-        // prepare_to_standby and tripping the durably-fenced promotion check.
-        ret = OB_NOT_MASTER;
-        if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-          CLOG_LOG(INFO, "local append is disabled (checked in critical section)",
-              K(ret), K(nbytes), K(ref_scn));
-        }
-      } else if (OB_FAIL(wal_handle_.append(opts, buffer, nbytes, ref_scn, lsn, scn))) {
-        if (REACH_TIME_INTERVAL(1*1000*1000)) {
-          CLOG_LOG(WARN, "wal_handle_ append failed", K(ret), KPC(this));
-        }
-      } else {
-        cb->set_append_finish_ts(ObTimeUtility::fast_current_time());
-        cb->__set_lsn(lsn);
-        cb->__set_scn(scn);
-        ret = apply_status_->push_append_cb(cb);
+  {
+    RLockGuard guard(lock_);
+    CriticalGuard(ls_qs_);
+    cb->set_append_start_ts(ObTimeUtility::fast_current_time());
+    if (IS_NOT_INIT) {
+      ret = OB_NOT_INIT;
+    } else if (is_in_stop_state_ || is_offline_) {
+      ret = OB_NOT_RUNNING;
+    } else if (!local_append_enabled_.load(std::memory_order_acquire)) {
+      // Re-check inside the quiescent critical section so that
+      // fence_local_append_ (set_local_append_enabled(false) +
+      // WaitQuiescent(ls_qs_)) closes the window where a caller that
+      // already passed the entry check still commits via wal_handle_,
+      // advancing end_scn past the cutover_scn captured by
+      // prepare_to_standby and tripping the durably-fenced promotion check.
+      ret = OB_NOT_MASTER;
+      if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+        CLOG_LOG(INFO, "local append is disabled (checked in critical section)",
+            K(ret), K(nbytes), K(ref_scn));
       }
-    } while (0);
-    // check if need wait and retry append
-    if (opts.need_nonblock) {
-      // nonblock mode, end loop
-      break;
-    } else if (OB_EAGAIN == ret) {
-      // block mode, need sleep and retry for -4023 ret code
-      static const int64_t MAX_SLEEP_US = 100;
-      ++wait_times;
-      int64_t sleep_us = wait_times * 10;
-      if (sleep_us > MAX_SLEEP_US) {
-        sleep_us = MAX_SLEEP_US;
+    } else if (OB_FAIL(wal_handle_.append(buffer, nbytes, ref_scn, lsn, scn))) {
+      if (REACH_TIME_INTERVAL(1*1000*1000)) {
+        CLOG_LOG(WARN, "wal_handle_ append failed", K(ret), KPC(this));
       }
-      ob_usleep(sleep_us);
     } else {
-      // other ret code, end loop
-      break;
+      cb->set_append_finish_ts(ObTimeUtility::fast_current_time());
+      cb->__set_lsn(lsn);
+      cb->__set_scn(scn);
+      ret = apply_status_->push_append_cb(cb);
     }
   }
 
@@ -450,19 +406,6 @@ int ObLogHandler::offline()
     WLockGuard guard(lock_);
     is_offline_ = true;
     CLOG_LOG(INFO, "LogHandler offline success", K(ret), KPC(this));
-  }
-  return ret;
-}
-
-int ObLogHandler::diagnose_wal(wal::DiagnoseInfo &diagnose_info) const
-{
-  int ret = OB_SUCCESS;
-  RLockGuard guard(lock_);
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(wal_handle_.diagnose(diagnose_info))) {
-  } else {
-    // do nothing
   }
   return ret;
 }

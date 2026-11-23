@@ -19,7 +19,6 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
-#include "share/log/types/log_define.h"
 
 namespace oceanbase
 {
@@ -35,8 +34,7 @@ public:
   ObServerLogBlockMgr();
   ~ObServerLogBlockMgr();
   static int check_clog_directory_is_empty(const char *clog_dir, bool &result);
-  int init(const char *log_disk_base_path,
-           GetLogDiskInfoInConfig get_log_disk_info_in_config);
+  int init(GetLogDiskInfoInConfig get_log_disk_info_in_config);
   void bind_log_service(ObLogService &log_service)
   {
     log_service_ = &log_service;
@@ -58,21 +56,12 @@ public:
   TO_STRING_KV(K_(is_inited));
 
 private:
-  static const int64_t BLOCK_SIZE = wal::WAL_PHY_BLOCK_SIZE;
-  int do_load_(const char *log_disk_path);
-  int scan_log_disk_dir_(const char *log_disk_path, int64_t &segment_count);
   bool check_space_is_enough_(const int64_t log_disk_size) const;
   int get_runtime_log_disk_size_(int64_t &log_disk_size) const;
-  int64_t get_in_use_size_() const;
-  int get_has_allocated_blocks_cnt_in_(const char *log_disk_path, int64_t &segment_count);
-  int remove_tmp_file_or_directory_for_runtime_(const char *log_disk_path);
-  int scan_runtime_dir_(const char *runtime_dir, int64_t &segment_count);
-  int scan_ls_dir_(const char *ls_dir, int64_t &segment_count);
 
 private:
   GetLogDiskInfoInConfig get_log_disk_info_in_config_func_;
   ObLogService *log_service_;
-  int64_t block_cnt_in_use_;
   bool is_inited_;
 
 private:

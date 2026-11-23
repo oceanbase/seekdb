@@ -111,7 +111,6 @@ int ObCSFetcher::init_consumption_position_()
   int ret = common::OB_SUCCESS;
   int64_t persisted_min_dep_lsn = 0;
   wal::LSN start_lsn;
-  wal::LSN begin_lsn;
   wal::LSN base_lsn;
   wal::LSN end_lsn;
   wal::LSN cached_min_dep_lsn;
@@ -127,19 +126,16 @@ int ObCSFetcher::init_consumption_position_()
   } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSFetcher: log handler is null", KR(ret));
-  } else if (OB_FAIL(log_handler->get_begin_lsn(begin_lsn))) {
-    LOG_WARN("CSFetcher: fail to get WAL begin_lsn", KR(ret));
   } else if (OB_FAIL(log_handler->get_base_lsn(base_lsn))) {
     LOG_WARN("CSFetcher: fail to get WAL base_lsn", KR(ret));
   } else if (OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
     LOG_WARN("CSFetcher: fail to get WAL end_lsn", KR(ret));
-  } else if (!begin_lsn.is_valid() || !base_lsn.is_valid() || !end_lsn.is_valid()
-             || begin_lsn > end_lsn || base_lsn > end_lsn) {
+  } else if (!base_lsn.is_valid() || !end_lsn.is_valid() || base_lsn > end_lsn) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSFetcher: invalid WAL restart boundaries",
-             KR(ret), K(begin_lsn), K(base_lsn), K(end_lsn));
+             KR(ret), K(base_lsn), K(end_lsn));
   } else {
-    start_lsn = begin_lsn < base_lsn ? base_lsn : begin_lsn;
+    start_lsn = base_lsn;
 
     if (persisted_min_dep_lsn >= 0) {
       const wal::LSN persisted_lsn(persisted_min_dep_lsn);
@@ -149,7 +145,7 @@ int ObCSFetcher::init_consumption_position_()
         }
       } else {
         LOG_WARN("CSFetcher: ignore out-of-range persisted min_dep_lsn",
-                 K(persisted_min_dep_lsn), K(begin_lsn), K(base_lsn), K(end_lsn));
+                 K(persisted_min_dep_lsn), K(base_lsn), K(end_lsn));
       }
     } else {
       LOG_WARN("CSFetcher: ignore negative persisted min_dep_lsn", K(persisted_min_dep_lsn));
@@ -186,7 +182,7 @@ int ObCSFetcher::init_consumption_position_()
         current_lsn_ = start_lsn;
         ATOMIC_STORE(&processed_end_lsn_, static_cast<int64_t>(start_lsn.val_));
         FLOG_INFO("CSFetcher: initialized consumption position",
-                  K(start_lsn), K(begin_lsn), K(base_lsn), K(end_lsn),
+                  K(start_lsn), K(base_lsn), K(end_lsn),
                   K(persisted_min_dep_lsn), K(cached_min_dep_lsn));
       }
     }

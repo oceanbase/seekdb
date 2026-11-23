@@ -2755,7 +2755,7 @@ int ObTxCtx::submit_abort_log_()
     return_log_cb_(log_cb);
     log_cb = NULL;
   } else if (OB_FAIL(acquire_ctx_ref_())) {
-  } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, abort_log_barrier_type, 50 * 1000))) {
+  } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, abort_log_barrier_type))) {
     TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
     return_log_cb_(log_cb);
     log_cb = NULL;
@@ -2888,8 +2888,7 @@ int ObTxCtx::submit_big_segment_log_()
                                              big_segment_info_.submit_base_scn_,
                                              log_cb,
                                              0,
-                                             ObReplayBarrierType::NO_NEED_BARRIER,
-                                             INT64_MAX))) {
+                                             ObReplayBarrierType::NO_NEED_BARRIER))) {
       TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
       return_log_cb_(log_cb);
       log_cb = NULL;
@@ -3004,8 +3003,7 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
                                           const share::SCN &base_scn,
                                           ObTxLogCb *&log_cb,
                                           const int64_t replay_hint,
-                                          const logservice::ObReplayBarrierType barrier,
-                                          const int64_t retry_timeout_us)
+                                          const logservice::ObReplayBarrierType barrier)
 {
   int ret = OB_SUCCESS;
   if ((!is_contain(log_block.get_cb_arg_array(), ObTxLogType::TX_ABORT_LOG)
@@ -3027,9 +3025,7 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
                        ->submit_log(log_block.get_buf(),
                                     log_block.get_size(),
                                     base_scn,
-                                    log_cb,
-                                    true,
-                                    retry_timeout_us))) {
+                                    log_cb))) {
       busy_cbs_.add_last(log_cb);
       log_cb->set_log_size(log_block.get_size());
     }
