@@ -191,8 +191,7 @@ int ObSchemaGetterGuard::get_schema_version(int64_t &schema_version) const
 // For SQL only
 int ObSchemaGetterGuard::get_can_read_index_array(
     const uint64_t table_id,
-    uint64_t *index_tid_array,
-    int64_t &size,
+    ObIArray<uint64_t> &index_ids,
     bool with_global_index /* =true */,
     bool with_domain_index /*=true*/,
     bool with_spatial_index /*=true*/,
@@ -200,13 +199,13 @@ int ObSchemaGetterGuard::get_can_read_index_array(
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
+  index_ids.reuse();
   if (OB_FAIL(get_table_schema( table_id, table_schema))
              || OB_ISNULL(table_schema)) {
     //TODO: ignore error even when table doesn't exist ?
   } else {
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     const ObTableSchema *index_schema = NULL;
-    int64_t can_read_count = 0;
     bool is_geo_default_srid = false;
     if (OB_FAIL(table_schema->get_simple_index_infos(simple_index_infos))) {
     }
@@ -236,13 +235,12 @@ int ObSchemaGetterGuard::get_can_read_index_array(
         } else if (!with_vector_index && index_schema->is_vec_index()) {
           // skip vector index
         } else if (index_schema->can_read_index() && index_schema->is_index_visible()) {
-          index_tid_array[can_read_count++] = simple_index_infos.at(i).table_id_;
+          ret = index_ids.push_back(index_id);
         } else {
           // Do nothing.
         }
       }
     }
-    size = can_read_count;
   }
 
   return ret;

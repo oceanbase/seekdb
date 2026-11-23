@@ -2078,26 +2078,22 @@ int LogTableHint::assign(const LogTableHint &other)
 int LogTableHint::init_index_hints(const ObDMLStmt &stmt, ObSqlSchemaGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  uint64_t tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1];
-  int64_t table_index_aux_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
+  ObSEArray<uint64_t, 16> index_ids;
   const share::schema::ObTableSchema *data_table_schema = nullptr;
   if (OB_ISNULL(table_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (index_hints_.empty() && union_merge_hint_ == nullptr) {
     /* do nothing */
   } else if (OB_FAIL(schema_guard.get_can_read_index_array(table_->ref_id_,
-                                                           tids,
-                                                           table_index_aux_count,
+                                                           index_ids,
                                                            table_->access_all_part(),
                                                            true /*domain index*/,
                                                            false /*spatial index*/))) {
   } else if (OB_FAIL(schema_guard.get_table_schema(table_->ref_id_, data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-  } else if (table_index_aux_count > OB_MAX_AUX_TABLE_PER_MAIN_TABLE
-            || data_table_schema->get_index_count() > OB_MAX_INDEX_PER_TABLE) {
+  } else if (data_table_schema->get_index_count() > OB_MAX_INDEX_PER_TABLE) {
     ret = OB_ERR_UNEXPECTED;
-    int64_t table_index_count = data_table_schema->get_index_count();
   } else {
     const share::schema::ObTableSchema *index_schema = NULL;
     ObSEArray<uint64_t, 4> index_list;
@@ -2109,8 +2105,8 @@ int LogTableHint::init_index_hints(const ObDMLStmt &stmt, ObSqlSchemaGuard &sche
     if (NULL != union_merge_hint_ &&
         OB_FAIL(union_merge_list.prepare_allocate(union_merge_hint_->get_index_name_list().count()))) {
     }
-    for (int64_t i = -1; OB_SUCC(ret) && i < table_index_aux_count; ++i) {
-      uint64_t index_id = -1 == i ? table_->ref_id_ : tids[i];
+    for (int64_t i = -1; OB_SUCC(ret) && i < index_ids.count(); ++i) {
+      uint64_t index_id = -1 == i ? table_->ref_id_ : index_ids.at(i);
       ObString index_name;
       bool is_primary_key = false;
       if (-1 == i) {

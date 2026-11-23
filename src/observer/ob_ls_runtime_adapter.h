@@ -27,7 +27,6 @@ class ObPrimaryMajorFreezeService;
 class ObDBMSSchedService;
 class ObDDLScheduler;
 class ObDDLServiceLauncher;
-class ObSystemPackageLoadService;
 }
 namespace share
 {
@@ -45,7 +44,6 @@ public:
       rootserver::ObDBMSSchedService &dbms_sched_service,
       rootserver::ObDDLScheduler &ddl_scheduler,
       rootserver::ObDDLServiceLauncher &ddl_service_launcher,
-      rootserver::ObSystemPackageLoadService &sys_package_service,
       share::ObPluginVectorIndexService &vector_index_service);
 
   int resolve_log_handler(
@@ -63,7 +61,6 @@ private:
   rootserver::ObDBMSSchedService *dbms_sched_service_;
   rootserver::ObDDLScheduler *ddl_scheduler_;
   rootserver::ObDDLServiceLauncher *ddl_service_launcher_;
-  rootserver::ObSystemPackageLoadService *sys_package_service_;
   share::ObPluginVectorIndexService *vector_index_service_;
 };
 

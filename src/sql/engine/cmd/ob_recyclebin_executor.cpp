@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_recyclebin_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 
 #include "sql/resolver/ddl/ob_purge_stmt.h"
@@ -58,7 +58,7 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
       if (OB_FAIL(GSCHEMASERVICE.cal_purge_need_timeout(purge_recyclebin_arg, cal_timeout))) {
       } else if (0 == cal_timeout) {
         is_finished = true;
-      } else if (OB_FAIL(query::serialize_root_service_call([&]{
+      } else if (OB_FAIL(share::local_ddl_serial_call([&]{
                    return ctx.root_command_service().purge_expire_recycle_objects(
                        purge_recyclebin_arg, affected_rows);
                  }))) {

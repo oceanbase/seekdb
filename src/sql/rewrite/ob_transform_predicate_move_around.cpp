@@ -3424,12 +3424,10 @@ int ObTransformPredicateMoveAround::is_column_expr_null(ObDMLStmt *stmt,
       //case: insert into t1 select null from dual;
       ObObj result;
       bool got_result = false;
-      if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
-                                                            child_expr,
-                                                            result,
-                                                            got_result,
-                                                            *ctx_->allocator_))) {
-      } else if (got_result && !result.is_ext() && (result.is_null())) {
+      bool has_warning = false;
+      if (OB_FAIL(ObTransformUtils::calc_const_expr_result(child_expr, ctx_, result,
+                                                           got_result, &has_warning))) {
+      } else if (got_result && !has_warning && result.is_null()) {
         is_null = true;
         if (!child_expr->is_const_raw_expr() && OB_FAIL(constraints.push_back(child_expr))) {
         }

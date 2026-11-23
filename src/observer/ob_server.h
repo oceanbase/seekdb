@@ -133,7 +133,6 @@ class ObPrimaryMajorFreezeService;
 class ObRestoreMajorFreezeService;
 class ObDBMSSchedService;
 class ObDDLServiceLauncher;
-class ObSystemPackageLoadService;
 class ObDDLScheduler;
 class ObIRootserverLocalRuntime;
 }
@@ -675,7 +674,6 @@ public:
   share::ObPluginVectorIndexService * plugin_vector_index_service() { return mods_plugin_vector_index_service_; }
   storage::ObIVectorIndexRuntime * vector_index_runtime();
   rootserver::ObDDLServiceLauncher * ddl_service_launcher() { return mods_ddl_service_launcher_; }
-  rootserver::ObSystemPackageLoadService * system_package_load_service() { return mods_system_package_load_service_; }
   rootserver::ObDDLScheduler * ddl_scheduler() { return mods_ddl_scheduler_; }
   rootserver::ObIRootserverLocalRuntime * rootserver_local_runtime()
   {
@@ -756,7 +754,6 @@ private:
   common::ObRbMemMgr * mods_rb_mem_mgr_ = nullptr;
   share::ObPluginVectorIndexService * mods_plugin_vector_index_service_ = nullptr;
   rootserver::ObDDLServiceLauncher * mods_ddl_service_launcher_ = nullptr;
-  rootserver::ObSystemPackageLoadService * mods_system_package_load_service_ = nullptr;
   rootserver::ObDDLScheduler * mods_ddl_scheduler_ = nullptr;
   omt::ObAiService * mods_ai_service_ = nullptr;
   share::ObChangeStreamMgr * mods_change_stream_mgr_ = nullptr;

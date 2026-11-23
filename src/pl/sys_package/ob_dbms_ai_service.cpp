@@ -19,7 +19,7 @@
 #include "ob_dbms_ai_service.h"
 #include "query/ai/ob_ai_endpoint_admin.h"
 #include "query/command/ob_root_command_service.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ai_service/ob_ai_service_struct.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/ob_rpc_struct.h"
@@ -276,7 +276,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
       if (OB_FAIL(arg.check_valid())) {
       } else if (OB_ISNULL(root_commands)) {
         ret = OB_NOT_INIT;
-      } else if (OB_FAIL(query::serialize_root_service_call(
+      } else if (OB_FAIL(share::local_ddl_serial_call(
                            [&]{ return root_commands->create_ai_model(arg); }))) {
       }
     }
@@ -325,7 +325,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
     arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
       if (OB_ISNULL(root_commands)) {
         ret = OB_NOT_INIT;
-      } else if (OB_FAIL(query::serialize_root_service_call(
+      } else if (OB_FAIL(share::local_ddl_serial_call(
                            [&]{ return root_commands->drop_ai_model(arg); }))) {
     }
 

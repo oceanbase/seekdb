@@ -20,7 +20,7 @@
 #include <inttypes.h>
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "sql/engine/ob_physical_plan.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_server_struct.h"
@@ -567,7 +567,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().modify_system_variable(arg); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().modify_system_variable(arg); }))) {
     } else {}
   }
   return ret;

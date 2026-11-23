@@ -18,7 +18,7 @@
 #include "ob_column_redefinition_task.h"
 #include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -204,7 +204,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
           if (OB_FAIL(generate_rebuild_index_arg_list(object_id_, schema_guard, alter_table_arg_))) {
           } else if (OB_FAIL(get_orig_all_index_tablet_count(schema_guard, all_tablet_count))) {
           } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_tablet_count, rpc_timeout))) {
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
+          } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
           }
         }
       }
@@ -329,7 +329,7 @@ int ObColumnRedefinitionTask::copy_table_constraints()
         alter_table_arg_.hidden_table_id_ = target_object_id_;
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                 *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
+        } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
         }
       } else {
         LOG_INFO("constraint has already been built");
@@ -371,7 +371,7 @@ int ObColumnRedefinitionTask::copy_table_foreign_keys()
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                 *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
           ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, fk_ids); }))) {
+        } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, fk_ids); }))) {
         }
         DEBUG_SYNC(COLUMN_REDEFINITION_COPY_TABLE_FOREIGN_KEYS);
         if (OB_SUCC(ret)) {
@@ -523,7 +523,7 @@ int ObColumnRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status
     }
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                  *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&] {
                return ::oceanbase::share::server_service<
                    ::oceanbase::rootserver::ObLocalManagementService>()->execute_ddl_task(
                        alter_table_arg_, objs);

@@ -63,6 +63,15 @@ unity_cc_library(
 )
 
 cc_library(
+    name = "local_ddl_serial_call",
+    hdrs = ["ob_local_ddl_serial_call.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
     name = "tenant_role_transition_interface",
     hdrs = ["ob_tenant_role_transition_service.h"],
     features = ["layering_check"],

@@ -21,7 +21,7 @@
 #include "ob_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_checksum.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_ddl_sim_point.h"
@@ -1342,7 +1342,7 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
     } else {
       const bool is_parallel = create_index_arg_.is_parallel_;
       if (!is_parallel) {
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
+        if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
         }
       } else {
         obcall::ObParallelDDLRes res;
@@ -1453,7 +1453,7 @@ int ObIndexBuildTask::clean_on_failed()
           drop_index_arg.is_inner_          = true;
           drop_index_arg.task_id_ = task_id_;
           if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
+          } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
           }
           LOG_INFO("drop index when build failed", K(ret), K(drop_index_arg));
           wait_trans_ctx_.reset();

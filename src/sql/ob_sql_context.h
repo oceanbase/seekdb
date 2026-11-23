@@ -356,8 +356,7 @@ public:
                         bool is_link = false) const;
   int get_table_schema_version(const uint64_t table_id, int64_t &schema_version) const;
   int get_can_read_index_array(uint64_t table_id,
-                               uint64_t *index_tid_array,
-                               int64_t &size,
+                               common::ObIArray<uint64_t> &index_ids,
                                bool with_global_index = true,
                                bool with_domain_index = true,
                                bool with_spatial_index = true,

@@ -52,7 +52,6 @@ ROOTSERVER_PUBLIC_HEADERS = [
     "pl_ddl/ob_pl_ddl_service.h",
     "ob_admin_job_table_operator.h",
     "ob_admin_job_type.h",
-    "ob_local_ddl_serial_call.h",
     "ob_local_management_service.h",
     "ob_server_thread_helper.h",
 ]

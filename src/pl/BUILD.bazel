@@ -161,7 +161,7 @@ _PL_RUNTIME_DEPS = [
     "//src/query:mysql_protocol_util",
     "//src/query:query_api_interface",
     "//src/query:root_command_service",
-    "//src/query:root_service_serialization",
+    "//src/share:local_ddl_serial_call",
     "//src/query:scheduler_interface",
     "//src/sql:sql_runtime_interface",
 ] + _PL_RUNTIME_SHARE_HEADER_DEPS

@@ -714,6 +714,8 @@ int ObExprRangeConverter::convert_like_expr(const ObRawExpr *expr, int64_t expr_
       // do nothing
     } else if (OB_ISNULL(column_meta = get_column_meta(key_idx))) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (column_meta->column_type_.get_accuracy().get_length() <= 0) {
+      // A zero-width derived column has no usable LIKE range. Keep the predicate as a filter.
     } else if (!ObPreRangeGraph::can_be_extract_range(T_OP_LIKE, column_meta->column_type_,
                                                    expr->get_param_expr(0)->get_result_type(),
                                                    pattern_expr->get_result_type().get_type(),

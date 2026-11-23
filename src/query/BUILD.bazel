@@ -199,16 +199,6 @@ cc_library(
 )
 
 cc_library(
-    name = "root_service_serialization",
-    hdrs = ["api/query/command/ob_root_service_serialization.h"],
-    deps = ["//src/oblib:oblib_foundation"],
-    includes = ["api"],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = ["//src:__subpackages__"],
-)
-
-cc_library(
     name = "local_command_service",
     hdrs = ["api/query/command/ob_local_command_service.h"],
     deps = [

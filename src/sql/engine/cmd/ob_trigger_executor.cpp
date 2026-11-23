@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_trigger_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 #include "sql/pl/ob_pl_package.h"
 #include "sql/resolver/ddl/ob_trigger_resolver.h"
@@ -41,7 +41,7 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-  OZ (query::serialize_root_service_call(
+  OZ (share::local_ddl_serial_call(
       [&]{ return ctx.root_command_service().create_trigger_with_res(arg, res); }),
       GCTX.self_addr());
   // Here needs to refresh schema, otherwise may not get the latest trigger_info
@@ -71,7 +71,7 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
     OZ (arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.trigger_info_.get_trigger_id(),
                                                                           TRIGGER_SCHEMA,
                                                                           res.trigger_schema_version_)));
-    OZ (query::serialize_root_service_call(
+    OZ (share::local_ddl_serial_call(
         [&]{ return ctx.root_command_service().create_trigger_with_res(arg, res); }),
         GCTX.self_addr());
     if (OB_ERR_PARALLEL_DDL_CONFLICT == ret) {
@@ -95,7 +95,7 @@ int ObDropTriggerExecutor::execute(ObExecContext &ctx, ObDropTriggerStmt &stmt)
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-  OZ (query::serialize_root_service_call(
+  OZ (share::local_ddl_serial_call(
       [&]{ return ctx.root_command_service().drop_trigger(arg); }),
       GCTX.self_addr());
   return ret;
@@ -113,7 +113,7 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
     OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
     if (OB_FAIL(ret)) {
     } else {
-      OZ (query::serialize_root_service_call(
+      OZ (share::local_ddl_serial_call(
           [&]{ return ctx.root_command_service().alter_trigger(arg); }),
           GCTX.self_addr());
     }

@@ -33,7 +33,6 @@
 #include "observer/ob_server.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/allocator/ob_jemalloc.h"
-#include "observer/ob_system_package_load_service.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
@@ -45,7 +44,7 @@
 #include "share/ob_freeze_info_proxy.h"
 namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
@@ -195,8 +194,8 @@ public:
       LOG_WARN("failed to wait for schema readiness", KR(ret));
     } else if (OB_FAIL(server_.check_if_timezone_usable())) {
       LOG_WARN("failed to wait for timezone readiness", KR(ret));
-    } else if (OB_FAIL(server_.system_package_load_service()->start())) {
-      LOG_WARN("failed to schedule system package installation", KR(ret));
+    } else if (OB_FAIL(server_.ob_service_.ensure_system_packages())) {
+      LOG_WARN("failed to install system packages before SQL startup", KR(ret));
     }
     return ret;
   }
@@ -1589,20 +1588,6 @@ void ObServer::set_stop()
   FLOG_INFO("[OBSERVER_NOTICE] observer is setted to stop");
 }
 
-/** Cancel package DDL before joining its loader; null modules support partial initialization. */
-static void stop_in_process_package_ddl(
-    rootserver::ObDDLServiceLauncher *launcher,
-    rootserver::ObSystemPackageLoadService *loader)
-{
-  if (launcher != nullptr) {
-    launcher->deactivate();
-  }
-  if (loader != nullptr) {
-    loader->stop();
-    loader->wait();
-  }
-}
-
 int ObServer::stop()
 {
   int ret = OB_SUCCESS;
@@ -1610,10 +1595,8 @@ int ObServer::stop()
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_STOP_BEGIN, "observer stop begin.");
 
-  if (in_process_) {
-    // DDL retries must observe cancellation while schema and SQL services are still available.
-    // Otherwise session cleanup waits for a loader query that cannot publish its schema.
-    stop_in_process_package_ddl(mods_ddl_service_launcher_, mods_system_package_load_service_);
+  if (in_process_ && mods_ddl_service_launcher_ != nullptr) {
+    mods_ddl_service_launcher_->deactivate();
   }
 
 #ifndef __EMSCRIPTEN__
@@ -2857,7 +2840,7 @@ int ObServer::clean_up_invalid_tables()
           } else if (FALSE_IT(table_item.database_name_ = database_schema->get_database_name_str())) {
             //impossible
           } else if (OB_FAIL(drop_table_arg.tables_.push_back(table_item))) {
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{
+          } else if (OB_FAIL(share::local_ddl_serial_call([&]{
                        return ::oceanbase::share::server_service<
                            ::oceanbase::rootserver::ObLocalManagementService>()
                            ->drop_table(drop_table_arg, res);

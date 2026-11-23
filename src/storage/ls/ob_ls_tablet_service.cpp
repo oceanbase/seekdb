@@ -4694,6 +4694,8 @@ int ObLSTabletService::estimate_block_count_and_row_count(
     int64_t &memtable_row_count)
 {
   int ret = OB_SUCCESS;
+  const int64_t start_us = ObTimeUtility::current_time();
+  int64_t read_timeout_us = 0;
   ObTabletHandle tablet_handle;
   ObTabletTableIterator tablet_iter;
   share::SCN max_readable_scn;
@@ -4702,12 +4704,14 @@ int ObLSTabletService::estimate_block_count_and_row_count(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(OB_TS_MGR.get_gts(max_readable_scn))) {
+  } else if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, max_readable_scn))) {
+  } else if ((read_timeout_us = timeout_us - (ObTimeUtility::current_time() - start_us)) <= 0) {
+    ret = OB_TIMEOUT;
   } else if (FALSE_IT(snapshot_version_for_tablet = static_cast<int64_t>(max_readable_scn.get_val_for_sql()))) {
   } else if (FALSE_IT(snapshot_version_for_tables = static_cast<int64_t>(max_readable_scn.get_val_for_sql()))) {
   } else if (OB_FAIL(inner_get_read_tables(
           tablet_id,
-          timeout_us,
+          read_timeout_us,
           snapshot_version_for_tablet,
           snapshot_version_for_tables,
           tablet_iter,

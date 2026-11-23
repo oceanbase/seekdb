@@ -170,7 +170,7 @@ public:
                         const bool get_hidden = false,
                         bool is_link = false);
   //int check_is_index_table(uint64_t table_id, bool &is_index_table) const;
-  int get_can_read_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size) const;
+  int get_can_read_index_array(uint64_t table_id, common::ObIArray<uint64_t> &index_ids) const;
   int get_can_write_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size, bool only_global = false) const;
   int get_database_schema(
                           const uint64_t database_id,

@@ -40,7 +40,7 @@ SQL_RUNTIME_NATIVE_DEPS = [
     "//src/query:virtual_table_factory_provider",
     "//src/query:request_time_guard_interface",
     "//src/query:root_command_service",
-    "//src/query:root_service_serialization",
+    "//src/share:local_ddl_serial_call",
     "//src/query:scheduler_interface",
     "//src/query:sql_expression_interface",
     "//src/query:vector_index_interface",

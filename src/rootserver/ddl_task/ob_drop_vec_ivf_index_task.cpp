@@ -18,7 +18,7 @@
 
 #include "rootserver/ddl_task/ob_drop_vec_ivf_index_task.h"
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
@@ -609,7 +609,7 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
     arg.is_hidden_           = drop_index_arg_.is_hidden_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_index(arg, res); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return local_management_service_->drop_index(arg, res); }))) {
     } else {
       task_id = res.task_id_;
     }

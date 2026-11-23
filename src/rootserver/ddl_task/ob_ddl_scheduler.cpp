@@ -18,7 +18,6 @@
 
 #include "ob_ddl_scheduler.h"
 #include <inttypes.h>
-#include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
 #include "rootserver/ddl_task/ob_drop_vec_index_task.h"
 #include "rootserver/ddl_task/ob_drop_lob_task.h"
