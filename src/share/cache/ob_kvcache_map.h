@@ -37,9 +37,15 @@ class ObKVCacheMap
   // Each shard is internally exclusive under its rwlock, so its bucket array can
   // double when the chain load reaches one. High hash bits select the shard and
   // low bits select the bucket, so the two levels do not share the same bits.
+  // Resize follows Redis dict and Linux rhashtable: the new array is allocated
+  // and touched outside the write lock, then each write moves a bounded number
+  // of nodes. Lookup checks the new table and any old bucket not yet migrated.
   static constexpr int64_t SHARD_NUM_MIN = 16;
   static constexpr int64_t SHARD_NUM_MAX = 256;
   static constexpr int64_t INIT_BUCKETS_PER_SHARD = 8;
+  static constexpr int64_t REHASH_BUDGET_US = 100;
+  static constexpr int64_t REHASH_WASH_BUDGET_US = 500;
+  static constexpr int64_t REHASH_MAX_NODES = 2048;
   // Wash/replace cursors are not flat bucket indexes. A shard expand changes
   // every shard's bucket count, so a flat position would skip or revisit slots.
   static constexpr int64_t SCAN_SHARD_SHIFT = 32;
@@ -112,7 +118,12 @@ private:
   void free_nodes(Node *head);
   void internal_map_replace(Node *&prev, Node *&iter, Node *&bucket_ptr, Node *&retired);
   int internal_data_move(Node *&prev, Node *&iter, Node *&bucket_ptr, Node *&retired);
-  int expand_shard(Shard &shard);
+  int64_t rehash_alloc_count(const Shard &shard) const;
+  void install_rehash(Shard &shard, Node **buckets, int64_t bucket_num);
+  // Returns the retired bucket array when this call finishes the rehash.
+  // budget_us < 0 migrates everything still pending.
+  Node **migrate_rehash(Shard &shard, int64_t budget_us);
+  void chain_slots(Shard &shard, uint64_t raw_hash, Node **&primary, Node **&secondary) const;
   int locate_bucket(const int64_t flat_pos, int64_t &shard_idx, int64_t &local_pos) const;
   int64_t shard_index_of(const uint64_t raw_hash) const;
   static int64_t bucket_pos(const uint64_t raw_hash, const int64_t bucket_num);
