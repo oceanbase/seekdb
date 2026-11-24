@@ -181,7 +181,7 @@ def _route_options(
                 remote_config = True
     defaults = []
     if (
-        command in ("build", "test", "run", "coverage")
+        command in ("build", "test", "run")
         and re.fullmatch(r"[0-9]+", jobs)
         and not remote_executor
         and not remote_config
@@ -239,7 +239,7 @@ def main(arguments: List[str]) -> int:
     command, *arguments = arguments
     if command.startswith("-"):
         parser.error("put the command before its options, for example: build -o build3 seekdb")
-    if os.name == "nt" and command in ("build", "test", "run", "coverage"):
+    if os.name == "nt" and command in ("build", "test", "run"):
         _check_windows_toolset()
     separator = arguments.index("--") if "--" in arguments else len(arguments)
     options, remaining = bootstrap.parse_known_args(arguments[:separator])
@@ -276,9 +276,10 @@ def main(arguments: List[str]) -> int:
         # Starlark can inspect fixed action variables, but not inherited ones.
         # Native build scripts need both the compiler's PATH and shell tools.
         lines.append("build --action_env=" + _quote("PATH=" + os.environ.get("PATH", os.defpath)))
-        lines.append("build --repo_env=" + _quote(
-            "BAZEL_LLVM=" + (root / "deps/3rd/tools/llvm18").resolve().as_posix()
-        ))
+        llvm = root / "deps" / "prebuilt" / "native" / "llvm"
+        if not (llvm / "bin" / "clang-cl.exe").is_file():
+            raise BuildError("Bundled LLVM is missing; run python build.py init")
+        lines.append("build --repo_env=" + _quote("BAZEL_LLVM=" + llvm.resolve().as_posix()))
     descriptor, name = tempfile.mkstemp(prefix="runtime.", suffix=".bazelrc", dir=cache)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:

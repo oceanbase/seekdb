@@ -63,7 +63,6 @@ cc_toolchain_config(
         "objcopy": "ndk/bin/llvm-objcopy",
         "objdump": "ndk/bin/llvm-objdump",
         "strip": "ndk/bin/llvm-strip",
-        "gcov": "ndk/bin/llvm-cov",
         "dwp": "ndk/bin/llvm-dwp",
     },
 )

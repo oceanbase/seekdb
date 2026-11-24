@@ -80,8 +80,6 @@ def ios_framework():
             "//package/ios:rust_license_files",
             "//bazel/sdk_sources:ios_source_metadata",
             "//bazel/sdk_sources:ios_licenses",
-            "//bazel/third_party:ios_base_metadata",
-            "//bazel/third_party:ios_base_licenses",
             "//bazel/third_party:ios_locked_metadata",
             "//bazel/third_party:ios_locked_licenses",
         ],
@@ -100,10 +98,8 @@ def ios_framework():
               ' --rust-lock "$(location //:Cargo.lock)"' +
               ' --rust-licenses "$(location //package/ios:rust_licenses)"' +
               ' --source-metadata $(locations //bazel/sdk_sources:ios_source_metadata)' +
-              ' $(locations //bazel/third_party:ios_base_metadata)' +
               ' $(locations //bazel/third_party:ios_locked_metadata)' +
               ' --licenses $(location //:LICENSE) $(locations //bazel/sdk_sources:ios_licenses)' +
-              ' $(locations //bazel/third_party:ios_base_licenses)' +
               ' $(locations //bazel/third_party:ios_locked_licenses)' +
               ' --output "$(@D)/framework/SeekDB.framework" --platform ' + select({
                   "//bazel:ios_simulator": "IOSSIMULATOR",
