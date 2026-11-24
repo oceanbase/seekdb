@@ -1003,6 +1003,7 @@ impl Driver {
             .map_err(io::Error::other)?;
         Ok(())
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(super) fn device_drained(&self, device: DeviceId) -> bool {
         !self
             .active
@@ -1100,6 +1101,7 @@ impl Driver {
             .insert(prepared.id, Arc::new(AtomicBool::new(true)));
         Ok(())
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(super) fn register_with_config(
         &mut self,
         config: Config,
@@ -1171,12 +1173,14 @@ impl Driver {
             );
         }
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(super) fn reconfigure(&mut self, config: Config, now: Instant) -> Result<(), ConfigError> {
         self.validate_config(&config)?;
         self.prepare_capacity(&config)
             .map_err(ConfigError::Invalid)?;
         self.commit_config(config, None, None, now)
     }
+    #[cfg(any(feature = "cxx", test))]
     fn validate_config(&self, config: &Config) -> Result<(), ConfigError> {
         if config.statistics_lanes != self.shared.statistics.lane_count() {
             return Err(ConfigError::Invalid(invalid(

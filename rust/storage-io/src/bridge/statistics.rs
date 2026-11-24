@@ -45,9 +45,6 @@ pub fn metric_mbps(iops: i64, size: i64) -> ffi::Metric {
 pub struct StatisticsHandle(pub(super) Option<Arc<CompletionStatistics>>);
 pub struct StatisticsSnapshot(Vec<CompletionRates>);
 
-pub fn new_statistics_handle() -> Box<StatisticsHandle> {
-    Box::new(StatisticsHandle(None))
-}
 pub fn new_statistics_snapshot() -> Box<StatisticsSnapshot> {
     Box::new(StatisticsSnapshot(Vec::new()))
 }

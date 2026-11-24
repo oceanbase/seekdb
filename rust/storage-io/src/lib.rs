@@ -25,6 +25,8 @@ pub use drop_witness::DropWitness;
 mod bridge;
 #[cfg(feature = "cxx")]
 pub use bridge::{ffi, new_service_handle, RequestOptions, ServiceHandle};
+#[cfg(feature = "cxx")]
+mod file_session;
 mod header;
 mod service;
 pub mod statistics;

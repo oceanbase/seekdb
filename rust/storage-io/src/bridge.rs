@@ -17,7 +17,7 @@ use named::{new_named_file, new_named_owner, NamedFile, NamedOwnerHandle};
 mod blocks;
 mod statistics;
 use statistics::{
-    metric_integer, metric_mbps, new_statistics_handle, new_statistics_snapshot, StatisticsHandle,
+    metric_integer, metric_mbps, new_statistics_snapshot, StatisticsHandle,
     StatisticsSnapshot,
 };
 mod requests;
@@ -200,7 +200,6 @@ pub mod ffi {
     extern "Rust" {
         type StatisticsHandle;
         type StatisticsSnapshot;
-        fn new_statistics_handle() -> Box<StatisticsHandle>;
         fn new_statistics_snapshot() -> Box<StatisticsSnapshot>;
         fn statistics_snapshot(
             self: &StatisticsHandle,

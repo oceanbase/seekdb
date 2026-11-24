@@ -14,8 +14,9 @@
 
 use super::{
     ffi,
-    requests::{self, FileSession, ServiceHandle},
+    requests::{self, ServiceHandle},
 };
+use crate::file_session::FileSession;
 use crate::{
     BlockConfig, BlockError, BlockFile, BlockIndex, BlockRegion, FileSize, GrowthPolicy,
     ReleaseOutcome, SpaceBudget, UnmarkedBlockFile,
@@ -205,7 +206,7 @@ impl BlockOwner {
                                     options.initial_size,
                                     options.initial_percentage,
                                 ),
-                                direct_io: endpoint.direct_io,
+                                direct_io: endpoint.direct_io(),
                                 punch_holes: options.punch_holes,
                             },
                             SpaceBudget {
@@ -234,13 +235,13 @@ impl BlockOwner {
         directory: &[u8],
         execution: &ffi::ExecutionOptions,
     ) -> i32 {
-        self.session.prepare(service, directory, execution)
+        requests::prepare_session(&self.session, service, directory, execution)
     }
     pub fn close_blocks(&self) -> i32 {
-        self.session.close(|| *self.lock() = State::Empty)
+        requests::status(self.session.close(|| *self.lock() = State::Empty))
     }
     pub fn validate_block_workers(&self, configured: usize) -> i32 {
-        self.session.validate_workers(configured)
+        requests::status(self.session.validate_workers(configured))
     }
     pub fn submit_block(
         &self,

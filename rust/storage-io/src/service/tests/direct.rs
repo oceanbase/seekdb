@@ -608,16 +608,12 @@ fn assert_partial_read_is_hidden_after_terminal(status: CompletionStatus) {
 }
 
 #[test]
-fn partial_read_late_timeout_does_not_expose_the_prefix() {
-    assert_partial_read_is_hidden_after_terminal(CompletionStatus::TimedOut);
-}
-
-#[test]
-fn partial_read_late_close_does_not_expose_the_prefix() {
-    assert_partial_read_is_hidden_after_terminal(CompletionStatus::Shutdown);
-}
-
-#[test]
-fn partial_read_late_cancel_does_not_expose_the_prefix() {
-    assert_partial_read_is_hidden_after_terminal(CompletionStatus::Cancelled);
+fn partial_read_does_not_expose_prefix_after_terminal_result() {
+    for status in [
+        CompletionStatus::TimedOut,
+        CompletionStatus::Shutdown,
+        CompletionStatus::Cancelled,
+    ] {
+        assert_partial_read_is_hidden_after_terminal(status);
+    }
 }

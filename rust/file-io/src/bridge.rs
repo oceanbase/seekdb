@@ -18,15 +18,9 @@ mod directory;
 mod durability;
 pub use durability::*;
 mod path_operations;
-mod paths;
 pub use path_operations::*;
-mod metadata;
 mod stream;
 pub use directory::*;
-pub use metadata::stat as file_stat;
-pub use paths::{
-    exists_path, mkdir_path, rename_path, rmdir_path, stat_path, truncate_legacy_path, unlink_path,
-};
 pub use stream::{new_appender, new_reader, AppenderFacade, ReaderFacade};
 
 #[cxx::bridge(namespace = "oceanbase::file_io")]
@@ -58,17 +52,6 @@ pub mod ffi {
         count: u64,
         first_path: Vec<u8>,
         first_error: FsError,
-    }
-
-    enum DirectoryCapabilities {
-        BufferedWorker,
-        DirectWorker,
-        DirectNativeAio,
-    }
-
-    struct CapabilityResult {
-        capability: DirectoryCapabilities,
-        error: i32,
     }
 
     enum DirectoryStepCode {
@@ -112,13 +95,6 @@ pub mod ffi {
         error: i32,
     }
 
-    struct SpaceResult {
-        capacity: u64,
-        free: u64,
-        available: u64,
-        error: i32,
-    }
-
     struct PathMetadata {
         directory: bool,
         symlink: bool,
@@ -135,25 +111,6 @@ pub mod ffi {
         total: u64,
         available: u64,
         error: i32,
-    }
-
-    #[derive(Default)]
-    struct FileStat {
-        rdev: u64,
-        dev: u64,
-        inode: u64,
-        mask: u32,
-        mode: u32,
-        nlink: u32,
-        uid: u64,
-        gid: u64,
-        size: u64,
-        block_cnt: u64,
-        block_size: u64,
-        atime_s: i64,
-        mtime_s: i64,
-        ctime_s: i64,
-        btime_s: i64,
     }
 
     extern "Rust" {
@@ -190,11 +147,9 @@ pub mod ffi {
         ) -> FsError;
         fn directory_entries(directory: &DirectoryHandle) -> Box<DirectoryCursor>;
         fn inspect_at(directory: &DirectoryHandle, name: &[u8], follow: bool) -> ObservationResult;
-        fn sync_directory_handle(directory: &DirectoryHandle) -> FsError;
         fn remove_file_at(directory: &DirectoryHandle, name: &[u8]) -> FsError;
         fn remove_dir_at(directory: &DirectoryHandle, name: &[u8]) -> FsError;
         type DirectoryCursor;
-        fn read_directory(path: &[u8]) -> Box<DirectoryCursor>;
         fn next_entry(self: &mut DirectoryCursor) -> DirectoryStep;
         fn inspect_path(path: &[u8], follow: bool) -> PathMetadata;
         fn create_directory_path(path: &[u8], mode: u32, recursive: bool) -> i32;
@@ -203,17 +158,6 @@ pub mod ffi {
         fn symlink_file_path(target: &[u8], link: &[u8]) -> i32;
         fn resolve_path(path: &[u8], lexical: bool) -> ResolvedPath;
         fn read_usable_space(path: &[u8]) -> UsableSpaceResult;
-        fn mkdir_path(path: &[u8], mode: u32) -> i32;
-        fn rmdir_path(path: &[u8]) -> i32;
-        fn unlink_path(path: &[u8]) -> i32;
-        fn rename_path(source: &[u8], destination: &[u8]) -> i32;
-        fn truncate_legacy_path(path: &[u8], length: i64) -> i32;
-        fn exists_path(path: &[u8], exists: &mut bool) -> i32;
-        fn stat_path(path: &[u8], out: &mut FileStat) -> i32;
-        /// Legacy byte paths use the process ANSI code page on Windows.
-        fn read_space(path: &[u8]) -> SpaceResult;
-        fn probe_directory(path: &[u8]) -> CapabilityResult;
-
     }
 }
 
@@ -265,46 +209,6 @@ pub fn legacy_path(bytes: &[u8]) -> io::Result<std::borrow::Cow<'_, std::path::P
         Ok(std::borrow::Cow::Owned(
             std::ffi::OsString::from_wide(&wide).into(),
         ))
-    }
-}
-
-fn probe_directory(bytes: &[u8]) -> ffi::CapabilityResult {
-    match legacy_path(bytes).and_then(|path| crate::probe_directory(&path)) {
-        Ok(capability) => ffi::CapabilityResult {
-            capability: match capability {
-                crate::DirectoryCapabilities::BufferedWorker => {
-                    ffi::DirectoryCapabilities::BufferedWorker
-                }
-                crate::DirectoryCapabilities::DirectWorker => {
-                    ffi::DirectoryCapabilities::DirectWorker
-                }
-                crate::DirectoryCapabilities::DirectNativeAio => {
-                    ffi::DirectoryCapabilities::DirectNativeAio
-                }
-            },
-            error: 0,
-        },
-        Err(error) => ffi::CapabilityResult {
-            capability: ffi::DirectoryCapabilities::BufferedWorker,
-            error: error_number(error),
-        },
-    }
-}
-
-fn read_space(bytes: &[u8]) -> ffi::SpaceResult {
-    match legacy_path(bytes).and_then(|path| crate::space(&path)) {
-        Ok(value) => ffi::SpaceResult {
-            capacity: value.capacity,
-            free: value.free,
-            available: value.available,
-            error: 0,
-        },
-        Err(error) => ffi::SpaceResult {
-            capacity: 0,
-            free: 0,
-            available: 0,
-            error: error_number(error),
-        },
     }
 }
 

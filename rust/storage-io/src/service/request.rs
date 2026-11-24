@@ -137,6 +137,7 @@ impl Registry {
             .filter(|state| device.is_none_or(|device| state.device() == device))
             .collect()
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(super) fn has_device(&self, device: DeviceId) -> bool {
         self.entries
             .values()
@@ -359,9 +360,11 @@ impl Request {
             .and_then(|o| o.completion.data())
             .unwrap_or(&[])
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn completed(&self) -> Option<&PublishedCompletion> {
         self.result.outcome.get().map(|o| &o.completion)
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn callback_error(&self) -> i32 {
         self.result.outcome.get().map_or(0, |o| o.callback_error)
     }

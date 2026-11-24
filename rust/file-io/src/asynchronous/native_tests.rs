@@ -302,7 +302,7 @@ fn native_probe(file: &TestFile) -> io::Result<bool> {
 }
 
 #[test]
-fn probe_setup_fallback_is_limited_to_enosys() {
+fn probe_only_falls_back_on_unsupported_io() {
     let file = TestFile::new();
     for error in [
         libc::ENOSYS,
@@ -314,40 +314,25 @@ fn probe_setup_fallback_is_limited_to_enosys() {
         libc::ENOSPC,
         libc::EIO,
     ] {
-        let result = with_faults(&[(Call::Setup, Fault::Error(error))], || {
-            native_probe(&file)
-        });
-        if error == libc::ENOSYS {
-            assert!(!result.unwrap());
-        } else {
-            assert_eq!(result.unwrap_err().raw_os_error(), Some(error));
-        }
-        assert_eq!(Arc::strong_count(&file.file), 1);
-    }
-}
-
-#[test]
-fn probe_submission_and_retrieval_preserve_stage_errors() {
-    let file = TestFile::new();
-    for call in [Call::Submit, Call::Events] {
-        for error in [
-            libc::EINVAL,
-            libc::EOPNOTSUPP,
-            libc::ENOSYS,
-            libc::EAGAIN,
-            libc::EPERM,
-            libc::EACCES,
-            libc::ENOSPC,
-            libc::EIO,
-        ] {
-            let result = with_faults(&[(call, Fault::Error(error))], || native_probe(&file));
-            if [libc::EINVAL, libc::EOPNOTSUPP, libc::ENOSYS].contains(&error) {
+        let assert_result = |result: io::Result<bool>, unsupported| {
+            if unsupported {
                 assert!(!result.unwrap());
             } else {
                 assert_eq!(result.unwrap_err().raw_os_error(), Some(error));
             }
             assert_eq!(Arc::strong_count(&file.file), 1);
+        };
+        let setup = with_faults(&[(Call::Setup, Fault::Error(error))], || native_probe(&file));
+        assert_result(setup, error == libc::ENOSYS);
+        let unsupported = [libc::EINVAL, libc::EOPNOTSUPP, libc::ENOSYS].contains(&error);
+        for call in [Call::Submit, Call::Events] {
+            let result = with_faults(&[(call, Fault::Error(error))], || native_probe(&file));
+            assert_result(result, unsupported);
         }
+        INJECTION.with(|injection| {
+            injection.borrow_mut().event = Some(EventFault::Result(-i64::from(error)));
+        });
+        assert_result(native_probe(&file), unsupported);
     }
 }
 
@@ -386,30 +371,6 @@ fn probe_checks_submission_event_and_byte_counts() {
         native_probe(&file).unwrap_err().raw_os_error(),
         Some(libc::EIO)
     );
-}
-
-#[test]
-fn probe_valid_negative_completion_can_fallback() {
-    let file = TestFile::new();
-    for error in [
-        libc::EINVAL,
-        libc::EOPNOTSUPP,
-        libc::ENOSYS,
-        libc::EAGAIN,
-        libc::EACCES,
-        libc::ENOSPC,
-        libc::EIO,
-    ] {
-        INJECTION.with(|injection| {
-            injection.borrow_mut().event = Some(EventFault::Result(-(error as i64)))
-        });
-        let result = native_probe(&file);
-        if [libc::EINVAL, libc::EOPNOTSUPP, libc::ENOSYS].contains(&error) {
-            assert!(!result.unwrap());
-        } else {
-            assert_eq!(result.unwrap_err().raw_os_error(), Some(error));
-        }
-    }
 }
 
 #[test]

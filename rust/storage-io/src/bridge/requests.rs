@@ -15,27 +15,18 @@
 use super::ffi;
 use crate::service::{CallbackOwner, Consumer, PublishedCompletion, RequestOptions};
 use crate::{
-    AdmissionLimits, CancelOutcome, CompletionRequirement, CompletionStatus, Config, ConfigError, DeviceConfig, DeviceId,
-    DeviceLimits, Execution, Request, RequestPolicy, Service, Target,
+    AdmissionLimits, CancelOutcome, CompletionRequirement, CompletionStatus, Config, ConfigError,
+    Execution, Request, RequestPolicy, Service, Target,
 };
-use file_io::bridge::{error_number, legacy_path};
-use file_io::{Backend, BackendKind, Direction};
+use crate::file_session::{Endpoint, FileSession};
+use file_io::bridge::error_number;
+use file_io::Direction;
 use std::collections::BTreeMap;
 use std::io;
-use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 pub struct ServiceHandle(Mutex<Option<Arc<Service>>>);
-#[derive(Clone)]
-pub(super) struct Endpoint {
-    service: Arc<Service>,
-    id: DeviceId,
-    native_aio: bool,
-    worker_threads: usize,
-    depth: usize,
-    pub(super) direct_io: bool,
-}
 pub(super) struct RequestPlan {
     pub error: i32,
     pub offset: u64,
@@ -60,7 +51,7 @@ impl Consumer for ForeignCallback {
         self.0.as_ref()
     }
 }
-fn status(result: io::Result<()>) -> i32 {
+pub(super) fn status(result: io::Result<()>) -> i32 {
     result.err().map_or(0, error_number)
 }
 fn invalid() -> io::Error {
@@ -93,19 +84,6 @@ fn buffer_limit(server_memory_bytes: u64, io_buffer_bytes: u64) -> io::Result<us
         io_buffer_bytes
     })
     .map_err(|_| invalid())
-}
-fn worker_count(configured: usize, depth: usize) -> usize {
-    let requested = if configured == 0 {
-        let cpus = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-        if cpus <= 16 {
-            cpus * 6
-        } else {
-            96 + (cpus - 16).min(464) * 2
-        }
-    } else {
-        configured
-    };
-    requested.min(depth)
 }
 fn callback_count(threads: usize) -> usize {
     if threads == 0 {
@@ -177,7 +155,7 @@ fn config_error(error: ConfigError) -> io::Error {
 }
 
 impl ServiceHandle {
-    fn service(&self) -> io::Result<Arc<Service>> {
+    pub(super) fn service(&self) -> io::Result<Arc<Service>> {
         self.0
             .lock()
             .unwrap()
@@ -220,44 +198,6 @@ impl ServiceHandle {
             Ok(())
         })())
     }
-    fn create_endpoint(
-        &self,
-        native_aio: bool,
-        worker_threads: usize,
-        depth: usize,
-    ) -> io::Result<Endpoint> {
-        if depth == 0 {
-            return Err(invalid());
-        }
-        let service = self.service()?;
-        let id = service.allocate_device_id()?;
-        let worker_threads = worker_count(worker_threads, depth);
-        let worker = Backend::new(
-            BackendKind::Worker {
-                threads: worker_threads,
-            },
-            depth,
-        )?;
-        let native = if native_aio {
-            Some(Backend::new(BackendKind::NativeAio, depth)?)
-        } else {
-            None
-        };
-        service
-            .register_device_with_limits(
-                DeviceConfig { id, worker, native },
-                DeviceLimits { depth },
-            )
-            .map_err(config_error)?;
-        Ok(Endpoint {
-            service,
-            id,
-            native_aio,
-            worker_threads,
-            depth,
-            direct_io: native_aio,
-        })
-    }
     pub fn configure_resources(
         &self,
         server_memory_bytes: u64,
@@ -283,17 +223,6 @@ impl ServiceHandle {
     }
 }
 impl Endpoint {
-    fn validate_worker_threads(&self, configured: usize) -> i32 {
-        if worker_count(configured, self.depth) == self.worker_threads {
-            0
-        } else {
-            error_number(io::ErrorKind::Unsupported.into())
-        }
-    }
-    #[cfg(test)]
-    fn close_device(&self) -> i32 {
-        status(self.service.remove_device(self.id))
-    }
     fn submit(
         &self,
         options: &ffi::RequestOptions,
@@ -323,7 +252,7 @@ impl Endpoint {
                 }
                 _ => (),
             }
-            let fault = decode_worker_fault(if self.native_aio && !options.worker_required {
+            let fault = decode_worker_fault(if self.native_aio() && !options.worker_required {
                 0
             } else {
                 options.worker_fault
@@ -348,7 +277,7 @@ impl Endpoint {
                 policy: RequestPolicy::for_storage_io(
                     deadline,
                     execution,
-                    self.native_aio,
+                    self.native_aio(),
                     alignment,
                     if callback.is_some() {
                         CompletionRequirement::FullBuffer
@@ -373,82 +302,18 @@ impl Endpoint {
         }
     }
 }
-#[derive(Default)]
-enum SessionState {
-    #[default]
-    Empty,
-    Open(Arc<Endpoint>),
-    Closing(Arc<Endpoint>),
-}
-#[derive(Default)]
-pub(super) struct FileSession(Mutex<SessionState>);
-impl FileSession {
-    pub(super) fn prepare(
-        &self,
-        service: &ServiceHandle,
-        directory: &[u8],
-        execution: &ffi::ExecutionOptions,
-    ) -> i32 {
-        status((|| {
-            let mut state = self.0.lock().unwrap();
-            if !matches!(*state, SessionState::Empty) {
-                return Err(io::ErrorKind::AlreadyExists.into());
-            }
-            let capability = file_io::probe_directory(&legacy_path(directory)?)?;
-            let native = capability == file_io::DirectoryCapabilities::DirectNativeAio;
-            let direct = capability != file_io::DirectoryCapabilities::BufferedWorker;
-            let mut endpoint =
-                service.create_endpoint(native, execution.worker_threads, execution.max_depth)?;
-            endpoint.direct_io = direct;
-            *state = SessionState::Open(Arc::new(endpoint));
-            Ok(())
-        })())
-    }
-    pub(super) fn capture<T>(
-        &self,
-        capture: impl FnOnce(&Arc<Endpoint>) -> io::Result<T>,
-    ) -> io::Result<T> {
-        let state = self.0.lock().unwrap();
-        match &*state {
-            SessionState::Open(endpoint) => capture(endpoint),
-            _ => Err(io::ErrorKind::NotConnected.into()),
-        }
-    }
-    pub(super) fn close(&self, close_file: impl FnOnce()) -> i32 {
-        let endpoint = {
-            let mut state = self.0.lock().unwrap();
-            let endpoint = match &*state {
-                SessionState::Empty => None,
-                SessionState::Open(endpoint) | SessionState::Closing(endpoint) => {
-                    Some(Arc::clone(endpoint))
-                }
-            };
-            if let Some(endpoint) = &endpoint {
-                *state = SessionState::Closing(Arc::clone(endpoint));
-            }
-            close_file();
-            endpoint
-        };
-        let Some(endpoint) = endpoint else {
-            return 0;
-        };
-        let result = endpoint
-            .service
-            .remove_device(endpoint.id)
-            .and_then(|()| endpoint.service.wait_device_drained(endpoint.id));
-        if result.is_ok() {
-            let mut state = self.0.lock().unwrap();
-            if matches!(&*state, SessionState::Closing(current) if Arc::ptr_eq(current, &endpoint))
-            {
-                *state = SessionState::Empty;
-            }
-        }
-        status(result)
-    }
-    pub(super) fn validate_workers(&self, configured: usize) -> i32 {
-        self.capture(|endpoint| Ok(endpoint.validate_worker_threads(configured)))
-            .unwrap_or_else(error_number)
-    }
+pub(super) fn prepare_session(
+    session: &FileSession,
+    service: &ServiceHandle,
+    directory: &[u8],
+    execution: &ffi::ExecutionOptions,
+) -> i32 {
+    status(session.prepare(
+        || service.service(),
+        || file_io::bridge::legacy_path(directory),
+        execution.worker_threads,
+        execution.max_depth,
+    ))
 }
 
 pub(super) fn take_callback(

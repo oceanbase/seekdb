@@ -28,7 +28,9 @@ mod admission;
 mod delivery;
 mod engine;
 mod request;
-pub(crate) use request::{CallbackOwner, Consumer};
+pub(crate) use request::CallbackOwner;
+#[cfg(any(feature = "cxx", test))]
+pub(crate) use request::Consumer;
 pub use request::{PublishedCompletion, Request, RequestResult};
 pub(crate) mod lifetime;
 pub(crate) use admission::Admission;
@@ -307,6 +309,7 @@ impl Drop for RequestControl {
 }
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum ServicePhase {
+    #[cfg(any(feature = "cxx", test))]
     Prepared,
     Active,
     Stopped,
@@ -346,6 +349,7 @@ pub struct Service {
     progress_worker: Mutex<Option<ProgressWorker>>,
     shutdown_phase: Mutex<ShutdownPhase>,
     shutdown_changed: std::sync::Condvar,
+    #[cfg(any(feature = "cxx", test))]
     next_device_id: AtomicU64,
 }
 struct ProgressWorker {
@@ -356,6 +360,7 @@ impl Service {
     pub fn start(config: Config) -> io::Result<Self> {
         Self::start_in_phase(config, ServicePhase::Active)
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn prepare(config: Config) -> io::Result<Self> {
         Self::start_in_phase(config, ServicePhase::Prepared)
     }
@@ -406,9 +411,11 @@ impl Service {
             progress_worker: Mutex::new(None),
             shutdown_phase: Mutex::new(ShutdownPhase::Open),
             shutdown_changed: std::sync::Condvar::new(),
+            #[cfg(any(feature = "cxx", test))]
             next_device_id: AtomicU64::new(1),
         })
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn activate(&self) -> io::Result<()> {
         let mut gate = self.shared.gate.lock().unwrap();
         match gate.phase {
@@ -419,6 +426,7 @@ impl Service {
             ServicePhase::Stopped => Err(io::ErrorKind::BrokenPipe.into()),
         }
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn allocate_device_id(&self) -> io::Result<DeviceId> {
         self.next_device_id
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
@@ -481,6 +489,7 @@ impl Service {
         self.driver.lock().unwrap().register(device)
     }
 
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn register_device_with_limits(
         &self,
         device: DeviceConfig,
@@ -499,6 +508,7 @@ impl Service {
         driver.register_with_config(config, device, Instant::now())
     }
 
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn configure_resources(
         &self,
         max_bytes: usize,
@@ -625,12 +635,14 @@ impl Service {
     pub(crate) fn statistics(&self) -> &crate::statistics::CompletionStatistics {
         &self.shared.statistics
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn statistics_owner(&self) -> Arc<crate::statistics::CompletionStatistics> {
         Arc::clone(&self.shared.statistics)
     }
     pub fn snapshot(&self) -> io::Result<ServiceSnapshot> {
         Ok(self.driver.lock().unwrap().snapshot())
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn device_drained(&self, device: DeviceId) -> bool {
         self.driver.lock().unwrap().device_drained(device)
             && !self.shared.requests.lock().unwrap().has_device(device)
@@ -642,6 +654,7 @@ impl Service {
             request.stop();
         }
     }
+    #[cfg(any(feature = "cxx", test))]
     pub(crate) fn wait_device_drained(&self, device: DeviceId) -> io::Result<()> {
         struct DrainWait<'a>(&'a AtomicUsize);
         impl Drop for DrainWait<'_> {

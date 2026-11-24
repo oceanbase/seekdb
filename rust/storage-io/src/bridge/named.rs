@@ -14,8 +14,9 @@
 
 use super::{
     ffi,
-    requests::{self, Endpoint, FileSession, ServiceHandle},
+    requests::{self, ServiceHandle},
 };
+use crate::file_session::{Endpoint, FileSession};
 use crate::{NamedOpenedFile, NamedOwner, OwnerPhase, Target};
 use file_io::bridge::{error_number, legacy_path, DirectoryHandle};
 use std::{io, sync::Arc};
@@ -62,7 +63,7 @@ impl NamedOwnerHandle {
         if !self.named_owner_replaceable() {
             return error_number(io::ErrorKind::WouldBlock.into());
         }
-        let error = self.session.prepare(service, directory, execution);
+        let error = requests::prepare_session(&self.session, service, directory, execution);
         if error != 0 {
             return error;
         }
@@ -73,14 +74,14 @@ impl NamedOwnerHandle {
         self.owner.as_ref().is_none_or(NamedOwner::can_replace)
     }
     pub fn close_named_owner(&self) -> i32 {
-        self.session.close(|| {
+        requests::status(self.session.close(|| {
             if let Some(owner) = &self.owner {
                 owner.close();
             }
-        })
+        }))
     }
     pub fn validate_named_workers(&self, configured: usize) -> i32 {
-        self.session.validate_workers(configured)
+        requests::status(self.session.validate_workers(configured))
     }
     pub fn open_named_file(&self, path: &[u8], read_only: bool, output: &mut NamedFile) -> i32 {
         code(self.session.capture(|endpoint| {
@@ -93,10 +94,10 @@ impl NamedOwnerHandle {
                 file_io::open_with_direct_io(
                     std::fs::OpenOptions::new().read(true),
                     &path,
-                    endpoint.direct_io,
+                    endpoint.direct_io(),
                 )?
             } else {
-                file_io::open_synchronous_read_write(&path, endpoint.direct_io)?
+                file_io::open_synchronous_read_write(&path, endpoint.direct_io())?
             };
             output.0 = Some((owner.bind(Arc::new(file))?, Arc::clone(endpoint)));
             Ok(())

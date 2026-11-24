@@ -809,36 +809,6 @@ fn reopening_rejects_partial_file_length() {
     );
 }
 
-#[test]
-#[ignore = "requires an existing C++ database block file in BLOCK_FILE_FIXTURE"]
-fn reopens_cpp_database_without_modifying_header_or_length() {
-    let path = PathBuf::from(std::env::var_os("BLOCK_FILE_FIXTURE").expect("BLOCK_FILE_FIXTURE"));
-    let file = std::fs::File::open(&path).unwrap();
-    let mut before = [0; HEADER_PAGE_SIZE];
-    file_io::read_exact_at(&file, &mut before, 0).unwrap();
-    let length = file.metadata().unwrap().len();
-    let owner = UnmarkedBlockFile::open(
-        &path,
-        BlockConfig {
-            block_size: 2 * 1024 * 1024,
-            initial_size: crate::FileSize::Bytes(0),
-            direct_io: false,
-            punch_holes: false,
-        },
-        SpaceBudget::default(),
-        file_io::DirectoryDurability::Required,
-        &mut file_io::DirectorySyncSummary::default(),
-    )
-    .unwrap();
-    assert_eq!(owner.snapshot().capacity, length);
-    owner.sync().unwrap();
-    drop(owner);
-    let mut after = [0; HEADER_PAGE_SIZE];
-    file_io::read_exact_at(&file, &mut after, 0).unwrap();
-    assert_eq!(before, after);
-    assert_eq!(file.metadata().unwrap().len(), length);
-}
-
 #[cfg(unix)]
 #[test]
 fn production_maximum_inventory_reopens_a_sparse_file_without_reserving_capacity() {

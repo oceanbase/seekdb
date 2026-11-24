@@ -99,9 +99,6 @@ pub fn inspect_at(
     }
     result
 }
-pub fn sync_directory_handle(directory: &DirectoryHandle) -> ffi::FsError {
-    status(directory.get().and_then(crate::Directory::sync))
-}
 pub fn remove_file_at(directory: &DirectoryHandle, name: &[u8]) -> ffi::FsError {
     status(
         directory
@@ -135,9 +132,6 @@ pub struct DirectoryCursor {
     state: State,
 }
 
-pub fn read_directory(path: &[u8]) -> Box<DirectoryCursor> {
-    cursor(open_entries(path))
-}
 fn empty_step(code: ffi::DirectoryStepCode, detail: ffi::FsError) -> ffi::DirectoryStep {
     ffi::DirectoryStep {
         code,
@@ -173,16 +167,6 @@ impl DirectoryCursor {
             },
         }
     }
-}
-
-fn open_entries(path: &[u8]) -> io::Result<crate::Entries> {
-    if path.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "directory path is empty",
-        ));
-    }
-    super::legacy_path(path).and_then(crate::read_dir)
 }
 
 fn transport(entry: crate::Entry) -> io::Result<ffi::DirectoryStep> {
