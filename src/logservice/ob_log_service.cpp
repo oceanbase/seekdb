@@ -15,10 +15,10 @@
  */
 
 #define USING_LOG_PREFIX CLOG
+#include "lib/file/path_operations.h"
 #include "ob_log_service.h"
 #include "logservice/wal_handle_guard.h"
 #include "logservice/ob_log_allocator_mgr.h"
-#include "lib/file/file_directory_utils.h"
 #include "lib/ob_running_mode.h"
 #include "share/ob_share_util.h"
 
@@ -65,7 +65,6 @@ int ObLogService::server_module_init(
     const char *clog_dir,
     const common::ObAddr &self,
     ObILogStorage *log_storage,
-    common::ObIOManager *io_manager,
     const bool is_shared_storage_mode,
     const int64_t replay_thread_quota,
     const ObLogRuntimeConfig &runtime_config)
@@ -73,22 +72,19 @@ int ObLogService::server_module_init(
   int ret = OB_SUCCESS;
   common::ObILogAllocator *alloc_mgr = NULL;
   if (OB_ISNULL(logservice) || OB_ISNULL(runtime_clog_dir) ||
-      OB_ISNULL(clog_dir) || OB_ISNULL(log_storage) ||
-      OB_ISNULL(io_manager) || OB_UNLIKELY(!self.is_valid())) {
+      OB_ISNULL(clog_dir) || OB_ISNULL(log_storage) || OB_UNLIKELY(!self.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid log service composition", K(ret), KP(logservice),
-        KP(runtime_clog_dir), KP(clog_dir), KP(log_storage),
-        KP(io_manager), K(self));
+        KP(runtime_clog_dir), KP(clog_dir), KP(log_storage), K(self));
   } else if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
   } else if (OB_FAIL(logservice->init(wal_disk_soft_target, runtime_clog_dir,
                                       self,
                                       alloc_mgr,
                                       log_storage,
-                                      io_manager,
                                       is_shared_storage_mode,
                                       replay_thread_quota,
                                       runtime_config))) {
-  } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(clog_dir))) {
+  } else if (OB_FAIL(path_operations::fsync_dir(clog_dir))) {
   } else {
     CLOG_LOG(INFO, "ObLogService server_module_init success");
   }
@@ -341,10 +337,10 @@ int check_and_prepare_dir(const char *dir)
 {
   bool is_exist = false;
   int ret = OB_SUCCESS;
-  if (OB_FAIL(common::FileDirectoryUtils::is_exists(dir, is_exist))) {
+  if (OB_FAIL(common::path_operations::is_exists(dir, is_exist))) {
   } else if (is_exist == true) {
     CLOG_LOG(INFO, "director exist", K(ret), K(dir));
-  } else if (OB_FAIL(common::FileDirectoryUtils::create_directory(dir))) {
+  } else if (OB_FAIL(common::path_operations::create_directory(dir))) {
   } else {
     CLOG_LOG(INFO, "check_and_prepare_dir success", K(ret), K(dir));
   }
@@ -356,7 +352,6 @@ int ObLogService::init(const int64_t wal_disk_soft_target,
                        const common::ObAddr &self,
                        common::ObILogAllocator *alloc_mgr,
                        ObILogStorage *log_storage,
-                       common::ObIOManager *io_manager,
                        const bool is_shared_storage_mode,
                        const int64_t replay_thread_quota,
                        const ObLogRuntimeConfig &runtime_config)
@@ -369,11 +364,10 @@ int ObLogService::init(const int64_t wal_disk_soft_target,
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
   } else if (wal_disk_soft_target < 0 || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
-      || OB_ISNULL(alloc_mgr) || OB_ISNULL(log_storage)
-      || OB_ISNULL(io_manager)) {
+      || OB_ISNULL(alloc_mgr) || OB_ISNULL(log_storage)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(wal_disk_soft_target), KP(base_dir), K(self),
-             KP(alloc_mgr), KP(log_storage), KP(io_manager));
+             KP(alloc_mgr), KP(log_storage));
   } else if (OB_FAIL(Env::create_wal_env(wal_disk_soft_target, base_dir, wal_env_))) {
   } else if (OB_ISNULL(wal_env_)) {
     ret = OB_ERR_UNEXPECTED;

@@ -15,45 +15,43 @@
  */
 
 #define USING_LOG_PREFIX CLOG
+#include "lib/file/path_operations.h"
 #include "ob_server_log_block_mgr.h"
-#include "lib/utility/ob_platform_io.h"
+#include "share/io_request.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
 {
+using namespace share;
 namespace logservice
 {
 
 int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, bool &result)
 {
-  int ret = OB_SUCCESS;
-  common::ObPlatformDir *dir = NULL;
   result = false;
-  if (NULL == clog_dir) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "directory path is NULL", K(ret));
-  } else if (NULL == (dir = common::ob_opendir_utf8(clog_dir))) {
-    ret = OB_ERR_SYS;
-    CLOG_LOG(WARN, "Fail to open dir", K(ret), K(errno), K(clog_dir));
-  } else {
-    char entry_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    int read_ret = 0;
-    result = true;
-    while (1 == (read_ret = common::ob_readdir_utf8(dir, entry_name, sizeof(entry_name)))) {
-      if (0 != strcmp(entry_name, ".") && 0 != strcmp(entry_name, "..")) {
-        result = false;
-      }
-    }
-    if (0 > read_ret) {
-      result = false;
-      ret = OB_ERR_SYS;
-      CLOG_LOG(WARN, "read dir failed", K(ret), K(errno), K(clog_dir));
-    }
+  if (clog_dir == nullptr) return OB_INVALID_ARGUMENT;
+  auto directory = file_io::new_directory_handle();
+  if (directory->open_directory({reinterpret_cast<const uint8_t *>(clog_dir), strlen(clog_dir)}).domain != file_io::ErrorDomain::None) {
+#ifdef _WIN32
+    return OB_IO_ERROR;
+#else
+    return OB_ERR_SYS;
+#endif
   }
-  if (NULL != dir) {
-    common::ob_closedir_utf8(dir);
+  auto cursor = file_io::directory_entries(*directory);
+  file_io::DirectoryStep entry;
+  file_io::ObservationResult observation;
+  bool empty = true;
+  for (;;) {
+    entry = cursor->next_entry();
+    if (entry.code == file_io::DirectoryStepCode::End) { result = empty; return OB_SUCCESS; }
+    if (entry.code != file_io::DirectoryStepCode::Entry) return OB_IO_ERROR;
+    observation = file_io::inspect_at(*directory, {entry.name.data(), entry.name.size()}, false);
+    if (observation.error.domain != file_io::ErrorDomain::None) return OB_IO_ERROR;
+    if (observation.presence == file_io::Presence::Missing) continue;
+    if (observation.kind == file_io::EntryKind::Link) return OB_IO_ERROR;
+    empty = false;
   }
-  return ret;
 }
 
 ObServerLogBlockMgr::ObServerLogBlockMgr()

@@ -57,7 +57,6 @@ grouped_unity_cc_library(
         "//rust:storage_io_headers",
         "//rust:wal_headers",
         "//src/share:startup_result",
-        "//src/share:local_io_config",
         "//src/share:local_storage_interface",
         ":append_callback_interface",
         "//src/share:log_protocol",

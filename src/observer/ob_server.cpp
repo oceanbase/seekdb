@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "lib/file/path_operations.h"
-#include "logservice/palf/log_meta.h"
 #include "share/io_request.h"
 #include "rust/config.h"
 #include "rust/config/config_checkers.h"
@@ -33,7 +32,6 @@
 #include <thread>
 #include <cstdio>
 #include "observer/ob_server.h"
-#include "lib/file/file_directory_utils.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/allocator/ob_jemalloc.h"
 #include "rootserver/ob_ddl_service_launcher.h"
@@ -528,7 +526,7 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
         "    base-dir: %s\n"
         "    data-dir: %s\n"
         "    redo-dir: %s\n"
-        "    PALF-dir: %s/sys/log_stream\n",
+        "    WAL-dir: %s\n",
         ret, data_file_exists, redo_empty, base_dir, data_dir, redo_dir, redo_dir);
     std::fflush(stderr);
   }
@@ -704,8 +702,7 @@ ObServer::ObServer()
     schema_status_proxy_(sql_proxy_),
     is_log_dir_empty_(false),
     conn_res_mgr_(),
-    disk_usage_report_task_(),
-    log_block_mgr_(startup_result_)
+    disk_usage_report_task_()
 {
 }
 
@@ -1572,7 +1569,6 @@ bool ObServer::is_stopped()
 
 void ObServer::set_stop()
 {
-  log_block_mgr_.stop();
   net_frame_.sql_nio_stop();
   stop_ = true;
   ob_service_.set_stop();
@@ -2074,11 +2070,7 @@ int ObServer::validate_io_threads()
   const int64_t data_threads = config::sync_io_thread_count();
   const int64_t log_threads = config::disk_io_thread_count();
   if (data_threads < 0 || log_threads < 0) { return OB_INVALID_ARGUMENT; }
-  int ret = OB_SERVER_BLOCK_MGR.validate_io_threads(data_threads);
-  if (ret == OB_SUCCESS) {
-    ret = convert_storage_error(log_block_mgr_.physical_owner().validate_named_workers(log_threads));
-  }
-  return ret;
+  return OB_SERVER_BLOCK_MGR.validate_io_threads(data_threads);
 }
 
 int ObServer::configure_io(int64_t server_memory_bytes, int64_t callback_threads)
@@ -2093,18 +2085,7 @@ int ObServer::init_io()
   int ret = OB_SUCCESS;
   rust::String data_dir = config::data_dir();
   rust::String redo_dir = config::redo_dir();
-  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(data_dir.c_str(), redo_dir.c_str()))) {
-  } else {
-    char log_dir[MAX_PATH_SIZE] = {'\0'};
-    bool directory_exists = false;
-    const int length = snprintf(log_dir, sizeof(log_dir), "%s/sys/log_stream",
-        OB_FILE_SYSTEM_ROUTER.get_clog_dir());
-    if (length < 0 || length >= sizeof(log_dir)) {
-      ret = OB_BUF_NOT_ENOUGH;
-    } else if (OB_FAIL(palf::meta_store::check_directory(local_store_, log_dir, directory_exists))) {
-      LOG_ERROR("PALF directory check failed before log recovery", KR(ret), K(log_dir));
-    }
-  }
+  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(data_dir.c_str(), redo_dir.c_str()))) {}
 
   if (OB_SUCC(ret)) {
     storage_io::RuntimeConfig io_config{};
@@ -2137,7 +2118,7 @@ int ObServer::init_io()
         int64_t data_disk_percentage = 0;
         int64_t log_disk_percentage = 0;
 
-        } else if (OB_FAIL(log_block_mgr_.init(ObServerUtils::get_log_disk_info_in_config))) {
+        if (OB_FAIL(log_block_mgr_.init(ObServerUtils::get_log_disk_info_in_config))) {
           LOG_ERROR("log block mgr init failed", KR(ret));
         } else if (OB_FAIL(ObServerUtils::cal_all_part_disk_size(config::datafile_size(),
                                                   config::log_disk_size(),
