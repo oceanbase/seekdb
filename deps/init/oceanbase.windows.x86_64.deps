@@ -4,15 +4,12 @@ arch=x86_64
 repo=https://mirrors.oceanbase.com/oceanbase/development-kit/windows/11/x86_64
 
 [deps]
-devdeps-zlib-20260506.tar.gz
 devdeps-dirent-20260506.tar.gz
 devdeps-pthreads-20260506.tar.gz
-devdeps-curl-20260506.tar.gz
 devdeps-abseil-20260506.tar.gz
 devdeps-boost-geometry-20260506.tar.gz
 devdeps-roaring-20260506.tar.gz
 devdeps-openssl-20260414.tar.gz
 
 [tools]
-obdevtools-llvm-18.1.8-20260414.tar.gz
 obdevtools-win-flex-bison-20260414.tar.gz

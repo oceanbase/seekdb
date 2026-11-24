@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 OceanBase.
 # SPDX-License-Identifier: Apache-2.0
-"""Prepare pinned Wasm libraries, headers and the Emscripten sysroot."""
+"""Prepare Wasm headers, the Emscripten sysroot and the Rust standard library."""
 
 import argparse
 import hashlib
@@ -11,45 +11,9 @@ from pathlib import Path
 import re
 import subprocess
 import shutil
-import tarfile
 import tempfile
 
 from rust import prepare as prepare_rust_std
-
-
-def locked_source(prefix, spec, suffix, checksum_error, *, reuse=False):
-    root = prefix / "sources"
-    root.mkdir(parents=True, exist_ok=True)
-    archive = root / (spec["source_directory"] + suffix)
-    if not archive.exists():
-        download = archive.with_suffix(".download")
-        subprocess.run([
-            "curl", "--fail", "--location", "--connect-timeout", "20",
-            "--max-time", "180", spec["url"], "--output", str(download),
-        ], check=True)
-        if hashlib.sha256(download.read_bytes()).hexdigest() != spec["sha256"]:
-            raise SystemExit(checksum_error)
-        download.replace(archive)
-    if hashlib.sha256(archive.read_bytes()).hexdigest() != spec["sha256"]:
-        raise SystemExit(checksum_error)
-    source = root / spec["source_directory"]
-    if not reuse or not source.exists():
-        with tarfile.open(archive) as files:
-            files.extractall(root, filter="data")
-    return source
-
-
-def build_openssl(prefix, spec, jobs):
-    source = locked_source(prefix, spec, ".tar.gz", "OpenSSL source checksum mismatch", reuse=True)
-    subprocess.run([
-        "perl", "Configure", "linux-generic32",
-        "no-asm", "no-shared", "no-tests", "no-dso", "no-engine", "no-async",
-        "no-sock", "no-afalgeng", "no-ui-console", "-pthread", "--prefix=" + str(prefix),
-    ], cwd=source, env=dict(os.environ, CC="emcc", AR="emar", RANLIB="emranlib"), check=True)
-    subprocess.run(["make", "-j" + str(jobs), "build_libs"], cwd=source, check=True)
-    subprocess.run(["make", "install_dev"], cwd=source, check=True)
-
-
 
 
 def header_variant(patch, digest, fields):
@@ -160,7 +124,6 @@ def main():
     prefix.mkdir(parents=True, exist_ok=True)
     os.environ["EM_CACHE"] = str(prefix / "em-cache")
     dependencies = json.loads(Path(__file__).with_name("dependencies.json").read_text())
-    build_openssl(prefix, dependencies["openssl"], args.jobs)
     prepare_headers(repo / "deps/3rd/usr/local/oceanbase/deps/devel/include", prefix, dependencies)
 
     # Bazel consumes this prepared thread/exception ABI cache read-only.

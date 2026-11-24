@@ -92,13 +92,17 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
         repository_ctx.file("BUILD.bazel", "# The bundled toolchain is Linux-only.\n")
         return
     architecture = host_substitutions(repository_ctx)["@HOST_CPU@"]
-    devtools = repository_ctx.workspace_root.get_child("deps", "3rd", "usr", "local", "oceanbase", "devtools")
+    prebuilt = repository_ctx.workspace_root.get_child("deps", "prebuilt", "native")
+    devtools = prebuilt.get_child("llvm")
+    manifest = devtools.get_child("manifest.json")
+    repository_ctx.watch(manifest)
+    if not manifest.exists:
+        fail("LLVM is missing: %s; run ./build.py init" % devtools)
     for tool_name in [
         "clang",
         "ld.lld",
         "lld",
         "llvm-ar",
-        "llvm-cov",
         "llvm-cxxfilt",
         "llvm-dwp",
         "llvm-nm",
@@ -112,13 +116,18 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
             fail("bundled tool is missing: %s" % tool)
 
     repository_ctx.symlink(devtools, "devtools")
+    gcc = prebuilt.get_child("gcc")
+    if not gcc.get_child("lib", "gcc").exists:
+        fail("GCC runtime is missing: %s; run ./build.py init" % gcc)
+    repository_ctx.symlink(gcc, "gcc")
+    gcc_directory = repository_ctx.path("gcc")
     sysroot = repository_ctx.getenv("SEEKDB_SYSROOT")
-    flags = []
+    flags = ["--gcc-toolchain=" + str(gcc_directory)]
     if sysroot:
         if not repository_ctx.path(sysroot).get_child("usr/include/stdlib.h").exists:
             fail("SEEKDB_SYSROOT is missing usr/include/stdlib.h: %s" % sysroot)
         _stage_sysroot(repository_ctx, repository_ctx.path(sysroot))
-        flags = ["--sysroot=" + str(repository_ctx.path("sysroot"))]
+        flags.append("--sysroot=" + str(repository_ctx.path("sysroot")))
 
     repository_ctx.template(
         "validate_static_library.sh",
@@ -142,6 +151,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
         substitutions = {
             "@CXX_BUILTIN_INCLUDE_DIRECTORIES@": repr(builtin_include_directories),
             "@HOST_CPU@": architecture,
+            "@GCC_TOOLCHAIN@": "external/" + repository_ctx.name + "/gcc",
             "@BAZEL_CPU@": "aarch64" if architecture == "aarch64" else "k8",
             "@BUILTIN_SYSROOT@": repr("external/" + repository_ctx.name + "/sysroot" if sysroot else None),
         },

@@ -110,7 +110,7 @@ python build.py init
 python build.py build seekdb
 ```
 
-`build.py` selects clang-cl from `deps\3rd\tools\llvm18`. The executable is `build\bin\src\observer\seekdb\seekdb.exe`. The build retains `_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH` to bypass the compiler version check in newer MSVC standard library headers, for both project C++ and Cargo's C++ bridges.
+`build.py` selects clang-cl from `deps\prebuilt\native\llvm`. The executable is `build\bin\src\observer\seekdb\seekdb.exe`. The build retains `_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH` to bypass the compiler version check in newer MSVC standard library headers, for both project C++ and Cargo's C++ bridges.
 
 The Windows allocator uses the bundled jemalloc `je_` APIs. Server startup sets decay to 1000/0 ms for new arenas and arena 0 through `je_mallctl`, before logger workers start. Background threads remain disabled because the upstream Windows backend does not support them.
 
