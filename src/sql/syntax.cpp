@@ -460,7 +460,9 @@ void ParsedSql::sql_traits(ObSqlTraits &traits)
     }
     traits.is_cause_implicit_commit_ = syntax_traits.implicit_commit;
     traits.is_commit_stmt_ = kind == peg::NodeKind::Commit;
-    traits.allowed_on_standby_ = kind == Kind::SetConfig
+    traits.allowed_on_standby_ = kind == Kind::SwitchoverToStandby
+        || kind == Kind::SwitchoverToPrimary || kind == Kind::ActivateStandby
+        || kind == Kind::SetConfig
         || kind == Kind::ResetConfig || kind == Kind::SetTracepoint;
   }
 }
