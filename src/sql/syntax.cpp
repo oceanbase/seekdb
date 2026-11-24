@@ -81,6 +81,7 @@ struct NativeStatementTraits
   stmt::StmtType type;
   bool readonly;
   bool implicit_commit;
+  bool allowed_on_standby = false;
 };
 
 std::optional<NativeStatementTraits> native_statement_traits(Kind kind)
@@ -103,14 +104,14 @@ std::optional<NativeStatementTraits> native_statement_traits(Kind kind)
     case Kind::ReleaseSavepoint: return NativeStatementTraits{stmt::T_RELEASE_SAVEPOINT, false, false};
     case Kind::RollbackSavepoint: return NativeStatementTraits{stmt::T_ROLLBACK_SAVEPOINT, false, false};
     case Kind::CreateView: return NativeStatementTraits{stmt::T_CREATE_VIEW, false, true};
-    case Kind::CreateOutline: return NativeStatementTraits{stmt::T_CREATE_OUTLINE, false, true};
-    case Kind::AlterOutline: return NativeStatementTraits{stmt::T_ALTER_OUTLINE, false, true};
-    case Kind::DropOutline: return NativeStatementTraits{stmt::T_DROP_OUTLINE, false, true};
+    case Kind::CreateOutline: return NativeStatementTraits{stmt::T_CREATE_OUTLINE, false, false};
+    case Kind::AlterOutline: return NativeStatementTraits{stmt::T_ALTER_OUTLINE, false, false};
+    case Kind::DropOutline: return NativeStatementTraits{stmt::T_DROP_OUTLINE, false, false};
     case Kind::VariableSet: return NativeStatementTraits{stmt::T_VARIABLE_SET, true, false};
     case Kind::SetNames:
     case Kind::SetCharset: return NativeStatementTraits{stmt::T_SET_NAMES, true, false};
     case Kind::Kill: return NativeStatementTraits{stmt::T_KILL, false, false};
-    case Kind::LoadData: return NativeStatementTraits{stmt::T_LOAD_DATA, false, true};
+    case Kind::LoadData: return NativeStatementTraits{stmt::T_LOAD_DATA, false, false};
     case Kind::Diagnostics: return NativeStatementTraits{stmt::T_DIAGNOSTICS, false, false};
     case Kind::Prepare: return NativeStatementTraits{stmt::T_PREPARE, false, false};
     case Kind::Execute: return NativeStatementTraits{stmt::T_EXECUTE, false, false};
@@ -143,9 +144,9 @@ std::optional<NativeStatementTraits> native_statement_traits(Kind kind)
     case Kind::DiffTable: return NativeStatementTraits{stmt::T_DIFF_TABLE, true, false};
     case Kind::FlushDagWarnings: return NativeStatementTraits{stmt::T_FLUSH_DAG_WARNINGS, false, false};
     case Kind::RefreshIoCalibration: return NativeStatementTraits{stmt::T_REFRESH_IO_CALIBRATION, false, false};
-    case Kind::SwitchoverToPrimary: return NativeStatementTraits{stmt::T_SWITCHOVER_TO_PRIMARY, false, false};
-    case Kind::SwitchoverToStandby: return NativeStatementTraits{stmt::T_SWITCHOVER_TO_STANDBY, false, false};
-    case Kind::ActivateStandby: return NativeStatementTraits{stmt::T_ACTIVATE_STANDBY, false, false};
+    case Kind::SwitchoverToPrimary: return NativeStatementTraits{stmt::T_SWITCHOVER_TO_PRIMARY, false, false, true};
+    case Kind::SwitchoverToStandby: return NativeStatementTraits{stmt::T_SWITCHOVER_TO_STANDBY, false, false, true};
+    case Kind::ActivateStandby: return NativeStatementTraits{stmt::T_ACTIVATE_STANDBY, false, false, true};
     case Kind::Freeze: return NativeStatementTraits{stmt::T_FREEZE, false, false};
     case Kind::SuspendMerge:
     case Kind::ResumeMerge: return NativeStatementTraits{stmt::T_ADMIN_MERGE, false, false};
@@ -153,8 +154,8 @@ std::optional<NativeStatementTraits> native_statement_traits(Kind kind)
     case Kind::CancelTask: return NativeStatementTraits{stmt::T_CANCEL_TASK, false, false};
     case Kind::FlushCache: return NativeStatementTraits{stmt::T_FLUSH_CACHE, false, false};
     case Kind::FlushKvCache: return NativeStatementTraits{stmt::T_FLUSH_KVCACHE, false, false};
-    case Kind::SetConfig: return NativeStatementTraits{stmt::T_ALTER_SYSTEM_SET_PARAMETER, false, false};
-    case Kind::SetTracepoint: return NativeStatementTraits{stmt::T_ALTER_SYSTEM_SETTP, false, false};
+    case Kind::SetConfig: return NativeStatementTraits{stmt::T_ALTER_SYSTEM_SET_PARAMETER, false, false, true};
+    case Kind::SetTracepoint: return NativeStatementTraits{stmt::T_ALTER_SYSTEM_SETTP, false, false, true};
     case Kind::CreateDatabase: return NativeStatementTraits{stmt::T_CREATE_DATABASE, false, true};
     case Kind::AlterDatabase: return NativeStatementTraits{stmt::T_ALTER_DATABASE, false, true};
     case Kind::UseDatabase: return NativeStatementTraits{stmt::T_USE_DATABASE, true, false};
@@ -216,7 +217,7 @@ std::optional<NativeStatementTraits> native_statement_traits(Kind kind)
     case Kind::Analyze: return NativeStatementTraits{stmt::T_ANALYZE, false, false};
     case Kind::CreateTrigger: return NativeStatementTraits{stmt::T_CREATE_TRIGGER, false, true};
     case Kind::DropTrigger: return NativeStatementTraits{stmt::T_DROP_TRIGGER, false, true};
-    case Kind::ResetConfig: return NativeStatementTraits{stmt::T_ALTER_SYSTEM_RESET_PARAMETER, false, false};
+    case Kind::ResetConfig: return NativeStatementTraits{stmt::T_ALTER_SYSTEM_RESET_PARAMETER, false, false, true};
     default: return std::nullopt;
   }
 }
@@ -269,14 +270,8 @@ int report_parse_error(const common::ObString &sql, const peg::ParseDiagnostic &
   }
   description += " at line " + std::to_string(line);
   common::log_user_message(common::USER_ERROR, OB_ERR_PARSE_SQL, "%s", description.c_str());
-  std::string expected;
-  for (const auto &candidate : diagnostic.expected) {
-    if (!expected.empty()) expected += ", ";
-    expected.append(candidate.data(), candidate.size());
-  }
-  LOG_WARN_RET(OB_ERR_PARSE_SQL, "SQL syntax error", "description", description.c_str(),
-      "span_start", offset, "span_end", diagnostic.span.end, "line", line, "column", column,
-      "expected", expected.c_str());
+  LOG_WARN_RET(OB_ERR_PARSE_SQL, "SQL syntax error", "span_start", offset,
+      "span_end", diagnostic.span.end, "line", line, "column", column);
   return common::OB_ERR_PARSE_SQL;
 }
 
@@ -285,6 +280,8 @@ int ObParser::parse_entry(const ObString &query, ParsedSql &owner, peg::ParseMod
 {
   return run_parser([&](peg::StackBounds bounds, bool &stack_limit) -> int {
     owner.reset();
+    ParseResult &result = owner.metadata_;
+    result.contain_sensitive_data_ = true;
     ObString sql = query;
     if (mode == peg::ParseMode::Sql || mode == peg::ParseMode::Trigger
         || mode == peg::ParseMode::Statistics) {
@@ -301,7 +298,6 @@ int ObParser::parse_entry(const ObString &query, ParsedSql &owner, peg::ParseMod
           : syntax_text(expanded_sql);
       return report_parse_error(source, parsed->diagnostic());
     }
-    ParseResult &result = owner.metadata_;
     result.input_sql_ = sql.ptr();
     result.input_sql_len_ = sql.length();
     result.is_dynamic_sql_ = dynamic_sql;
@@ -460,10 +456,7 @@ void ParsedSql::sql_traits(ObSqlTraits &traits)
     }
     traits.is_cause_implicit_commit_ = syntax_traits.implicit_commit;
     traits.is_commit_stmt_ = kind == peg::NodeKind::Commit;
-    traits.allowed_on_standby_ = kind == Kind::SwitchoverToStandby
-        || kind == Kind::SwitchoverToPrimary || kind == Kind::ActivateStandby
-        || kind == Kind::SetConfig
-        || kind == Kind::ResetConfig || kind == Kind::SetTracepoint;
+    traits.allowed_on_standby_ = syntax_traits.allowed_on_standby;
   }
 }
 
