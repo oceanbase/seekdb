@@ -403,23 +403,6 @@
       ]
     },
     {
-      "name": "LZ4",
-      "version": "1.7.1",
-      "source": "https://github.com/lz4/lz4",
-      "packaged_as": "Compression source in the native engine",
-      "license": "BSD-2-Clause",
-      "modified": "unspecified",
-      "license_files": [
-        "NOTICE",
-        "licenses/lz4.171.txt"
-      ],
-      "redistribution": "Reproduce the copyright, conditions, and disclaimer; no source or relink offer is required for unmodified binaries.",
-      "evidence": "NOTICE lz4.171 section; licenses/lz4.171.txt",
-      "shipped_in": [
-        "engine"
-      ]
-    },
-    {
       "name": "memchr",
       "version": "2.8.3",
       "source": "https://github.com/BurntSushi/memchr",
