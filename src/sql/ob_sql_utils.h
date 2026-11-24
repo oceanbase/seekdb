@@ -337,7 +337,6 @@ public:
 
   static bool is_mysql_ps_not_support_stmt(const ParsedSql &syntax);
 
-  static bool is_allowed_on_standby(const ObItemType stmt_type);
   static int make_field_name(const char *src, int64_t len, const common::ObCollationType cs_type,
                              common::ObIAllocator *allocator, common::ObString &name);
   static int set_compatible_cast_mode(const ObSQLSessionInfo *session,

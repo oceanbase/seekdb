@@ -1,0 +1,16 @@
+CREATE TABLE t (id INT PRIMARY KEY);
+CREATE OUTLINE existing_outline ON SELECT id FROM t;
+
+START TRANSACTION READ ONLY;
+--error 1792
+LOAD DATA INFILE 'read_only_statement_traits.csv' INTO TABLE t;
+--error 1792
+CREATE OUTLINE new_outline ON SELECT id FROM t WHERE id = 1;
+--error 1792
+ALTER OUTLINE existing_outline ADD SELECT id FROM t;
+--error 1792
+DROP OUTLINE existing_outline;
+ROLLBACK;
+
+DROP OUTLINE existing_outline;
+DROP TABLE t;
