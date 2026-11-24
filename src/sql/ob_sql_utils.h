@@ -56,6 +56,7 @@ class ObISrsProvider;
 namespace sql
 {
 class ParsedSql;
+struct ObSqlTraits;
 class ObRawExprFactory;  // fwd: previously re-exported through the share schema include chain
 class ObMaintainDepInfoTaskQueue;
 class RowDesc;
@@ -336,6 +337,7 @@ public:
                                               common::ObIAllocator *allocator, common::ObString &name);
 
   static bool is_mysql_ps_not_support_stmt(const ParsedSql &syntax);
+  static int get_sql_traits(const ParsedSql &syntax, ObSqlTraits &traits);
 
   static int make_field_name(const char *src, int64_t len, const common::ObCollationType cs_type,
                              common::ObIAllocator *allocator, common::ObString &name);

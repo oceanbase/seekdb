@@ -891,6 +891,80 @@ bool ObSQLUtils::is_mysql_ps_not_support_stmt(const ParsedSql &syntax)
           || syntax.statement()->kind() == peg::NodeKind::DropProcedure);
 }
 
+int ObSQLUtils::get_sql_traits(const ParsedSql &syntax, ObSqlTraits &traits)
+{
+  stmt::StmtType type = stmt::T_NONE;
+  int ret = syntax.statement_type(type);
+  if (OB_SUCC(ret)) {
+    const auto &statement = *syntax.statement();
+    traits.stmt_type_ = type;
+    traits.is_readonly_stmt_ = ObStmt::is_show_stmt(type);
+    traits.is_cause_implicit_commit_ = false;
+    traits.is_commit_stmt_ = statement.kind() == peg::NodeKind::Commit;
+    traits.allowed_on_standby_ = false;
+    switch (type) {
+      case stmt::T_SELECT:
+        traits.is_readonly_stmt_ = !peg::query_has_lock(statement);
+        break;
+      case stmt::T_EXPLAIN: {
+        const auto &body = peg::explain_statement(statement);
+        traits.is_readonly_stmt_ = body.kind() == peg::NodeKind::Select && !peg::query_has_lock(body);
+        break;
+      }
+      case stmt::T_START_TRANS:
+      case stmt::T_END_TRANS:
+      case stmt::T_VARIABLE_SET:
+      case stmt::T_SET_NAMES:
+      case stmt::T_SET_ROLE:
+      case stmt::T_DIFF_TABLE:
+      case stmt::T_USE_DATABASE:
+      case stmt::T_SHOW_PROFILE:
+      case stmt::T_SHOW_ENGINE:
+      case stmt::T_SHOW_OPEN_TABLES:
+      case stmt::T_SHOW_RECYCLEBIN:
+      case stmt::T_SHOW_CHECK_TABLE:
+      case stmt::T_SHOW_CREATE_TRIGGER:
+        traits.is_readonly_stmt_ = true;
+        break;
+      case stmt::T_CREATE_VIEW:
+      case stmt::T_CREATE_USER:
+      case stmt::T_DROP_USER:
+      case stmt::T_LOCK_USER:
+      case stmt::T_RENAME_USER:
+      case stmt::T_SET_PASSWORD:
+      case stmt::T_GRANT:
+      case stmt::T_REVOKE:
+      case stmt::T_CREATE_TABLE:
+      case stmt::T_CREATE_INDEX:
+      case stmt::T_DROP_TABLE:
+      case stmt::T_DROP_INDEX:
+      case stmt::T_CREATE_DATABASE:
+      case stmt::T_ALTER_DATABASE:
+      case stmt::T_DROP_DATABASE:
+      case stmt::T_CREATE_ROUTINE:
+      case stmt::T_ALTER_ROUTINE:
+      case stmt::T_DROP_ROUTINE:
+      case stmt::T_CREATE_PACKAGE:
+      case stmt::T_CREATE_PACKAGE_BODY:
+      case stmt::T_DROP_PACKAGE:
+      case stmt::T_CREATE_TRIGGER:
+      case stmt::T_DROP_TRIGGER:
+        traits.is_cause_implicit_commit_ = true;
+        break;
+      case stmt::T_SWITCHOVER_TO_PRIMARY:
+      case stmt::T_SWITCHOVER_TO_STANDBY:
+      case stmt::T_ACTIVATE_STANDBY:
+      case stmt::T_ALTER_SYSTEM_SET_PARAMETER:
+      case stmt::T_ALTER_SYSTEM_SETTP:
+      case stmt::T_ALTER_SYSTEM_RESET_PARAMETER:
+        traits.allowed_on_standby_ = true;
+        break;
+      default:
+        break;
+    }
+  }
+  return ret;
+}
 
 
 int ObSQLUtils::make_field_name(const char *src,

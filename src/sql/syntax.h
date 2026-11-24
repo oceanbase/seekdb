@@ -58,7 +58,6 @@ struct ParseResult {
   int no_param_sql_len_ = 0;
 };
 
-struct ObSqlTraits;
 int statement_type(const peg::Node &statement, stmt::StmtType &type);
 int report_parse_error(const common::ObString &sql, const peg::ParseDiagnostic &diagnostic);
 
@@ -110,7 +109,6 @@ public:
   }
   int preserve_source(common::ObIAllocator &allocator);
   int statement_type(stmt::StmtType &type) const;
-  void sql_traits(ObSqlTraits &traits);
   bool is_end_transaction() const;
   void reset() { syntax_.reset(); original_source_.reset(); metadata_ = {}; }
 
