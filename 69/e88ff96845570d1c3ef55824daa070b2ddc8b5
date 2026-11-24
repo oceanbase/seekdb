@@ -1,0 +1,19 @@
+src/sql/engine/cmd/ob_vector_index_refresh.cpp
+  s_78f50719950de6::t_58165cffa08452 423,425
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "69e88ff96845570d1c3ef55824daa070b2ddc8b5",
+  "prompts": {},
+  "sessions": {
+    "s_78f50719950de6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20b42-922d-7210-b6a4-022b547cb930",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
