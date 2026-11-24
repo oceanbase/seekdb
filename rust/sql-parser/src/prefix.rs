@@ -222,20 +222,28 @@ fn classify_pl(first: Token<'_>, tokens: &mut Tokens<'_>) -> PlPrefix {
             PlPrefix::None
         };
     }
+    let begin = first.is(b"begin");
+    let double_declare = first.is(b"dd");
+    let update = first.is(b"update");
+    let create = first.is(b"create");
+    let change_routine = first.is(b"drop") || first.is(b"alter");
+    if !(begin || double_declare || update || create || change_routine) {
+        return PlPrefix::None;
+    }
     let Some(next) = tokens.next().ok().flatten() else {
         return PlPrefix::None;
     };
-    if first.is(b"begin") {
+    if begin {
         return if next.is(b";") || next.is(b"work") {
             PlPrefix::None
         } else {
             PlPrefix::Anonymous
         };
     }
-    if first.is(b"dd") && next.is(b"begin") || first.is(b"update") && next.is(b"of") {
+    if double_declare && next.is(b"begin") || update && next.is(b"of") {
         return PlPrefix::Anonymous;
     }
-    if first.is(b"create") {
+    if create {
         let mut token = next;
         loop {
             if let Some(kind) = routine_kind(token) {
@@ -300,7 +308,7 @@ fn classify_pl(first: Token<'_>, tokens: &mut Tokens<'_>) -> PlPrefix {
             token = after;
         }
     }
-    if first.is(b"drop") || first.is(b"alter") {
+    if change_routine {
         return routine_kind(next).unwrap_or(PlPrefix::None);
     }
     PlPrefix::None

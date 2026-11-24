@@ -2355,11 +2355,7 @@ pub(crate) mod ffi {
         fn advance_relation(self: &mut RelationReferences<'_>) -> bool;
         unsafe fn relation_reference<'a>(self: &RelationReferences<'a>) -> &'a Node;
         fn collation_name(expression: &Node) -> &[u8];
-        type Scanner<'a>;
-        // The SQL buffer must remain valid and unchanged until the scanner is dropped.
-        unsafe fn begin_scan<'a>(sql: &'a [u8], options: ScanOptions) -> Box<Scanner<'a>>;
-        fn advance(self: &mut Scanner<'_>) -> bool;
-        fn finish_scan(scanner: Box<Scanner<'_>>) -> ScanResult;
+        fn scan_sql(sql: &[u8], options: ScanOptions) -> ScanResult;
         fn split_sql(sql: &[u8], mode: SqlMode, first_only: bool, bounds: StackBounds) -> StatementSplits;
         unsafe fn default_expression<'a>(node: &'a Node) -> DefaultExpression<'a>;
         unsafe fn default_literal<'a>(node: &'a Node) -> ExpressionLiteral<'a>;
@@ -2666,7 +2662,7 @@ use crate::select_into::{query_into_kind, file_output_definition, file_option, e
 use crate::defaults::{default_expression, default_literal, default_arguments, DefaultArguments};
 use crate::fts::{parse_search_query, SearchNode, SearchTree};
 use crate::inspect::inspect_expression;
-use crate::scan::{begin_scan, finish_scan, Scanner};
+use crate::scan::scan_sql;
 
 pub struct ParseTree(Result<crate::parser::Parsed, crate::ParseFailure>);
 
