@@ -132,7 +132,6 @@ def environment():
         with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
             stream.write("DEVELOPER_DIR=" + developer + "\n")
             stream.write("IPHONEOS_DEPLOYMENT_TARGET=" + CONFIG["ios_minimum_os"] + "\n")
-        sdk.update((ROOT / "deps/init/ios/build.py").read_bytes())
         sdk.update(CONFIG["ios_minimum_os"].encode())
         sdk.update(os.environ["PACKAGE_APPLE_SDK"].encode())
         for command in (["xcodebuild", "-version"],
@@ -173,10 +172,6 @@ def initialize():
         simulator = os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator"
         prepare.prepare_rust("aarch64-apple-ios-sim" if simulator else "aarch64-apple-ios")
         prepare.install(ROOT / "deps/init/oceanbase.ios-host.arm64.deps", ROOT / "deps/3rd", None)
-        # Build the base dependencies here; Bazel builds source_sdk with the
-        # engine below, using the CI downloader configuration and parallelism.
-        run([sys.executable, "deps/init/ios/build.py", "--reuse", "--jobs", build_jobs(),
-             "--deployment-target", CONFIG["ios_minimum_os"], *(["--simulator"] if simulator else [])])
         prepare.install_locked(ROOT / "deps.lock.json",
                                ROOT / "deps/prebuilt" / ("ios_simulator" if simulator else "ios"),
                                None, "iOSSimulator" if simulator else "iOSDevice", "arm64")

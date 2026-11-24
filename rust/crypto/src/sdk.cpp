@@ -45,9 +45,6 @@ OperationResult failure(Code code) noexcept
 const EVP_MD *digest(std::uint32_t algorithm) noexcept
 {
   switch (algorithm) {
-#ifndef OPENSSL_NO_MD4
-    case 1: return EVP_md4();
-#endif
 #ifndef OPENSSL_NO_MD5
     case 2: return EVP_md5();
 #endif

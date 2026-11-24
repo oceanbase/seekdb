@@ -26,9 +26,7 @@ def tool(name, layout):
         directories += sorted((Path(os.environ["ANDROID_NDK_HOME"]) / "toolchains/llvm/prebuilt").glob("*/bin"))
     if os.environ.get("BAZEL_LLVM"):
         directories.append(Path(os.environ["BAZEL_LLVM"]) / "bin")
-    if layout == "windows":
-        directories.append(ROOT / "deps/3rd/tools/llvm18/bin")
-    directories.append(ROOT / "deps/3rd/usr/local/oceanbase/devtools/bin")
+    directories.append(ROOT / "deps/prebuilt/native/llvm/bin")
     for directory in directories:
         for suffix in ("", ".exe"):
             candidate = directory / ("llvm-" + name + suffix)
@@ -209,7 +207,7 @@ def uuids(path):
     return result
 
 
-def separate(root, destination, layout, original, primary):
+def separate(root, destination, layout, original, primary, *, verify_pdb=True):
     records = {}
     # Bazel's Mach-O debug map contains paths relative to the execution root.
     working = next((path.parent for path in original.resolve().parents if path.name == "bazel-out"), ROOT)
@@ -241,7 +239,8 @@ def separate(root, destination, layout, original, primary):
             source = original if relative == primary else original.parent / path.name
             pdb = source.resolve().with_suffix(".pdb")
             if pdb.is_file():
-                identity = matching_pdb(path, pdb, layout)
+                if verify_pdb:
+                    identity = matching_pdb(path, pdb, layout)
                 symbol = destination / relative.with_suffix(".pdb")
                 symbol.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(pdb, symbol)

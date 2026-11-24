@@ -5,12 +5,20 @@ load("@rules_cc//cc/private/toolchain:unix_cc_toolchain_config.bzl", "cc_toolcha
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
+    name = "llvm_shared_libraries",
+    srcs = glob(["devtools/lib/libLLVM*.so*"], allow_empty = True),
+)
+
+filegroup(
     name = "clang_compiler_files",
-    srcs = ["devtools/bin/clang"] + glob([
-        "devtools/include/c++/**",
+    srcs = [
+        ":llvm_shared_libraries",
+        "devtools/bin/clang",
+    ] + glob([
+        "gcc/include/c++/**",
         "devtools/lib/clang/**/include/**",
         "devtools/lib/clang/**/share/**",
-        "devtools/lib/gcc/**",
+        "gcc/lib/gcc/**",
         "sysroot/**",
     ], allow_empty = True) + [
         "builtin_include_directory_paths",
@@ -21,6 +29,7 @@ filegroup(
 filegroup(
     name = "archive_files",
     srcs = [
+        ":llvm_shared_libraries",
         "devtools/bin/llvm-ar",
         "devtools/bin/llvm-nm",
         "devtools/bin/llvm-ranlib",
@@ -35,15 +44,15 @@ filegroup(
         "devtools/bin/lld",
     ] + glob([
         "devtools/lib/clang/**/lib/**",
-        "devtools/lib64/**",
+        "gcc/lib64/**",
     ], allow_empty = True),
 )
 
 filegroup(
     name = "static_cpp_runtime",
     srcs = glob(
-        ["devtools/lib64/libstdc++.a"] + (
-            ["devtools/lib64/libatomic.a"] if "@HOST_CPU@" == "aarch64" else []
+        ["gcc/lib64/libstdc++.a"] + (
+            ["gcc/lib64/libatomic.a"] if "@HOST_CPU@" == "aarch64" else []
         ),
         allow_empty = True,
     ),
@@ -51,17 +60,18 @@ filegroup(
 
 filegroup(
     name = "dynamic_cpp_runtime",
-    srcs = glob(["devtools/lib64/libstdc++.so", "devtools/lib64/libstdc++.so.*"], exclude = ["**/*-gdb.py"], allow_empty = True),
+    srcs = glob(["gcc/lib64/libstdc++.so", "gcc/lib64/libstdc++.so.*"], exclude = ["**/*-gdb.py"], allow_empty = True),
 )
 
 filegroup(
     name = "objcopy_files",
-    srcs = ["devtools/bin/llvm-objcopy"],
+    srcs = [":llvm_shared_libraries", "devtools/bin/llvm-objcopy"],
 )
 
 filegroup(
     name = "strip_files",
     srcs = [
+        ":llvm_shared_libraries",
         "devtools/bin/llvm-objcopy",
         "devtools/bin/llvm-strip",
     ],
@@ -69,7 +79,7 @@ filegroup(
 
 filegroup(
     name = "dwp_files",
-    srcs = ["devtools/bin/llvm-dwp"],
+    srcs = [":llvm_shared_libraries", "devtools/bin/llvm-dwp"],
 )
 
 filegroup(
@@ -96,6 +106,7 @@ cc_toolchain_config(
     abi_version = "@HOST_CPU@",
     builtin_sysroot = @BUILTIN_SYSROOT@,
     compile_flags = [
+        "--gcc-toolchain=@GCC_TOOLCHAIN@",
         "-Wall",
         "-Wthread-safety",
         "-Wself-assign",
@@ -105,8 +116,6 @@ cc_toolchain_config(
         "-fno-omit-frame-pointer",
     ],
     compiler = "clang",
-    coverage_compile_flags = ["--coverage"],
-    coverage_link_flags = ["--coverage"],
     cpu = "@BAZEL_CPU@",
     cxx_builtin_include_directories = @CXX_BUILTIN_INCLUDE_DIRECTORIES@,
     cxx_flags = ["-std=c++17"],
@@ -123,6 +132,7 @@ cc_toolchain_config(
     extra_enabled_features = [":static_cpp_runtime_feature"],
     host_system_name = "local",
     link_flags = [
+        "--gcc-toolchain=@GCC_TOOLCHAIN@",
         "-fuse-ld=lld",
         "-Wl,-no-as-needed",
         "-Wl,-z,relro,-z,now",
@@ -142,7 +152,6 @@ cc_toolchain_config(
         "cpp": "devtools/bin/clang",
         "dwp": "devtools/bin/llvm-dwp",
         "gcc": "devtools/bin/clang",
-        "gcov": "devtools/bin/llvm-cov",
         "ld": "devtools/bin/ld.lld",
         "nm": "devtools/bin/llvm-nm",
         "objcopy": "devtools/bin/llvm-objcopy",
@@ -150,7 +159,7 @@ cc_toolchain_config(
         "strip": "devtools/bin/llvm-strip",
         "validate_static_library": "validate_static_library.sh",
     },
-    toolchain_identifier = "seekdb-clang17-local",
+    toolchain_identifier = "seekdb-clang-local",
     unfiltered_compile_flags = [
         "-no-canonical-prefixes",
         "-Wno-builtin-macro-redefined",
@@ -175,7 +184,7 @@ cc_toolchain(
     strip_files = ":strip_files",
     supports_param_files = 1,
     toolchain_config = ":local_compile_config",
-    toolchain_identifier = "seekdb-clang17-local",
+    toolchain_identifier = "seekdb-clang-local",
 )
 
 toolchain(
