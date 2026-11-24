@@ -1,0 +1,19 @@
+tools/deploy/mysqltest.py
+  s_316c61c2ca7b50::t_a95b4dfef14b97 373,409-418,557-574,576-582
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8b066d50ff6b94388c16ea4167e2d35c25c248f0",
+  "prompts": {},
+  "sessions": {
+    "s_316c61c2ca7b50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20832-b996-7773-825e-2cb6868d3222",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
