@@ -3839,7 +3839,6 @@ int ObJoinOrder::fill_opt_info_index_name(const uint64_t table_id,
                                                             true /*global index*/,
                                                             true /*domain index*/))) {
   } else if (OB_FAIL(index_ids.push_back(base_table_id))) {
-  } else if (OB_FAIL(table_opt_info->available_index_id_.assign(available_index_id))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < index_ids.count(); ++i) {
       ObString name;

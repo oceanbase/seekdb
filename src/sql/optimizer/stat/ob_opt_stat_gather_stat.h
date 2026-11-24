@@ -171,8 +171,6 @@ public:
   inline int64_t get_completed_table_count() { return task_info_.completed_table_count_; }
   inline const ObString &get_table_gather_progress() const { return table_gather_progress_; }
   inline void set_table_gather_progress(const char *ptr, int32_t len) { table_gather_progress_.assign_ptr(ptr, len); }
-  inline void set_gather_audit(const char *ptr, int32_t len) { gather_audit_.assign_ptr(ptr, len); }
-  inline const ObString &get_gather_audit() const { return gather_audit_; }
   sql::ObSQLSessionInfo *get_session() { return task_info_.session_; }
   inline int64_t get_consecutive_failed_count() { return consecutive_failed_count_;} 
 
@@ -203,7 +201,6 @@ private:
   ObString properties_;
   ObString table_gather_progress_;
   int64_t consecutive_failed_count_;
-  ObString gather_audit_;
 };
 
 struct ObOptStatRunningMonitor
@@ -262,8 +259,6 @@ public:
   int cancel_gather_stats(const ObString &task_id);
   void update_gather_stat_refresh_failed_list(ObString &failed_list,
                                               ObOptStatGatherStat &stat_value);
-  void update_gather_stat_audit(const ObString &audit,
-                                ObOptStatGatherStat &stat_value);
   int list_to_array(common::ObIAllocator &allocator,
                     common::ObIArray<ObOptStatGatherStat> &stat_array);
 private:
