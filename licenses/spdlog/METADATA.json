@@ -1,6 +1,6 @@
 {
   "name": "spdlog",
-  "version": "unspecified",
+  "version": "1.12.0",
   "source": "https://github.com/gabime/spdlog",
   "packaged_as": "Native library or headers linked into the engine",
   "license": "MIT",
@@ -9,7 +9,7 @@
     "spdlog-LICENSE.txt"
   ],
   "redistribution": "Retain the copyright and permission notice.",
-  "evidence": "licenses/spdlog-LICENSE.txt",
+  "evidence": "vsag 0.16.20 extern/spdlog/spdlog.cmake; deps.lock.json; licenses/spdlog-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

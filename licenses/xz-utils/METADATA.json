@@ -1,6 +1,6 @@
 {
   "name": "XZ Utils",
-  "version": "unspecified",
+  "version": "5.2.2 (macos sdk)",
   "source": "https://tukaani.org/xz/",
   "packaged_as": "Native library or build/runtime input",
   "license": "Public domain and LGPL/GPL components; see COPYING",
@@ -9,7 +9,7 @@
     "xz-COPYING.txt"
   ],
   "redistribution": "Retain the complete XZ licensing text and identify any LGPL/GPL components.",
-  "evidence": "deps/init/*.deps; licenses/xz-COPYING.txt",
+  "evidence": "deps/init/oceanbase.macos15.arm64.deps (devdeps-xz-5.2.2-20251208); licenses/xz-COPYING.txt",
   "shipped_in": [
     "engine"
   ]

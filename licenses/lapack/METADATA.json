@@ -1,6 +1,6 @@
 {
   "name": "LAPACK",
-  "version": "unspecified",
+  "version": "3.11.0 (linux, via OpenBLAS 0.3.23); 3.12.0 (macos, ios, windows, android, via OpenBLAS 0.3.34)",
   "source": "https://github.com/Reference-LAPACK/lapack",
   "packaged_as": "Native library or headers linked into the engine",
   "license": "BSD-3-Clause",
@@ -9,7 +9,7 @@
     "lapack-LICENSE.txt"
   ],
   "redistribution": "Retain the copyright, conditions, and disclaimer.",
-  "evidence": "bazel/third_party/repositories.bzl; licenses/lapack-LICENSE.txt",
+  "evidence": "bazel/third_party/repositories.bzl; OpenBLAS lapack-netlib SRC ilaver.f (VERS_MINOR 11 for 0.3.23, 12 for 0.3.34); licenses/lapack-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

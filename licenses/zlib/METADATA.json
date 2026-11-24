@@ -1,6 +1,6 @@
 {
   "name": "zlib",
-  "version": "unspecified",
+  "version": "1.2.13",
   "source": "https://zlib.net/",
   "packaged_as": "Compression source/library in the native engine",
   "license": "Zlib",
@@ -9,7 +9,7 @@
     "zlib.txt"
   ],
   "redistribution": "Retain the notice, do not misrepresent origin, and mark altered source versions.",
-  "evidence": "NOTICE zlib section; licenses/zlib.txt",
+  "evidence": "1.4.0 engine binary exports inflate 1.2.13; devdeps-zlib-static-1.2.13; licenses/zlib.txt",
   "shipped_in": [
     "engine"
   ]

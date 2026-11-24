@@ -1,6 +1,6 @@
 {
   "name": "fmt",
-  "version": "unspecified",
+  "version": "10.2.1",
   "source": "https://github.com/fmtlib/fmt",
   "packaged_as": "Static native library linked into the engine",
   "license": "MIT",
@@ -9,7 +9,7 @@
     "fmt-LICENSE.txt"
   ],
   "redistribution": "Retain the copyright and permission notice.",
-  "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/targets.bzl; licenses/fmt-LICENSE.txt",
+  "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/targets.bzl; vsag 0.16.20 extern/fmt/fmt.cmake; engine binary exports fmt::v10 symbols; deps.lock.json",
   "shipped_in": [
     "engine"
   ]
