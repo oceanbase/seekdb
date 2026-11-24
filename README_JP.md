@@ -128,7 +128,7 @@ MERGE TABLE agent_sandbox_42.memory INTO agent_state.memory STRATEGY THEIRS;
 DROP DATABASE agent_sandbox_42;
 ```
 
-<sub>ソース: [`tools/deploy/mysql_test/cases/fork_table/`](tools/deploy/mysql_test/cases/fork_table/)</sub>
+<sub>ソース: [`tests/mysqltest/cases/fork_table/`](tests/mysqltest/cases/fork_table/)</sub>
 
 ### 🔍 1 つの SQL でハイブリッド検索
 

@@ -130,7 +130,7 @@ jobs:
           RUN_DIR=$(mktemp -d "${RUNNER_TEMP:?}/sqltest.XXXXXX")
           DEST_DIR="$SEEKDB_RESULT_NFS_ROOT/$GITHUB_RUN_ID/attempt-$GITHUB_RUN_ATTEMPT/sqltest"
           mkdir -p "$DEST_DIR"
-          TEST_ROOT="$GITHUB_WORKSPACE/tools/deploy/mysql_test"
+          TEST_ROOT="$GITHUB_WORKSPACE/tests/mysqltest"
           RESULT=0
           "$GITHUB_WORKSPACE/tools/sqltest/bin/linux-amd64/sqltest" --seekdb "$GITHUB_WORKSPACE/$SEEKDB_BINARY_PATH" \
             --test-root "$TEST_ROOT" --run-dir "$RUN_DIR" -j 24 --case-timeout 1h \
