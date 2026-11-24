@@ -532,6 +532,7 @@ private:
   void get_next_to_submit_log_info(wal::LSN &lsn, share::SCN &scn) const;
   wal::LSN get_base_lsn() const;
   share::SCN get_base_scn() const;
+  int update_submit_lsn(const wal::LSN &lsn);
   int update_submit_log_meta_info(const wal::LSN &lsn, const share::SCN &scn);
   int update_submit_scn(const share::SCN &scn);
   void set_queue_head(int64_t index, const LogInfo &head);

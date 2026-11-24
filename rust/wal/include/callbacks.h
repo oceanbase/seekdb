@@ -15,12 +15,15 @@
 #pragma once
 
 #include <cstdint>
+#include "rust/cxx.h"
 
 namespace oceanbase {
 namespace wal {
 namespace wal_rs {
 
 void publish_flush_ffi(uint8_t *context, const uint64_t end_lsn, const uint64_t end_scn);
+void report_fatal_ffi(rust::Str path, rust::Str operation, const int32_t raw_os_error,
+    const bool no_space);
 
 } // namespace wal_rs
 } // namespace wal

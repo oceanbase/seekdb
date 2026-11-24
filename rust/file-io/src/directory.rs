@@ -407,6 +407,8 @@ pub(crate) struct SyncFault {
     pub flush: Option<i32>,
     pub close: Option<i32>,
     pub closes: usize,
+    pub owner_flushes: std::collections::VecDeque<i32>,
+    pub owner_flush_calls: usize,
 }
 #[cfg(test)]
 thread_local! { pub(crate) static SYNC_FAULT: std::cell::RefCell<SyncFault> = std::cell::RefCell::default(); }

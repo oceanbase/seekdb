@@ -74,7 +74,6 @@
 #include "storage/tx_storage/ob_access_service.h"
 #include "logservice/ob_server_log_block_mgr.h"
 #include "rust/storage_io.h"
-#include "share/startup_result.h"
 
 
 
@@ -497,7 +496,6 @@ private:
   sql::ObConnectResourceMgr conn_res_mgr_;
   ObDiskUsageReportTask disk_usage_report_task_;
 
-  share::StartupResult startup_result_;
   logservice::ObServerLogBlockMgr log_block_mgr_;
 
   // This handler is used to process tasks during startup. it can speed up the startup process.

@@ -156,8 +156,17 @@ struct PlannedRecord {
 
 struct AppendFile {
     id: u64,
+    path: PathBuf,
     file: File,
     tail: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub(crate) struct IoFailure {
+    pub path: PathBuf,
+    pub operation: &'static str,
+    pub raw_os_error: Option<i32>,
+    pub code: Error,
 }
 
 struct AppendBatch {
@@ -212,12 +221,14 @@ struct AppendQueue {
 }
 
 type FlushCallback = Arc<dyn Fn(u64, u64) + Send + Sync + 'static>;
+type FailureCallback = Arc<dyn Fn(&IoFailure) + Send + Sync + 'static>;
 
 struct StreamInner {
     state: Mutex<State>,
     appends: Mutex<AppendQueue>,
     worker_closed: Mutex<bool>,
     flush_callback: OnceLock<FlushCallback>,
+    failure_callback: OnceLock<FailureCallback>,
     changed: Condvar,
     append_changed: Condvar,
     worker_changed: Condvar,
@@ -306,6 +317,7 @@ impl Stream {
                 appends: Mutex::new(AppendQueue::default()),
                 worker_closed: Mutex::new(false),
                 flush_callback: OnceLock::new(),
+                failure_callback: OnceLock::new(),
                 changed: Condvar::new(),
                 append_changed: Condvar::new(),
                 worker_changed: Condvar::new(),
@@ -352,6 +364,16 @@ impl Stream {
     {
         self.inner
             .flush_callback
+            .set(Arc::new(callback))
+            .map_err(|_| Error::Invalid)
+    }
+
+    pub(crate) fn set_failure_callback<F>(&self, callback: F) -> Result<()>
+    where
+        F: Fn(&IoFailure) + Send + Sync + 'static,
+    {
+        self.inner
+            .failure_callback
             .set(Arc::new(callback))
             .map_err(|_| Error::Invalid)
     }
@@ -513,8 +535,11 @@ impl Stream {
             plan.push_imported(&state, group)?;
         }
         let last = groups.last().ok_or(Error::Invalid)?;
-        if let Err(error) = state.persist_append_batch(&plan) {
+        let mut failure = None;
+        if let Err(error) = state.persist_append_batch(&plan, &mut failure) {
             state.failed = Some(error);
+            drop(state);
+            State::report_failure(&self.inner, failure);
             return Err(error);
         }
         state.reserved_end_lsn = state.end_lsn;
@@ -831,6 +856,9 @@ impl Cursor {
     pub fn end_lsn(&self) -> u64 {
         self.current_end_lsn
     }
+    pub fn next_lsn(&self) -> u64 {
+        self.next_lsn
+    }
     pub fn scn(&self) -> u64 {
         self.current_scn
     }
@@ -1143,7 +1171,13 @@ impl State {
         let directory = state.directory.clone();
         let mut append_file = state.append_file.take();
         drop(state);
-        let write_result = Self::write_planned_records(&directory, &mut append_file, &plan.records);
+        let mut failure = None;
+        let write_result = Self::write_planned_records(
+            &directory,
+            &mut append_file,
+            &plan.records,
+            &mut failure,
+        );
         let mut state = match inner.state.lock() {
             Ok(state) => state,
             Err(_) => {
@@ -1160,6 +1194,7 @@ impl State {
         if let Err(error) = write_result {
             state.failed = Some(error);
             drop(state);
+            Self::report_failure(inner, failure);
             for request in requests {
                 request.complete_durable(Err(error));
             }
@@ -1182,9 +1217,19 @@ impl State {
         }
     }
 
-    fn persist_append_batch(&mut self, plan: &AppendBatch) -> Result<()> {
+    fn report_failure(inner: &Arc<StreamInner>, failure: Option<IoFailure>) {
+        if let (Some(callback), Some(failure)) = (inner.failure_callback.get(), failure) {
+            callback(&failure);
+        }
+    }
+
+    fn persist_append_batch(
+        &mut self,
+        plan: &AppendBatch,
+        failure: &mut Option<IoFailure>,
+    ) -> Result<()> {
         let directory = self.directory.clone();
-        Self::write_planned_records(&directory, &mut self.append_file, &plan.records)?;
+        Self::write_planned_records(&directory, &mut self.append_file, &plan.records, failure)?;
         self.publish_append_batch(plan);
         Ok(())
     }
@@ -1202,9 +1247,10 @@ impl State {
         directory: &Path,
         append_file: &mut Option<AppendFile>,
         records: &[PlannedRecord],
+        failure: &mut Option<IoFailure>,
     ) -> Result<()> {
         let mut index = 0;
-        let mut new_segment = false;
+        let mut created_segment = None;
         while index < records.len() {
             let id = block_id(records[index].lsn);
             let create = records[index].new_segment.is_some();
@@ -1251,21 +1297,25 @@ impl State {
                 .as_ref()
                 .is_none_or(|file| file.id != id)
             {
-                *append_file = Some(open_append_file(
+                *append_file = Some(open_append_file_with_failure(
                     id,
                     &segment_path(directory, id),
                     true,
                     Vec::new(),
+                    failure,
                 )?);
             }
             append_file
                 .as_mut()
                 .ok_or(Error::Io)?
-                .write(start, &bytes)?;
-            new_segment |= create;
+                .write(start, &bytes, failure)?;
+            if create {
+                created_segment = Some(segment_path(directory, id));
+            }
         }
-        if new_segment {
-            sync_directory(directory)?;
+        if let Some(segment) = created_segment {
+            sync_directory_io(directory)
+                .map_err(|error| capture_io_error(failure, &segment, "fsync directory", error))?;
         }
         Ok(())
     }
@@ -1828,6 +1878,36 @@ fn read_append_tail(path: &Path, valid_length: u64) -> Result<Vec<u8>> {
 }
 
 fn open_append_file(id: u64, path: &Path, create: bool, tail: Vec<u8>) -> Result<AppendFile> {
+    let mut failure = None;
+    open_append_file_with_failure(id, path, create, tail, &mut failure)
+}
+
+fn capture_io_error(
+    failure: &mut Option<IoFailure>,
+    path: &Path,
+    operation: &'static str,
+    error: std::io::Error,
+) -> Error {
+    let raw_os_error = error.raw_os_error();
+    let code = error.into();
+    if failure.is_none() {
+        *failure = Some(IoFailure {
+            path: path.to_path_buf(),
+            operation,
+            raw_os_error,
+            code,
+        });
+    }
+    code
+}
+
+fn open_append_file_with_failure(
+    id: u64,
+    path: &Path,
+    create: bool,
+    tail: Vec<u8>,
+    failure: &mut Option<IoFailure>,
+) -> Result<AppendFile> {
     let mut options = OpenOptions::new();
     options
         .create(create)
@@ -1836,13 +1916,20 @@ fn open_append_file(id: u64, path: &Path, create: bool, tail: Vec<u8>) -> Result
         .write(true);
     let file = AppendFile {
         id,
-        file: file_io::open_data_synchronous_read_write_with_options(&mut options, path, true)?,
+        path: path.to_path_buf(),
+        file: file_io::open_data_synchronous_read_write_with_options(&mut options, path, true)
+            .map_err(|error| capture_io_error(failure, path, "open segment", error))?,
         tail,
     };
     if create {
-        file.allocate()?;
-        file.set_len(PHYSICAL_BLOCK_SIZE)?;
-        file.file.sync_all()?;
+        file_io::allocate(&file.file, 0..PHYSICAL_BLOCK_SIZE, Allocation::Reserve)
+            .map_err(|error| capture_io_error(failure, path, "allocate segment", error))?;
+        file.file
+            .set_len(PHYSICAL_BLOCK_SIZE)
+            .map_err(|error| capture_io_error(failure, path, "resize segment", error))?;
+        file.file
+            .sync_all()
+            .map_err(|error| capture_io_error(failure, path, "fsync segment", error))?;
     }
     Ok(file)
 }
@@ -1857,7 +1944,12 @@ impl AppendFile {
         Ok(self.file.set_len(len)?)
     }
 
-    fn write(&mut self, start: u64, bytes: &[u8]) -> Result<()> {
+    fn write(
+        &mut self,
+        start: u64,
+        bytes: &[u8],
+        failure: &mut Option<IoFailure>,
+    ) -> Result<()> {
         let prefix_len = self.tail.len();
         let aligned_start = start
             .checked_sub(prefix_len as u64)
@@ -1874,7 +1966,8 @@ impl AppendFile {
         output[..prefix_len].copy_from_slice(&self.tail);
         output[prefix_len..logical_len].copy_from_slice(bytes);
         output[logical_len..].fill(0);
-        file_io::write_all_at(&self.file, output, aligned_start)?;
+        file_io::write_all_at(&self.file, output, aligned_start)
+            .map_err(|error| capture_io_error(failure, &self.path, "write segment", error))?;
         let tail_len = logical_len % DIO_ALIGNMENT;
         let mut tail = Vec::new();
         tail.try_reserve_exact(tail_len).map_err(|_| Error::NoMemory)?;
@@ -1885,8 +1978,12 @@ impl AppendFile {
 }
 
 pub(crate) fn sync_directory(directory: &Path) -> Result<()> {
-    file_io::Directory::open(directory)?.sync()?;
-    Ok(())
+    Ok(sync_directory_io(directory)?)
+}
+
+#[cfg(unix)]
+fn sync_directory_io(directory: &Path) -> std::io::Result<()> {
+    file_io::Directory::open(directory)?.sync()
 }
 
 pub(crate) fn directory_is_empty(directory: &Path) -> Result<bool> {
@@ -1894,7 +1991,7 @@ pub(crate) fn directory_is_empty(directory: &Path) -> Result<bool> {
 }
 
 #[cfg(not(unix))]
-fn sync_directory(_directory: &Path) -> Result<()> {
+fn sync_directory_io(_directory: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
@@ -2605,6 +2702,21 @@ mod tests {
         assert!(groups.padding());
         groups.next(u64::MAX).unwrap();
         assert!(!groups.padding());
+    }
+
+    #[test]
+    fn entry_cursor_reports_position_after_skipping_trailing_padding() {
+        let directory = Directory::new();
+        let path = directory.0.to_string_lossy().into_owned();
+        let stream = Stream::create(&path, base(), 0);
+        let entry = encode_entry(&[0; 8], 10, true).unwrap();
+        let group = encode_group(&entry, 0, 10, 1, 0, true).unwrap();
+        let end_lsn = group.len() as u64;
+        import(&stream, 0, 10, &group).unwrap();
+
+        let mut entries = stream.cursor(0, false);
+        assert_eq!(entries.next(u64::MAX), Ok(Next::End));
+        assert_eq!(entries.next_lsn(), end_lsn);
     }
 
     #[test]

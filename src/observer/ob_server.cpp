@@ -1367,9 +1367,6 @@ int ObServer::start()
       FLOG_INFO("server metadata is ready");
     }
 
-    if (OB_SUCC(ret) && !stop_ && OB_FAIL(startup_result_.finish())) {
-      LOG_ERROR("background log allocation failed during startup", KR(ret));
-    }
     if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -1382,7 +1379,6 @@ int ObServer::start()
 
   int64_t start_service_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret)) {
-    startup_result_.report_failure(ret);
     LOG_ERROR("failure occurs, stop observer startup", KR(ret));
     LOG_DBA_FORCE_PRINT(DBA_ERROR, OB_SERVER_START_FAIL, ret,
                         DBA_STEP_INC_INFO(server_start),
@@ -1457,10 +1453,6 @@ int ObServer::wait_for_server_runtime()
                   DBA_STEP_INC_INFO(server_start),
                   "wait for server runtime begin.");
   while (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
-    if (OB_FAIL(startup_result_.error())) {
-      LOG_ERROR("log allocation failed while waiting for server runtime", KR(ret));
-      break;
-    }
     synced = server_runtime_controller_.has_synced();
     if (synced && !replay_ready) {
       if (OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {

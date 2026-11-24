@@ -387,13 +387,6 @@ cc_library(
 
 
 cc_library(
-    name = "startup_result",
-    hdrs = ["startup_result.h"],
-    visibility = ["//src:__subpackages__"],
-)
-
-
-cc_library(
     name = "errsim_interface",
     hdrs = [],
     deps = ["//src/oblib:oblib_foundation"],
