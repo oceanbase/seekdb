@@ -1,0 +1,51 @@
+diff --git a/src/compile.rs b/src/compile.rs
+--- a/src/compile.rs
++++ b/src/compile.rs
+@@ -240,5 +240,12 @@
+                 let group = info.start_group();
+-                self.b.add(Insn::SaveCaptureGroupStart(group))?;
+-                self.visit(&info.children[0], hard)?;
+-                self.b.add(Insn::Save(group * 2 + 1))?;
++                if group == 0 {
++                    self.b.add(Insn::SaveCaptureGroupStart(0))?;
++                    self.visit(&info.children[0], hard)?;
++                    self.b.add(Insn::Save(1))?;
++                } else {
++                    let start = self.b.newsave();
++                    self.b.add(Insn::Save(start))?;
++                    self.visit(&info.children[0], hard)?;
++                    self.b.add(Insn::SaveCaptureGroupEnd { group, start })?;
++                }
+             }
+@@ -355,5 +362,9 @@
+                         }
+-                        self.b.add(Insn::SaveCaptureGroupStart(target_group))?;
++                        let start = self.b.newsave();
++                        self.b.add(Insn::Save(start))?;
+                         self.visit(&target_info.children[0], hard)?;
+-                        self.b.add(Insn::Save(target_group * 2 + 1))?;
++                        self.b.add(Insn::SaveCaptureGroupEnd {
++                            group: target_group,
++                            start,
++                        })?;
+                     }
+diff --git a/src/vm.rs b/src/vm.rs
+--- a/src/vm.rs
++++ b/src/vm.rs
+@@ -466,2 +466,9 @@
+     SaveCaptureGroupStart(usize),
++    /// Publish a completed capture, retaining the previous capture while its body runs.
++    SaveCaptureGroupEnd {
++        /// Capture group to publish.
++        group: usize,
++        /// Slot holding this invocation's start position.
++        start: usize,
++    },
+     /// Set the string index to the value that was saved in the specified slot
+@@ -1407,2 +1414,6 @@
+                 }
++                Insn::SaveCaptureGroupEnd { group, start } => {
++                    state.save(group * 2, state.get(start));
++                    state.save(group * 2 + 1, ix);
++                }
+                 Insn::Restore(slot) => ix = state.get(slot),
