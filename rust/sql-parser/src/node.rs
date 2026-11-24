@@ -16,7 +16,7 @@ use crate::bridge::ffi;
 pub(crate) use ffi::NodeKind as Kind;
 
 pub(crate) fn valid_function_name(name: &str) -> bool {
-    !["any", "some", "value", "unknown", "hybrid_search"]
+    !["any", "some", "value", "unknown", "hybrid_search", "unnest"]
         .iter().any(|invalid| name.eq_ignore_ascii_case(invalid))
 }
 

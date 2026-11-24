@@ -1893,7 +1893,7 @@ int ObRawExprResolverImpl::process_logical_node(const peg::Node &node, bool is_r
   if (OB_SUCC(ret) && groups.count() == 1) {
     const auto &group = groups.at(0);
     if (group.rows_.segments_.empty()) OZ(recursive_resolve(*group.node_, expr, is_root_expr));
-    else OZ(process_in_or_not_in_node(*group.node_, is_root_expr, expr, &group.rows_));
+    else OZ(process_in_or_not_in_node(*group.node_, false, expr, &group.rows_));
   } else if (OB_SUCC(ret)) {
     ObOpRawExpr *logical = nullptr;
     OZ(ctx_.expr_factory_.create_raw_expr(binary_expression_type(peg::binary_operator(node)), logical));
