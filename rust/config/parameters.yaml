@@ -888,14 +888,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "io timeout for data storage, Range [1s,600s]. The default value is 10s"
 
-- name: data_storage_warning_tolerance_time
-  type: TIME
-  default: "5s"
-  range: "[1s,300s]"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "time to tolerate disk read failure, after that, the disk status will be set warning. Range [1s,300s]. The default value is 5s"
-
 - name: data_disk_usage_limit_percentage
   type: INT
   default: "90"
@@ -917,8 +909,8 @@
   default: "1"
   range: "[1,32]"
   section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "The number of io threads on each disk. The default value is 8. Range: [2,32] in even integer"
+  edit_level: STATIC_EFFECTIVE
+  description: "Maximum number of PALF blocking I/O worker threads. The default value is 1. Explicit values must be even integers from 2 through 32. Changes take effect on restart"
   checker: "common::ObConfigEvenIntChecker"
 
 - name: sync_io_thread_count
@@ -926,16 +918,16 @@
   default: "0"
   range: "[0,1024]"
   section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "The number of io threads for synchronizing request on each device. The default value is 0. Range: [0,1024] in integer"
+  edit_level: STATIC_EFFECTIVE
+  description: "Maximum number of data-file blocking I/O worker threads. The default value is 0, which selects a limit from the available CPU parallelism. Range: [0,1024]. Changes take effect on restart"
 
 - name: _io_callback_thread_count
   type: INT
   default: "0"
   range: "[0,128]"
   section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "The number of io callback threads. The default value is 0. Range: [0,128] in integer. If not specified, The number of threads is dynamically configured according to the memory size"
+  edit_level: STATIC_EFFECTIVE
+  description: "Maximum number of I/O callback worker threads. The default value is 0, which selects a limit of 16. Range: [0,128]. Changes take effect on restart"
 
 - name: _enable_parallel_minor_merge
   type: BOOL

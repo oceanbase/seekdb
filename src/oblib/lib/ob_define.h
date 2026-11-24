@@ -255,7 +255,6 @@ const char *const OB_SEEKDB_NAME = "seekdb";
 const char *const OB_COMPATIBILITY_VERSION = "4.3.5.3";
 
 // See ObDeviceHealthStatus for more information
-const int64_t OB_MAX_DEVICE_HEALTH_STATUS_STR_LENGTH = 20;
 
 typedef int64_t ObDateTime;
 typedef int64_t ObPreciseDateTime;

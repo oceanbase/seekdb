@@ -136,11 +136,11 @@ int ObTmpFileFlushListIterator::reinsert_files_into_flush_list_(const int64_t st
     } else if (OB_UNLIKELY(!files_[i].is_inited_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObITmpFileHandle &file_handle = files_[i].file_handle_;
+      ObSNTmpFileHandle &file_handle = files_[i].file_handle_;
       if (OB_ISNULL(file_handle.get())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (files_[i].is_meta_) {
-        ObSharedNothingTmpFile *sn_file = static_cast<ObSharedNothingTmpFile *>(file_handle.get());
+        ObSharedNothingTmpFile *sn_file = file_handle.get();
         if (sn_file->is_in_meta_flush_list()) {
           // do nothing, because meta flush node may be re-inserted after
           // tmp file insert meta tree item; do not handle data flush node here
@@ -154,7 +154,7 @@ int ObTmpFileFlushListIterator::reinsert_files_into_flush_list_(const int64_t st
   return ret;
 }
 
-int ObTmpFileFlushListIterator::next(const FlushCtxState iter_stage, ObITmpFileHandle &file_handle)
+int ObTmpFileFlushListIterator::next(const FlushCtxState iter_stage, ObSNTmpFileHandle &file_handle)
 {
   int ret = OB_SUCCESS;
   FlushCtxState cur_stage = FlushCtxState::FSM_FINISHED;
@@ -208,7 +208,7 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
   FileList end_list_idx = FileList::MAX;
   const int64_t target_cache_file_num = iter_stage == FlushCtxState::FSM_F1 ?
                                         BIG_FILE_CACHE_NUM : MAX_CACHE_NUM;
-  ObArray<ObITmpFileHandle> file_handles;
+  ObArray<ObSNTmpFileHandle> file_handles;
 
   if (OB_UNLIKELY(0 != cached_dir_num_ || 0 != cached_file_num_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -253,11 +253,11 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
     cached_file_num_ = 0; // to guarantee that the iterator must not reinsert cached part files into priority list
     int tmp_ret = OB_SUCCESS;
     for (int64_t i = 0; OB_LIKELY(OB_SUCCESS == tmp_ret) && i < file_handles.count(); ++i) {
-      ObITmpFile *tmp_file = file_handles[i].get();
+      ObSharedNothingTmpFile *tmp_file = file_handles[i].get();
       if (OB_ISNULL(tmp_file)) {
         // could not happen, just skip
       } else if (cur_caching_list_is_meta_) {
-        ObSharedNothingTmpFile *sn_file = static_cast<ObSharedNothingTmpFile *>(tmp_file);
+        ObSharedNothingTmpFile *sn_file = tmp_file;
         if (OB_FAIL(sn_file->reinsert_meta_flush_node())) {
         }
       } else if (OB_TMP_FAIL(tmp_file->reinsert_data_flush_node())) {
@@ -267,7 +267,7 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
   return ret;
 }
 
-int ObTmpFileFlushListIterator::cache_big_files_(const ObArray<ObITmpFileHandle> &file_handles)
+int ObTmpFileFlushListIterator::cache_big_files_(const ObArray<ObSNTmpFileHandle> &file_handles)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(build_file_wrappers_(file_handles))) {
@@ -279,7 +279,7 @@ int ObTmpFileFlushListIterator::cache_big_files_(const ObArray<ObITmpFileHandle>
   return ret;
 }
 
-int ObTmpFileFlushListIterator::cache_small_files_(const ObArray<ObITmpFileHandle> &file_handles)
+int ObTmpFileFlushListIterator::cache_small_files_(const ObArray<ObSNTmpFileHandle> &file_handles)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(build_file_wrappers_(file_handles))) {
@@ -291,7 +291,7 @@ int ObTmpFileFlushListIterator::cache_small_files_(const ObArray<ObITmpFileHandl
   return ret;
 }
 
-int ObTmpFileFlushListIterator::build_file_wrappers_(const ObArray<ObITmpFileHandle> &file_handles)
+int ObTmpFileFlushListIterator::build_file_wrappers_(const ObArray<ObSNTmpFileHandle> &file_handles)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(file_handles.empty())) {
@@ -330,7 +330,7 @@ int ObTmpFileFlushListIterator::build_dir_wrappers_()
     int64_t end_file_idx = -1;
     int64_t page_num = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < cached_file_num_; ++i) {
-      ObITmpFile *file = nullptr;
+      ObSharedNothingTmpFile *file = nullptr;
       int64_t file_dirty_page_num = 0;
       if (OB_UNLIKELY(!files_[i].is_inited_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -392,20 +392,20 @@ int ObTmpFileFlushListIterator::build_dir_wrappers_()
   return ret;
 }
 
-int ObTmpFileFlushListIterator::get_flushing_file_dirty_page_num_(const ObITmpFile &file, int64_t &page_num)
+int ObTmpFileFlushListIterator::get_flushing_file_dirty_page_num_(const ObSharedNothingTmpFile &file, int64_t &page_num)
 {
   int ret = OB_SUCCESS;
   FlushCtxState cur_stage = cal_current_flush_stage_();
   if (OB_UNLIKELY(cur_stage < FlushCtxState::FSM_F1 || cur_stage > FlushCtxState::FSM_F5)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (cur_stage <= FlushCtxState::FSM_F3) {
-    ObITmpFile &mutable_file_ref = const_cast<ObITmpFile &>(file);
+    ObSharedNothingTmpFile &mutable_file_ref = const_cast<ObSharedNothingTmpFile &>(file);
     int64_t dirty_page_size = mutable_file_ref.get_dirty_data_page_size_with_lock();
     page_num = upper_align(dirty_page_size, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   } else { // stage > FlushCtxState::FSM_F3 is flushing meta page
     int64_t non_rightmost_dirty_page_num = 0;
     int64_t rightmost_dirty_page_num = 0;
-    ObSharedNothingTmpFile &mutable_file_ref = static_cast<ObSharedNothingTmpFile &>(const_cast<ObITmpFile &>(file));
+    ObSharedNothingTmpFile &mutable_file_ref = const_cast<ObSharedNothingTmpFile &>(file);
     mutable_file_ref.get_dirty_meta_page_num_with_lock(non_rightmost_dirty_page_num, rightmost_dirty_page_num);
     if (cur_stage == FlushCtxState::FSM_F4) {
       page_num = non_rightmost_dirty_page_num;
@@ -617,7 +617,7 @@ int ObTmpFileFlushListIterator::acquire_final_list_of_flush_stage_(const FlushCt
   return ret;
 }
 
-int ObTmpFileFlushListIterator::ObFlushingTmpFileWrapper::init(const bool is_meta, const ObITmpFileHandle &file_handle)
+int ObTmpFileFlushListIterator::ObFlushingTmpFileWrapper::init(const bool is_meta, const ObSNTmpFileHandle &file_handle)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
@@ -659,8 +659,8 @@ bool ObTmpFileFlushListIterator::ObFlushingTmpFileWrapper::operator <(const ObFl
   } else if (file_handle_.get()->get_dir_id() > other.file_handle_.get()->get_dir_id()) {
     b_ret = false;
   } else if (is_meta_) {
-    ObSharedNothingTmpFile *sn_file = static_cast<ObSharedNothingTmpFile *>(file_handle_.get());
-    ObSharedNothingTmpFile *sn_other_file = static_cast<ObSharedNothingTmpFile *>(other.file_handle_.get());
+    ObSharedNothingTmpFile *sn_file = file_handle_.get();
+    ObSharedNothingTmpFile *sn_other_file = other.file_handle_.get();
     b_ret = sn_file->get_meta_page_flush_level() < sn_other_file->get_meta_page_flush_level();
   } else {
     b_ret = file_handle_.get()->get_data_page_flush_level() < other.file_handle_.get()->get_data_page_flush_level();

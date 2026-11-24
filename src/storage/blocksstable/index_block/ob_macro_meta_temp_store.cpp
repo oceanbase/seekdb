@@ -253,7 +253,6 @@ int ObMacroMetaTempStore::inner_append(const ObDataMacroBlockMeta &macro_meta, c
       io_.size_ = buffer_.pos();
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       io_.io_timeout_ms_ = timeout_us <= 0 ? 0 : timeout_us / 1000;
-      io_.io_desc_.set_wait_event(ObWaitEventIds::INTERM_RESULT_DISK_WRITE);
       if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_write(io_, io_handle_))) {
       }
     }
@@ -438,7 +437,6 @@ int ObMacroMetaTempStoreIter::try_submit_io()
       tmp_file::ObTmpFileIOInfo io_info = io_info_;
       io_info.buf_ = meta_store_fragment_;
       io_info.size_ = curr_read_size;
-      io_info.io_desc_.set_wait_event(ObWaitEventIds::INTERM_RESULT_DISK_READ);
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       io_info.io_timeout_ms_ = timeout_us <= 0 ? 0 : timeout_us / 1000;
       int64_t deserialize_pos = 0;

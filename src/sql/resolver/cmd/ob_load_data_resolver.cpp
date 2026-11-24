@@ -15,11 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "lib/file/path_operations.h"
 #include "sql/resolver/cmd/ob_load_data_resolver.h"
 #include "src/sql/resolver/dml/ob_del_upd_resolver.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
-#include "lib/utility/ob_platform_io.h"
 #include "rust/path_utils.h"
 
 #include <cstring>
@@ -620,8 +620,8 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
             for (int32_t i = 0; OB_SUCC(ret) && i < match_array.size(); i++) {
               //security check for mysql mode
               ObString secure_file_priv;
-              if (0 != ob_absolute_path_utf8(match_array[i].ptr(), full_path_buf,
-                                             full_path_size)) {
+              if (OB_SUCCESS != path_operations::resolve_path(match_array[i].ptr(), full_path_buf,
+                                                              full_path_size)) {
                 ret = OB_FILE_NOT_EXIST;
               } else if (OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
               } else if (!session_info_->is_inner() && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, full_path_buf))) {

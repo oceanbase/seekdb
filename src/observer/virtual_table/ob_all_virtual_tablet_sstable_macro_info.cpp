@@ -133,8 +133,7 @@ ObAllVirtualTabletSSTableMacroInfo::ObAllVirtualTabletSSTableMacroInfo()
     rowkey_allocator_(),
     curr_range_(),
     block_idx_(0),
-    iter_buf_(nullptr),
-    io_buf_(nullptr)
+    iter_buf_(nullptr)
 {
 }
 
@@ -160,10 +159,6 @@ void ObAllVirtualTabletSSTableMacroInfo::reset()
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
     iter_buf_ = nullptr;
-  }
-  if (OB_NOT_NULL(io_buf_)) {
-    allocator_->free(io_buf_);
-    io_buf_ = nullptr;
   }
   memset(objs_, 0, sizeof(objs_));
 
@@ -241,52 +236,44 @@ int ObAllVirtualTabletSSTableMacroInfo::get_macro_info(
   ObStorageObjectReadInfo macro_read_info;
   macro_read_info.macro_block_id_ = macro_id;
   macro_read_info.io_desc_.set_mode(ObIOMode::READ);
-  macro_read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   macro_read_info.offset_ = 0;
   macro_read_info.size_ = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
   macro_read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
   
 
-  if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
-      reinterpret_cast<char*>(allocator_->alloc(OB_STORAGE_OBJECT_MGR.get_macro_block_size())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    int64_t io_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-    STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(io_size));
+  if (OB_UNLIKELY(!macro_id.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    SERVER_LOG(WARN, "invalid argument", K(ret), K(macro_id));
+  } else if (OB_FAIL(ObObjectManager::read_object(macro_read_info, macro_handle))) {
   } else {
-    macro_read_info.buf_ = io_buf_;
-    if (OB_UNLIKELY(!macro_id.is_valid())) {
-      ret = OB_INVALID_ARGUMENT;
-      SERVER_LOG(WARN, "invalid argument", K(ret), K(macro_id));
-    } else if (OB_FAIL(ObObjectManager::read_object(macro_read_info, macro_handle))) {
+    ObMacroBlockCommonHeader common_header;
+    ObSSTableMacroBlockHeader macro_header;
+    const char *buf = macro_handle.get_buffer();
+    const int64_t size = macro_handle.get_data_size();
+    int64_t pos = 0;
+    if (OB_FAIL(common_header.deserialize(buf, size, pos))) {
+    } else if (OB_FAIL(common_header.check_integrity())) {
+    } else if (OB_FAIL(macro_header.deserialize(buf, size, pos))) {
+    } else if (OB_UNLIKELY(!macro_header.is_valid())) {
+      ret = OB_INVALID_DATA;
+      STORAGE_LOG(WARN, "invalid macro header", K(ret), K(macro_header));
     } else {
-      ObMacroBlockCommonHeader common_header;
-      ObSSTableMacroBlockHeader macro_header;
-      const char *buf = macro_read_info.buf_;
-      const int64_t size = macro_handle.get_data_size();
-      int64_t pos = 0;
-      if (OB_FAIL(common_header.deserialize(buf, size, pos))) {
-      } else if (OB_FAIL(common_header.check_integrity())) {
-      } else if (OB_FAIL(macro_header.deserialize(buf, size, pos))) {
-      } else if (OB_UNLIKELY(!macro_header.is_valid())) {
-        ret = OB_INVALID_DATA;
-        STORAGE_LOG(WARN, "invalid macro header", K(ret), K(macro_header));
-      } else {
-        info.data_seq_ = macro_header.fixed_header_.data_seq_;
-        info.macro_logic_version_ = macro_header.fixed_header_.logical_version_;
-        info.macro_block_index_ = macro_id.block_index();
-        info.macro_block_id_ = macro_id;
-        info.row_count_ = macro_header.fixed_header_.row_count_;
-        info.original_size_ = macro_header.fixed_header_.occupy_size_;
-        info.data_size_ = macro_header.fixed_header_.occupy_size_;
-        info.data_zsize_ = macro_header.fixed_header_.occupy_size_;
-        info.occupy_size_ = macro_header.fixed_header_.occupy_size_;
-        info.micro_block_count_ = macro_header.fixed_header_.micro_block_count_;
-        info.data_checksum_ = macro_header.fixed_header_.data_checksum_;
-        info.compressor_type_ = macro_header.get_compressor_type();
-        info.row_store_type_ = static_cast<ObRowStoreType>(macro_header.fixed_header_.row_store_type_);
-      }
+      info.data_seq_ = macro_header.fixed_header_.data_seq_;
+      info.macro_logic_version_ = macro_header.fixed_header_.logical_version_;
+      info.macro_block_index_ = macro_id.block_index();
+      info.macro_block_id_ = macro_id;
+      info.row_count_ = macro_header.fixed_header_.row_count_;
+      info.original_size_ = macro_header.fixed_header_.occupy_size_;
+      info.data_size_ = macro_header.fixed_header_.occupy_size_;
+      info.data_zsize_ = macro_header.fixed_header_.occupy_size_;
+      info.occupy_size_ = macro_header.fixed_header_.occupy_size_;
+      info.micro_block_count_ = macro_header.fixed_header_.micro_block_count_;
+      info.data_checksum_ = macro_header.fixed_header_.data_checksum_;
+      info.compressor_type_ = macro_header.get_compressor_type();
+      info.row_store_type_ = static_cast<ObRowStoreType>(macro_header.fixed_header_.row_store_type_);
     }
   }
+
   return ret;
 }
 

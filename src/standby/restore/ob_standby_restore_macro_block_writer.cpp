@@ -15,8 +15,8 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "storage/blocksstable/ob_block_manager.h"
 #include "ob_standby_restore_macro_block_writer.h"
-#include "share/ob_io_device_helper.h"
 
 namespace oceanbase
 {
@@ -144,7 +144,7 @@ int ObStandbyRestoreMacroBlockWriter::process(
     STORAGE_LOG(INFO, "macro block writer begin", K_(tenant_id), K_(ls_id), K_(tablet_id),
         K_(copy_id), KPC_(sstable_param));
     while (OB_SUCC(ret)) {
-      if (OB_FAIL(LOCAL_DEVICE_INSTANCE.check_space_full(0 /*required_size*/))) {
+      if (OB_FAIL(OB_SERVER_BLOCK_MGR.check_space_full(0 /*required_size*/))) {
         STORAGE_LOG(ERROR, "failed to check disk space", K(ret), K_(tenant_id), K_(ls_id),
             K_(tablet_id), K_(copy_id), KPC_(sstable_param));
         break;
@@ -292,9 +292,7 @@ int ObStandbyRestoreLocalMacroBlockWriter::set_macro_write_info_(
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "index_block_rebuilder_ should not be nullptr", KR(ret), KP(index_block_rebuilder_));
   } else {
-    write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
-    write_info.io_desc_.set_sealed();
     write_info.io_timeout_ms_ = io_timeout_ms_;
     write_info.offset_ = 0;
     opt.set_data_macro_object_opt();

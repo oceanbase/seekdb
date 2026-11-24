@@ -14,90 +14,31 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_LOGSERVICE_LOG_IO_ADAPTER_
-#define OCEANBASE_LOGSERVICE_LOG_IO_ADAPTER_
+#pragma once
 
-#include "lib/restore/ob_io_device.h"
-#include "lib/restore/ob_device_common.h"
-#include "log_io_context.h"                                   // LogIOContext
+#include <optional>
+#include "rust/storage_io.h"
 
-namespace oceanbase
+namespace oceanbase::palf
 {
-namespace common
-{
-class ObIOManager;
-class ObDeviceManager;
-}
-namespace share
-{
-class ObLocalDevice;
-struct LocalIOConfig;
-}
-namespace palf
-{
-
-class LogIODeviceWrapper
-{
-public:
-  LogIODeviceWrapper() : log_local_device_(NULL), device_manager_(NULL), is_inited_(false) {}
-  int init(const char *clog_dir, 
-           const int64_t disk_io_thread_count,
-           const int64_t max_io_depth,
-           common::ObIOManager *io_manager,
-           common::ObDeviceManager *device_manager,
-           const share::LocalIOConfig &io_config);
-  void destroy();
-  common::ObIODevice *get_local_device();
-private:
-  share::ObLocalDevice *log_local_device_;
-  common::ObDeviceManager *device_manager_;
-  bool is_inited_;
-};
+using LogFile = std::optional<rust::Box<storage_io::NamedFile>>;
 
 class LogIOAdapter
 {
 public:
-  LogIOAdapter() : log_local_device_(NULL), io_manager_(NULL), is_inited_(false) {}
-  ~LogIOAdapter() {
-    destroy();
-  }
-  int init(common::ObIODevice *log_local_device,
-           common::ObIOManager *io_manager);
-  void destroy();
-  bool is_valid() const {
-    return true && NULL != log_local_device_ && NULL != io_manager_;
-  }
-  int open(const char *block_path, 
-           const int flags, 
-           const mode_t mode,
-           ObIOFd &io_fd);
-  int close(ObIOFd &io_fd);
-  int pwrite(const ObIOFd &io_fd, 
-             const char *buf, 
-             const int64_t count, 
-             const int64_t offset,
-             int64_t &write_size);
-  int pread(const ObIOFd &io_fd, 
-            const int64_t count, 
-            const int64_t offset,
-            char *buf, 
-            int64_t &out_read_size,
-            LogIOContext &io_ctx);
-  // directly pread without iosolation
-  int pread(const ObIOFd &io_fd, 
-            const int64_t count, 
-            const int64_t offset,
-            char *buf, 
-            int64_t &out_read_size);
-  int truncate(const ObIOFd &fd, const int64_t offset);
+  int init(const storage_io::NamedOwnerHandle *log_files);
+  void destroy() { log_files_ = nullptr; }
+  bool is_valid() const { return log_files_ != nullptr; }
+  int open(const char *path, bool read_only, LogFile &file);
+  int pwrite(const LogFile &file, const char *buf, int64_t count,
+      int64_t offset, int64_t &write_size);
+  int pread(const LogFile &file, int64_t count, int64_t offset,
+      char *buf, int64_t &read_size);
+  int pread_direct(const LogFile &file, int64_t count, int64_t offset,
+      char *buf, int64_t &read_size);
+  int truncate(const LogFile &file, int64_t length);
+
 private:
-  
-  common::ObIODevice *log_local_device_;
-  common::ObIOManager *io_manager_;
-  bool is_inited_;
+  const storage_io::NamedOwnerHandle *log_files_ = nullptr;
 };
 }
-
-}
-
-#endif

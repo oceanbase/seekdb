@@ -48,7 +48,7 @@ int ObTmpFileFlushPriorityManager::init()
 void ObTmpFileFlushPriorityManager::destroy()
 {
   // int ret = OB_SUCCESS;
-  // ObITmpFile *file = nullptr;
+  // ObSharedNothingTmpFile *file = nullptr;
   is_inited_ = false;
   for (int64_t i = 0; i < FileList::MAX; i++) {
     ObSpinLockGuard guard(data_list_locks_[i]);
@@ -99,8 +99,8 @@ int64_t ObTmpFileFlushPriorityManager::get_file_size()
 }
 
 // attention:
-// call this function with protection of ObITmpFile's meta_lock
-int ObTmpFileFlushPriorityManager::insert_data_flush_list(ObITmpFile &file, const int64_t dirty_page_size)
+// call this function with protection of ObSharedNothingTmpFile's meta_lock
+int ObTmpFileFlushPriorityManager::insert_data_flush_list(ObSharedNothingTmpFile &file, const int64_t dirty_page_size)
 {
   int ret = OB_SUCCESS;
   FileList flush_idx = FileList::MAX;
@@ -114,8 +114,8 @@ int ObTmpFileFlushPriorityManager::insert_data_flush_list(ObITmpFile &file, cons
 }
 
 // attention:
-// call this function with protection of ObITmpFile's meta_lock
-int ObTmpFileFlushPriorityManager::insert_meta_flush_list(ObITmpFile &file,
+// call this function with protection of ObSharedNothingTmpFile's meta_lock
+int ObTmpFileFlushPriorityManager::insert_meta_flush_list(ObSharedNothingTmpFile &file,
                                                           const int64_t non_rightmost_dirty_page_num,
                                                           const int64_t rightmost_dirty_page_num)
 {
@@ -130,11 +130,11 @@ int ObTmpFileFlushPriorityManager::insert_meta_flush_list(ObITmpFile &file,
   return ret;
 }
 
-int ObTmpFileFlushPriorityManager::insert_flush_list_(const bool is_meta, ObITmpFile &file,
+int ObTmpFileFlushPriorityManager::insert_flush_list_(const bool is_meta, ObSharedNothingTmpFile &file,
                                                       const FileList flush_idx)
 {
   int ret = OB_SUCCESS;
-  ObITmpFile::ObTmpFileNode *flush_node = nullptr;
+  ObSharedNothingTmpFile::ObTmpFileNode *flush_node = nullptr;
   ObSpinLock* locks = is_meta ? meta_list_locks_ : data_list_locks_;
   ObTmpFileFlushList *flush_lists =  is_meta ? meta_flush_lists_ : data_flush_lists_;
 
@@ -159,8 +159,8 @@ int ObTmpFileFlushPriorityManager::insert_flush_list_(const bool is_meta, ObITmp
 }
 
 // attention:
-// call this function with protection of ObITmpFile's meta_lock
-int ObTmpFileFlushPriorityManager::update_data_flush_list(ObITmpFile &file, const int64_t dirty_page_size)
+// call this function with protection of ObSharedNothingTmpFile's meta_lock
+int ObTmpFileFlushPriorityManager::update_data_flush_list(ObSharedNothingTmpFile &file, const int64_t dirty_page_size)
 {
   int ret = OB_SUCCESS;
   FileList new_flush_idx = FileList::MAX;
@@ -173,8 +173,8 @@ int ObTmpFileFlushPriorityManager::update_data_flush_list(ObITmpFile &file, cons
 }
 
 // attention:
-// call this function with protection of ObITmpFile's meta_lock
-int ObTmpFileFlushPriorityManager::update_meta_flush_list(ObITmpFile &file,
+// call this function with protection of ObSharedNothingTmpFile's meta_lock
+int ObTmpFileFlushPriorityManager::update_meta_flush_list(ObSharedNothingTmpFile &file,
                                                           const int64_t non_rightmost_dirty_page_num,
                                                           const int64_t rightmost_dirty_page_num)
 {
@@ -188,11 +188,11 @@ int ObTmpFileFlushPriorityManager::update_meta_flush_list(ObITmpFile &file,
   return ret;
 }
 
-int ObTmpFileFlushPriorityManager::update_flush_list_(const bool is_meta, ObITmpFile &file,
+int ObTmpFileFlushPriorityManager::update_flush_list_(const bool is_meta, ObSharedNothingTmpFile &file,
                                                       const FileList new_flush_idx)
 {
   int ret = OB_SUCCESS;
-  ObITmpFile::ObTmpFileNode *flush_node = nullptr;
+  ObSharedNothingTmpFile::ObTmpFileNode *flush_node = nullptr;
   ObSpinLock* locks = is_meta ? meta_list_locks_ : data_list_locks_;
   ObTmpFileFlushList *flush_lists =  is_meta ? meta_flush_lists_ : data_flush_lists_;
   FileList cur_flush_idx = FileList::INVALID;
@@ -233,7 +233,7 @@ int ObTmpFileFlushPriorityManager::update_flush_list_(const bool is_meta, ObITmp
   return ret;
 }
 
-int ObTmpFileFlushPriorityManager::remove_file(ObITmpFile &file)
+int ObTmpFileFlushPriorityManager::remove_file(ObSharedNothingTmpFile &file)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(remove_file(true /*is_meta*/, file))) {
@@ -243,12 +243,12 @@ int ObTmpFileFlushPriorityManager::remove_file(ObITmpFile &file)
 }
 
 // attention:
-// call this function with protection of ObITmpFile's meta_lock
-int ObTmpFileFlushPriorityManager::remove_file(const bool is_meta, ObITmpFile &file)
+// call this function with protection of ObSharedNothingTmpFile's meta_lock
+int ObTmpFileFlushPriorityManager::remove_file(const bool is_meta, ObSharedNothingTmpFile &file)
 {
   int ret = OB_SUCCESS;
   FileList flush_idx = FileList::INVALID ;
-  ObITmpFile::ObTmpFileNode *flush_node = nullptr;
+  ObSharedNothingTmpFile::ObTmpFileNode *flush_node = nullptr;
 
   if (OB_FAIL(get_file_flush_level_(is_meta, file, flush_idx))) {
   } else if (FileList::INVALID == flush_idx) {
@@ -278,7 +278,7 @@ int ObTmpFileFlushPriorityManager::remove_file(const bool is_meta, ObITmpFile &f
 
 int ObTmpFileFlushPriorityManager::popN_from_file_list(const bool is_meta, const int64_t list_idx,
                                                        const int64_t expected_count, int64_t &actual_count,
-                                                       ObArray<ObITmpFileHandle> &file_handles)
+                                                       ObArray<ObSNTmpFileHandle> &file_handles)
 {
   int ret = OB_SUCCESS;
   ObSpinLock* locks = is_meta ? meta_list_locks_ : data_list_locks_;
@@ -290,12 +290,12 @@ int ObTmpFileFlushPriorityManager::popN_from_file_list(const bool is_meta, const
   } else {
     ObSpinLockGuard guard(locks[list_idx]);
     while (OB_SUCC(ret) && !flush_lists[list_idx].is_empty() && actual_count < expected_count) {
-      ObITmpFile *file = nullptr;
+      ObSharedNothingTmpFile *file = nullptr;
       if (OB_ISNULL(file = &flush_lists[list_idx].remove_first()->file_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(file_handles.push_back(file))) {
         int tmp_ret = OB_SUCCESS;
-        ObITmpFile::ObTmpFileNode *node = nullptr;
+        ObSharedNothingTmpFile::ObTmpFileNode *node = nullptr;
         if (OB_FAIL(get_file_flush_node_(is_meta, *file, node))) {
         } else if (OB_ISNULL(node)) {
           ret = OB_ERR_UNEXPECTED;
@@ -313,14 +313,14 @@ int ObTmpFileFlushPriorityManager::popN_from_file_list(const bool is_meta, const
   return ret;
 }
 
-int ObTmpFileFlushPriorityManager::get_file_flush_node_(const bool is_meta, ObITmpFile &file,
-                                                        ObITmpFile::ObTmpFileNode *&flush_node)
+int ObTmpFileFlushPriorityManager::get_file_flush_node_(const bool is_meta, ObSharedNothingTmpFile &file,
+                                                        ObSharedNothingTmpFile::ObTmpFileNode *&flush_node)
 {
   int ret = OB_SUCCESS;
   flush_node = nullptr;
 
   if (is_meta) {
-    flush_node = static_cast<ObSharedNothingTmpFile&>(file).get_meta_flush_node();
+    flush_node = file.get_meta_flush_node();
   } else {
     flush_node = file.get_data_flush_node();
   }
@@ -328,13 +328,13 @@ int ObTmpFileFlushPriorityManager::get_file_flush_node_(const bool is_meta, ObIT
   return ret;
 }
 
-int ObTmpFileFlushPriorityManager::get_file_flush_level_(const bool is_meta, ObITmpFile &file, FileList &flush_level)
+int ObTmpFileFlushPriorityManager::get_file_flush_level_(const bool is_meta, ObSharedNothingTmpFile &file, FileList &flush_level)
 {
   int ret = OB_SUCCESS;
   flush_level = FileList::INVALID;
 
   if (is_meta) {
-    flush_level = static_cast<FileList>(static_cast<ObSharedNothingTmpFile&>(file).get_meta_page_flush_level());
+    flush_level = static_cast<FileList>(file.get_meta_page_flush_level());
   } else {
     flush_level = static_cast<FileList>(file.get_data_page_flush_level());
   }
@@ -342,11 +342,11 @@ int ObTmpFileFlushPriorityManager::get_file_flush_level_(const bool is_meta, ObI
   return ret;
 }
 
-int ObTmpFileFlushPriorityManager::set_flush_page_level_(const bool is_meta, const FileList flush_idx, ObITmpFile &file)
+int ObTmpFileFlushPriorityManager::set_flush_page_level_(const bool is_meta, const FileList flush_idx, ObSharedNothingTmpFile &file)
 {
   int ret = OB_SUCCESS;
   if (is_meta) {
-    static_cast<ObSharedNothingTmpFile&>(file).set_meta_page_flush_level(flush_idx);
+    file.set_meta_page_flush_level(flush_idx);
   } else {
     file.set_data_page_flush_level(flush_idx);
   }

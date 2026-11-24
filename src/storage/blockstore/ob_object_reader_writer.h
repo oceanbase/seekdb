@@ -38,13 +38,12 @@ public:
   ObObjectWriteInfo &operator=(const ObObjectWriteInfo &other);
   bool is_valid() const;
   void reset();
-  TO_STRING_KV(KP_(buffer), K_(offset), K_(size), K_(io_desc), K_(io_callback), KP_(write_callback));
+  TO_STRING_KV(KP_(buffer), K_(offset), K_(size), K_(io_desc), KP_(write_callback));
 public:
   const char *buffer_;
   int64_t offset_;
   int64_t size_;
   common::ObIOFlag io_desc_;
-  ObObjectIOCallback *io_callback_;
   blocksstable::ObIMacroBlockFlushCallback *write_callback_;
 };
 
@@ -52,15 +51,14 @@ struct ObObjectReadInfo final
 {
 public:
   ObObjectReadInfo()
-    : addr_(), io_desc_(), io_callback_(nullptr), io_timeout_ms_(DEFAULT_IO_WAIT_TIME_MS)
+    : addr_(), io_desc_(), io_timeout_ms_(DEFAULT_IO_WAIT_TIME_MS)
   {}
   ~ObObjectReadInfo() = default;
   bool is_valid() const;
-  TO_STRING_KV(K_(addr), K_(io_desc), K_(io_callback), K_(io_timeout_ms));
+  TO_STRING_KV(K_(addr), K_(io_desc), K_(io_timeout_ms));
 public:
   ObMetaDiskAddr addr_;
   common::ObIOFlag io_desc_;
-  ObObjectIOCallback *io_callback_;
   int64_t io_timeout_ms_;
   DISALLOW_COPY_AND_ASSIGN(ObObjectReadInfo);
 };
@@ -147,11 +145,9 @@ public:
                            const common::ObIOCallbackType type)
     : common::ObIOCallback(type), io_allocator_(io_allocator), addr_(addr), data_buf_(nullptr) {}
   virtual ~ObObjectIOCallback();
-  virtual int alloc_data_buf(const char *io_data_buffer, const int64_t data_size) override;
-  int inner_process(const char *data_buffer, const int64_t size) override;
+  int process(const char *data_buffer, const int64_t size) override;
   virtual int do_process(const char *buf, const int64_t buf_len) = 0;
-  virtual int64_t size() const = 0;
-  virtual const char *get_data() override;
+  virtual const char *get_data() const override;
   virtual ObIAllocator *get_allocator() override { return io_allocator_; }
 
   VIRTUAL_TO_STRING_KV(K_(addr), KP_(io_allocator), KP_(data_buf));
@@ -174,7 +170,6 @@ class ObObjectReadHandle final
   friend class ObObjectIOCallback;
 public:
   ObObjectReadHandle();
-  ObObjectReadHandle(ObIAllocator &allocator);
   ~ObObjectReadHandle();
   ObObjectReadHandle(const ObObjectReadHandle &other);
   ObObjectReadHandle &operator=(const ObObjectReadHandle &other);
@@ -194,11 +189,9 @@ private:
       const int64_t data_size,
       int64_t &header_size,
       int64_t &buf_len);
-  int alloc_io_buf(char *&buf, const int64_t &buf_size);
   int set_addr_and_object_handle(const ObMetaDiskAddr &addr, const blocksstable::ObStorageObjectHandle &object_handle);
 
 private:
-  ObIAllocator *allocator_;
   blocksstable::ObStorageObjectHandle object_handle_;
   ObMetaDiskAddr addr_;
 };
@@ -274,7 +267,8 @@ public:
   int init();
   void reset();
   void get_cur_block(blocksstable::MacroBlockId &macro_id);
-  static int async_read(const ObObjectReadInfo &read_info, ObObjectReadHandle &object_io_handle);
+  static int async_read(const ObObjectReadInfo &read_info, ObObjectReadHandle &object_io_handle,
+      std::unique_ptr<storage_io::CallbackAdapter> callback = nullptr);
   static int parse_data_from_object(
       blocksstable::ObStorageObjectHandle &object_handle,
       const ObMetaDiskAddr addr,

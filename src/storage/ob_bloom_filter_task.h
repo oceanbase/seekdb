@@ -49,7 +49,6 @@ private:
   blocksstable::ObStorageObjectHandle macro_handle_;
   int64_t prefix_len_;
   common::ObArenaAllocator allocator_;
-  char *io_buf_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBloomFilterBuildTask);
 };

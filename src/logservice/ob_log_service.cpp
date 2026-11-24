@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX CLOG
+#include "lib/file/path_operations.h"
 #include "ob_log_service.h"
 #include "logservice/palf_handle_guard.h"
 #include "logservice/ob_log_allocator_mgr.h"
@@ -67,8 +68,8 @@ int ObLogService::server_module_init(
     const common::ObAddr &self,
     ObILogStorage *log_storage,
     palf::ILogBlockPool *log_block_pool,
-    common::ObIODevice *log_local_device,
-    common::ObIOManager *io_manager,
+    const storage_io::NamedOwnerHandle *log_files,
+
     const bool is_shared_storage_mode,
     const int64_t replay_thread_quota,
     const ObLogRuntimeConfig &runtime_config)
@@ -77,12 +78,12 @@ int ObLogService::server_module_init(
   common::ObILogAllocator *alloc_mgr = NULL;
   if (OB_ISNULL(logservice) || OB_ISNULL(runtime_clog_dir) ||
       OB_ISNULL(clog_dir) || OB_ISNULL(log_storage) ||
-      OB_ISNULL(log_block_pool) || OB_ISNULL(log_local_device) ||
-      OB_ISNULL(io_manager) || OB_UNLIKELY(!self.is_valid())) {
+      OB_ISNULL(log_block_pool) || OB_ISNULL(log_files) ||
+      OB_UNLIKELY(!self.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid log service composition", K(ret), KP(logservice),
         KP(runtime_clog_dir), KP(clog_dir), KP(log_storage),
-        KP(log_block_pool), KP(log_local_device), KP(io_manager), K(self));
+        KP(log_block_pool), KP(log_files), K(self));
   } else if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
   } else if (OB_FAIL(logservice->init(palf_options, store,
                                       runtime_clog_dir,
@@ -90,12 +91,12 @@ int ObLogService::server_module_init(
                                       alloc_mgr,
                                       log_storage,
                                       log_block_pool,
-                                      log_local_device,
-                                      io_manager,
+                                      log_files,
+
                                       is_shared_storage_mode,
                                       replay_thread_quota,
                                       runtime_config))) {
-  } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(clog_dir))) {
+  } else if (OB_FAIL(path_operations::fsync_dir(clog_dir))) {
   } else {
     CLOG_LOG(INFO, "ObLogService server_module_init success");
   }
@@ -348,10 +349,10 @@ int check_and_prepare_dir(const char *dir)
 {
   bool is_exist = false;
   int ret = OB_SUCCESS;
-  if (OB_FAIL(common::FileDirectoryUtils::is_exists(dir, is_exist))) {
+  if (OB_FAIL(common::path_operations::is_exists(dir, is_exist))) {
   } else if (is_exist == true) {
     CLOG_LOG(INFO, "director exist", K(ret), K(dir));
-  } else if (OB_FAIL(common::FileDirectoryUtils::create_directory(dir))) {
+  } else if (OB_FAIL(common::path_operations::create_directory(dir))) {
   } else {
     CLOG_LOG(INFO, "check_and_prepare_dir success", K(ret), K(dir));
   }
@@ -365,8 +366,8 @@ int ObLogService::init(const PalfOptions &options,
                        common::ObILogAllocator *alloc_mgr,
                        ObILogStorage *log_storage,
                        palf::ILogBlockPool *log_block_pool,
-                       common::ObIODevice *log_local_device,
-                       common::ObIOManager *io_manager,
+                       const storage_io::NamedOwnerHandle *log_files,
+
                        const bool is_shared_storage_mode,
                        const int64_t replay_thread_quota,
                        const ObLogRuntimeConfig &runtime_config)
@@ -380,15 +381,15 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
   } else if (false == options.is_valid() || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
       || OB_ISNULL(alloc_mgr) || OB_ISNULL(log_storage)
-      || OB_ISNULL(log_block_pool) || OB_ISNULL(log_local_device)
-      || OB_ISNULL(io_manager)) {
+      || OB_ISNULL(log_block_pool) || OB_ISNULL(log_files)
+     ) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
              KP(alloc_mgr), KP(log_storage), KP(log_block_pool),
-             KP(log_local_device), KP(io_manager));
+             KP(log_files));
   } else if (OB_FAIL(PalfEnv::create_palf_env(options, store, base_dir, self,
                                               alloc_mgr, log_block_pool, &monitor_,
-                                              log_local_device, io_manager, palf_env_))) {
+                                              log_files, palf_env_))) {
   } else if (OB_ISNULL(palf_env_)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "palf_env_ is NULL", K(ret));

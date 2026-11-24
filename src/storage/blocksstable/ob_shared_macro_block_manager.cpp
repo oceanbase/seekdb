@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
+#include "storage/blocksstable/ob_block_manager.h"
 #include "rust/config.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "share/rc/ob_server_runtime.h"
@@ -175,7 +176,6 @@ int ObSharedMacroBlockMgr::write_block(
   } else {
     ObMacroBlockWriteInfo write_info;
     write_info.buffer_ = buf;
-    write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.size_ = size;
     write_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
     lib::ObMutexGuard guard(mutex_);
@@ -250,26 +250,20 @@ int ObSharedMacroBlockMgr::write_block(
   read_info.macro_block_id_ = macro_id;
   read_info.size_ = size;
   read_info.offset_ = offset;
-  read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
   ObMacroBlockHandle read_handle;
   ObSSTableMacroBlockChecker macro_block_checker;
-  ObArenaAllocator io_allocator("SMBM_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE);
 
-  if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char*>(io_allocator.alloc(read_info.size_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(read_info.size_));
-  } else {
-    if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
-    } else if (OB_FAIL(ObBlockManager::async_read_block(read_info, read_handle))) {
-    } else if (OB_FAIL(read_handle.wait())) {
-    } else if (OB_FAIL(macro_block_checker.check(
-        read_handle.get_buffer(),
-        read_handle.get_data_size(),
-        CHECK_LEVEL_PHYSICAL))) {
-    }
+  if (OB_FAIL(OB_SERVER_BLOCK_MGR.fsync_block())) {
+  } else if (OB_FAIL(ObBlockManager::async_read_block(read_info, read_handle))) {
+  } else if (OB_FAIL(read_handle.wait())) {
+  } else if (OB_FAIL(macro_block_checker.check(
+      read_handle.get_buffer(),
+      read_handle.get_data_size(),
+      CHECK_LEVEL_PHYSICAL))) {
   }
+
   return ret;
 }
 
@@ -290,7 +284,6 @@ int ObSharedMacroBlockMgr::try_switch_macro_block()
     write_info.buffer_ = common_header_buf_;
     write_info.size_ = header_size_;
     write_info.offset_ = 0;
-    write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
     if (OB_FAIL(do_write_block(new_macro_handle.get_macro_id(), write_info, block_info))) {
     }
@@ -600,7 +593,6 @@ int ObSharedMacroBlockMgr::rebuild_sstable(
   ObSSTableMergeRes res;
   ObSSTableMetaHandle old_meta_handle;
   ObSSTableMetaHandle new_meta_handle;
-  common::ObArenaAllocator read_allocator;
 
   if (OB_FAIL(old_sstable.get_meta(old_meta_handle))) {
   } else if (OB_FAIL(parse_merge_type(old_sstable, merge_type))) {
@@ -614,7 +606,7 @@ int ObSharedMacroBlockMgr::rebuild_sstable(
       data_desc))) {
   } else if (OB_FAIL(sstable_index_builder.init(data_desc.get_desc(), ObSSTableIndexBuilder::DISABLE))) {
   } else if (OB_FAIL(index_block_rebuilder.init(sstable_index_builder, nullptr, old_sstable.get_key()))) {
-  } else if (OB_FAIL(read_sstable_block(old_sstable, block_handle, read_allocator))) {
+  } else if (OB_FAIL(read_sstable_block(old_sstable, block_handle))) {
   } else if (OB_FAIL(write_block(
       block_handle.get_buffer(), block_handle.get_data_size(), block_info, write_ctx))) {
   } else if (OB_FAIL(index_block_rebuilder.append_macro_row(
@@ -753,8 +745,7 @@ int ObSharedMacroBlockMgr::alloc_for_tools(
 
 int ObSharedMacroBlockMgr::read_sstable_block(
     const ObSSTable &sstable,
-    ObMacroBlockHandle &block_handle,
-    common::ObIAllocator &allocator)
+    ObMacroBlockHandle &block_handle)
 {
   int ret = OB_SUCCESS;
   ObMacroBlockReadInfo read_info;
@@ -769,20 +760,15 @@ int ObSharedMacroBlockMgr::read_sstable_block(
     read_info.macro_block_id_ = macro_id;
     read_info.offset_ = sstable.get_macro_offset();
     read_info.size_ = upper_align(sstable.get_macro_read_size(), DIO_READ_ALIGN_SIZE);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
     read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
     read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
 
-    if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char*>(allocator.alloc(read_info.size_)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(read_info.size_));
-    } else {
-      if (OB_FAIL(ObBlockManager::read_block(read_info, block_handle))) {
-      } else if (OB_UNLIKELY(!block_handle.is_valid()
-            || sstable.get_macro_read_size() != block_handle.get_data_size())) {
-        ret = OB_ERR_UNEXPECTED;
-      }
+    if (OB_FAIL(ObBlockManager::read_block(read_info, block_handle))) {
+    } else if (OB_UNLIKELY(!block_handle.is_valid()
+          || sstable.get_macro_read_size() != block_handle.get_data_size())) {
+      ret = OB_ERR_UNEXPECTED;
     }
+
   }
   return ret;
 }

@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "share/ob_io_device_helper.h"
 #include "ob_object_manager.h"
+#include "storage/blocksstable/ob_block_manager.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 
 namespace oceanbase
@@ -56,8 +56,7 @@ ObObjectManager &ObObjectManager::get_instance()
 
 ObObjectManager::ObObjectManager()
   : is_inited_(false),
-    macro_object_size_(0),
-    resize_file_lock_()
+    macro_object_size_(0)
 {
 }
 
@@ -67,7 +66,7 @@ ObObjectManager::~ObObjectManager()
 
 int ObObjectManager::init(const int64_t macro_object_size)
 {
-  int ret = OB_SERVER_BLOCK_MGR.init(&LOCAL_DEVICE_INSTANCE, macro_object_size);
+  int ret = OB_SERVER_BLOCK_MGR.init(macro_object_size);
   if (OB_SUCC(ret)) {
     macro_object_size_ = macro_object_size;
     is_inited_ = true;
@@ -119,9 +118,10 @@ int ObObjectManager::alloc_object(const ObStorageObjectOpt &opt, ObStorageObject
 
 int ObObjectManager::async_read_object(
     const ObStorageObjectReadInfo &read_info,
-    ObStorageObjectHandle &object_handle)
+    ObStorageObjectHandle &object_handle,
+    std::unique_ptr<storage_io::CallbackAdapter> callback)
 {
-  return object_handle.async_read(read_info);
+  return object_handle.async_read(read_info, std::move(callback));
 }
 
 int ObObjectManager::async_write_object(
@@ -140,10 +140,11 @@ int ObObjectManager::async_write_object(
 
 int ObObjectManager::read_object(
     const ObStorageObjectReadInfo &read_info,
-    ObStorageObjectHandle &object_handle)
+    ObStorageObjectHandle &object_handle,
+    std::unique_ptr<storage_io::CallbackAdapter> callback)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(async_read_object(read_info, object_handle))) {
+  if (OB_FAIL(async_read_object(read_info, object_handle, std::move(callback)))) {
   } else if (OB_FAIL(object_handle.wait())) {
   }
   return ret;
@@ -178,37 +179,6 @@ int ObObjectManager::dec_ref(const MacroBlockId &object_id) const
     ret = OB_NOT_INIT;
   } else {
     ret = OB_SERVER_BLOCK_MGR.dec_ref(object_id);
-  }
-  return ret;
-}
-
-int ObObjectManager::resize_local_device(
-    const int64_t expected_current_size,
-    const int64_t new_device_size,
-    const int64_t new_device_disk_percentage,
-    const int64_t reserved_size)
-{
-  int ret = OB_SUCCESS;
-  lib::ObMutexGuard guard(resize_file_lock_); // lock resize file opt
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    const int64_t current_size = OB_SERVER_BLOCK_MGR.get_total_block_size();
-    if (expected_current_size != current_size) {
-      ret = OB_EAGAIN;
-    } else {
-      ret = OB_SERVER_BLOCK_MGR.resize_file(new_device_size, new_device_disk_percentage, reserved_size);
-    }
-  }
-  return ret;
-}
-
-int ObObjectManager::check_disk_space_available()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
   }
   return ret;
 }

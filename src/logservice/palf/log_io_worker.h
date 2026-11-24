@@ -18,6 +18,7 @@
 #define OCEANBASE_LOGSERVIVE_LOG_IO_WORKER_
 
 #include <stdint.h>
+#include "lib/lock/ob_spin_lock.h"
 #include "lib/queue/ob_priority_queue.h"            // ObTLinkQueue16
 #include "lib/utility/ob_macro_utils.h"             // DISALLOW_COPY_AND_ASSIGN
 #include "lib/utility/ob_print_utils.h"             // TO_STRING_KV
@@ -77,6 +78,7 @@ public:
            LogWritingThrottle *throttle,
            IPalfEnvImpl *palf_env_impl);
   void destroy();
+  void stop() override;
 
   void run1() override final;
   int submit_io_task(LogIOTask *io_task);
@@ -85,6 +87,8 @@ public:
   static constexpr int64_t MAX_THREAD_NUM = 1;
   TO_STRING_KV(KP_(cb_thread_pool));
 private:
+  bool is_stopping_() const;
+  bool wait_before_retry_(int64_t &delay_us) const;
   bool need_reduce_(LogIOTask *task);
   int reduce_io_task_(ObLink *task);
   int handle_io_task_(LogIOTask *io_task);
@@ -102,7 +106,7 @@ private:
     int init(int64_t batch_depth, ObIAllocator *allocator, ObMiniStat::ObStatItem *wait_cost_stat);
     void destroy();
     int insert(LogIOFlushLogTask *io_task);
-    int handle(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
+    int handle(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl, const LogIOWorker &worker);
     bool empty();
     TO_STRING_KV(K_(batch_io_task));
   private:
@@ -115,6 +119,8 @@ private:
   //       will consume it, at nowdays, the io_task_queue is single consumer and mutil
   //       producers model.
 
+  common::ObSpinLock admission_lock_;
+  bool accepting_tasks_;
   LogIOTaskCbThreadPool *cb_thread_pool_;
   IPalfEnvImpl *palf_env_impl_;
   ObTLinkQueue16 queue_;

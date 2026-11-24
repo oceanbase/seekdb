@@ -36,22 +36,19 @@ public:
     macros_handle_.reset();
     handles_[0].reset();
     handles_[1].reset();
-    // Need to pay attention!!!
-    // The allocator is used to allocate io data buffer, and its memory life cycle needs to be longer than the object handle.
-    allocator_.reset();
   }
   ObLinkedMacroBlockReader(const ObLinkedMacroBlockReader &) = delete;
   ObLinkedMacroBlockReader &operator=(const ObLinkedMacroBlockReader &) = delete;
 
-  int init(const blocksstable::MacroBlockId &entry_block, const ObMemAttr &mem_attr);
+  int init(const blocksstable::MacroBlockId &entry_block);
   int iter_read_block(char *&buf, int64_t &buf_len, blocksstable::MacroBlockId &block_id);
   void reset();
   ObIArray<blocksstable::MacroBlockId> &get_meta_block_list();
 
   static int pread_block(const ObMetaDiskAddr &addr,
-      blocksstable::ObStorageObjectHandle &handler, char *item_buf);
+      blocksstable::ObStorageObjectHandle &handler);
   static int read_block_by_id(const blocksstable::MacroBlockId &block_id,
-      blocksstable::ObStorageObjectHandle &handler, char *io_buf);
+      blocksstable::ObStorageObjectHandle &handler);
 
 private:
   int get_meta_blocks(const blocksstable::MacroBlockId &entry_block);
@@ -68,8 +65,6 @@ private:
   blocksstable::ObStorageObjectsHandle macros_handle_;
   int64_t prefetch_macro_block_idx_;
   int64_t read_macro_block_cnt_;
-  common::ObArenaAllocator allocator_;
-  char *io_buf_[2];
 };
 
 class ObLinkedMacroBlockItemReader final

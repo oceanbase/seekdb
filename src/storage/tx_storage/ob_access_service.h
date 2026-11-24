@@ -278,7 +278,6 @@ public:
       const common::ObTabletID &tablet_id,
       int64_t &row_count_delta) const override;
   int run_io_benchmark(
-      common::ObIAllocator &allocator,
       int64_t &disk_random_read_speed,
       int64_t &disk_sequential_read_speed) const override;
 

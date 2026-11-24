@@ -360,7 +360,7 @@ int ObTmpPageCacheReadInfo::init_read(const blocksstable::MacroBlockId &macro_bl
   return ret;
 }
 
-int ObTmpPageCacheReadInfo::async_read(ObTmpPageCache::ObITmpPageIOCallback *callback)
+int ObTmpPageCacheReadInfo::async_read(std::unique_ptr<storage_io::CallbackAdapter> callback)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -368,7 +368,7 @@ int ObTmpPageCacheReadInfo::async_read(ObTmpPageCache::ObITmpPageIOCallback *cal
     STORAGE_LOG(WARN, "ObTmpPageCacheReadInfo has not been inited", KR(ret), KPC(this));
   } else if (OB_ISNULL(callback)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid arguments", KR(ret), KP(callback));
+    STORAGE_LOG(WARN, "invalid arguments", KR(ret), KP(callback.get()));
   } else {
     blocksstable::ObStorageObjectReadInfo read_info;
     read_info.macro_block_id_ = macro_block_id_;
@@ -376,10 +376,9 @@ int ObTmpPageCacheReadInfo::async_read(ObTmpPageCache::ObITmpPageIOCallback *cal
     read_info.offset_ = begin_offset_;
     read_info.io_desc_ = io_desc_;
     read_info.io_timeout_ms_ = io_timeout_ms_;
-    read_info.io_callback_ = callback;
     
     read_info.io_desc_.set_sys_module_id(ObIOModule::TMP_PAGE_CACHE_IO);
-    if (OB_FAIL(object_handle_->async_read(read_info))) {
+    if (OB_FAIL(object_handle_->async_read(read_info, std::move(callback)))) {
     }
   }
 
@@ -471,12 +470,11 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
     p_handle.value_ = new (buf) ObTmpPageCacheValue(buf + sizeof(ObTmpPageCacheValue));
   }
   if (OB_SUCC(ret)) {
-    ObTmpFileBlockManager &block_manager = ::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->get_sn_file_manager().get_tmp_file_block_manager();
+    ObTmpFileBlockManager &block_manager = ::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->get_tmp_file_block_manager();
     blocksstable::ObStorageObjectHandle obj_handle;
     blocksstable::MacroBlockId macro_block_id;
     //TODO: io_desc and io_timeout_ms value settings
     common::ObIOFlag io_desc;
-    io_desc.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     int64_t io_timeout_ms = 10 * 1000; // 10s
     ObTmpPageCacheReadInfo read_info;
 
@@ -525,9 +523,6 @@ int ObTmpPageCache::direct_read(ObTmpPageCacheReadInfo &read_info,
     callback->allocator_ = &callback_allocator;
     if (OB_FAIL(inner_read_io_(read_info, callback))) {
     }
-    // There is no need to handle error cases (freeing the memory of the
-    // callback) because inner_read_io_ will handle error cases and free the
-    // memory of the callback.
   }
   return ret;
 }
@@ -563,9 +558,6 @@ int ObTmpPageCache::cached_read(const common::ObIArray<ObTmpPageCacheKey> &page_
       callback_allocator.free(callback);
     } else if (OB_FAIL(inner_read_io_(read_info, callback))) {
     }
-    // There is no need to handle error cases (freeing the memory of the
-    // callback) because inner_read_io_ will handle error cases and free the
-    // memory of the callback.
   }
   return ret;
 }
@@ -601,45 +593,20 @@ int ObTmpPageCache::aggregate_read(const common::ObIArray<std::pair<ObTmpPageCac
       callback_allocator.free(callback);
     } else if (OB_FAIL(inner_read_io_(read_info, callback))) {
     }
-    // There is no need to handle error cases (freeing the memory of the
-    // callback) because inner_read_io_ will handle error cases and free the
-    // memory of the callback.
   }
   return ret;
 }
 
-// TODO: wanyue.wy
-// refactor logic of callback.
-// currently, the buffer of callback is freed in different places.
-// if async_read_() is failed, it will be released in here;
-// otherwise, it will be released after ObTmpFileIOCtx::do_read_wait_() has been called.
-// (callback is bound with ObIOResult of io_handle, do_read_wait_() will call reset() of io_handle to
-//  destroy callback and its data buf)
-// we need to refactor it by removing callback allocator and directly copy read io buf to user buf
-// rather than using a callback buf
 int ObTmpPageCache::inner_read_io_(ObTmpPageCacheReadInfo &read_info,
-                                   ObITmpPageIOCallback *callback)
+    ObITmpPageIOCallback *callback)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(read_info.async_read(callback))) {
-  }
-
-  // if read successful, callback will be freed after user calls ObTmpFileIOHandle::wait()
-  // for copying data from callback's buf to user's buf
-  // thus, here just free memory of the failed cases
-  if (OB_FAIL(ret) && OB_NOT_NULL(callback) && OB_NOT_NULL(callback->get_allocator())) {
-    common::ObIAllocator *allocator = callback->get_allocator();
-    callback->~ObITmpPageIOCallback();
-    allocator->free(callback);
-  }
-
-  return ret;
+  auto owner = storage_io::adopt_callback(callback);
+  return owner ? read_info.async_read(std::move(owner)) : OB_ALLOCATE_MEMORY_FAILED;
 }
 
 ObTmpPageCache::ObITmpPageIOCallback::ObITmpPageIOCallback(const common::ObIOCallbackType type)
   : common::ObIOCallback(type), cache_(NULL), allocator_(NULL), data_buf_(NULL)
 {
-  static_assert(sizeof(*this) <= CALLBACK_BUF_SIZE, "IOCallback buf size not enough");
 }
 
 ObTmpPageCache::ObITmpPageIOCallback::~ObITmpPageIOCallback()
@@ -672,7 +639,6 @@ int ObTmpPageCache::ObITmpPageIOCallback::process_page(
 ObTmpPageCache::ObTmpCachedReadPageIOCallback::ObTmpCachedReadPageIOCallback()
   : ObITmpPageIOCallback(ObIOCallbackType::TMP_CACHED_READ_CALLBACK), page_keys_()
 {
-  static_assert(sizeof(*this) <= CALLBACK_BUF_SIZE, "IOCallback buf size not enough");
   page_keys_.set_attr(ObMemAttr("TFCacheRead"));
 }
 
@@ -681,7 +647,7 @@ ObTmpPageCache::ObTmpCachedReadPageIOCallback::~ObTmpCachedReadPageIOCallback()
   page_keys_.reset();
 }
 
-int ObTmpPageCache::ObTmpCachedReadPageIOCallback::inner_process(const char *data_buffer, const int64_t size)
+int ObTmpPageCache::ObTmpCachedReadPageIOCallback::process(const char *data_buffer, const int64_t size)
 {
   int ret = OB_SUCCESS;
   ObTimeGuard time_guard("TmpCachedReadPage_Callback_Process", 100000); //100ms
@@ -717,7 +683,6 @@ int ObTmpPageCache::ObTmpCachedReadPageIOCallback::inner_process(const char *dat
 ObTmpPageCache::ObTmpAggregatePageIOCallback::ObTmpAggregatePageIOCallback()
   : ObITmpPageIOCallback(ObIOCallbackType::TMP_MULTI_PAGE_CALLBACK), page_infos_()
 {
-  static_assert(sizeof(*this) <= CALLBACK_BUF_SIZE, "IOCallback buf size not enough");
   page_infos_.set_attr(ObMemAttr("TFPrefetch"));
 }
 
@@ -726,7 +691,7 @@ ObTmpPageCache::ObTmpAggregatePageIOCallback::~ObTmpAggregatePageIOCallback()
   page_infos_.reset();
 }
 
-int ObTmpPageCache::ObTmpAggregatePageIOCallback::inner_process(const char *data_buffer, const int64_t size)
+int ObTmpPageCache::ObTmpAggregatePageIOCallback::process(const char *data_buffer, const int64_t size)
 {
   int ret = OB_SUCCESS;
   ObTimeGuard time_guard("TmpPrefetchPage_Callback_Process", 100000); //100ms
@@ -756,7 +721,7 @@ int ObTmpPageCache::ObTmpAggregatePageIOCallback::inner_process(const char *data
   return ret;
 }
 
-int ObTmpPageCache::ObTmpDirectReadPageIOCallback::inner_process(const char *data_buffer, const int64_t size)
+int ObTmpPageCache::ObTmpDirectReadPageIOCallback::process(const char *data_buffer, const int64_t size)
 {
   int ret = OB_SUCCESS;
   ObTimeGuard time_guard("ObTmpDirectReadPageIOCallback", 100000); //100ms

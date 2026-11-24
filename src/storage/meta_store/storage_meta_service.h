@@ -16,7 +16,6 @@
 #pragma once
 
 #include "share/storage/local_store.h"
-#include "share/ob_i_local_device_space_provider.h"
 #include "share/resource/ob_server_runtime_config.h"
 #include "storage/meta_mem/ob_meta_obj_struct.h"
 
@@ -26,7 +25,7 @@ class ObLSMeta;
 class ObTablet;
 
 // Process-owned recovery state; the LocalStore is supplied by Observer.
-class StorageMetaService : public share::ObILocalDeviceSpaceProvider
+class StorageMetaService
 {
 public:
   static StorageMetaService &get_instance();
@@ -35,7 +34,7 @@ public:
   void stop() { ATOMIC_STORE(&is_started_, false); }
   void destroy();
   bool is_started() const { return ATOMIC_LOAD(&is_started_); }
-  int get_reserved_size(int64_t &size) const override;
+  int get_reserved_size(int64_t &size) const;
   int commit_bootstrap();
   int write_resources(const share::ObServerRuntimeConfig &config);
   int update_ls_meta(const ObLSMeta &meta);

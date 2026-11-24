@@ -230,7 +230,6 @@ SQL_INTERFACE_CLOSURE_HEADERS = [
     "engine/ob_des_exec_context.h",
     "engine/ob_engine_op_traits.h",
     "engine/ob_exec_feedback_info.h",
-    "engine/ob_io_event_observer.h",
     "engine/ob_operator_reg.h",
     "engine/ob_phy_operator_type.h",
     "engine/ob_physical_plan_ctx.h",

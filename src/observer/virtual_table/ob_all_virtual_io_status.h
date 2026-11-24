@@ -20,8 +20,7 @@
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
-#include "share/io/ob_io_calibration.h"
-#include "share/io/ob_io_struct.h"
+#include "share/io_request.h"
 namespace oceanbase
 {
 namespace observer
@@ -41,162 +40,35 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualIOStatusIterator);
 };
 
-class ObAllVirtualIOCalibrationStatus : public ObAllVirtualIOStatusIterator
+class ObAllVirtualIOStat : public ObAllVirtualIOStatusIterator
 {
 public:
-  ObAllVirtualIOCalibrationStatus();
-  virtual ~ObAllVirtualIOCalibrationStatus();
+  ObAllVirtualIOStat();
   int init(const common::ObAddr &addr);
   virtual void reset() override;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
 private:
   enum COLUMN
   {
-        STORAGE_NAME = common::OB_APP_MIN_COLUMN_ID,
-    STATUS,
-    START_TIME,
-    FINISH_TIME,
-  };
-  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualIOCalibrationStatus);
-private:
-  bool is_end_;
-  int64_t start_ts_;
-  int64_t finish_ts_;
-  int ret_code_;
-};
-
-class ObAllVirtualIOBenchmark : public ObAllVirtualIOStatusIterator
-{
-public:
-  ObAllVirtualIOBenchmark();
-  virtual ~ObAllVirtualIOBenchmark();
-  int init(const common::ObAddr &addr);
-  virtual void reset() override;
-  virtual int inner_get_next_row(common::ObNewRow *&row) override;
-private:
-  enum COLUMN
-  {
-        STORAGE_NAME = common::OB_APP_MIN_COLUMN_ID,
+    MODULE_ID = common::OB_APP_MIN_COLUMN_ID,
     MODE,
     SIZE,
     IOPS,
     MBPS,
-    LATENCY,
-  };
-  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualIOBenchmark);
-private:
-  common::ObIOAbility io_ability_;
-  int64_t mode_pos_;
-  int64_t size_pos_;
-};
-
-class ObAllVirtualIOQuota : public ObAllVirtualIOStatusIterator
-{
-public:
-  ObAllVirtualIOQuota();
-  virtual ~ObAllVirtualIOQuota();
-  int init(const common::ObAddr &addr);
-  int record_user_group(ObIOUsage &io_usage, const ObIOServiceConfig &io_config);
-  int record_sys_group(ObIOUsage &sys_io_usage);
-  virtual void reset() override;
-  virtual int inner_get_next_row(common::ObNewRow *&row) override;
-private:
-  enum COLUMN
-  {
-        GROUP_ID = common::OB_APP_MIN_COLUMN_ID,
-    MODE,
-    SIZE,
-    MIN_IOPS,
-    MAX_IOPS,
-    REAL_IOPS,
-    MIN_MBPS,
-    MAX_MBPS,
-    REAL_MBPS,
-    SCHEDULE_US,
-    IO_DELAY_US,
     TOTAL_US
   };
-  struct QuotaInfo
+  struct IOStat
   {
-  public:
-    QuotaInfo();
-    ~QuotaInfo();
-    TO_STRING_KV(K(group_id_), K(group_mode_), K(size_), K(real_iops_), K(min_iops_), K(max_iops_), K(schedule_us_), K(io_delay_us_), K(total_us_));
-  public:
-    uint64_t group_id_;
-    common::ObIOGroupMode group_mode_;
-    int64_t size_;
-    int64_t real_iops_;
-    int64_t min_iops_;
-    int64_t max_iops_;
-    int64_t schedule_us_;
-    int64_t io_delay_us_;
-    int64_t total_us_;
+    uint64_t module_id_ = 0;
+    common::ObIOMode mode_ = common::ObIOMode::READ;
+    int64_t size_ = 0;
+    int64_t iops_ = 0;
+    int64_t total_us_ = 0;
   };
-  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualIOQuota);
-private:
-  ObArray<QuotaInfo> quota_infos_;
-  int64_t quota_pos_;
+  ObArray<IOStat> stats_;
+  int64_t position_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualIOStat);
 };
-
-const int64_t GroupIoStatusStringLength = 128;
-class ObAllVirtualGroupIOStat : public ObAllVirtualIOStatusIterator
-{
-public:
-  ObAllVirtualGroupIOStat();
-  virtual ~ObAllVirtualGroupIOStat();
-  virtual void reset() override;
-  virtual int inner_get_next_row(common::ObNewRow *&row) override;
-  int init(const common::ObAddr &addr);
-  int record_user_group_io_status(ObIOService *io_manager);
-  int record_sys_group_io_status(ObIOService *io_manager);
-private:
-  enum COLUMN
-  {
-        GROUP_ID = common::OB_APP_MIN_COLUMN_ID,
-    GROUP_NAME,
-    MODE,
-    MIN_IOPS,
-    MAX_IOPS,
-    REAL_IOPS,
-    NORM_IOPS,
-  };
-  struct GroupIoStat
-  {
-  public:
-    GroupIoStat() {
-      reset();
-    }
-    ~GroupIoStat() {
-      reset();
-    }
-    void reset() {
-      group_id_ = 0;
-      mode_ = common::ObIOMode::MAX_MODE;
-      min_iops_ = 0;
-      max_iops_ = 0;
-      norm_iops_ = 0;
-      real_iops_ = 0;
-      memset(group_name_, 0, sizeof(group_name_));
-    }
-    TO_STRING_KV(K(group_id_), K(mode_), K_(group_name),
-                 K(min_iops_), K(max_iops_), K_(norm_iops), K_(real_iops));
-  public:
-    uint64_t group_id_;
-    common::ObIOMode mode_;
-    char group_name_[GroupIoStatusStringLength];
-    int64_t min_iops_;
-    int64_t max_iops_;
-    int64_t norm_iops_;
-    int64_t real_iops_;
-  };
-  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualGroupIOStat);
-private:
-  ObArray<GroupIoStat> group_io_stats_;
-  int64_t group_io_stats_pos_;
-};
-
-
 
 }// namespace observer
 }// namespace oceanbase

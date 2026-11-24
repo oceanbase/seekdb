@@ -19,7 +19,7 @@
 
 #include <cstdint>
 #include "lib/utility/ob_print_utils.h"
-#include "share/io/ob_io_define.h"
+#include "share/io_request.h"
 
 namespace oceanbase
 {

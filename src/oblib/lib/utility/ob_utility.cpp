@@ -15,7 +15,6 @@
  */
 
 #include "ob_utility.h"
-#include "lib/utility/ob_platform_io.h"
 #ifdef _WIN32
 #include <windows.h>
 #ifdef ERROR
@@ -47,65 +46,6 @@ int64_t upper_align(int64_t input, int64_t align)
 };
 
 
-int64_t ob_pwrite(const int fd, const char *buf, const int64_t count, const int64_t offset)
-{
-  int64_t length2write = count;
-  int64_t offset2write = 0;
-  int64_t write_ret = 0;
-  while (length2write > 0) {
-    write_ret = ob_pwrite_fd(fd, (char *)buf + offset2write, length2write,
-                             offset + offset2write);
-    if (0 >= write_ret) {
-      if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
-        continue;
-      } else {
-        offset2write = -1;
-        break;
-      }
-    } else {
-      length2write -= write_ret;
-      offset2write += write_ret;
-    }
-  }
-  return offset2write;
-}
-
-int64_t ob_pread(const int fd, char *buf, const int64_t count, const int64_t offset)
-{
-  int64_t length2read = count;
-  int64_t offset2read = 0;
-  int64_t read_ret = 0;
-  while (length2read > 0) {
-    for (int64_t retry = 0; retry < 3;) {
-      read_ret = ob_pread_fd(fd, (char *)buf + offset2read, length2read,
-                             offset + offset2read);
-      if (0 > read_ret) {
-        if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
-          continue;
-        }
-        retry++;
-      } else {
-        break;
-      }
-    }
-    if (0 >= read_ret) {
-      if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
-        continue;
-      }
-      if (0 > read_ret) {
-        offset2read = -1;
-      }
-      break;
-    }
-    offset2read += read_ret;
-    if (length2read > read_ret) {
-      length2read -= read_ret;
-    } else {
-      break;
-    }
-  }
-  return offset2read;
-}
 
 int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_name)
 {

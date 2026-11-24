@@ -22,16 +22,12 @@
 #include "palf_env_impl.h"
 namespace oceanbase
 {
+namespace storage_io { struct NamedOwnerHandle; }
 namespace commom
 {
 class ObAddr;
-class ObIOManager;
 }
 
-namespace share
-{
-class ObLocalDevice;
-}
 namespace palf
 {
 class PalfHandle;
@@ -54,8 +50,8 @@ public:
                              common::ObILogAllocator *alloc_mgr,
                              ILogBlockPool *log_block_pool,
                              PalfMonitorCb *monitor,
-                             common::ObIODevice *log_local_device,
-                             common::ObIOManager *io_manager,
+                             const storage_io::NamedOwnerHandle *log_files,
+
                              PalfEnv *&palf_env);
   // static interface
   // destroy the palf env, and set "palf_env" to NULL.

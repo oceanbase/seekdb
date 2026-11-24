@@ -128,8 +128,6 @@ const uint64_t PALF_INITIAL_LSN_VAL = 0;
 // =========== LSN end ==============
 
 // =========== Disk io start ==================
-constexpr int LOG_READ_FLAG = O_RDONLY | O_DIRECT | O_SYNC;
-constexpr int LOG_WRITE_FLAG = O_RDWR | O_DIRECT | O_SYNC;
 constexpr mode_t FILE_OPEN_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 // =========== Disk io end ====================
 

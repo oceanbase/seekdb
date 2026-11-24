@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_MACRO_BLOCK_WRITER_H_
 #define OCEANBASE_STORAGE_BLOCKSSTABLE_MACRO_BLOCK_WRITER_H_
-#include "share/io/ob_io_manager.h"
+#include "share/io_request.h"
 #include "storage/blocksstable/ob_block_writer_concurrent_guard.h"
 #include "encoding/ob_micro_block_decoder.h"
 #include "encoding/ob_micro_block_encoder.h"
@@ -151,18 +151,17 @@ private:
     virtual void reset();
     virtual int write_disk(ObMacroBlock& macro_block, const bool is_close_flush) override;
     OB_INLINE void set_writer_and_handles(ObMacroBlockWriter &macro_block_writer, 
-                                          ObStorageObjectHandle *macro_handle, 
-                                          ObIODevice *device_handle) 
+                                          ObStorageObjectHandle *macro_handle)
     {
       macro_block_writer_ = &macro_block_writer;
       macro_handle_ = macro_handle;
-      device_handle_ = device_handle;
+
     }
   protected:
     ObMacroBlockWriter *macro_block_writer_;
   private:
     ObStorageObjectHandle *macro_handle_;
-    ObIODevice *device_handle_;
+
   };
 
   class ObSmallSStableMacroBlockFlusher : public ObDefaultMacroBlockFlusher
@@ -189,8 +188,7 @@ public:
       const blocksstable::ObMacroSeqParam &macro_seq_param,
       const share::ObPreWarmerParam &pre_warm_param,
       ObIMacroBlockFlushCallback *callback = nullptr,
-      ObIMacroBlockValidator *validator = nullptr,
-      ObIODevice *device_handle = nullptr);
+      ObIMacroBlockValidator *validator = nullptr);
   virtual int append_macro_block(const ObMacroBlockDesc &macro_desc,
                                  const ObMicroBlockData *micro_block_data);
   virtual int append_micro_block(const ObMicroBlock &micro_block, const ObMacroBlockDesc *curr_macro_desc = nullptr);
@@ -233,8 +231,7 @@ protected:
       const share::ObPreWarmerParam &pre_warm_param,
       const bool cluster_micro_index_on_flush,
       ObIMacroBlockFlushCallback *callback,
-      ObIMacroBlockValidator *validator,
-      ObIODevice *device_handle);
+      ObIMacroBlockValidator *validator);
 
 private:
   void inner_reset();
@@ -283,7 +280,7 @@ private:
   int wait_io_finish(ObStorageObjectHandle &macro_handle, ObMacroBlock *macro_block);
   int wait_io_and_alloc_block();
   int alloc_block();
-  int alloc_block_from_device(ObStorageObjectHandle &macro_handle);
+
   int check_write_complete(const MacroBlockId &macro_block_id);
   int save_last_key(const ObDatumRow &row);
   int save_last_key(const ObDatumRowkey &last_key);
@@ -336,11 +333,10 @@ private:
   blocksstable::ObDatumRow datum_row_;
   ObSkipIndexDataAggregator *data_aggregator_;
   ObIMacroBlockFlushCallback *callback_;
-  ObIODevice *device_handle_;
+
   ObDataIndexBlockBuilder *builder_;
   ObMicroBlockAdaptiveSplitter micro_block_adaptive_splitter_;
   share::ObIPreWarmer *pre_warmer_;
-  char *io_buf_;
   ObIMacroBlockValidator *validator_;
   ObDefaultMacroBlockFlusher default_macro_flusher_;
   ObSmallSStableMacroBlockFlusher small_sstable_macro_flusher_;

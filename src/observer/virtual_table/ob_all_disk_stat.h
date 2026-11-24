@@ -46,8 +46,6 @@ private:
         TOTAL_SIZE = common::OB_APP_MIN_COLUMN_ID,
     USED_SIZE,
     FREE_SIZE,
-    IS_DISK_VALID,
-    DISK_ERROR_BEGIN_TS,
     ALLOCATED_SIZE
   };
   common::ObAddr *addr_;

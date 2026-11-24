@@ -130,7 +130,6 @@ private:
   common::ObArenaAllocator allocator_;
   ObSSTableSecMetaIterator second_meta_iterator_;
   common::ObArenaAllocator io_allocator_;
-  char *io_buf_[MAX_PREFETCH_MACRO_BLOCK_NUM];
   ObSelfBufferWriter meta_row_buf_; // buffer for macro meta row (ObDatumRow)
   DISALLOW_COPY_AND_ASSIGN(ObCopyMacroBlockObProducer);
 };

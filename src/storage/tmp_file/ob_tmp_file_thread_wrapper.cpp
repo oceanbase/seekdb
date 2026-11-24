@@ -19,7 +19,7 @@
 #include "ob_tmp_file_thread_wrapper.h"
 #include "lib/thread/ob_thread_name.h"
 #include "storage/meta_store/storage_meta_service.h"
-#include "storage/tmp_file/ob_sn_tmp_file_manager.h"
+#include "storage/tmp_file/ob_tmp_file_manager.h"
 
 namespace oceanbase
 {
