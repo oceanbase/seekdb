@@ -66,7 +66,7 @@ public:
         scan_column_ids_(),
         embedding_vids_(),
         delete_vids_(),
-        trailing_delete_vid_(OB_INVALID_ID),
+        pending_scan_iter_(),
         embedding_task_(nullptr),
         index_id_column_ids_(),
         embedded_table_column_ids_(),
@@ -96,7 +96,7 @@ public:
   ObSEArray<uint64_t, 4> scan_column_ids_; // [vid][type][vector][chunk][other key columns]
   ObSEArray<int64_t, 4> embedding_vids_;
   ObSEArray<int64_t, 4> delete_vids_;
-  uint64_t trailing_delete_vid_;
+  storage::ObValueRowIterator pending_scan_iter_;
   ObEmbeddingTask *embedding_task_;
   ObSEArray<uint64_t, 4> index_id_column_ids_;
   ObSEArray<uint64_t, 4> embedded_table_column_ids_;
