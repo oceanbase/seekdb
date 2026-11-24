@@ -1710,15 +1710,15 @@ int ObSql::check_read_only_privilege(ParsedSql &parsed,
                                      ObSchemaGetterGuard &schema_guard,
                                      ObSqlTraits &sql_traits)
 {
-  int ret = OB_SUCCESS;
   bool read_only = false;
   ObPhysicalPlanCtx *pctx = exec_ctx.get_physical_plan_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
-  parsed.sql_traits(sql_traits);
+  int ret = ObSQLUtils::get_sql_traits(parsed, sql_traits);
   const bool is_write_enabled = share::server_is_write_enabled();
   const bool is_standby_control_stmt = !is_write_enabled
       && sql_traits.allowed_on_standby_;
-  if (OB_ISNULL(pctx) || OB_ISNULL(session)) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(pctx) || OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!(session->is_inner() && !session->is_user_session())
              && !is_write_enabled
