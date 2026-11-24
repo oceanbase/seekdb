@@ -31,7 +31,6 @@ namespace oceanbase
 namespace common
 {
 class ObAddr;
-class ObIOManager;
 class ObILogAllocator;
 }
 
@@ -66,7 +65,6 @@ public:
       const char *clog_dir,
       const common::ObAddr &self,
       ObILogStorage *log_storage,
-      common::ObIOManager *io_manager,
       bool is_shared_storage_mode,
       int64_t replay_thread_quota,
       const ObLogRuntimeConfig &runtime_config);
@@ -81,7 +79,6 @@ public:
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,
            ObILogStorage *log_storage,
-           common::ObIOManager *io_manager,
            bool is_shared_storage_mode,
            int64_t replay_thread_quota,
            const ObLogRuntimeConfig &runtime_config);
