@@ -92,6 +92,19 @@ Write review comments in English.
   severity criteria to concrete test gaps.
 - **Build and CI:** Review build or workflow changes only for correctness,
   security, portability, or reliability problems, not stylistic preferences.
+- **Third-party dependency and license changes:** When a diff adds, upgrades,
+  removes, vendors, or changes how a third-party dependency is built, linked,
+  or packaged, review the license and redistribution impact in addition to
+  build and runtime behavior. Verify the exact version and source, whether the
+  component is shipped, build-only, or separately installed, its license and
+  notice text, modification status, and any attribution, source, relink, or
+  replacement obligations. Check that shipped dependencies have a complete
+  component record and license bundle, and that package metadata and the final
+  artifact contain the required materials. Do not treat build success, an SBOM,
+  or a package `License` field as proof of compliance. An unknown or
+  incompatible license, missing required notice/source/relink material, or
+  inaccurate package inventory is a **Major** finding; make it a **Blocker**
+  when the change would cause an unlawful or prohibited distribution.
 
 ## Security Review
 
@@ -150,7 +163,8 @@ Do not report findings whose only concern is:
   version behavior.
 - Formatting, brace style, ordinary naming preferences, or optional refactors.
 - Vendor code, generated output, or generated-file style unless the change
-  breaks the current source-of-truth workflow or runtime behavior.
+  breaks the current source-of-truth workflow or runtime behavior. Changes that
+  alter third-party license or redistribution obligations remain in scope.
 - Documentation polish that does not change or misrepresent user-visible
   behavior.
 
