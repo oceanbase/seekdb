@@ -2,7 +2,7 @@
 """Generate and stage the redistribution compliance bundle.
 
 The component inventory is maintained in ``compliance/components.json``.  The
-original license texts are kept under ``licenses/`` next to the project source.
+original license texts are kept under ``compliance/licenses/``.
 This module renders the release-specific inventory and copies the complete
 bundle into native package payloads and the portable binary distribution.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "compliance" / "components.json"
-LICENSES = ROOT / "licenses"
+LICENSES = ROOT / "compliance" / "licenses"
 VERSION_FILE = ROOT / "bazel" / "compile_config.bzl"
 
 

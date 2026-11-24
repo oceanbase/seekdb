@@ -5,8 +5,7 @@ inventory.  Each component records its exact version when known, upstream
 source, packaging form, license, modification state, license texts, and
 redistribution requirement.
 
-Original license and notice texts are kept under `licenses/` at the repository
-root.  Do not edit upstream text; update the component record and replace the
+Original license and notice texts are kept under `compliance/licenses/`.  Do not edit upstream text; update the component record and replace the
 file only when the dependency version changes.
 
 Generate and validate the bundle with:

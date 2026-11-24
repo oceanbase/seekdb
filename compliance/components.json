@@ -21,7 +21,7 @@
       "license": "BSD-3-Clause",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/antlr4-LICENSE.txt"
+        "compliance/licenses/antlr4/unspecified/antlr4-LICENSE.txt"
       ],
       "redistribution": "Retain the copyright, conditions, and disclaimer.",
       "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/targets.bzl; licenses/antlr4-LICENSE.txt",
@@ -37,7 +37,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-chrono-0.4.45.txt"
+        "compliance/licenses/chrono/0.4.45/rust-chrono-0.4.45.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-chrono-0.4.45.txt",
@@ -53,7 +53,7 @@
       "license": "BSD-2-Clause",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/cpuinfo-LICENSE.txt"
+        "compliance/licenses/cpuinfo/unspecified/cpuinfo-LICENSE.txt"
       ],
       "redistribution": "Retain the copyright, conditions, and disclaimer.",
       "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/repositories.bzl; licenses/cpuinfo-LICENSE.txt",
@@ -69,7 +69,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-cxx-1.0.202.txt"
+        "compliance/licenses/cxx/1.0.202/rust-cxx-1.0.202.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-cxx-1.0.202.txt",
@@ -85,7 +85,7 @@
       "license": "Apache-2.0",
       "modified": "Source-build Bazel metadata only; el8 binary unspecified",
       "license_files": [
-        "licenses/abseil-LICENSE.txt"
+        "compliance/licenses/devdeps-abseil-cpp/20211102.0/abseil-LICENSE.txt"
       ],
       "redistribution": "Retain the license and applicable notices; mark any modified files.",
       "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; licenses/abseil-LICENSE.txt",
@@ -101,8 +101,8 @@
       "license": "BSL-1.0",
       "modified": "Yes: documented source copies and build patches",
       "license_files": [
-        "licenses/boost-geometry-1.74-LICENSE_1_0.txt",
-        "licenses/boost-geometry-notices.txt"
+        "compliance/licenses/devdeps-boost/1.74.0/boost-geometry-1.74-LICENSE_1_0.txt",
+        "compliance/licenses/devdeps-boost/1.74.0/boost-geometry-notices.txt"
       ],
       "redistribution": "Retain the license and all copyright/modification notices; no source or relink offer is required for unmodified binaries.",
       "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; deps/init/wasm/dependencies.json; the two listed notice files",
@@ -118,7 +118,7 @@
       "license": "LGPL-2.1-or-later",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/libaio-COPYING.txt"
+        "compliance/licenses/devdeps-libaio/0.3.112/libaio-COPYING.txt"
       ],
       "redistribution": "Retain the LGPL-2.1 text. Provide the corresponding libaio source, any patches, and a verified relink/replacement mechanism when bundling the library; see SOURCE-OFFER.txt.",
       "evidence": "el8 manifest; package/package.py; bazel/third_party/targets.bzl; upstream 0.3.112 src/libaio.h and COPYING",
@@ -135,7 +135,7 @@
       "license": "curl",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/curl-COPYING.txt"
+        "compliance/licenses/devdeps-libcurl-static/8.12.1/curl-COPYING.txt"
       ],
       "redistribution": "Retain the curl copyright and permission notice; review any bundled documentation and third-party notices for the exact build.",
       "evidence": "deps/init/oceanbase.el8.x86_64.deps; bazel/third_party/targets.bzl",
@@ -151,7 +151,7 @@
       "license": "OpenSSL and SSLeay",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/openssl-LICENSE.txt"
+        "compliance/licenses/devdeps-openssl-static/1.1.1u/openssl-LICENSE.txt"
       ],
       "redistribution": "Retain the OpenSSL and original SSLeay license texts and the required acknowledgments.",
       "evidence": "el8 manifest; deps/init/wasm/dependencies.json; bazel/third_party/targets.bzl",
@@ -167,7 +167,7 @@
       "license": "Apache-2.0 OR MIT",
       "modified": "No source patch recorded",
       "license_files": [
-        "licenses/croaring-LICENSE.txt"
+        "compliance/licenses/devdeps-roaringbitmap-croaring/3.0.0/croaring-LICENSE.txt"
       ],
       "redistribution": "Retain the supplied dual-license text and copyrights; no source or relink offer is required for unmodified binaries.",
       "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; licenses/croaring-LICENSE.txt",
@@ -183,7 +183,7 @@
       "license": "Apache-2.0",
       "modified": "Yes for patched repository-source builds; el8 binary unspecified",
       "license_files": [
-        "licenses/vsag-LICENSE.txt"
+        "compliance/licenses/devdeps-vsag-abiv1/1.1.0/vsag-LICENSE.txt"
       ],
       "redistribution": "Retain the license and modification notices. The RPM/source-revision correspondence is unresolved.",
       "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; licenses/vsag-LICENSE.txt",
@@ -199,7 +199,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-fancy-regex-0.20.0.txt"
+        "compliance/licenses/fancy-regex/0.20.0/rust-fancy-regex-0.20.0.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-fancy-regex-0.20.0.txt",
@@ -215,7 +215,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-fast-float2-0.2.4.txt"
+        "compliance/licenses/fast-float2/0.2.4/rust-fast-float2-0.2.4.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-fast-float2-0.2.4.txt",
@@ -231,7 +231,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/fmt-LICENSE.txt"
+        "compliance/licenses/fmt/unspecified/fmt-LICENSE.txt"
       ],
       "redistribution": "Retain the copyright and permission notice.",
       "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/targets.bzl; licenses/fmt-LICENSE.txt",
@@ -247,7 +247,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-getrandom-0.4.3.txt"
+        "compliance/licenses/getrandom/0.4.3/rust-getrandom-0.4.3.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices. Only the version with a staged text is listed here.",
       "evidence": "Cargo.lock; licenses/rust-getrandom-0.4.3.txt",
@@ -263,7 +263,7 @@
       "license": "Unlicense OR MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-globset-0.4.18.txt"
+        "compliance/licenses/globset/0.4.18/rust-globset-0.4.18.txt"
       ],
       "redistribution": "Retain the supplied texts; using the MIT option requires its copyright and permission notice.",
       "evidence": "Cargo.lock; licenses/rust-globset-0.4.18.txt",
@@ -280,7 +280,7 @@
       "modified": "unspecified",
       "license_files": [
         "NOTICE",
-        "licenses/http_parser.txt"
+        "compliance/licenses/http-parser/unspecified/http_parser.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "NOTICE http_parser section; licenses/http_parser.txt",
@@ -296,7 +296,7 @@
       "license": "unspecified (public-domain dedication)",
       "modified": "unspecified",
       "license_files": [
-        "licenses/timezone-public-domain.txt"
+        "compliance/licenses/iana-timezone-derived-c-sources/unspecified/timezone-public-domain.txt"
       ],
       "redistribution": "Preserve the public-domain and contributor notices; no SPDX identifier is asserted for this dedication.",
       "evidence": "licenses/timezone-public-domain.txt; src/oblib/common/timezone/localtime.c, private.h, and tzfile.h",
@@ -312,7 +312,7 @@
       "license": "BSD-3-Clause",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/lapack-LICENSE.txt"
+        "compliance/licenses/lapack/unspecified/lapack-LICENSE.txt"
       ],
       "redistribution": "Retain the copyright, conditions, and disclaimer.",
       "evidence": "bazel/third_party/repositories.bzl; licenses/lapack-LICENSE.txt",
@@ -328,7 +328,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-libc-0.2.189.txt"
+        "compliance/licenses/libc/0.2.189/rust-libc-0.2.189.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-libc-0.2.189.txt",
@@ -345,7 +345,7 @@
       "modified": "unspecified",
       "license_files": [
         "NOTICE",
-        "licenses/libev.txt"
+        "compliance/licenses/libev/unspecified/libev.txt"
       ],
       "redistribution": "This distribution retains the BSD option. Reproduce the copyright, conditions, and disclaimer; no source offer is required under that option.",
       "evidence": "NOTICE libev section; licenses/libev.txt",
@@ -362,7 +362,7 @@
       "modified": "No local patch recorded",
       "license_files": [
         "NOTICE",
-        "licenses/libm.txt"
+        "compliance/licenses/libm/0.2.16/libm.txt"
       ],
       "redistribution": "Retain the copyright and permission notice, including the musl-derived attribution.",
       "evidence": "Cargo.lock; NOTICE libm section; licenses/libm.txt",
@@ -378,7 +378,7 @@
       "license": "Apache-2.0 WITH LLVM-exception",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/openmp-LICENSE.TXT.txt"
+        "compliance/licenses/llvm-openmp/unspecified/openmp-LICENSE.TXT.txt"
       ],
       "redistribution": "Retain the Apache-2.0 and LLVM exception notices.",
       "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/repositories.bzl; licenses/openmp-LICENSE.TXT.txt",
@@ -394,7 +394,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-log-0.4.34.txt"
+        "compliance/licenses/log/0.4.34/rust-log-0.4.34.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-log-0.4.34.txt",
@@ -410,7 +410,7 @@
       "license": "Unlicense OR MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-memchr-2.8.3.txt"
+        "compliance/licenses/memchr/2.8.3/rust-memchr-2.8.3.txt"
       ],
       "redistribution": "Retain the supplied texts; using the MIT option requires its copyright and permission notice.",
       "evidence": "Cargo.lock; licenses/rust-memchr-2.8.3.txt",
@@ -426,7 +426,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-mio-1.2.3.txt"
+        "compliance/licenses/mio/1.2.3/rust-mio-1.2.3.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-mio-1.2.3.txt",
@@ -442,7 +442,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/nlohmann-json-LICENSE.MIT.txt"
+        "compliance/licenses/nlohmann-json/v3.11.3/nlohmann-json-LICENSE.MIT.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "bazel/sdk_sources/dependencies.json; licenses/nlohmann-json-LICENSE.MIT.txt",
@@ -458,7 +458,7 @@
       "license": "BSD-3-Clause",
       "modified": "Yes for patched repository-source builds",
       "license_files": [
-        "licenses/openblas-LICENSE.txt"
+        "compliance/licenses/openblas/0.3.23/openblas-LICENSE.txt"
       ],
       "redistribution": "Retain the copyright, conditions, disclaimer, and non-endorsement term; source patches are recorded in the source repository.",
       "evidence": "bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; licenses/openblas-LICENSE.txt",
@@ -474,7 +474,7 @@
       "license": "Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-prost-0.14.3.txt"
+        "compliance/licenses/prost/0.14.3/rust-prost-0.14.3.txt"
       ],
       "redistribution": "Retain the license and applicable notices; mark modified files.",
       "evidence": "Cargo.lock; licenses/rust-prost-0.14.3.txt",
@@ -490,7 +490,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-quick-xml-0.41.0.txt"
+        "compliance/licenses/quick-xml/0.41.0/rust-quick-xml-0.41.0.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-quick-xml-0.41.0.txt",
@@ -506,7 +506,7 @@
       "license": "Apache-2.0 AND ISC",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-ring-0.17.14.txt"
+        "compliance/licenses/ring/0.17.14/rust-ring-0.17.14.txt"
       ],
       "redistribution": "Retain the complete file, including BoringSSL, once_cell, and fiat notices; Apache and ISC obligations are cumulative for the included code.",
       "evidence": "Cargo.lock; licenses/rust-ring-0.17.14.txt",
@@ -522,7 +522,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/robin-map-LICENSE.txt"
+        "compliance/licenses/robin-map/v1.4.0/robin-map-LICENSE.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "bazel/sdk_sources/dependencies.json; licenses/robin-map-LICENSE.txt",
@@ -538,7 +538,7 @@
       "license": "Apache-2.0 OR ISC OR MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-rustls-0.23.46.txt"
+        "compliance/licenses/rustls/0.23.46/rust-rustls-0.23.46.txt"
       ],
       "redistribution": "Retain the supplied alternative-license texts and the notice for the selected option.",
       "evidence": "Cargo.lock; licenses/rust-rustls-0.23.46.txt",
@@ -554,7 +554,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-rustls-pki-types-1.15.1.txt"
+        "compliance/licenses/rustls-pki-types/1.15.1/rust-rustls-pki-types-1.15.1.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-rustls-pki-types-1.15.1.txt",
@@ -570,7 +570,7 @@
       "license": "Apache-2.0 OR BSL-1.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-ryu-1.0.23.txt"
+        "compliance/licenses/ryu/1.0.23/rust-ryu-1.0.23.txt"
       ],
       "redistribution": "Retain the supplied alternative-license texts and applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-ryu-1.0.23.txt",
@@ -586,7 +586,7 @@
       "license": "Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-s2rst-0.5.1.txt"
+        "compliance/licenses/s2rst/0.5.1/rust-s2rst-0.5.1.txt"
       ],
       "redistribution": "Retain both the license and the embedded NOTICE, including Google S2 attribution; mark modified files.",
       "evidence": "Cargo.lock; licenses/rust-s2rst-0.5.1.txt",
@@ -602,7 +602,7 @@
       "license": "Apache-2.0 AND BSD-2-Clause",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-seekdb-jemalloc-sys-0.2.3+5.3.1.txt"
+        "compliance/licenses/seekdb-jemalloc-sys/0.2.3+5.3.1/rust-seekdb-jemalloc-sys-0.2.3+5.3.1.txt"
       ],
       "redistribution": "Retain both the crate Apache text and vendored jemalloc BSD copyright/conditions/disclaimer.",
       "evidence": "deps/external/Cargo.lock; MODULE.bazel; licenses/rust-seekdb-jemalloc-sys-0.2.3+5.3.1.txt",
@@ -618,7 +618,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-serde-1.0.229.txt"
+        "compliance/licenses/serde/1.0.229/rust-serde-1.0.229.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-serde-1.0.229.txt",
@@ -635,7 +635,7 @@
       "modified": "No local patch recorded",
       "license_files": [
         "NOTICE",
-        "licenses/serde_json.txt"
+        "compliance/licenses/serde-json/1.0.151/serde_json.txt"
       ],
       "redistribution": "Retain the supplied copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; NOTICE serde_json section; licenses/serde_json.txt",
@@ -651,7 +651,7 @@
       "license": "Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-simsimd-6.5.16.txt"
+        "compliance/licenses/simsimd/6.5.16/rust-simsimd-6.5.16.txt"
       ],
       "redistribution": "Retain the license and applicable notices; mark modified files.",
       "evidence": "Cargo.lock; licenses/rust-simsimd-6.5.16.txt",
@@ -667,7 +667,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-slab-0.4.12.txt"
+        "compliance/licenses/slab/0.4.12/rust-slab-0.4.12.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-slab-0.4.12.txt",
@@ -684,7 +684,7 @@
       "modified": "unspecified",
       "license_files": [
         "NOTICE",
-        "licenses/snappy.txt"
+        "compliance/licenses/snappy/unspecified/snappy.txt"
       ],
       "redistribution": "Reproduce the copyright, conditions, disclaimer, and non-endorsement term.",
       "evidence": "NOTICE snappy section; licenses/snappy.txt",
@@ -700,7 +700,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-socket2-0.6.5.txt"
+        "compliance/licenses/socket2/0.6.5/rust-socket2-0.6.5.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-socket2-0.6.5.txt",
@@ -716,7 +716,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/spdlog-LICENSE.txt"
+        "compliance/licenses/spdlog/unspecified/spdlog-LICENSE.txt"
       ],
       "redistribution": "Retain the copyright and permission notice.",
       "evidence": "licenses/spdlog-LICENSE.txt",
@@ -732,7 +732,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-spdlog-rs-0.5.3.txt"
+        "compliance/licenses/spdlog-rs/0.5.3/rust-spdlog-rs-0.5.3.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-spdlog-rs-0.5.3.txt",
@@ -748,7 +748,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/thread-pool-LICENSE.txt"
+        "compliance/licenses/thread-pool/unspecified/thread-pool-LICENSE.txt"
       ],
       "redistribution": "Retain the copyright and permission notice.",
       "evidence": "licenses/thread-pool-LICENSE.txt",
@@ -764,7 +764,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-tokio-1.52.3.txt"
+        "compliance/licenses/tokio/1.52.3/rust-tokio-1.52.3.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-tokio-1.52.3.txt",
@@ -780,7 +780,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-tokio-stream-0.1.18.txt"
+        "compliance/licenses/tokio-stream/0.1.18/rust-tokio-stream-0.1.18.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-tokio-stream-0.1.18.txt",
@@ -796,7 +796,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-tonic-0.14.6.txt"
+        "compliance/licenses/tonic/0.14.6/rust-tonic-0.14.6.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-tonic-0.14.6.txt",
@@ -812,7 +812,7 @@
       "license": "MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-tonic-prost-0.14.6.txt"
+        "compliance/licenses/tonic-prost/0.14.6/rust-tonic-prost-0.14.6.txt"
       ],
       "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; licenses/rust-tonic-prost-0.14.6.txt",
@@ -828,7 +828,7 @@
       "license": "Apache-2.0 OR MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-uuid-1.29.0.txt"
+        "compliance/licenses/uuid/1.29.0/rust-uuid-1.29.0.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-uuid-1.29.0.txt",
@@ -844,7 +844,7 @@
       "license": "Unlicense OR MIT",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-walkdir-2.5.0.txt"
+        "compliance/licenses/walkdir/2.5.0/rust-walkdir-2.5.0.txt"
       ],
       "redistribution": "Retain the supplied texts; using the MIT option requires its copyright and permission notice.",
       "evidence": "Cargo.lock; licenses/rust-walkdir-2.5.0.txt",
@@ -860,7 +860,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-windows-sys-0.61.2.txt"
+        "compliance/licenses/windows-sys/0.61.2/rust-windows-sys-0.61.2.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices. Only the version with a staged text is listed here.",
       "evidence": "Cargo.lock; licenses/rust-windows-sys-0.61.2.txt",
@@ -876,7 +876,7 @@
       "license": "MIT OR Apache-2.0",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-x509-parser-0.18.1.txt"
+        "compliance/licenses/x509-parser/0.18.1/rust-x509-parser-0.18.1.txt"
       ],
       "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
       "evidence": "Cargo.lock; licenses/rust-x509-parser-0.18.1.txt",
@@ -892,7 +892,7 @@
       "license": "BSD-2-Clause",
       "modified": "unspecified",
       "license_files": [
-        "licenses/xxhash-LICENSE.txt"
+        "compliance/licenses/xxhash/0.6.2/xxhash-LICENSE.txt"
       ],
       "redistribution": "Reproduce the copyright, conditions, and disclaimer; no source or relink offer is required for unmodified binaries.",
       "evidence": "src/oblib/lib/hash_func/xxhash.h version macros; licenses/xxhash-LICENSE.txt",
@@ -908,7 +908,7 @@
       "license": "Public domain and LGPL/GPL components; see COPYING",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/xz-COPYING.txt"
+        "compliance/licenses/xz-utils/unspecified/xz-COPYING.txt"
       ],
       "redistribution": "Retain the complete XZ licensing text and identify any LGPL/GPL components.",
       "evidence": "deps/init/*.deps; licenses/xz-COPYING.txt",
@@ -925,7 +925,7 @@
       "modified": "unspecified",
       "license_files": [
         "NOTICE",
-        "licenses/zlib.txt"
+        "compliance/licenses/zlib/unspecified/zlib.txt"
       ],
       "redistribution": "Retain the notice, do not misrepresent origin, and mark altered source versions.",
       "evidence": "NOTICE zlib section; licenses/zlib.txt",
@@ -941,7 +941,7 @@
       "license": "Zlib",
       "modified": "No local patch recorded",
       "license_files": [
-        "licenses/rust-zlib-rs-0.6.8.txt"
+        "compliance/licenses/zlib-rs/0.6.8/rust-zlib-rs-0.6.8.txt"
       ],
       "redistribution": "Retain the notice, do not misrepresent origin, and mark altered source versions.",
       "evidence": "Cargo.lock; licenses/rust-zlib-rs-0.6.8.txt",
@@ -958,7 +958,7 @@
       "modified": "No local patch recorded",
       "license_files": [
         "NOTICE",
-        "licenses/zmij.txt"
+        "compliance/licenses/zmij/1.0.23/zmij.txt"
       ],
       "redistribution": "Retain the supplied copyright and permission notice; no source or relink offer is required for unmodified binaries.",
       "evidence": "Cargo.lock; NOTICE zmij section; licenses/zmij.txt",
@@ -975,7 +975,7 @@
       "modified": "No local patch recorded",
       "license_files": [
         "NOTICE",
-        "licenses/zstd-safe.txt"
+        "compliance/licenses/zstd-safe/8.2.0/zstd-safe.txt"
       ],
       "redistribution": "Reproduce the copyright, conditions, disclaimer, and non-endorsement term.",
       "evidence": "Cargo.lock; NOTICE zstd-safe section; licenses/zstd-safe.txt",
@@ -992,7 +992,7 @@
       "modified": "No local patch recorded",
       "license_files": [
         "NOTICE",
-        "licenses/zstd-sys.txt"
+        "compliance/licenses/zstd-sys/2.1.2+zstd.1.5.7/zstd-sys.txt"
       ],
       "redistribution": "Reproduce the Meta copyright, conditions, disclaimer, and non-endorsement term.",
       "evidence": "Cargo.lock; NOTICE zstd-sys section; licenses/zstd-sys.txt",
