@@ -1,0 +1,9 @@
+/*
+** This file is in the public domain, so clarified as of
+** 1996-06-05 by Arthur David Olson.
+*/
+
+/*
+** Leap second handling from Bradley White.
+** POSIX-style TZ environment variable handling from Guy Harris.
+*/

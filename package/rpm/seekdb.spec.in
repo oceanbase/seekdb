@@ -42,4 +42,6 @@ cp -a @PAYLOAD@/. %{buildroot}/
 /usr/libexec/seekdb/import*.py
 /usr/libexec/seekdb/scripts
 /usr/libexec/seekdb/lib
-/usr/share/seekdb
+/usr/share/seekdb/admin
+/usr/share/seekdb/srs
+%license /usr/share/seekdb/licenses/*
