@@ -20,5 +20,3 @@ obdevtools-flex-2.5.35-20251219.tar.gz
 obshell-4.4.1.1-20260325.tgz
 
 [test-utils]
-obclient-2.2.13-1.darwin.arm64.tar.gz
-libobclient-2.2.13-1.darwin.arm64.tar.gz

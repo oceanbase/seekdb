@@ -8,7 +8,7 @@
 # 模板:
 # sleep 3;
 #let $__tenant_name__ = 'sys';
-# --source mysql_test/include/get_tenant_server.inc
+# --source include/get_tenant_server.inc
 # connect (conn1,$TE_SERVER_IP,root@tt1,,*NO-ONE*,$TE_SERVER_PORT);
 
 

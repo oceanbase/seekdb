@@ -1,0 +1,242 @@
+# owner: yibo.tyf
+# owner group: SQL3
+# tags: optimizer
+
+# Verify partition granule allocation for both branches of UNION ALL.
+--disable_query_log
+SET @saved_ob_enable_aggregation_pushdown = @@SESSION.ob_enable_aggregation_pushdown;
+SET SESSION ob_enable_aggregation_pushdown = true;
+--disable_warnings
+DROP TABLE IF EXISTS parallel_mvi_union_all;
+--enable_warnings
+CREATE TABLE parallel_mvi_union_all(id INT,p INT,c SMALLINT,j JSON,a ARRAY(INT),n ARRAY(ARRAY(ARRAY(ARRAY(SMALLINT)))),m MAP(INT,ARRAY(TINYINT)),PRIMARY KEY(id,p),INDEX mv((CAST(j->'$[*]' AS UNSIGNED ARRAY)))) PARTITION BY HASH(p) PARTITIONS 4;
+INSERT INTO parallel_mvi_union_all VALUES(1,1,1,'[1,2]',[1,2],[[[[1,2]]]],map(1,[1,2])),(2,2,2,'[1,2]',[1,2],[[[[1,2]]]],map(1,[1,2])),(3,3,3,'[1,2]',[3],[[[[3]]]],map(2,[3])),(4,4,4,'[1,2]',NULL,NULL,NULL),(5,5,5,'[1,2]',NULL,NULL,NULL);
+
+--echo partitioned_union_all_preserves_duplicates
+SELECT COUNT(*) AS rows_found,SUM(cardinality(a)) AS payload_sum FROM (SELECT /*+ parallel(2) DISTINCT_PUSHDOWN(@"SET$1") */ a FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ a FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>=0) AS q;
+
+# The branch tags verify that each multivalue-index scan contributes five rows.
+--echo partitioned_union_all_raw_scalar_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,c FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,c FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_union_all_raw_array_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,a FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,a FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+--echo partitioned_union_all_raw_map_both_branches
+--sorted_result
+SELECT /*+ parallel(2) */ 1 AS side,m FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>0 UNION ALL SELECT /*+ parallel(2) */ 2 AS side,m FROM parallel_mvi_union_all WHERE 1 MEMBER OF(j->'$[*]') AND c>=0;
+
+DROP TABLE parallel_mvi_union_all;
+SET SESSION ob_enable_aggregation_pushdown = @saved_ob_enable_aggregation_pushdown;
+SET @saved_ob_enable_aggregation_pushdown = NULL;
+--enable_query_log
+
+--source cases/executor/include/cleanup.inc
+--source cases/executor/include/load_data.inc
+
+--result_format 4
+--explain_protocol 2
+--disable_abort_on_error
+
+################################
+# basic
+# all kinds of receive.
+
+# fifo receive
+select b, sum(a) from t_h3_01_20 group by b having sum(a) between 5 and 16 order by b;
+select b, sum(a) from t_h5_09_28 group by b having sum(a) between 13 and 24 order by b desc;
+select b, sum(a) from t_r4_01_20 group by b having sum(a) between 5 and 16 order by b;
+select b, sum(a) from t_r5_09_28 group by b having sum(a) between 13 and 24 order by b desc;
+select b, sum(a) from t_h3_r4_01_20 group by b having sum(a) between 5 and 16 order by b;
+select b, sum(a) from t_h3_r5_09_28 group by b having sum(a) between 13 and 24 order by b desc;
+select b, sum(a) from t_h5_r4_01_20 group by b having sum(a) between 5 and 16 order by b;
+select b, sum(a) from t_h5_r5_09_28 group by b having sum(a) between 13 and 24 order by b desc;
+# task order receive
+select a, b from t_r4_01_20 where a between 5 and 16 order by a;
+select a, b from t_r4_09_28 where a between 13 and 24 order by a desc;
+select a, b from t_r5_01_20 where a between 5 and 16 order by a;
+select a, b from t_r5_09_28 where a between 13 and 24 order by a desc;
+select a, b from t_h3_r4_01_20 where a = 12 order by b;
+select a, b from t_h3_r5_09_28 where a = 12 order by b desc;
+select a, b from t_h5_r4_01_20 where a = 12 order by b;
+select a, b from t_h5_r5_09_28 where a = 12 order by b desc;
+# merge sort receive
+select a, b from t_h3_01_20 where a between 5 and 16 order by b;
+select a, b from t_h5_09_28 where a between 13 and 24 order by b desc;
+select a, b from t_r4_01_20 where a between 5 and 16 order by b;
+select a, b from t_r4_09_28 where a between 13 and 24 order by b desc;
+select a, b from t_h3_r4_01_20 where a between 5 and 16 order by b;
+select a, b from t_h3_r5_09_28 where a between 13 and 24 order by b desc;
+select a, b from t_h5_r4_01_20 where a between 5 and 16 order by b;
+select a, b from t_h5_r5_09_28 where a between 13 and 24 order by b desc;
+
+## check if result_type_classes of join_keys are the same when repart
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.aa;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.a;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.b;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.c;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.d;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.e;
+
+
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.aa;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.a;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.b;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.c;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.d;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.e;
+
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.a;
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.b;
+--sorted_result
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.c;
+--sorted_result
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.d;
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.e;
+
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.a;
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.b;
+--sorted_result
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.c;
+--sorted_result
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.d;
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.e;
+
+#bug:
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.a;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.aa;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.b;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.bb;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.c;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.d;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.e;
+
+
+select * from t_r4_int t1, t_r4_int as t2 where t1.a = t2.a;
+select * from t_r4_int t1, t_r4_date as t2 where t1.a = t2.c;
+select * from t_r4_int t1, t_r4_datetime as t2 where t1.a = t2.c;
+select * from t_r4_int t1, t_r4_timestamp as t2 where t1.a = t2.c;
+
+
+select * from t_r4_date t1, t_r4_int as t2 where t1.c = t2.a;
+select * from t_r4_date t1, t_r4_date as t2 where t1.c = t2.c;
+select * from t_r4_date t1, t_r4_datetime as t2 where t1.c = t2.c;
+select * from t_r4_date t1, t_r4_timestamp as t2 where t1.c = t2.c;
+
+select * from t_r4_datetime t1, t_r4_int as t2 where t1.c = t2.a;
+select * from t_r4_datetime t1, t_r4_date as t2 where t1.c = t2.c;
+select * from t_r4_datetime t1, t_r4_datetime as t2 where t1.c = t2.c;
+select * from t_r4_datetime t1, t_r4_timestamp as t2 where t1.c = t2.c;
+
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.aa;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.a;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.b;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.c;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.d;
+select * from t_h5_int t1, t_refered as t2 where t1.a = t2.e;
+
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.aa;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.a;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.b;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.c;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.d;
+select * from t_r4_int t1, t_refered as t2 where t1.a = t2.e;
+
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.a;
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.b;
+--sorted_result
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.c;
+--sorted_result
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.d;
+select * from t_r4_date t1, t_refered as t2 where t1.c = t2.e;
+
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.a;
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.b;
+--sorted_result
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.c;
+--sorted_result
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.d;
+select * from t_r4_datetime t1, t_refered as t2 where t1.c = t2.e;
+
+select * from t_h5_r4_int_int t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a;
+select * from t_h5_r4_int_int t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.aa;
+select * from t_h5_r4_int_int t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.b;
+select * from t_h5_r4_int_int t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.c;
+select * from t_h5_r4_int_int t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.d;
+select * from t_h5_r4_int_int t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.e;
+
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.a;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.aa;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.b;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.bb;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.c;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.d;
+select * from t_h5_r4_int_int_datetime t1, t_refered as t2 where t1.a = t2.a and t1.b=t2.a and t1.c = t2.e;
+
+select * from t_r4_int t1, t_r4_int  as t2 where t1.a = t2.a;
+select * from t_r4_int t1, t_r4_date  as t2 where t1.a = t2.c;
+select * from t_r4_int t1, t_r4_datetime  as t2 where t1.a = t2.c;
+select * from t_r4_int t1, t_r4_timestamp  as t2 where t1.a = t2.c;
+
+
+select * from t_r4_date t1, t_r4_int  as t2 where t1.c = t2.a;
+select * from t_r4_date t1, t_r4_date  as t2 where t1.c = t2.c;
+select * from t_r4_date t1, t_r4_datetime  as t2 where t1.c = t2.c;
+select * from t_r4_date t1, t_r4_timestamp  as t2 where t1.c = t2.c;
+
+select * from t_r4_datetime t1, t_r4_int  as t2 where t1.c = t2.a;
+select * from t_r4_datetime t1, t_r4_date  as t2 where t1.c = t2.c;
+select * from t_r4_datetime t1, t_r4_datetime  as t2 where t1.c = t2.c;
+select * from t_r4_datetime t1, t_r4_timestamp  as t2 where t1.c = t2.c;
+
+
+# additional case for task order with many range part.
+
+select min(a) from t_many_range_part where a >=  1;
+select min(a) from t_many_range_part where a >=  6;
+select min(a) from t_many_range_part where a >= 11;
+select min(a) from t_many_range_part where a >= 16;
+select min(a) from t_many_range_part where a >= 21;
+select min(a) from t_many_range_part where a >= 26;
+select min(a) from t_many_range_part where a >= 31;
+select min(a) from t_many_range_part where a >= 36;
+select min(a) from t_many_range_part where a >= 41;
+select min(a) from t_many_range_part where a >= 46;
+
+select max(a) from t_many_range_part where a >=  1;
+select max(a) from t_many_range_part where a >=  6;
+select max(a) from t_many_range_part where a >= 11;
+select max(a) from t_many_range_part where a >= 16;
+select max(a) from t_many_range_part where a >= 21;
+select max(a) from t_many_range_part where a >= 26;
+select max(a) from t_many_range_part where a >= 31;
+select max(a) from t_many_range_part where a >= 36;
+select max(a) from t_many_range_part where a >= 41;
+select max(a) from t_many_range_part where a >= 46;
+
+select a from t_many_range_part where a >=  1 order by a asc limit 10;
+select a from t_many_range_part where a >=  6 order by a asc limit 10;
+select a from t_many_range_part where a >= 11 order by a asc limit 10;
+select a from t_many_range_part where a >= 16 order by a asc limit 10;
+select a from t_many_range_part where a >= 21 order by a asc limit 10;
+select a from t_many_range_part where a >= 26 order by a asc limit 10;
+select a from t_many_range_part where a >= 31 order by a asc limit 10;
+select a from t_many_range_part where a >= 36 order by a asc limit 10;
+select a from t_many_range_part where a >= 41 order by a asc limit 10;
+select a from t_many_range_part where a >= 46 order by a asc limit 10;
+
+select a from t_many_range_part where a >=  1 order by a desc limit 10;
+select a from t_many_range_part where a >=  6 order by a desc limit 10;
+select a from t_many_range_part where a >= 11 order by a desc limit 10;
+select a from t_many_range_part where a >= 16 order by a desc limit 10;
+select a from t_many_range_part where a >= 21 order by a desc limit 10;
+select a from t_many_range_part where a >= 26 order by a desc limit 10;
+select a from t_many_range_part where a >= 31 order by a desc limit 10;
+select a from t_many_range_part where a >= 36 order by a desc limit 10;
+select a from t_many_range_part where a >= 41 order by a desc limit 10;
+select a from t_many_range_part where a >= 46 order by a desc limit 10;
+
+
+--source cases/executor/include/cleanup.inc

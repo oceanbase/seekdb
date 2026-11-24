@@ -1,0 +1,6 @@
+user: admin
+password: admin
+init-files:
+  - ../init.sql
+  - ../init_user.sql
+ignore-trailing-space: true
