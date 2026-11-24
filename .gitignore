@@ -172,10 +172,9 @@ tools/deploy/lib
 tools/deploy/lib/
 tools/deploy/list
 tools/deploy/log/
-tools/deploy/mysql_test/r/*.reject
+tests/mysqltest/rejects/
 tools/deploy/mytest.log*
 tools/deploy/nohup*
-tools/deploy/obclient
 tools/deploy/oblog/
 tools/deploy/run/
 tools/deploy/server.list

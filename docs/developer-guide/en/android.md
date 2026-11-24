@@ -76,7 +76,9 @@ adb shell "/data/local/tmp/seekdb --nodaemon \
   --log-level INFO"
 ```
 
-Forward the SQL port and connect:
+Install the MySQL client on your host machine. See [Install the MySQL client](build-and-run.md#install-the-mysql-client).
+
+Forward the SQL port and connect.
 
 ```bash
 adb forward tcp:2881 tcp:2881

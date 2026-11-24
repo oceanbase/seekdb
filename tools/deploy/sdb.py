@@ -42,21 +42,6 @@ def _expand_command(value):
     return os.path.expanduser(value)
 
 
-def client_environment(client):
-    environment = os.environ.copy()
-    command = _expand_command(str(client))
-    executable = Path(shutil.which(command) or command).resolve()
-    environment["PATH"] = str(executable.parent) + os.pathsep + environment.get("PATH", "")
-    library_dirs = [str(executable.parent.parent / name) for name in ("lib", "lib64")
-                    if (executable.parent.parent / name).is_dir()]
-    if library_dirs:
-        variable = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
-        if environment.get(variable):
-            library_dirs.append(environment[variable])
-        environment[variable] = os.pathsep.join(library_dirs)
-    return environment
-
-
 def _executable_path(value):
     return Path(os.path.abspath(_expand_command(value))).resolve()
 
@@ -179,6 +164,7 @@ def command_start(args):
 def build_ready_command(args):
     return [
         _expand_command(args.client),
+        "--protocol=TCP",
         "-h",
         args.host,
         "-P",
@@ -215,7 +201,6 @@ def command_wait_ready(args):
         try:
             result = subprocess.run(
                 command,
-                env=client_environment(args.client),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=attempt_timeout,
@@ -541,7 +526,7 @@ def create_parser():
     ready = subparsers.add_parser(
         "wait-ready", help="wait until the managed seekdb accepts SELECT 1"
     )
-    ready.add_argument("--client", default="obclient", help="SQL client executable")
+    ready.add_argument("--client", default="mysql", help="SQL client executable (default: mysql)")
     ready.add_argument("--base-dir", required=True, help="seekdb base directory")
     ready.add_argument("--host", default="127.0.0.1")
     ready.add_argument("--port", type=int, default=DEFAULT_PORT)

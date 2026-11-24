@@ -125,24 +125,32 @@ Build the affected target with `./build.py build //package:target`. Existing mod
 
 ## Run a local instance
 
-On Linux and macOS, start the compiled binary with the repository's instance helper:
+### Install the MySQL client
+
+Install the client package on your development machine. Check that `mysql --version` works on your path.
+
+- On Ubuntu, install the client with `sudo apt install mysql-client`. See the [Ubuntu package details](https://packages.ubuntu.com/noble/mysql-client).
+- On macOS, run `brew install mysql-client@8.4`, then run `export PATH="$(brew --prefix mysql-client@8.4)/bin:$PATH"`. See the [Homebrew formula](https://formulae.brew.sh/formula/mysql-client@8.4).
+- On RPM-based Linux, configure the MySQL Yum repository for your distribution. Then install the `mysql-community-client` package. See the [MySQL Yum repository guide](https://dev.mysql.com/doc/refman/8.4/en/linux-installation-yum-repo.html).
+
+### Start and connect
+
+On Linux and macOS, use the instance helper to start seekdb and wait for it to accept connections.
 
 ```bash
 python3 tools/deploy/sdb.py start \
   --binary build/bin/src/observer/seekdb \
   --base-dir "$PWD/build/dev-instance" --port 2881
 python3 tools/deploy/sdb.py wait-ready \
-  --client deps/3rd/u01/obclient/bin/obclient \
   --base-dir "$PWD/build/dev-instance" --port 2881
 ```
 
-The helper starts seekdb directly. A new data directory initializes automatically. Pass repeated `--parameter key=value` options to `start` when you need server settings. `start` returns after spawning the process; `wait-ready` checks the managed process and waits for `SELECT 1` to succeed.
+The helper starts seekdb directly. A new data directory initializes automatically. Pass repeated `--parameter key=value` options to `start` when you need server settings. `start` returns after spawning the process. `wait-ready` uses `mysql` to run `SELECT 1`. Use `wait-ready --client /path/to/mysql` if the client is outside your path.
 
-Connect with either client:
+Connect to seekdb over TCP.
 
 ```bash
-mysql -h127.0.0.1 -P2881 -uroot
-./deps/3rd/u01/obclient/bin/obclient -h127.0.0.1 -P2881 -uroot -Doceanbase -A
+mysql --protocol=TCP -h127.0.0.1 -P2881 -uroot
 ```
 
 To run in the foreground, including on Windows, invoke the binary directly with `--nodaemon --base-dir=<directory> --port=2881`. The Python instance helper currently supports Linux and macOS.
