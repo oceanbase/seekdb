@@ -19,7 +19,7 @@ env:
 
 jobs:
   # 路径过滤下沉到 job 级：Markdown-only PR 也会创建 skipped check run，
-  # 避免 branch protection 的 required check（如 collect）永远 pending。
+  # 避免 branch protection 的 required check 永远 pending。
   changes:
     name: changes
     if: ${{ github.repository_owner == 'oceanbase' }}
@@ -144,15 +144,3 @@ jobs:
             find . -type f -name console.log -exec cp --parents -t "$DEST_DIR" {} +
           fi
           exit "$RESULT"
-
-  seekdb-collect:
-    # Branch protection requires the collect check.
-    if: ${{ always() && needs.seekdb-setup.result != 'skipped' }}
-    name: collect
-    needs: seekdb-setup
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require compile and mysqltest to pass
-        env:
-          SETUP_RESULT: ${{ needs.seekdb-setup.result }}
-        run: test "$SETUP_RESULT" = success

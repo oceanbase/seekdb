@@ -38,4 +38,4 @@ For a new case, create an empty `.result` with the same basename as the `.test` 
 
 ## GitHub Actions
 
-The `build-and-test` job runs all enabled cases with 24 workers. The job summary gives the NFS path to `sqltest.log` and any available failure diagnostics. The required `collect` check reports whether the `build-and-test` job passed.
+The `build-and-test` job runs all enabled cases with 24 workers. The job summary gives the NFS path to `sqltest.log` and any available failure diagnostics.
