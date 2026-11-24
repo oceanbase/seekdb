@@ -420,9 +420,9 @@ int ObVectorIndexRefresher::do_refresh() {
           if (OB_FAIL(freeze_sql.append_fmt(
                 "alter system major freeze tablet_id = %" PRIu64 "", tablet_id))) {
           } else if (OB_FAIL(refresh_ctx_->trans_->write(freeze_sql.ptr(), affected_rows))) {
-            ret = OB_SUCCESS;
-            LOG_ERROR("fail to execute major freeze sql, continue other tablet id", K(tablet_id),
+            LOG_ERROR("fail to execute major freeze sql, continue other tablet id", KR(ret), K(tablet_id),
                       K(freeze_sql));
+            ret = OB_SUCCESS;
           } else {
             LOG_INFO("execute major freeze success", K(tablet_id), K(affected_rows));
           }
