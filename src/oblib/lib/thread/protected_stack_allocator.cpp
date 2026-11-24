@@ -23,6 +23,8 @@
 #ifdef ERROR
 #undef ERROR
 #endif
+#else
+#include <sys/mman.h>
 #endif
 
 namespace oceanbase
@@ -32,7 +34,6 @@ using namespace common;
 namespace lib
 {
 ProtectedStackAllocator g_stack_allocer;
-StackMgr g_stack_mgr;
 
 ssize_t ProtectedStackAllocator::page_size()
 {
@@ -117,7 +118,6 @@ void *ProtectedStackAllocator::__alloc(const uint64_t ctx_id,
     header->pth_ = 0;
     header->base_ = buffer;
     header->has_guarded_page_ = guard_page;
-    g_stack_mgr.insert(header);
 
 #ifdef _WIN32
     DWORD old_prot;
@@ -157,7 +157,6 @@ void ProtectedStackAllocator::dealloc(void *ptr)
 #endif
       
       const ssize_t size = header->size_;
-      g_stack_mgr.erase(header);
       ob_free(base);
     }
   }
@@ -166,46 +165,6 @@ void ProtectedStackAllocator::dealloc(void *ptr)
 ObStackHeader *ProtectedStackAllocator::stack_header(void *ptr)
 {
   return (ObStackHeader *)((char *)ptr - page_size() - sizeof(ObStackHeader));
-}
-
-void StackMgr::insert(ObStackHeader *header)
-{
-  if (header != nullptr) {
-    abort_unless(header->check_magic());
-    rwlock_.wrlock(common::ObLatchIds::DEFAULT_SPIN_RWLOCK);
-    header->prev_ = &dummy_;
-    header->next_ = dummy_.next_;
-    dummy_.next_->prev_ = header;
-    dummy_.next_ = header;
-    rwlock_.unlock();
-  }
-}
-
-void StackMgr::erase(ObStackHeader *header)
-{
-  if (header != nullptr) {
-    abort_unless(header->check_magic());
-    rwlock_.wrlock(common::ObLatchIds::DEFAULT_SPIN_RWLOCK);
-    header->prev_->next_ = header->next_;
-    header->next_->prev_ = header->prev_;
-    header->prev_ = header->next_ = header;
-    rwlock_.unlock();
-  }
-}
-
-ObStackHeaderGuard::ObStackHeaderGuard()
-{
-#ifdef _WIN32
-  header_.pth_ = (uint64_t)GetCurrentThreadId();
-#else
-  header_.pth_ = (uint64_t)pthread_self();
-#endif
-  g_stack_mgr.insert(&header_);
-}
-
-ObStackHeaderGuard::~ObStackHeaderGuard()
-{
-  g_stack_mgr.erase(&header_);
 }
 
 }  // lib
