@@ -1,0 +1,16 @@
+{
+  "name": "cpuinfo",
+  "version": "unspecified",
+  "source": "https://github.com/pytorch/cpuinfo",
+  "packaged_as": "Static native library linked into the engine",
+  "license": "BSD-2-Clause",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "cpuinfo-LICENSE.txt"
+  ],
+  "redistribution": "Retain the copyright, conditions, and disclaimer.",
+  "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/repositories.bzl; licenses/cpuinfo-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

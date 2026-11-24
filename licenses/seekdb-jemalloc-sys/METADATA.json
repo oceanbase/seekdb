@@ -1,0 +1,16 @@
+{
+  "name": "seekdb-jemalloc-sys",
+  "version": "0.2.3+5.3.1",
+  "source": "https://crates.io/crates/seekdb-jemalloc-sys/0.2.3+5.3.1",
+  "packaged_as": "Rust FFI crate and vendored jemalloc native library",
+  "license": "Apache-2.0 AND BSD-2-Clause",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-seekdb-jemalloc-sys-0.2.3+5.3.1.txt"
+  ],
+  "redistribution": "Retain both the crate Apache text and vendored jemalloc BSD copyright/conditions/disclaimer.",
+  "evidence": "deps/external/Cargo.lock; MODULE.bazel; licenses/rust-seekdb-jemalloc-sys-0.2.3+5.3.1.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

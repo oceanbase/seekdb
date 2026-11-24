@@ -1,0 +1,16 @@
+{
+  "name": "ANTLR4",
+  "version": "unspecified",
+  "source": "https://github.com/antlr/antlr4",
+  "packaged_as": "Static native library linked into the engine",
+  "license": "BSD-3-Clause",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "antlr4-LICENSE.txt"
+  ],
+  "redistribution": "Retain the copyright, conditions, and disclaimer.",
+  "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/targets.bzl; licenses/antlr4-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "quick-xml",
+  "version": "0.41.0",
+  "source": "https://github.com/tafia/quick-xml",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-quick-xml-0.41.0.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
+  "evidence": "Cargo.lock; licenses/rust-quick-xml-0.41.0.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

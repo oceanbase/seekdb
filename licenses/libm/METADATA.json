@@ -1,0 +1,16 @@
+{
+  "name": "libm",
+  "version": "0.2.16",
+  "source": "https://github.com/rust-lang/compiler-builtins",
+  "packaged_as": "Rust math routines linked into native engine artifacts",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "libm.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice, including the musl-derived attribution.",
+  "evidence": "Cargo.lock; NOTICE libm section; licenses/libm.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

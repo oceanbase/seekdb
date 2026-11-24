@@ -1,0 +1,16 @@
+{
+  "name": "XZ Utils",
+  "version": "unspecified",
+  "source": "https://tukaani.org/xz/",
+  "packaged_as": "Native library or build/runtime input",
+  "license": "Public domain and LGPL/GPL components; see COPYING",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "xz-COPYING.txt"
+  ],
+  "redistribution": "Retain the complete XZ licensing text and identify any LGPL/GPL components.",
+  "evidence": "deps/init/*.deps; licenses/xz-COPYING.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

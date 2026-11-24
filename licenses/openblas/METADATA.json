@@ -1,0 +1,16 @@
+{
+  "name": "OpenBLAS",
+  "version": "0.3.23",
+  "source": "https://github.com/OpenMathLib/OpenBLAS/tree/v0.3.23",
+  "packaged_as": "Native BLAS library in repository-source builds",
+  "license": "BSD-3-Clause",
+  "modified": "Yes for patched repository-source builds",
+  "license_files": [
+    "openblas-LICENSE.txt"
+  ],
+  "redistribution": "Retain the copyright, conditions, disclaimer, and non-endorsement term; source patches are recorded in the source repository.",
+  "evidence": "bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; licenses/openblas-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

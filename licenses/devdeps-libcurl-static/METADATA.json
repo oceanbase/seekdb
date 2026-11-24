@@ -1,0 +1,16 @@
+{
+  "name": "devdeps-libcurl-static",
+  "version": "8.12.1",
+  "source": "https://github.com/curl/curl/tree/curl-8_12_1",
+  "packaged_as": "Static native library in the server dependency graph",
+  "license": "curl",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "curl-COPYING.txt"
+  ],
+  "redistribution": "Retain the curl copyright and permission notice; review any bundled documentation and third-party notices for the exact build.",
+  "evidence": "deps/init/oceanbase.el8.x86_64.deps; bazel/third_party/targets.bzl",
+  "shipped_in": [
+    "engine"
+  ]
+}

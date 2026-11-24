@@ -7,7 +7,7 @@
 *.cmd text eol=crlf
 
 # Preserve upstream license and notice texts verbatim.
-compliance/licenses/** -whitespace
+licenses/** -whitespace
 
 # All OceanBase code is auto-formatted using clang-format.
 *.c filter=codeformat

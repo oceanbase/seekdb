@@ -1,0 +1,16 @@
+{
+  "name": "zstd-safe",
+  "version": "8.2.0",
+  "source": "https://crates.io/crates/zstd-safe/8.2.0",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "BSD-3-Clause",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "zstd-safe.txt"
+  ],
+  "redistribution": "Reproduce the copyright, conditions, disclaimer, and non-endorsement term.",
+  "evidence": "Cargo.lock; NOTICE zstd-safe section; licenses/zstd-safe.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

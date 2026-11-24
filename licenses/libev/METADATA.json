@@ -1,0 +1,16 @@
+{
+  "name": "libev",
+  "version": "unspecified",
+  "source": "http://software.schmorp.de/pkg/libev.html",
+  "packaged_as": "Event-processing source in the native engine",
+  "license": "BSD-2-Clause OR GPL-2.0-or-later",
+  "modified": "unspecified",
+  "license_files": [
+    "libev.txt"
+  ],
+  "redistribution": "This distribution retains the BSD option. Reproduce the copyright, conditions, and disclaimer; no source offer is required under that option.",
+  "evidence": "NOTICE libev section; licenses/libev.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

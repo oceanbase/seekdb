@@ -1,0 +1,16 @@
+{
+  "name": "prost",
+  "version": "0.14.3",
+  "source": "https://github.com/tokio-rs/prost",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-prost-0.14.3.txt"
+  ],
+  "redistribution": "Retain the license and applicable notices; mark modified files.",
+  "evidence": "Cargo.lock; licenses/rust-prost-0.14.3.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

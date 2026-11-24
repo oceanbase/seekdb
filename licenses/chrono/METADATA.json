@@ -1,0 +1,16 @@
+{
+  "name": "chrono",
+  "version": "0.4.45",
+  "source": "https://github.com/chronotope/chrono",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT OR Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-chrono-0.4.45.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts; no source or relink offer is required for unmodified binaries.",
+  "evidence": "Cargo.lock; licenses/rust-chrono-0.4.45.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

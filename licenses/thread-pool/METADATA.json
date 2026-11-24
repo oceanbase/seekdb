@@ -1,0 +1,16 @@
+{
+  "name": "thread-pool",
+  "version": "unspecified",
+  "source": "https://github.com/bshoshany/thread-pool",
+  "packaged_as": "Header-only or source component linked into the engine",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "thread-pool-LICENSE.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice.",
+  "evidence": "licenses/thread-pool-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

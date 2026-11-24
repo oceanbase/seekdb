@@ -1,0 +1,16 @@
+{
+  "name": "LLVM OpenMP",
+  "version": "unspecified",
+  "source": "https://github.com/llvm/llvm-project",
+  "packaged_as": "Static native runtime linked into the engine",
+  "license": "Apache-2.0 WITH LLVM-exception",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "openmp-LICENSE.TXT.txt"
+  ],
+  "redistribution": "Retain the Apache-2.0 and LLVM exception notices.",
+  "evidence": "src/observer/observer_link_deps.bzl; bazel/third_party/repositories.bzl; licenses/openmp-LICENSE.TXT.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

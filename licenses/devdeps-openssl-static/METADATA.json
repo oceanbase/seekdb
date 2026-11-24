@@ -1,0 +1,16 @@
+{
+  "name": "devdeps-openssl-static",
+  "version": "1.1.1u",
+  "source": "https://github.com/openssl/openssl/tree/OpenSSL_1_1_1u",
+  "packaged_as": "Static libssl and libcrypto native libraries",
+  "license": "OpenSSL and SSLeay",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "openssl-LICENSE.txt"
+  ],
+  "redistribution": "Retain the OpenSSL and original SSLeay license texts and the required acknowledgments.",
+  "evidence": "el8 manifest; deps/init/wasm/dependencies.json; bazel/third_party/targets.bzl",
+  "shipped_in": [
+    "engine"
+  ]
+}

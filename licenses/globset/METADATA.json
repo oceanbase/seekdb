@@ -1,0 +1,16 @@
+{
+  "name": "globset",
+  "version": "0.4.18",
+  "source": "https://github.com/BurntSushi/ripgrep/tree/master/crates/globset",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "Unlicense OR MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-globset-0.4.18.txt"
+  ],
+  "redistribution": "Retain the supplied texts; using the MIT option requires its copyright and permission notice.",
+  "evidence": "Cargo.lock; licenses/rust-globset-0.4.18.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

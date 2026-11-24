@@ -1,0 +1,16 @@
+{
+  "name": "s2rst",
+  "version": "0.5.1",
+  "source": "https://github.com/torgebo/s2rst",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-s2rst-0.5.1.txt"
+  ],
+  "redistribution": "Retain both the license and the embedded NOTICE, including Google S2 attribution; mark modified files.",
+  "evidence": "Cargo.lock; licenses/rust-s2rst-0.5.1.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "uuid",
+  "version": "1.29.0",
+  "source": "https://github.com/uuid-rs/uuid",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "Apache-2.0 OR MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-uuid-1.29.0.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
+  "evidence": "Cargo.lock; licenses/rust-uuid-1.29.0.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

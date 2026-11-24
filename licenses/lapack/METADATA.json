@@ -1,0 +1,16 @@
+{
+  "name": "LAPACK",
+  "version": "unspecified",
+  "source": "https://github.com/Reference-LAPACK/lapack",
+  "packaged_as": "Native library or headers linked into the engine",
+  "license": "BSD-3-Clause",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "lapack-LICENSE.txt"
+  ],
+  "redistribution": "Retain the copyright, conditions, and disclaimer.",
+  "evidence": "bazel/third_party/repositories.bzl; licenses/lapack-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

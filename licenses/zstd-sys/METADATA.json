@@ -1,0 +1,16 @@
+{
+  "name": "zstd-sys",
+  "version": "2.1.2+zstd.1.5.7",
+  "source": "https://crates.io/crates/zstd-sys/2.1.2+zstd.1.5.7",
+  "packaged_as": "Rust bindings and Zstandard 1.5.7 native code",
+  "license": "BSD-3-Clause",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "zstd-sys.txt"
+  ],
+  "redistribution": "Reproduce the Meta copyright, conditions, disclaimer, and non-endorsement term.",
+  "evidence": "Cargo.lock; NOTICE zstd-sys section; licenses/zstd-sys.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

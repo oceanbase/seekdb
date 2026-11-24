@@ -1,0 +1,16 @@
+{
+  "name": "fancy-regex",
+  "version": "0.20.0",
+  "source": "https://github.com/fancy-regex/fancy-regex",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-fancy-regex-0.20.0.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
+  "evidence": "Cargo.lock; licenses/rust-fancy-regex-0.20.0.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

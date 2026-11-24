@@ -1,0 +1,16 @@
+{
+  "name": "simsimd",
+  "version": "6.5.16",
+  "source": "https://github.com/ashvardanian/SimSIMD",
+  "packaged_as": "Rust crate and native SIMD routines in engine artifacts",
+  "license": "Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-simsimd-6.5.16.txt"
+  ],
+  "redistribution": "Retain the license and applicable notices; mark modified files.",
+  "evidence": "Cargo.lock; licenses/rust-simsimd-6.5.16.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

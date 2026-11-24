@@ -1,0 +1,16 @@
+{
+  "name": "spdlog",
+  "version": "unspecified",
+  "source": "https://github.com/gabime/spdlog",
+  "packaged_as": "Native library or headers linked into the engine",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "spdlog-LICENSE.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice.",
+  "evidence": "licenses/spdlog-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

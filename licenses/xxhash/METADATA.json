@@ -1,0 +1,16 @@
+{
+  "name": "xxHash",
+  "version": "0.6.2",
+  "source": "https://github.com/Cyan4973/xxHash",
+  "packaged_as": "Header-based hashing in src/oblib/lib/hash_func/xxhash.h",
+  "license": "BSD-2-Clause",
+  "modified": "unspecified",
+  "license_files": [
+    "xxhash-LICENSE.txt"
+  ],
+  "redistribution": "Reproduce the copyright, conditions, and disclaimer; no source or relink offer is required for unmodified binaries.",
+  "evidence": "src/oblib/lib/hash_func/xxhash.h version macros; licenses/xxhash-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

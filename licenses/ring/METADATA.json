@@ -1,0 +1,16 @@
+{
+  "name": "ring",
+  "version": "0.17.14",
+  "source": "https://github.com/briansmith/ring",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "Apache-2.0 AND ISC",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-ring-0.17.14.txt"
+  ],
+  "redistribution": "Retain the complete file, including BoringSSL, once_cell, and fiat notices; Apache and ISC obligations are cumulative for the included code.",
+  "evidence": "Cargo.lock; licenses/rust-ring-0.17.14.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

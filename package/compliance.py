@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate and stage the redistribution compliance bundle.
 
-The component inventory is maintained in ``compliance/components.json``.  The
-original license texts are kept under ``compliance/licenses/``.
-This module renders the release-specific inventory and copies the complete
+Each directory under ``licenses/`` is one third-party component.  It contains
+``METADATA.json`` and the original license/notice text files.  This module
+walks those directories, validates the metadata, and renders the release
 bundle into native package payloads and the portable binary distribution.
 """
 
@@ -16,9 +16,24 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = ROOT / "compliance" / "components.json"
-LICENSES = ROOT / "compliance" / "licenses"
+LICENSES = ROOT / "licenses"
 VERSION_FILE = ROOT / "bazel" / "compile_config.bzl"
+PROJECT = {
+    "name": "seekdb",
+    "source": "https://github.com/oceanbase/seekdb",
+    "license": "Apache-2.0",
+    "license_files": ["LICENSE"],
+    "notice_files": ["NOTICE"],
+}
+REQUIRED_COMPONENT_FIELDS = (
+    "name",
+    "version",
+    "source",
+    "license",
+    "modified",
+    "license_files",
+    "redistribution",
+)
 
 
 def project_version():
@@ -29,61 +44,62 @@ def project_version():
 
 
 def load_manifest():
-    data = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    if data.get("schema_version") != 1:
-        raise ValueError("unsupported compliance manifest schema: %r" % data.get("schema_version"))
-    project = data.get("project")
-    if not isinstance(project, dict):
-        raise ValueError("compliance manifest is missing project metadata")
-    for key in ("name", "license", "license_files", "notice_files"):
-        if key not in project:
-            raise ValueError("project metadata is missing %s" % key)
-    components = data.get("components")
-    if not isinstance(components, list) or not components:
-        raise ValueError("compliance manifest contains no components")
+    components = []
     names = set()
-    for component in components:
-        for key in ("name", "version", "source", "license", "license_files", "redistribution"):
+    for directory in sorted(LICENSES.iterdir()):
+        if not directory.is_dir():
+            continue
+        metadata_path = directory / "METADATA.json"
+        if not metadata_path.is_file():
+            raise ValueError("component directory %s is missing METADATA.json" % directory)
+        component = json.loads(metadata_path.read_text(encoding="utf-8"))
+        component["directory"] = directory.relative_to(ROOT).as_posix()
+        for key in REQUIRED_COMPONENT_FIELDS:
             if key not in component:
                 raise ValueError("component %r is missing %s" % (component.get("name"), key))
         key = component["name"].lower()
         if key in names:
             raise ValueError("duplicate component name: %s" % component["name"])
         names.add(key)
+        if not component["license_files"]:
+            raise ValueError("component %s has no license files" % component["name"])
         for relative in component["license_files"]:
-            if relative == "NOTICE":
-                continue
-            path = ROOT / relative
+            path = directory / relative
             if not path.is_file():
-                raise ValueError("component %s references missing license file %s" % (component["name"], relative))
-    for relative in project["license_files"] + project["notice_files"]:
-        if not (ROOT / relative).is_file():
-            raise ValueError("project metadata references missing file %s" % relative)
-    return data
+                raise ValueError("component %s references missing license file %s" % (
+                    component["name"], path.relative_to(ROOT)))
+        components.append(component)
+    if not components:
+        raise ValueError("no component directories found under %s" % LICENSES)
+    return {
+        "schema_version": 1,
+        "project": PROJECT,
+        "components": components,
+    }
 
 
 def markdown(value):
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
+def component_license_path(component, relative):
+    return "%s/%s" % (Path(component["directory"]).name, relative)
+
+
 def license_cell(component):
-    values = []
-    for relative in component["license_files"]:
-        if relative == "NOTICE":
-            values.append("`NOTICE`")
-        else:
-            values.append("`%s`" % relative)
-    return "<br>".join(values) if values else "unspecified"
+    values = ["`%s`" % component_license_path(component, relative)
+              for relative in component["license_files"]]
+    return "<br>".join(values)
 
 
 def render_components(data, version, source_commit):
     lines = [
         "# Third-party components",
         "",
-        "This inventory is generated from `compliance/components.json` for the",
-        "release identified below.  It describes the components recorded for this",
-        "source tree.  Entries marked `unspecified` still require provenance work",
-        "before a release can claim complete third-party coverage.",
+        "This inventory is generated from the per-component `METADATA.json`",
+        "files under `licenses/<component>/`.  Entries marked `unspecified` still",
+        "require provenance work before a release can claim complete third-party",
+        "coverage.",
         "",
         "- Project: `%s`" % data["project"]["name"],
         "- Version: `%s`" % version,
@@ -105,7 +121,7 @@ def render_components(data, version, source_commit):
         ))
     lines.extend([
         "",
-        "The original license and notice texts are under `licenses/` in the",
+        "The original license and notice texts are under `<component>/` in the",
         "installed compliance directory.  `REDISTRIBUTION.md` describes the",
         "per-component retention and source/relink requirements.",
         "",
@@ -117,22 +133,22 @@ def render_redistribution(data):
     lines = [
         "# Redistribution requirements",
         "",
-        "This file is generated from `compliance/components.json`.  Preserve the",
-        "complete compliance directory when redistributing a package that contains",
-        "these components.  License and notice texts must remain verbatim.",
+        "This file is generated from the per-component `METADATA.json` files.",
+        "Preserve the complete compliance directory when redistributing a package",
+        "that contains these components.  License and notice texts must remain",
+        "verbatim.",
         "",
         "| Component | Files to retain | Redistribution requirement | Source |",
         "| --- | --- | --- | --- |",
     ]
     for component in sorted(data["components"], key=lambda item: item["name"].lower()):
-        files = license_cell(component)
         if component.get("source_offer"):
             requirement = component["redistribution"] + " See `SOURCE-OFFER.txt`."
         else:
             requirement = component["redistribution"]
         lines.append("| %s | %s | %s | %s |" % (
             markdown(component["name"]),
-            files,
+            license_cell(component),
             markdown(requirement),
             markdown(component["source"]),
         ))
@@ -161,7 +177,7 @@ def render_source_offer(data):
         "Corresponding source offers",
         "============================",
         "",
-        "This file is generated from `compliance/components.json`.",
+        "This file is generated from the per-component `METADATA.json` files.",
         "",
     ]
     offers = [component for component in data["components"] if component.get("source_offer")]
@@ -194,7 +210,7 @@ def write_manifest(target):
 
 def stage(target, version=None, source_commit=None):
     data = load_manifest()
-    version = version or data["project"].get("version") or project_version()
+    version = version or project_version()
     target = Path(target)
     target.mkdir(parents=True, exist_ok=True)
 
@@ -204,9 +220,9 @@ def stage(target, version=None, source_commit=None):
         copy_file(ROOT / name, target / Path(name).name)
     shutil.copytree(
         LICENSES,
-        target / "licenses",
+        target,
         dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("LICENSE", "NOTICE"),
+        ignore=shutil.ignore_patterns("METADATA.json", "README.md"),
     )
 
     artifact = {
@@ -229,6 +245,7 @@ def stage(target, version=None, source_commit=None):
     write_manifest(target)
     return target
 
+
 def _license_name(component):
     return "seekdb-" + re.sub(r"[^a-z0-9]+", "-", component["name"].lower()).strip("-")
 
@@ -236,10 +253,7 @@ def _license_name(component):
 def _license_text(component):
     parts = []
     for relative in component["license_files"]:
-        if relative == "NOTICE":
-            path = ROOT / "NOTICE"
-        else:
-            path = ROOT / relative
+        path = ROOT / component["directory"] / relative
         parts.append(path.read_text(encoding="utf-8", errors="replace").rstrip())
     return "\n\n".join(parts)
 
@@ -256,7 +270,8 @@ def render_debian_copyright(data):
         "",
     ]
     for component in sorted(data["components"], key=lambda item: item["name"].lower()):
-        files = [relative for relative in component["license_files"] if relative != "NOTICE"]
+        files = ["%s/%s" % (component["directory"], relative)
+                 for relative in component["license_files"]]
         lines.append("Files: %s" % " ".join(files))
         lines.extend([
             "Copyright: See the corresponding upstream license and notice files.",
@@ -320,7 +335,7 @@ def check():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     subcommands = parser.add_subparsers(dest="command", required=True)
-    subcommands.add_parser("check", help="validate the manifest and render the bundle")
+    subcommands.add_parser("check", help="validate component metadata and render the bundle")
     stage_parser = subcommands.add_parser("stage", help="stage the bundle into a package payload")
     stage_parser.add_argument("--target", type=Path, required=True)
     stage_parser.add_argument("--version", default=None)

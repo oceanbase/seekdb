@@ -1,0 +1,16 @@
+{
+  "name": "spdlog-rs",
+  "version": "0.5.3",
+  "source": "https://github.com/SpriteOvO/spdlog-rs",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT OR Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-spdlog-rs-0.5.3.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
+  "evidence": "Cargo.lock; licenses/rust-spdlog-rs-0.5.3.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

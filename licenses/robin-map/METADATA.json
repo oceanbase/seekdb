@@ -1,0 +1,16 @@
+{
+  "name": "robin-map",
+  "version": "v1.4.0",
+  "source": "https://github.com/Tessil/robin-map/tree/v1.4.0",
+  "packaged_as": "Header-based hash containers in native source builds",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "robin-map-LICENSE.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
+  "evidence": "bazel/sdk_sources/dependencies.json; licenses/robin-map-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}
