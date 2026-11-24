@@ -33,12 +33,12 @@ impl Drop for CapturedTarget {
 #[derive(Default)]
 pub(crate) struct RequestLifetime {
     pub(crate) target: Option<Arc<CapturedTarget>>,
-    cell: Option<Arc<ControlCell>>,
+    _cell: Option<Arc<ControlCell>>,
 }
 impl RequestLifetime {
     #[cfg(any(test, feature = "ownership-test-support"))]
     pub fn watch_final_charge(&self) -> io::Result<crate::DropWitness> {
-        self.cell
+        self._cell
             .as_ref()
             .ok_or_else(|| invalid("request has no charge"))?
             .charge
@@ -63,7 +63,7 @@ impl RequestLifetime {
 
     pub(super) fn reserved(cell: Arc<ControlCell>) -> Self {
         Self {
-            cell: Some(cell),
+            _cell: Some(cell),
             ..Self::default()
         }
     }
@@ -79,7 +79,7 @@ impl RequestLifetime {
 
     #[cfg(test)]
     pub(crate) fn belongs_to(&self, admission: &Admission) -> bool {
-        self.cell
+        self._cell
             .as_ref()
             .is_some_and(|cell| Arc::ptr_eq(cell, &admission.cell))
     }

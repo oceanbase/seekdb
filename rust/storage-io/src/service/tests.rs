@@ -29,7 +29,6 @@ impl RequestCompletion for ChannelCompletion {
     fn complete(self: Box<Self>, completion: Completion) {
         let _ = self.0.send(completion);
     }
-    fn cancel(self: Box<Self>) {}
 }
 impl Admission {
     fn publish_channel(&mut self, sender: mpsc::Sender<Completion>) -> io::Result<RequestId> {

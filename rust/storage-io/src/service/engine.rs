@@ -134,7 +134,6 @@ struct DeviceState {
 }
 struct InlineCompletion {
     driver: Weak<Mutex<Driver>>,
-    shared: Weak<Shared>,
     device: DeviceId,
 }
 impl file_io::CompletionListener for InlineCompletion {
@@ -1086,7 +1085,6 @@ impl Driver {
                 lane.backend
                     .bind_completion_listener(Arc::new(InlineCompletion {
                         driver: driver.clone(),
-                        shared: Arc::downgrade(&self.shared),
                         device: device.id,
                     }))?;
             }

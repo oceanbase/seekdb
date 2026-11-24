@@ -85,6 +85,11 @@ impl AlignedBuffer {
     pub fn len(&self) -> usize {
         self.len
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: this owner keeps the initialized prefix alive for the borrow.
         unsafe { std::slice::from_raw_parts(self.ptr().as_ptr(), self.initialized) }

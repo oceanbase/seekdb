@@ -623,12 +623,9 @@ impl Backend {
         }
     }
 
-    #[cfg_attr(
-        feature = "ownership-test-support",
-        allow(
-            clippy::result_large_err,
-            reason = "the proof-only owner enlarges Operation; rejection must return it inline"
-        )
+    #[allow(
+        clippy::result_large_err,
+        reason = "return the rejected operation and its buffer without allocating on backpressure"
     )]
     pub fn submit(&self, operation: Operation) -> Result<SubmissionId, SubmitFailure> {
         let mut state = self.shared.lock();
@@ -654,7 +651,7 @@ impl Backend {
             return Err(SubmitFailure { operation, error });
         }
         let id = match NEXT_ID
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
         {
             Ok(id) => SubmissionId(id),
             Err(_) => {

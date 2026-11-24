@@ -235,7 +235,7 @@ impl Admission {
             return Err(io::ErrorKind::WouldBlock.into());
         }
         let id = NEXT_ID
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map(RequestId)
             .map_err(|_| io::Error::other("request identifiers exhausted"))?;
         ledger.usage.records += 1;
@@ -275,6 +275,7 @@ impl Admission {
     pub(crate) fn lifetime(&self) -> RequestLifetime {
         RequestLifetime::reserved(Arc::clone(&self.cell))
     }
+    #[cfg(test)]
     pub(super) fn ready(&mut self) -> io::Result<bool> {
         self.check_open()?;
         if self.cell.phase.load(Ordering::Acquire) == RESERVED {

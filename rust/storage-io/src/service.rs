@@ -260,7 +260,6 @@ impl Completion {
 
 pub(crate) trait RequestCompletion: Send + Sync + 'static {
     fn complete(self: Box<Self>, completion: Completion);
-    fn cancel(self: Box<Self>);
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CancelOutcome {
@@ -271,10 +270,8 @@ pub(crate) struct RequestControl {
     cell: Arc<ControlCell>,
     armed: bool,
 }
+#[cfg(test)]
 impl RequestControl {
-    pub fn id(&self) -> RequestId {
-        self.cell.id
-    }
     pub fn request_cancel(&self) -> CancelOutcome {
         self.cell.cancel()
     }
@@ -402,7 +399,7 @@ impl Service {
     }
     pub(crate) fn allocate_device_id(&self) -> io::Result<DeviceId> {
         self.next_device_id
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map(DeviceId)
             .map_err(|_| io::Error::other("device identifiers exhausted"))
     }
@@ -561,6 +558,7 @@ impl Service {
         }
         self.publish_request_at(admission, lifetime, callback, began)
     }
+    #[cfg(test)]
     pub(super) fn publish_request(
         &self,
         admission: Admission,
@@ -601,6 +599,7 @@ impl Service {
             .unwrap()
             .reconfigure(config, Instant::now())
     }
+    #[cfg(test)]
     pub(crate) fn statistics(&self) -> &crate::statistics::CompletionStatistics {
         &self.shared.statistics
     }

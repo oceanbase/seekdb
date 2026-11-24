@@ -27,6 +27,7 @@ pub use ffi::RequestOptions;
 use file_io::toggle_worker_fault_delay;
 pub use requests::{new_service_handle, ServiceHandle};
 
+#[allow(clippy::needless_lifetimes, reason = "CXX requires an explicit lifetime for the borrowed callback result")]
 #[cxx::bridge(namespace = "oceanbase::storage_io")]
 pub mod ffi {
     #[derive(Default)]

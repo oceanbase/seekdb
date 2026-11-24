@@ -685,7 +685,6 @@ fn device_drain_and_shutdown_wait_for_direct_completion_publication() {
                 .recv_timeout(Duration::from_secs(5))
                 .unwrap();
         }
-        fn cancel(self: Box<Self>) {}
     }
     let directory = Directory::new();
     let file = directory.file();

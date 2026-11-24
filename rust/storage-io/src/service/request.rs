@@ -634,9 +634,6 @@ impl RequestCompletion for Publisher {
             self.state.publish(completion, 0, None, false);
         }
     }
-    fn cancel(self: Box<Self>) {
-        self.state.cancel(CompletionStatus::Cancelled);
-    }
 }
 pub(super) fn discard(state: Arc<RequestState>, completion: Completion) {
     state.cancel(CompletionStatus::Shutdown);
