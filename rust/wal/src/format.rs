@@ -14,7 +14,7 @@
 
 use std::fmt;
 
-pub const PHYSICAL_BLOCK_SIZE: u64 = 1 << 26;
+pub const PHYSICAL_BLOCK_SIZE: u64 = 1 << 24;
 pub const SEGMENT_HEADER_SIZE: u64 = 4096;
 pub const BLOCK_SIZE: u64 = PHYSICAL_BLOCK_SIZE - SEGMENT_HEADER_SIZE;
 pub const GROUP_HEADER_SIZE: usize = 64;
