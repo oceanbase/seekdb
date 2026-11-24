@@ -400,6 +400,7 @@ psmall_test=[
 'storage.rowkey_is_char',
 'storage.rowkey_is_int',
 'storage.rowkey_is_null',
+'subquery.bug1477_ifnull_double_negated_like_having',
 'subquery.idx_with_const_expr_21_subquery_dilang',
 'subquery.optimizer_subquery_bug',
 'subquery.order_by_subquery',
