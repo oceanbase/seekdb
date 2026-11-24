@@ -1,0 +1,19 @@
+src/rootserver/ddl_task/ob_index_build_task.cpp
+  s_a9755b3e3d05cb::t_3f15f6261397bd 1323-1325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "509f20fed41a4e1daaee0b91f769248e4cee2a1b",
+  "prompts": {},
+  "sessions": {
+    "s_a9755b3e3d05cb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20d36-480f-7890-ae0a-d3fa98bbea91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
