@@ -24,7 +24,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 
 const MANIFEST_FILE: &str = "manifest";
 const MANIFEST_SIZE: usize = 128;
@@ -33,8 +33,6 @@ const MANIFEST_MAGIC: &[u8; 8] = b"WALMAN01";
 const DIO_ALIGNMENT: usize = 4096;
 const MAX_APPEND_BATCH_REQUESTS: usize = 128;
 const MAX_APPEND_BATCH_BYTES: usize = 2 * 1024 * 1024;
-const MAX_RECENT_RECORDS: usize = 4096;
-const MAX_RECENT_RECORD_BYTES: usize = 64 * 1024 * 1024;
 
 pub struct ImportedGroup<'a> {
     pub source_lsn: u64,
@@ -152,9 +150,8 @@ impl AppendCompletion {
 
 struct PlannedRecord {
     lsn: u64,
-    bytes: Arc<Vec<u8>>,
+    bytes: Vec<u8>,
     new_segment: Option<SegmentHeader>,
-    meta: Option<RecordMeta>,
 }
 
 struct AppendFile {
@@ -193,8 +190,6 @@ struct State {
     append_file: Option<AppendFile>,
     manifest: Manifest,
     segments: BTreeMap<u64, SegmentMeta>,
-    recent_records: BTreeMap<u64, (RecordMeta, Arc<Vec<u8>>)>,
-    recent_record_bytes: usize,
     last_record: Option<RecordMeta>,
     end_lsn: u64,
     end_scn: u64,
@@ -216,22 +211,16 @@ struct AppendQueue {
     closed: bool,
 }
 
-#[derive(Default)]
-struct FlushState {
-    generation: u64,
-    end_lsn: u64,
-    end_scn: u64,
-    closed: bool,
-    failed: Option<Error>,
-}
+type FlushCallback = Arc<dyn Fn(u64, u64) + Send + Sync + 'static>;
 
 struct StreamInner {
     state: Mutex<State>,
     appends: Mutex<AppendQueue>,
-    flushes: Mutex<FlushState>,
+    worker_closed: Mutex<bool>,
+    flush_callback: OnceLock<FlushCallback>,
     changed: Condvar,
     append_changed: Condvar,
-    flush_changed: Condvar,
+    worker_changed: Condvar,
     worker_started: AtomicBool,
     handle_count: AtomicUsize,
 }
@@ -298,8 +287,6 @@ impl Stream {
                 ref_scn: 0,
             },
             segments: BTreeMap::new(),
-            recent_records: BTreeMap::new(),
-            recent_record_bytes: 0,
             last_record: None,
             end_lsn: 0,
             end_scn: 0,
@@ -317,10 +304,11 @@ impl Stream {
             inner: Arc::new(StreamInner {
                 state: Mutex::new(state),
                 appends: Mutex::new(AppendQueue::default()),
-                flushes: Mutex::new(FlushState::default()),
+                worker_closed: Mutex::new(false),
+                flush_callback: OnceLock::new(),
                 changed: Condvar::new(),
                 append_changed: Condvar::new(),
-                flush_changed: Condvar::new(),
+                worker_changed: Condvar::new(),
                 worker_started: AtomicBool::new(false),
                 handle_count: AtomicUsize::new(1),
             }),
@@ -356,6 +344,16 @@ impl Stream {
         let state = self.lock()?;
         state.check_open()?;
         Ok(state.integrity)
+    }
+
+    pub fn set_flush_callback<F>(&self, callback: F) -> Result<()>
+    where
+        F: Fn(u64, u64) + Send + Sync + 'static,
+    {
+        self.inner
+            .flush_callback
+            .set(Arc::new(callback))
+            .map_err(|_| Error::Invalid)
     }
 
     pub fn append(&self, payload: &[u8], ref_scn: u64) -> Result<AppendResult> {
@@ -473,27 +471,11 @@ impl Stream {
             state.closed = true;
             inner.changed.notify_all();
         }
-        if let Ok(mut flush) = inner.flushes.lock() {
-            flush.closed = true;
-            inner.flush_changed.notify_all();
+        if let Ok(mut closed) = inner.worker_closed.lock() {
+            *closed = true;
+            inner.worker_changed.notify_all();
         }
         inner.append_changed.notify_all();
-    }
-
-    pub fn wait_flush(&self, after: u64) -> Result<(u64, u64, u64)> {
-        let mut flush = self.inner.flushes.lock().map_err(|_| Error::Io)?;
-        loop {
-            if flush.generation > after {
-                return Ok((flush.generation, flush.end_lsn, flush.end_scn));
-            }
-            if let Some(error) = flush.failed {
-                return Err(error);
-            }
-            if flush.closed {
-                return Err(Error::Closed);
-            }
-            flush = self.inner.flush_changed.wait(flush).map_err(|_| Error::Io)?;
-        }
     }
 
     fn execute_append_batch(
@@ -506,7 +488,6 @@ impl Stream {
                 for request in requests {
                     request.complete_durable(Err(Error::Io));
                 }
-                State::publish_flush_error(inner, Error::Io);
                 return;
             }
         };
@@ -623,12 +604,6 @@ impl Stream {
         if lsn == state.end_lsn {
             state.last_record = None;
         }
-        state.recent_records = state.recent_records.split_off(&lsn);
-        state.recent_record_bytes = state
-            .recent_records
-            .values()
-            .map(|(_, bytes)| bytes.len())
-            .sum();
         drop(state);
         self.inner.changed.notify_all();
         self.progress()
@@ -665,14 +640,14 @@ impl Stream {
             let mut state = self.lock()?;
             state.closed = true;
             self.inner.changed.notify_all();
-            let mut flush = self.inner.flushes.lock().map_err(|_| Error::Io)?;
-            flush.closed = true;
-            self.inner.flush_changed.notify_all();
+            let mut closed = self.inner.worker_closed.lock().map_err(|_| Error::Io)?;
+            *closed = true;
+            self.inner.worker_changed.notify_all();
             return Ok(());
         }
-        let mut flush = self.inner.flushes.lock().map_err(|_| Error::Io)?;
-        while !flush.closed {
-            flush = self.inner.flush_changed.wait(flush).map_err(|_| Error::Io)?;
+        let mut closed = self.inner.worker_closed.lock().map_err(|_| Error::Io)?;
+        while !*closed {
+            closed = self.inner.worker_changed.wait(closed).map_err(|_| Error::Io)?;
         }
         Ok(())
     }
@@ -944,9 +919,8 @@ impl AppendBatch {
         }
         self.records.push(PlannedRecord {
             lsn,
-            bytes: Arc::new(bytes),
+            bytes,
             new_segment,
-            meta,
         });
         Ok(())
     }
@@ -1150,7 +1124,6 @@ impl State {
                     for request in requests {
                         request.complete_durable(Err(error));
                     }
-                    Self::publish_flush_error(inner, error);
                     return;
                 }
             };
@@ -1162,7 +1135,6 @@ impl State {
                 for request in requests {
                         request.complete_durable(Err(Error::Corrupt));
                 }
-                Self::publish_flush_error(inner, Error::Corrupt);
                 return;
             }
         }
@@ -1178,7 +1150,6 @@ impl State {
                 for request in requests {
                     request.complete_durable(Err(Error::Io));
                 }
-                Self::publish_flush_error(inner, Error::Io);
                 return;
             }
         };
@@ -1192,7 +1163,6 @@ impl State {
             for request in requests {
                 request.complete_durable(Err(error));
             }
-            Self::publish_flush_error(inner, error);
             return;
         }
         let flush_result = requests.last().map(|request| request.result);
@@ -1207,18 +1177,8 @@ impl State {
     }
 
     fn publish_flush(inner: &Arc<StreamInner>, end_lsn: u64, end_scn: u64) {
-        if let Ok(mut flush) = inner.flushes.lock() {
-            flush.generation = flush.generation.wrapping_add(1);
-            flush.end_lsn = end_lsn;
-            flush.end_scn = end_scn;
-            inner.flush_changed.notify_all();
-        }
-    }
-
-    fn publish_flush_error(inner: &Arc<StreamInner>, error: Error) {
-        if let Ok(mut flush) = inner.flushes.lock() {
-            flush.failed = Some(error);
-            inner.flush_changed.notify_all();
+        if let Some(callback) = inner.flush_callback.get() {
+            callback(end_lsn, end_scn);
         }
     }
 
@@ -1230,30 +1190,6 @@ impl State {
     }
 
     fn publish_append_batch(&mut self, plan: &AppendBatch) {
-        for record in &plan.records {
-            if let Some(meta) = &record.meta {
-                self.recent_record_bytes = self
-                    .recent_record_bytes
-                    .saturating_add(record.bytes.len());
-                if let Some((_, previous)) = self.recent_records.insert(
-                    meta.lsn,
-                    (meta.clone(), Arc::clone(&record.bytes)),
-                ) {
-                    self.recent_record_bytes = self
-                        .recent_record_bytes
-                        .saturating_sub(previous.len());
-                }
-            }
-        }
-        while self.recent_records.len() > MAX_RECENT_RECORDS
-            || self.recent_record_bytes > MAX_RECENT_RECORD_BYTES
-        {
-            if let Some((_, (_, bytes))) = self.recent_records.pop_first() {
-                self.recent_record_bytes = self.recent_record_bytes.saturating_sub(bytes.len());
-            } else {
-                break;
-            }
-        }
         self.segments = plan.segments.clone();
         self.last_record = plan.last_record.clone();
         self.end_lsn = plan.end_lsn;
@@ -1337,9 +1273,6 @@ impl State {
     fn read_record(&self, lsn: u64) -> Result<(RecordMeta, Vec<u8>)> {
         let id = block_id(lsn);
         let segment = self.segments.get(&id).ok_or(Error::OutLower)?;
-        if let Some((meta, bytes)) = self.recent_records.get(&lsn) {
-            return Ok((meta.clone(), bytes.as_ref().clone()));
-        }
         let mut file = File::open(segment_path(&self.directory, id))?;
         read_record_from(
             &mut file,
@@ -1378,11 +1311,6 @@ impl State {
                 Error::OutUpper
             });
         };
-        if let Some((_, (record, bytes))) = self.recent_records.range(..=lsn).next_back() {
-            if lsn < record.end_lsn() {
-                return Ok((record.clone(), bytes.as_ref().clone()));
-            }
-        }
         let mut scanner = SegmentScanner::new(
             &self.directory,
             id,
@@ -1606,8 +1534,6 @@ fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64) -> Result<State>
         accumulated_checksum: base.prev_accumulated_checksum,
         manifest,
         segments: BTreeMap::new(),
-        recent_records: BTreeMap::new(),
-        recent_record_bytes: 0,
         last_record: None,
         integrity: true,
         closed: false,
@@ -1763,8 +1689,6 @@ fn open_state(directory: &Path) -> Result<State> {
         append_file,
         manifest,
         segments,
-        recent_records: BTreeMap::new(),
-        recent_record_bytes: 0,
         last_record,
         end_lsn,
         end_scn,

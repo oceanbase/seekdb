@@ -53,13 +53,6 @@ mod ffi {
         end_scn: u64,
     }
 
-    struct FlushResult {
-        code: Code,
-        generation: u64,
-        end_lsn: u64,
-        end_scn: u64,
-    }
-
     struct ImportedGroup {
         source_lsn: u64,
         source_scn: u64,
@@ -100,6 +93,16 @@ mod ffi {
         total: u64,
     }
 
+    unsafe extern "C++" {
+        include!("rust/wal/include/callbacks.h");
+
+        unsafe fn publish_flush_ffi(
+            callbacks: *mut u8,
+            end_lsn: u64,
+            end_scn: u64,
+        );
+    }
+
     extern "Rust" {
         type Env;
         fn create_env(path: &str, disk_soft_target: u64) -> Box<Env>;
@@ -114,9 +117,11 @@ mod ffi {
 
         type Stream;
         fn status_ffi(stream: &Stream) -> Code;
-        fn clone_stream_ffi(stream: &Stream) -> Box<Stream>;
+        unsafe fn set_flush_callback_ffi(
+            stream: &Stream,
+            callbacks: *mut u8,
+        ) -> Code;
         fn submit_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult;
-        fn wait_flush_ffi(stream: &Stream, after_generation: u64) -> FlushResult;
         fn copy_imported_group(source_lsn: u64, source_scn: u64, bytes: &[u8])
             -> ImportedGroupResult;
         fn append_imported_ffi(stream: &Stream, groups: &[ImportedGroup]) -> AppendResult;
@@ -142,8 +147,8 @@ mod ffi {
 }
 
 pub use ffi::{
-    AppendResult, BaseInfo, BaseInfoResult, Code, DiskUsageResult, FlushResult, ImportedGroup,
-    ImportedGroupResult, PositionResult, Progress,
+    AppendResult, BaseInfo, BaseInfoResult, Code, DiskUsageResult, ImportedGroup, ImportedGroupResult,
+    PositionResult, Progress,
 };
 
 fn code(result: Result<()>) -> Code {
@@ -258,8 +263,18 @@ fn status_ffi(stream: &Stream) -> Code {
     }
 }
 
-fn clone_stream_ffi(stream: &Stream) -> Box<Stream> {
-    Box::new(stream.clone())
+unsafe fn set_flush_callback_ffi(
+    stream: &Stream,
+    callbacks: *mut u8,
+) -> Code {
+    let callbacks = callbacks as usize;
+    code(stream.set_flush_callback(move |end_lsn, end_scn| unsafe {
+        ffi::publish_flush_ffi(
+            callbacks as *mut u8,
+            end_lsn,
+            end_scn,
+        );
+    }))
 }
 
 fn submit_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult {
@@ -275,23 +290,6 @@ fn submit_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult {
             code: error.into(),
             lsn: 0,
             scn: 0,
-            end_lsn: 0,
-            end_scn: 0,
-        },
-    }
-}
-
-fn wait_flush_ffi(stream: &Stream, after_generation: u64) -> FlushResult {
-    match stream.wait_flush(after_generation) {
-        Ok((generation, end_lsn, end_scn)) => FlushResult {
-            code: Code::Ok,
-            generation,
-            end_lsn,
-            end_scn,
-        },
-        Err(error) => FlushResult {
-            code: error.into(),
-            generation: after_generation,
             end_lsn: 0,
             end_scn: 0,
         },

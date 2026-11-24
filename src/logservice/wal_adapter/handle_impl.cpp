@@ -35,10 +35,21 @@ void assign_scn(SCN &scn, const uint64_t value)
 
 }
 
+namespace wal_rs
+{
+void publish_flush_ffi(uint8_t *context, const uint64_t end_lsn,
+    const uint64_t end_scn_value)
+{
+  auto *callbacks = reinterpret_cast<FsyncCallbackWrapper *>(context);
+  SCN end_scn;
+  assign_scn(end_scn, end_scn_value);
+  (void)callbacks->update_end_lsn(LSN(end_lsn), end_scn);
+}
+}
+
 HandleImpl::HandleImpl()
     : lock_(common::ObLatchIds::WAL_HANDLE_IMPL_LOCK),
       stream_(),
-      flush_thread_(),
       fs_cb_wrapper_(),
       io_lock_(common::ObLatchIds::WAL_HANDLE_IMPL_LOCK),
       active_io_count_(0),
@@ -60,19 +71,10 @@ int HandleImpl::init(::rust::Box<wal_rs::Stream> stream)
     stream_.emplace(std::move(stream));
     ret = from_rust_code(wal_rs::status_ffi(**stream_));
     if (OB_SUCC(ret)) {
-      flush_thread_ = std::thread([this, stream = wal_rs::clone_stream_ffi(**stream_)]() mutable {
-        uint64_t generation = 0;
-        for (;;) {
-          const auto flushed = wal_rs::wait_flush_ffi(*stream, generation);
-          if (wal_rs::Code::Ok != flushed.code) {
-            break;
-          }
-          generation = flushed.generation;
-          SCN end_scn;
-          assign_scn(end_scn, flushed.end_scn);
-          (void)fs_cb_wrapper_.update_end_lsn(LSN(flushed.end_lsn), end_scn);
-        }
-      });
+      ret = from_rust_code(wal_rs::set_flush_callback_ffi(
+          **stream_, reinterpret_cast<uint8_t *>(&fs_cb_wrapper_)));
+    }
+    if (OB_SUCC(ret)) {
       is_inited_ = true;
     } else {
       stream_.reset();
@@ -92,7 +94,6 @@ void HandleImpl::destroy()
   WLockGuard guard(lock_);
   if (is_inited_) {
     (void)wal_rs::close_ffi(**stream_);
-    flush_thread_.join();
     stream_.reset();
     is_inited_ = false;
   }
