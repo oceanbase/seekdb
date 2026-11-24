@@ -4,7 +4,13 @@
 
 ## Prepare the binaries
 
-Build seekdb using the [build and run guide](build-and-run.md). Get the `sqltest` binary for your platform from the [seekdb_test repository](https://gitlab.oceanbase-dev.com/obqa/seekdb_test/-/tree/master/tools/sqltest/bin) and put it on your path. Access to that repository is required to retrieve the tool.
+Build seekdb using the [build and run guide](build-and-run.md). On Linux x86_64, add the bundled `sqltest` to your path from the repository root.
+
+```bash
+export PATH="$PWD/tools/sqltest/bin/linux-amd64:$PATH"
+```
+
+On other platforms, put a `sqltest` binary for your platform on your path.
 
 ## Select and run cases
 

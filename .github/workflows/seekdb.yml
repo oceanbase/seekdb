@@ -13,7 +13,6 @@ permissions:
   contents: read
 
 env:
-  SEEKDB_TEST_REVISION: 4b0eee752936b3e08a91880463abac4d90113247
   SEEKDB_BINARY_PATH: build/bin/src/observer/seekdb
   SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
   SEEKDB_CACHE_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb/_cache
@@ -124,21 +123,6 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
 
-      - name: Fetch sqltest from seekdb_test
-        shell: bash
-        run: |
-          set -euo pipefail
-          TEST_REPO=$(mktemp -d "${RUNNER_TEMP:?}/seekdb-test.XXXXXX")
-          # The runner-mounted key needs read access to seekdb_test and its
-          # known_hosts file needs the GitLab host key.
-          export GIT_SSH_COMMAND='/usr/bin/ssh -i /obshared/seekdb/id_rsa -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/obshared/seekdb/known_hosts'
-          git init "$TEST_REPO"
-          git -C "$TEST_REPO" remote add origin ssh://git@gitlab.oceanbase-dev.com/obqa/seekdb_test.git
-          git -C "$TEST_REPO" fetch --no-tags --depth=1 --filter=blob:none origin "$SEEKDB_TEST_REVISION"
-          git -C "$TEST_REPO" cat-file blob FETCH_HEAD:tools/sqltest/bin/linux-amd64/sqltest > "$TEST_REPO/sqltest"
-          chmod +x "$TEST_REPO/sqltest"
-          echo "SQLTEST_BIN=$TEST_REPO/sqltest" >> "$GITHUB_ENV"
-
       - name: Run mysqltest with sqltest (24 workers)
         shell: bash
         run: |
@@ -148,7 +132,7 @@ jobs:
           mkdir -p "$DEST_DIR"
           TEST_ROOT="$GITHUB_WORKSPACE/tools/deploy/mysql_test"
           RESULT=0
-          "$SQLTEST_BIN" --seekdb "$GITHUB_WORKSPACE/$SEEKDB_BINARY_PATH" \
+          "$GITHUB_WORKSPACE/tools/sqltest/bin/linux-amd64/sqltest" --seekdb "$GITHUB_WORKSPACE/$SEEKDB_BINARY_PATH" \
             --test-root "$TEST_ROOT" --run-dir "$RUN_DIR" -j 24 --case-timeout 1h \
             2>&1 | tee "$DEST_DIR/sqltest.log" || RESULT=$?
           echo "SQL regression log saved to $DEST_DIR/sqltest.log" >> "$GITHUB_STEP_SUMMARY"
