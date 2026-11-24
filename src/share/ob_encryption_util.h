@@ -106,8 +106,7 @@ public:
 
 enum ObHashAlgorithm {
   OB_HASH_INVALID = 0,
-  OB_HASH_MD4,
-  OB_HASH_MD5,
+  OB_HASH_MD5 = 2,
   OB_HASH_SH1,
   OB_HASH_SH224,
   OB_HASH_SH256,

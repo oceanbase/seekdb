@@ -35,9 +35,8 @@ fn hex(value: &str) -> Vec<u8> {
 
 #[test]
 fn digest_known_answers_and_output_bounds() {
-    // Published "abc" vectors from RFC 1320/1321, FIPS 180-4 and GB/T 32905.
+    // Published "abc" vectors from RFC 1321, FIPS 180-4 and GB/T 32905.
     let cases = [
-        (HashAlgorithm::Md4, "a448017aaf21d8525fc10ae87aa6729d"),
         (HashAlgorithm::Md5, "900150983cd24fb0d6963f7d28e17f72"),
         (HashAlgorithm::Sha1, "a9993e364706816aba3e25717850c26c9cd0d89d"),
         (HashAlgorithm::Sha224, "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7"),
