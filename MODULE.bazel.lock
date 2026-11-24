@@ -208,16 +208,9 @@
         "bzlTransitiveDigest": "6qbbcXCKyLfjRt7/fjlAk+QaxaAbiAQTZk24i6KV55g=",
         "usagesDigest": "C88oWWRSwl985DWTNoqa3RJhrmyPEurpg8bTGjwBxHo=",
         "recordedInputs": [
-          "FILE:@@//bazel/sdk_sources/dependencies.json e6cc5afa8c36fef2bb50de9d9b870a71a0f4333edc11951fa2a03dbdabb03ca7"
+          "FILE:@@//bazel/sdk_sources/dependencies.json 3284314731ac2256bc54f5db4895b8f0a20205cd653ed96245196fc85e0cf51b"
         ],
         "generatedRepoSpecs": {
-          "sdk_abseil": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:abseil.BUILD",
-              "package": "abseil"
-            }
-          },
           "sdk_roaring": {
             "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
             "attributes": {

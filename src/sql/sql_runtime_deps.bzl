@@ -113,7 +113,6 @@ SQL_RUNTIME_NATIVE_DEPS = [
     "//src/share:utility_types",
     "//src/share:vector",
     "//src/share:worker_runtime",
-    "//bazel/third_party:absl_headers",
     "//bazel/third_party:boost_headers",
     "//rust:http_client_headers",
     "//rust:regex_engine_headers",

@@ -248,7 +248,6 @@ _STORAGE_RUNTIME_NATIVE_DEPS = [
     "//src/share:utility_types",
     "//src/share:vector",
     "//src/share:worker_runtime",
-    "//bazel/third_party:absl_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
     "//bazel/third_party:roaring_headers",

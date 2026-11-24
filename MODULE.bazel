@@ -170,7 +170,6 @@ sdk_sources = use_extension("//bazel/sdk_sources:repositories.bzl", "sdk_sources
 
 use_repo(
     sdk_sources,
-    "sdk_abseil",
     "sdk_roaring",
     "sdk_boost",
 )

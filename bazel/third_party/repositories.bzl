@@ -96,7 +96,7 @@ def _third_party_headers_repository_impl(repository_ctx):
     elif platform == "wasm":
         locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/wasm"
     source_headers = [
-        "absl", "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
+        "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
         "omp.h", "ompx.h", "omp-tools.h", "ompt.h", "lapack.h", "lapacke.h",
         "lapacke_config.h", "lapacke_mangling.h", "lapacke_utils.h", "cblas.h",
     ]

@@ -126,7 +126,6 @@ grouped_unity_cc_library(
         "//src/share:thread_pool_interface",
         "//src/share:unit_topology",
         "//src/share:worker_runtime",
-        "//bazel/third_party:absl_headers",
         "//bazel/third_party:mariadb_headers",
         "//bazel/third_party:openssl_headers",
         "//bazel/third_party:vsag_headers",
