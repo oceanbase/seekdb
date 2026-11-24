@@ -1,0 +1,21 @@
+MODULE.bazel
+  s_fdfde42d902ed0::t_6e1827fd2c714c 57-63
+bazel/fancy-regex-captures.diff
+  s_fdfde42d902ed0::t_79beeabf0bc3c6 1-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b213c5fb9a226d93e40bb7d6e5e9d062f69a1a79",
+  "prompts": {},
+  "sessions": {
+    "s_fdfde42d902ed0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20b10-0238-7c71-9aff-d9b223fa94ef",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}
