@@ -1,0 +1,34 @@
+bazel/toolchains/cc/BUILD.android_cc_toolchain.tpl
+  s_7966c2b79dc7d9::t_7bdc269cf28bc7 62
+  s_7966c2b79dc7d9::t_441fb1c5699321 61
+bazel/final_link.bzl
+  s_7966c2b79dc7d9::t_5e5f47818f8069 298-299
+  s_7966c2b79dc7d9::t_402a1fafb4dfd0 345
+  s_b05fb35d268d3d::t_84af7a5b84fa2e 289-297
+bazel/BUILD.bazel
+  s_b05fb35d268d3d::t_3b87168f4a10da 71-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "39196850a3a6bdd00489b2a022d906052c423ea7",
+  "prompts": {},
+  "sessions": {
+    "s_7966c2b79dc7d9": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "3375ffcb-47f8-4626-a108-c5811ec63525",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    },
+    "s_b05fb35d268d3d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "397c44e0-dcf6-4293-9fdf-0c165190b278",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+src/sql/engine/cmd/ob_load_data_parser.cpp
+  s_788b3e9063c7e5::t_b63f38d8524c29 163,167,175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a2ca0a6213b4df688fc94350e084925125bdaa47",
+  "prompts": {},
+  "sessions": {
+    "s_788b3e9063c7e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f84c-3ceb-7682-b97a-fd821249bfab",
+        "model": "deepseek-flash"
+      },
+      "human_author": "文田 <chenminsi.cms@oceanbase.com>"
+    }
+  }
+}

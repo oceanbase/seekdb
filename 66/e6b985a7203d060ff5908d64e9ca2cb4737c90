@@ -1,0 +1,19 @@
+AGENTS.md
+  s_316c61c2ca7b50::t_c3c75033818498 50-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "66e6b985a7203d060ff5908d64e9ca2cb4737c90",
+  "prompts": {},
+  "sessions": {
+    "s_316c61c2ca7b50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20832-b996-7773-825e-2cb6868d3222",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}

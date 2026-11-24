@@ -1,0 +1,22 @@
+package/package.py
+  s_99bd9318300c1c::t_6bb70f5800ff17 69
+package/binary.py
+  s_99bd9318300c1c::t_6bb70f5800ff17 86-110,124-126,131-132,165,184-185
+  s_99bd9318300c1c::t_f9bed3b329c0f7 127-130,133-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c6c91b6c5290cb496f3bf8751bffc0e2b5dd5583",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

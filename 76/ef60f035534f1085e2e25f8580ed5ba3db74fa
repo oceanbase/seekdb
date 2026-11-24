@@ -1,0 +1,27 @@
+src/sql/engine/dml/ob_table_insert_up_op.cpp
+  s_a768317b8a1c82::t_487026c8f7a0e5 1232-1237
+  s_a768317b8a1c82::t_79913f3190c3b3 1219-1221
+  s_a768317b8a1c82::t_f97c70422f89cc 1222,1238
+src/sql/engine/basic/ob_chunk_datum_store.h
+  s_a768317b8a1c82::t_487026c8f7a0e5 137-139
+  s_a768317b8a1c82::t_f97c70422f89cc 140
+src/sql/engine/basic/ob_chunk_datum_store.cpp
+  s_a768317b8a1c82::t_f97c70422f89cc 73,81
+  s_a768317b8a1c82::t_487026c8f7a0e5 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "76ef60f035534f1085e2e25f8580ed5ba3db74fa",
+  "prompts": {},
+  "sessions": {
+    "s_a768317b8a1c82": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f84c-ba06-7f83-bed1-d90889d91d33",
+        "model": "deepseek-flash"
+      },
+      "human_author": "文田 <chenminsi.cms@oceanbase.com>"
+    }
+  }
+}

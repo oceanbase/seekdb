@@ -1,0 +1,19 @@
+src/logservice/ob_log_service.cpp
+  s_bfbce7ea66b68b::t_5f6a8d4ca7a986 23-27,602-634
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8444a73229f44418cd6bbf6dc4e4c06f79387a74",
+  "prompts": {},
+  "sessions": {
+    "s_bfbce7ea66b68b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a143fc-2c61-7ef0-a136-c10b98d3f0af",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

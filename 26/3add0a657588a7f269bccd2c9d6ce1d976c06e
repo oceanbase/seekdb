@@ -1,0 +1,19 @@
+.github/workflows/build-libseekdb.yml
+  s_7966c2b79dc7d9::t_e183725ad68d7d 241-265,276,279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "263add0a657588a7f269bccd2c9d6ce1d976c06e",
+  "prompts": {},
+  "sessions": {
+    "s_7966c2b79dc7d9": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "3375ffcb-47f8-4626-a108-c5811ec63525",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

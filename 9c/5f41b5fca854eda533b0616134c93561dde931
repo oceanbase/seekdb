@@ -1,0 +1,20 @@
+bazel/final_link.bzl
+  s_f87238b17c0588::t_cd70ac6e5d8b20 121-130,138,157
+  s_f87238b17c0588::t_e30edad8fed82c 228-231,238,243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9c5f41b5fca854eda533b0616134c93561dde931",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

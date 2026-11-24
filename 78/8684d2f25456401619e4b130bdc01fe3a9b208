@@ -1,0 +1,25 @@
+.github/workflows/package.yml
+  s_99bd9318300c1c::t_7a6c4952ca5720 94,160,163,165,172,186,230-232
+package/package.py
+  s_99bd9318300c1c::t_7a6c4952ca5720 313-314
+package/README.md
+  s_99bd9318300c1c::t_db754705e88e05 28-30,214-217,225-226
+.github/scripts/package.py
+  s_99bd9318300c1c::t_7a6c4952ca5720 125,175,180-182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "788684d2f25456401619e4b130bdc01fe3a9b208",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai <5187215+hnwyllmm@users.noreply.github.com>"
+    }
+  }
+}

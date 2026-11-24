@@ -1,0 +1,19 @@
+src/observer/virtual_table/ob_virtual_warning.cpp
+  s_de4df3b0d83d68::t_29075a5a3fe8f3 83-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6a1d199d757b70b7e32a46105053f7d730dc2c55",
+  "prompts": {},
+  "sessions": {
+    "s_de4df3b0d83d68": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f6f2-fea2-7a72-86a2-8f9d6c6fdf86",
+        "model": "deepseek-flash"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

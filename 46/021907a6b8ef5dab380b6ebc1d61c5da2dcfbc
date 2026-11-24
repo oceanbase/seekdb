@@ -1,0 +1,24 @@
+deps/init/oceanbase.ios-host.arm64.deps
+  s_99bd9318300c1c::t_9ae67b84791c0c 8-14
+  s_99bd9318300c1c::t_691c05369915fa 1-7,15-18
+.github/scripts/package.py
+  s_99bd9318300c1c::t_691c05369915fa 94-96,157-167
+package/README.md
+  s_99bd9318300c1c::t_691c05369915fa 96-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "46021907a6b8ef5dab380b6ebc1d61c5da2dcfbc",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}

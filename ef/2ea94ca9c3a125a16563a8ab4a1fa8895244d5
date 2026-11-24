@@ -1,0 +1,19 @@
+src/sql/optimizer/stat/ob_stats_estimator.cpp
+  s_c1726ac37da477::t_fa9e66a50c8998 19,368-396,398-442,444-453,456-459,462-470,472-473,476-485
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ef2ea94ca9c3a125a16563a8ab4a1fa8895244d5",
+  "prompts": {},
+  "sessions": {
+    "s_c1726ac37da477": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c9b8-d9ec-7e81-bc9f-4f6259e85576",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

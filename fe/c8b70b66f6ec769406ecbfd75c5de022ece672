@@ -1,0 +1,25 @@
+src/standby/standby_host.h
+  s_fa53ea079f3123::t_1698b2442651bc 101
+src/standby/control/ob_standby_role_transition_service.cpp
+  s_fa53ea079f3123::t_1698b2442651bc 198-199,201
+  s_fa53ea079f3123::t_b2fff65cb2451c 182,186-197,200,202,242,312,468
+src/observer/ob_server.cpp
+  s_fa53ea079f3123::t_1698b2442651bc 197,203-205
+  s_fa53ea079f3123::t_01bd2bb3881d5b 206-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fec8b70b66f6ec769406ecbfd75c5de022ece672",
+  "prompts": {},
+  "sessions": {
+    "s_fa53ea079f3123": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20771-0c72-7270-8c9b-f05d3eb07e79",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

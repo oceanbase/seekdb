@@ -1,0 +1,25 @@
+rpm/seekdb-build.sh
+  s_99bd9318300c1c::t_96c019832f5dc1 3-4
+package/binary.py
+  s_99bd9318300c1c::t_96c019832f5dc1 9,224-241,248,280,310
+  s_99bd9318300c1c::t_1412ceaff7d96a 207
+  s_99bd9318300c1c::t_54fedcd40ee919 274
+package/rpm/seekdb-build.sh
+  s_99bd9318300c1c::t_b1de7d1a153810 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ddeeede508a1409cf8b66e955a228cfdd066e4c4",
+  "prompts": {},
+  "sessions": {
+    "s_99bd9318300c1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c972-d73b-7203-b5c1-870abbb05adf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wangyunlai.wyl <wangyunlai.wyl@B-X5EBQ6LT-0055.local>"
+    }
+  }
+}
