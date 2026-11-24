@@ -5,8 +5,16 @@ load("@rules_cc//cc/private/toolchain:unix_cc_toolchain_config.bzl", "cc_toolcha
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
+    name = "llvm_shared_libraries",
+    srcs = glob(["devtools/lib/libLLVM*.so*"], allow_empty = True),
+)
+
+filegroup(
     name = "clang_compiler_files",
-    srcs = ["devtools/bin/clang"] + glob([
+    srcs = [
+        ":llvm_shared_libraries",
+        "devtools/bin/clang",
+    ] + glob([
         "gcc/include/c++/**",
         "devtools/lib/clang/**/include/**",
         "devtools/lib/clang/**/share/**",
@@ -21,6 +29,7 @@ filegroup(
 filegroup(
     name = "archive_files",
     srcs = [
+        ":llvm_shared_libraries",
         "devtools/bin/llvm-ar",
         "devtools/bin/llvm-nm",
         "devtools/bin/llvm-ranlib",
@@ -56,12 +65,13 @@ filegroup(
 
 filegroup(
     name = "objcopy_files",
-    srcs = ["devtools/bin/llvm-objcopy"],
+    srcs = [":llvm_shared_libraries", "devtools/bin/llvm-objcopy"],
 )
 
 filegroup(
     name = "strip_files",
     srcs = [
+        ":llvm_shared_libraries",
         "devtools/bin/llvm-objcopy",
         "devtools/bin/llvm-strip",
     ],
@@ -69,7 +79,7 @@ filegroup(
 
 filegroup(
     name = "dwp_files",
-    srcs = ["devtools/bin/llvm-dwp"],
+    srcs = [":llvm_shared_libraries", "devtools/bin/llvm-dwp"],
 )
 
 filegroup(
