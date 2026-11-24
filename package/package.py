@@ -42,9 +42,9 @@ def copy(source, destination, executable=False):
     destination.chmod(0o755 if executable else 0o644)
 
 
-def stage_compliance(destination, share, version):
+def stage_compliance(destination, share, version, source_commit=None):
     import compliance
-    compliance.stage(destination / share / "licenses", version)
+    compliance.stage(destination / share / "licenses", version, source_commit)
 
 
 def normalize_permissions(root):
@@ -57,9 +57,9 @@ def normalize_permissions(root):
 
 
 def stage(destination, artifacts, dependencies, layout, version, release, component="server",
-          binary_package=None, seekdb_bin=None, obshell_bin=None, portable=False):
+          binary_package=None, seekdb_bin=None, obshell_bin=None, portable=False, source_commit=None):
     if component == "libs":
-        stage_compliance(destination, "usr/share/seekdb", version)
+        stage_compliance(destination, "usr/share/seekdb", version, source_commit)
         if binary_package:
             shutil.copytree(binary_package / "lib/seekdb", destination / "usr/libexec/seekdb/lib",
                             dirs_exist_ok=True)
@@ -83,7 +83,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
     }
     directories = ("bin", "etc/seekdb", "share/seekdb", "libexec/seekdb") if portable else paths[layout]
     binary, config, share, helpers = [destination / path for path in directories]
-    stage_compliance(destination, share, version)
+    stage_compliance(destination, share, version, source_commit)
     executable = "seekdb.exe" if layout == "windows" else "seekdb"
     if binary_package:
         for source, target in (("bin", binary), ("etc/seekdb", config),
@@ -322,7 +322,8 @@ def main():
             import binary_distribution
             binary_package = work / "binary"
             stage(binary_package, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
-                  options.version, options.release, seekdb_bin=options.seekdb_bin, portable=True)
+                  options.version, options.release, seekdb_bin=options.seekdb_bin, portable=True,
+                  source_commit=options.source_commit)
             import compliance
             compliance.stage(binary_package / "licenses", options.version, options.source_commit)
             original = options.seekdb_bin or options.artifacts / "src/observer" / (
