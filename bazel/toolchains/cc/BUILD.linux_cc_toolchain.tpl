@@ -159,7 +159,7 @@ cc_toolchain_config(
         "strip": "devtools/bin/llvm-strip",
         "validate_static_library": "validate_static_library.sh",
     },
-    toolchain_identifier = "seekdb-clang17-local",
+    toolchain_identifier = "seekdb-clang-local",
     unfiltered_compile_flags = [
         "-no-canonical-prefixes",
         "-Wno-builtin-macro-redefined",
@@ -184,7 +184,7 @@ cc_toolchain(
     strip_files = ":strip_files",
     supports_param_files = 1,
     toolchain_config = ":local_compile_config",
-    toolchain_identifier = "seekdb-clang17-local",
+    toolchain_identifier = "seekdb-clang-local",
 )
 
 toolchain(

@@ -97,7 +97,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
     manifest = devtools.get_child("manifest.json")
     repository_ctx.watch(manifest)
     if not manifest.exists:
-        devtools = repository_ctx.workspace_root.get_child("deps", "3rd", "usr", "local", "oceanbase", "devtools")
+        fail("LLVM is missing: %s; run ./build.py init" % devtools)
     for tool_name in [
         "clang",
         "ld.lld",

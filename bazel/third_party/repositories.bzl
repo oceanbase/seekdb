@@ -41,9 +41,10 @@ def _windows_sdk(repository_ctx):
     for source, destination in {
         "openssl/lib/VC/x64/MD": "openssl",
         "openssl/bin": "openssl_bin",
-        "tools/llvm18": "devtools",
     }.items():
         repository_ctx.symlink(sdk + "/" + source, destination)
+    repository_ctx.watch(repository_ctx.path(locked_sdk + "/llvm/manifest.json"))
+    repository_ctx.symlink(locked_sdk + "/llvm", "devtools")
     locked_bins = locked_sdk + "/bin"
     if repository_ctx.path(locked_bins).exists:
         _link_directory_contents(repository_ctx, [locked_bins, sdk + "/vcpkg/x64-windows/bin"], "bin")
@@ -119,19 +120,12 @@ def _third_party_headers_repository_impl(repository_ctx):
             _link_directory_contents(repository_ctx, [locked_headers, headers], "include")
         else:
             repository_ctx.symlink(headers, "include")
-    devtools = repository_ctx.path(sdk + "/devtools")
+    host_prebuilt = repository_ctx.workspace_root.get_child("deps", "prebuilt", "native")
+    llvm = host_prebuilt.get_child("llvm")
+    repository_ctx.watch(llvm.get_child("manifest.json"))
+    repository_ctx.symlink(llvm, "devtools")
     if platform == "native" and repository_ctx.os.name == "linux":
-        prebuilt = repository_ctx.path(locked_sdk)
-        llvm = prebuilt.get_child("llvm")
-        manifest = llvm.get_child("manifest.json")
-        repository_ctx.watch(manifest)
-        if manifest.exists:
-            devtools = llvm
-            repository_ctx.symlink(prebuilt.get_child("ob-sanity"), "sanity")
-        else:
-            repository_ctx.symlink(devtools.get_child("include"), "sanity/include")
-            repository_ctx.symlink(devtools.get_child("lib64"), "sanity/lib")
-    repository_ctx.symlink(devtools, "devtools")
+        repository_ctx.symlink(host_prebuilt.get_child("ob-sanity"), "sanity")
     locked_libraries = locked_sdk + "/lib"
     if locked_libraries != libraries and repository_ctx.path(locked_libraries).exists:
         _link_directory_contents(repository_ctx, [locked_libraries, libraries], "lib")

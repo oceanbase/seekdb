@@ -26,9 +26,7 @@ def tool(name, layout):
         directories += sorted((Path(os.environ["ANDROID_NDK_HOME"]) / "toolchains/llvm/prebuilt").glob("*/bin"))
     if os.environ.get("BAZEL_LLVM"):
         directories.append(Path(os.environ["BAZEL_LLVM"]) / "bin")
-    if layout == "windows":
-        directories.append(ROOT / "deps/3rd/tools/llvm18/bin")
-    directories.append(ROOT / "deps/3rd/usr/local/oceanbase/devtools/bin")
+    directories.append(ROOT / "deps/prebuilt/native/llvm/bin")
     for directory in directories:
         for suffix in ("", ".exe"):
             candidate = directory / ("llvm-" + name + suffix)

@@ -63,6 +63,14 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-linux-aarch64-glibc217-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
         "sha256": "f7c1cc019fc513df585f9bf61dda71336f0a0228c265f45c6bad7b2be37e2568"
       },
+      "llvm": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/llvm-18.1.8/llvm-18.1.8-bin-linux-aarch64-glibc217-20261124T030119%2B0000-6be1041e42be.tar.gz",
+        "sha256": "977664951736c4fefc761487a49db69a43eb13a9635edb73e70ac2c822a144b1"
+      },
+      "ob-sanity": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/ob-sanity-1.0.0/ob-sanity-1.0.0-bin-linux-aarch64-glibc217-20261124T035858%2B0000-6be1041e42be.tar.gz",
+        "sha256": "34bb80df4fe905db3eac9f52efac1e7da250634e0f164986034f409f993cad09"
+      },
       "openssl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-linux-aarch64-glibc217-20261120T071231%2B0000-c79e60669ad8.tar.gz",
         "sha256": "4ed1c5b31af2ac66b0fae861f7520e840297b58845b2d7e500b52d948bbdc9ed"
@@ -89,6 +97,14 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-linux-x86_64-glibc217-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
         "sha256": "2d9b870b5df738596c8d3d50525911631acc81be57ecbad60d932af53c364d70"
       },
+      "llvm": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/llvm-18.1.8/llvm-18.1.8-bin-linux-x86_64-glibc217-20261124T030119%2B0000-6be1041e42be.tar.gz",
+        "sha256": "82c15515607c35c0ce6cfaedd0146472ecd702d461500e8d826425c843e42afd"
+      },
+      "ob-sanity": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/ob-sanity-1.0.0/ob-sanity-1.0.0-bin-linux-x86_64-glibc217-20261124T035858%2B0000-6be1041e42be.tar.gz",
+        "sha256": "e1fb2435364b10a923eb90f8ce0059f9fbef6605d02e87cea49994715ab0f966"
+      },
       "openssl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-linux-x86_64-glibc217-20261120T071231%2B0000-c79e60669ad8.tar.gz",
         "sha256": "dc2b745ce912ccff3359c1beb3418111acfcd19d696d4cf269b5965e7cd43d6e"
@@ -108,8 +124,8 @@
         "sha256": "aa2a52401e5f2c40d6aa8012a05df2773e9e532de6c4853f78c1852103c5627a"
       },
       "llvm": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/llvm-17.0.6/llvm-17.0.6-bin-macos-arm64-min13-20261123T022610%2B0000-8516872bda60.tar.gz",
-        "sha256": "8cce39f189c2fa59b5609b3b25db247a2666adbdaee6ec82d3501399ba15c2d9"
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/llvm-18.1.8/llvm-18.1.8-bin-macos-arm64-min13-20261124T030119%2B0000-6be1041e42be.tar.gz",
+        "sha256": "94066cb72ef148d6cf5440dbf860708d7f0dc4d1084fd3ad0cff622d5a231063"
       },
       "openssl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-macos-arm64-min13-20261120T071231%2B0000-c79e60669ad8.tar.gz",
@@ -138,6 +154,10 @@
       "libcurl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-windows-x86_64-md-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
         "sha256": "634e632830e7d4509b3d3b80a638cf93c3ed84a239c791b94dc0a8976c513774"
+      },
+      "llvm": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/llvm-18.1.8/llvm-18.1.8-bin-windows-x86_64-mt-20261124T030119%2B0000-6be1041e42be.tar.gz",
+        "sha256": "31fd132a87c1c52e7ba61a1f8a8952792d209d9a72e273a7f88a40cedeb99cbb"
       },
       "vsag": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/vsag-0.16.20/vsag-0.16.20-bin-windows-x86_64-md-20261116T070344%2B0000-97588f036a3a.tar.gz",

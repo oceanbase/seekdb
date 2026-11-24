@@ -352,7 +352,7 @@ def install(profile, destination, cache_directory):
 def install_locked(lock_file, destination, cache_directory, system, architecture):
     packages = locked_packages(lock_file, system, architecture)
     names = {package["name"] for package in packages}
-    if system == "Linux" and ("llvm" in names) != ("ob-sanity" in names):
+    if system == "Linux" and not {"llvm", "ob-sanity"} <= names:
         raise ValueError("Linux locked dependencies must include LLVM and ob-sanity together")
     layout = {"version": 2, "packages": packages}
     key = hashlib.sha256(json.dumps(layout, sort_keys=True).encode("utf-8")).hexdigest()
@@ -380,7 +380,7 @@ def install_locked(lock_file, destination, cache_directory, system, architecture
                 manifests = stage / "manifests"
                 manifests.mkdir(exist_ok=True)
                 manifest.rename(manifests / (package["name"] + ".json"))
-        if system == "Linux" and "ob-sanity" in names:
+        if system == "Linux":
             llvm = json.loads((stage / "llvm/manifest.json").read_text(encoding="utf-8"))
             sanity = json.loads((stage / "ob-sanity/manifest.json").read_text(encoding="utf-8"))
             llvm_version = llvm["version"]

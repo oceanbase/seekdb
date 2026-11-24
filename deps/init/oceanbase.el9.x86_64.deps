@@ -25,7 +25,6 @@ devdeps-roaringbitmap-croaring-3.0.0-42024042816.el8.x86_64.rpm
 [tools]
 obdevtools-bison-2.4.1-12022100413.el8.x86_64.rpm
 obdevtools-flex-2.5.35-12022100417.el8.x86_64.rpm
-obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm
 
 [tools-deps]
 obshell-4.5.1.3-12026111915.el8.x86_64.rpm target=community
