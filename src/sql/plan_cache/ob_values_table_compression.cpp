@@ -74,6 +74,13 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
                                                     ObSQLSessionInfo &session_info,
                                                     ObFastParserResult &fp_result)
 {
+  if (fp_result.values_tokens_.empty() ||
+      pc_ctx.sql_ctx_.handle_batched_multi_stmt() ||
+      session_info.is_inner() ||
+      session_info.get_is_in_retry() ||
+      !config::_enable_values_table_folding()) {
+    return OB_SUCCESS;
+  }
   int ret = OB_SUCCESS;
   bool can_fold_params = false;
   int64_t old_sql_pos = 0;
@@ -101,12 +108,7 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
     }
     return ret;
   };
-  if (pc_ctx.sql_ctx_.handle_batched_multi_stmt() ||
-      session_info.is_inner() ||
-      session_info.get_is_in_retry() ||
-      fp_result.values_tokens_.empty() ||
-      !config::_enable_values_table_folding()) {
-  } else if (!is_support_compress_values_table(pc_ctx.raw_sql_)) {
+  if (!is_support_compress_values_table(pc_ctx.raw_sql_)) {
   } else if (OB_ISNULL(phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else {

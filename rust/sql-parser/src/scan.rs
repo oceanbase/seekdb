@@ -15,7 +15,7 @@
 use crate::bridge::ffi::{Literal, LiteralKind as Kind, ScanOptions, ScanResult, ValuesPosition};
 use crate::lex::{decode_string_into, identifier, quoted_end, space};
 
-pub fn begin_scan(input: &[u8], options: ScanOptions) -> Box<Scanner<'_>> {
+pub fn scan_sql(input: &[u8], options: ScanOptions) -> ScanResult {
     let result = ScanResult {
         sql: Vec::with_capacity(input.len()),
         literals: Vec::new(),
@@ -28,23 +28,23 @@ pub fn begin_scan(input: &[u8], options: ScanOptions) -> Box<Scanner<'_>> {
         error_offset: 0,
     };
     let sql = &input[..crate::prefix::normalized_sql_length(input)];
-    Box::new(Scanner {
+    let mut scanner = Scanner {
         sql,
         pos: 0,
+        copy_start: 0,
         options,
         result,
         inserts: 0,
         brace_depth: 0,
-    })
-}
-
-pub fn finish_scan(scanner: Box<Scanner<'_>>) -> ScanResult {
+    };
+    scanner.run();
     scanner.result
 }
 
-pub struct Scanner<'a> {
+struct Scanner<'a> {
     sql: &'a [u8],
     pos: usize,
+    copy_start: usize,
     options: ScanOptions,
     result: ScanResult,
     inserts: usize,
@@ -52,15 +52,48 @@ pub struct Scanner<'a> {
 }
 
 impl Scanner<'_> {
-    /// Scan up to 512 tokens, then yield so the caller can check cancellation.
-    pub fn advance(&mut self) -> bool {
-        match self.run() {
-            Ok(finished) => finished,
-            Err(offset) => {
-                self.result.error = "invalid SQL token".into();
-                self.result.error_offset = offset;
-                true
+    fn run(&mut self) {
+        loop {
+            self.pos = self.skip_space(self.pos);
+            if self.pos == self.sql.len() {
+                break;
             }
+            let start = self.pos;
+            match self.scan_token(start) {
+                Ok(false) => {}
+                Ok(true) => {
+                    self.flush_sql(self.pos);
+                    return;
+                }
+                Err(offset) => {
+                    self.flush_sql(start);
+                    self.result.error = "invalid SQL token".into();
+                    self.result.error_offset = offset;
+                    return;
+                }
+            }
+        }
+        self.flush_sql(self.pos);
+    }
+
+    // Unformatted text passes through as one source range between edits.
+    fn flush_sql(&mut self, end: usize) {
+        if !self.options.format && self.copy_start < end {
+            self.result.sql.extend_from_slice(&self.sql[self.copy_start..end]);
+            self.copy_start = end;
+        }
+    }
+
+    fn skip_sql(&mut self, start: usize) {
+        self.flush_sql(start);
+        self.copy_start = self.pos;
+    }
+
+    fn sql_offset(&self, pos: usize) -> usize {
+        if self.options.format {
+            self.result.sql.len()
+        } else {
+            self.result.sql.len() + (pos - self.copy_start)
         }
     }
 
@@ -110,8 +143,11 @@ impl Scanner<'_> {
     }
 
     fn normal(&mut self, start: usize, preserve_case: bool) {
+        if !self.options.format {
+            return;
+        }
         let bytes = &self.sql[start..self.pos];
-        if self.options.format && !preserve_case {
+        if !preserve_case {
             if let Ok(text) = std::str::from_utf8(bytes) {
                 for ch in text.chars() {
                     let mut uppercase = ch.to_uppercase();
@@ -126,9 +162,7 @@ impl Scanner<'_> {
         } else {
             self.result.sql.extend_from_slice(bytes);
         }
-        if self.options.format {
-            self.result.sql.push(b' ');
-        }
+        self.result.sql.push(b' ');
     }
 
     fn trim_output_space(&mut self) {
@@ -158,6 +192,7 @@ impl Scanner<'_> {
             self.normal(start, false);
             return;
         }
+        self.skip_sql(start);
         self.result.literals.push(Literal {
             kind,
             start,
@@ -414,6 +449,7 @@ impl Scanner<'_> {
                     self.pos = comment_start;
                     self.normal(start, false);
                     self.pos = end;
+                    self.skip_sql(comment_start);
                     self.comment_separator();
                     if self.options.format {
                         self.trim_output_space();
@@ -493,11 +529,11 @@ impl Scanner<'_> {
         }
         if word.eq_ignore_ascii_case(b"values") || word.eq_ignore_ascii_case(b"value") {
             if self.inserts == 1 && self.result.insert_values_offset == 0 {
-                self.result.insert_values_offset = self.result.sql.len() + 1;
+                self.result.insert_values_offset = self.sql_offset(start) + 1;
             }
             if word.eq_ignore_ascii_case(b"values") {
                 self.result.values.push(ValuesPosition {
-                    sql_offset: self.result.sql.len(),
+                    sql_offset: self.sql_offset(start),
                     literal_index: self.result.literals.len(),
                 });
             }
@@ -526,145 +562,138 @@ impl Scanner<'_> {
         Ok(())
     }
 
-    fn run(&mut self) -> Result<bool, usize> {
-        for _ in 0..512 {
-            if self.pos == self.sql.len() {
-                return Ok(true);
+    #[inline]
+    fn scan_token(&mut self, start: usize) -> Result<bool, usize> {
+        let byte = self.byte(start);
+        match byte {
+            b'\'' | b'"' => self.string(start, Kind::String)?,
+            b'`' => {
+                self.pos = quoted_end(self.sql, start, false).ok_or(start)?;
+                self.pos = self.qualified_tail(self.pos);
+                self.normal(start, true);
             }
-            let whitespace = self.pos;
-            self.pos = self.skip_space(self.pos);
-            if !self.options.format {
-                self.result.sql.extend_from_slice(&self.sql[whitespace..self.pos]);
+            b'n' | b'N' if self.byte(start + 1) == b'\'' => {
+                self.pos += 1;
+                self.string(start, Kind::NationalString)?;
             }
-            if self.pos == self.sql.len() {
-                return Ok(true);
+            b'x' | b'X' | b'b' | b'B' if self.byte(start + 1) == b'\'' => {
+                self.binary(start, true, byte.eq_ignore_ascii_case(&b'x'))?;
             }
-            let start = self.pos;
-            let byte = self.byte(start);
-            match byte {
-                b'\'' | b'"' => self.string(start, Kind::String)?,
-                b'`' => {
-                    self.pos = quoted_end(self.sql, start, false).ok_or(start)?;
-                    self.pos = self.qualified_tail(self.pos);
-                    self.normal(start, true);
-                }
-                b'n' | b'N' if self.byte(start + 1) == b'\'' => {
-                    self.pos += 1;
-                    self.string(start, Kind::NationalString)?;
-                }
-                b'x' | b'X' | b'b' | b'B' if self.byte(start + 1) == b'\'' => {
-                    self.binary(start, true, byte.eq_ignore_ascii_case(&b'x'))?;
-                }
-                b'0' if matches!(self.byte(start + 1), b'x' | b'X' | b'b' | b'B') => {
-                    if !self.binary(
-                        start,
-                        false,
-                        self.byte(start + 1).eq_ignore_ascii_case(&b'x'),
-                    )? {
-                        self.pos = self.qualified_end(start);
-                        self.normal(start, false);
-                    }
-                }
-                b'0'..=b'9' => self.number(start),
-                b'.' if self.byte(start + 1).is_ascii_digit() => self.number(start),
-                b'#' => {
-                    while self.pos < self.sql.len() && !matches!(self.byte(self.pos), b'\n' | b'\r')
-                    {
-                        self.pos += 1;
-                    }
-                    if !self.options.format && self.brace_depth > 0 {
-                        self.normal(start, false);
-                    }
-                }
-                b'-' if self.byte(start + 1) == b'-'
-                    && matches!(self.byte(start + 2), b' ' | b'\t' | b'\n' | b'\r') =>
-                {
-                    self.pos += 2;
-                    while self.pos < self.sql.len() && !matches!(self.byte(self.pos), b'\n' | b'\r')
-                    {
-                        self.pos += 1;
-                    }
-                    if !self.options.format && self.brace_depth > 0 {
-                        self.normal(start, false);
-                    }
-                }
-                b'/' if self.byte(start + 1) == b'*' => {
-                    self.pos = self.comment_end(start)?;
-                    if self.byte(start + 2) == b'!'
-                        || !self.options.format && self.brace_depth > 0
-                    {
-                        self.normal(start, false);
-                    } else {
-                        self.comment_separator();
-                    }
-                }
-                b'-' => {
-                    self.pos = self.skip_space(start + 1);
-                    if (self.byte(self.pos).is_ascii_digit()
-                        && !matches!(self.byte(self.pos + 1), b'x' | b'X' | b'b' | b'B'))
-                        || self.byte(self.pos) == b'.' && self.byte(self.pos + 1).is_ascii_digit()
-                    {
-                        self.number(start);
-                    } else {
-                        self.normal(start, false);
-                    }
-                }
-                b'?' => self.placeholder(start)?,
-                b':' if self.byte(start + 1).is_ascii_alphanumeric()
-                    || self.byte(start + 1) >= 0x80 =>
-                {
-                    self.placeholder(start)?;
-                }
-                b'@' => {
-                    self.pos += 1;
-                    if self.byte(self.pos) == b'@' {
-                        self.pos += 1;
-                    }
-                    if matches!(self.byte(self.pos), b'\'' | b'"' | b'`') {
-                        self.pos = quoted_end(
-                            self.sql,
-                            self.pos,
-                            !self.options.mode.no_backslash_escapes,
-                        )
-                        .ok_or(start)?;
-                    } else {
-                        while identifier(self.byte(self.pos)) || self.byte(self.pos) == b'.' {
-                            self.pos += 1;
-                        }
-                    }
-                    self.normal(start, true);
-                }
-                b';' => {
-                    self.pos += 1;
-                    if self.options.batch_statement {
-                        self.trim_output_space();
-                    } else {
-                        self.normal(start, false);
-                    }
-                    return Ok(true);
-                }
-                b'\\' => {
-                    self.pos += 1;
-                    self.word(start)?;
-                }
-                byte if identifier(byte) => self.word(start)?,
-                b'{' | b'}' => {
-                    self.brace_depth = if byte == b'{' {
-                        self.brace_depth + 1
-                    } else {
-                        self.brace_depth.saturating_sub(1)
-                    };
-                    self.pos += 1;
+            b'0' if matches!(self.byte(start + 1), b'x' | b'X' | b'b' | b'B') => {
+                if !self.binary(
+                    start,
+                    false,
+                    self.byte(start + 1).eq_ignore_ascii_case(&b'x'),
+                )? {
+                    self.pos = self.qualified_end(start);
                     self.normal(start, false);
                 }
-                b'!' | b'%' | b'&' | b'(' | b')' | b'*' | b'+' | b',' | b'.' | b'/' | b':'
-                | b'<' | b'=' | b'>' | b'[' | b']' | b'^' | b'|' | b'~' => {
+            }
+            b'0'..=b'9' => self.number(start),
+            b'.' if self.byte(start + 1).is_ascii_digit() => self.number(start),
+            b'#' => {
+                while self.pos < self.sql.len() && !matches!(self.byte(self.pos), b'\n' | b'\r')
+                {
                     self.pos += 1;
+                }
+                if !self.options.format && self.brace_depth > 0 {
+                    self.normal(start, false);
+                } else {
+                    self.skip_sql(start);
+                }
+            }
+            b'-' if self.byte(start + 1) == b'-'
+                && matches!(self.byte(start + 2), b' ' | b'\t' | b'\n' | b'\r') =>
+            {
+                self.pos += 2;
+                while self.pos < self.sql.len() && !matches!(self.byte(self.pos), b'\n' | b'\r')
+                {
+                    self.pos += 1;
+                }
+                if !self.options.format && self.brace_depth > 0 {
+                    self.normal(start, false);
+                } else {
+                    self.skip_sql(start);
+                }
+            }
+            b'/' if self.byte(start + 1) == b'*' => {
+                self.pos = self.comment_end(start)?;
+                if self.byte(start + 2) == b'!'
+                    || !self.options.format && self.brace_depth > 0
+                {
+                    self.normal(start, false);
+                } else {
+                    self.skip_sql(start);
+                    self.comment_separator();
+                }
+            }
+            b'-' => {
+                self.pos = self.skip_space(start + 1);
+                if (self.byte(self.pos).is_ascii_digit()
+                    && !matches!(self.byte(self.pos + 1), b'x' | b'X' | b'b' | b'B'))
+                    || self.byte(self.pos) == b'.' && self.byte(self.pos + 1).is_ascii_digit()
+                {
+                    self.number(start);
+                } else {
                     self.normal(start, false);
                 }
-                _ => return Err(start),
             }
+            b'?' => self.placeholder(start)?,
+            b':' if self.byte(start + 1).is_ascii_alphanumeric()
+                || self.byte(start + 1) >= 0x80 =>
+            {
+                self.placeholder(start)?;
+            }
+            b'@' => {
+                self.pos += 1;
+                if self.byte(self.pos) == b'@' {
+                    self.pos += 1;
+                }
+                if matches!(self.byte(self.pos), b'\'' | b'"' | b'`') {
+                    self.pos = quoted_end(
+                        self.sql,
+                        self.pos,
+                        !self.options.mode.no_backslash_escapes,
+                    )
+                    .ok_or(start)?;
+                } else {
+                    while identifier(self.byte(self.pos)) || self.byte(self.pos) == b'.' {
+                        self.pos += 1;
+                    }
+                }
+                self.normal(start, true);
+            }
+            b';' => {
+                self.pos += 1;
+                if self.options.batch_statement {
+                    self.skip_sql(start);
+                    self.trim_output_space();
+                } else {
+                    self.normal(start, false);
+                }
+                return Ok(true);
+            }
+            b'\\' => {
+                self.pos += 1;
+                self.word(start)?;
+            }
+            byte if identifier(byte) => self.word(start)?,
+            b'{' | b'}' => {
+                self.brace_depth = if byte == b'{' {
+                    self.brace_depth + 1
+                } else {
+                    self.brace_depth.saturating_sub(1)
+                };
+                self.pos += 1;
+                self.normal(start, false);
+            }
+            b'!' | b'%' | b'&' | b'(' | b')' | b'*' | b'+' | b',' | b'.' | b'/' | b':'
+            | b'<' | b'=' | b'>' | b'[' | b']' | b'^' | b'|' | b'~' => {
+                self.pos += 1;
+                self.normal(start, false);
+            }
+            _ => return Err(start),
         }
-        Ok(self.pos == self.sql.len())
+        Ok(false)
     }
 }

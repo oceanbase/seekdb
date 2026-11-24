@@ -18,12 +18,17 @@
 #include "sql/plan_cache/fast_parse.h"
 #include "rust/sql_parser.h"
 #include "share/ob_define.h"
-#include "lib/worker.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 
 namespace {
+struct ScannedParameter
+{
+  LiteralToken token;
+  ObPCParam parameter;
+};
+
 int scan(const ObString &stmt, const FPContext &context, ObIAllocator &allocator,
          ObFastParserResult &result)
 {
@@ -33,14 +38,8 @@ int scan(const ObString &stmt, const FPContext &context, ObIAllocator &allocator
                    bool(context.sql_mode_ & SMO_REAL_AS_FLOAT)},
       context.parameterize_, context.ignore_hint_, context.is_format_, context.enable_batched_multi_stmt_};
   int ret = OB_SUCCESS;
-  if (OB_FAIL(THIS_WORKER.check_status())) return ret;
-  auto scanner = peg::begin_scan(rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(stmt.ptr()), stmt.length()), options);
-  bool finished = false;
-  do {
-    finished = scanner->advance();
-    if (OB_FAIL(THIS_WORKER.check_status())) return ret;
-  } while (!finished);
-  auto scanned = peg::finish_scan(std::move(scanner));
+  auto scanned = peg::scan_sql(
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(stmt.ptr()), stmt.length()), options);
   if (!scanned.error.empty()) return OB_ERR_PARSER_SYNTAX;
   if (scanned.ordinal_parameters != 0 && !scanned.parameter_names.empty()) return OB_NOT_SUPPORTED;
   auto copy = [&](const char *text, size_t size) -> char * {
@@ -55,9 +54,8 @@ int scan(const ObString &stmt, const FPContext &context, ObIAllocator &allocator
   const int64_t count = context.parameterize_ ? scanned.literals.size() : 0;
   result.raw_params_.reset();
   if (count > 0) {
-    auto *tokens = static_cast<LiteralToken *>(allocator.alloc(sizeof(LiteralToken) * count));
-    auto *params = static_cast<ObPCParam *>(allocator.alloc(sizeof(ObPCParam) * count));
-    if (tokens == nullptr || params == nullptr) return OB_ALLOCATE_MEMORY_FAILED;
+    auto *parameters = static_cast<ScannedParameter *>(allocator.alloc(sizeof(ScannedParameter) * count));
+    if (parameters == nullptr) return OB_ALLOCATE_MEMORY_FAILED;
     if (OB_FAIL(result.raw_params_.reserve(count))) return ret;
     const char *text = nullptr;
     if (!scanned.literal_text.empty()) {
@@ -66,21 +64,22 @@ int scan(const ObString &stmt, const FPContext &context, ObIAllocator &allocator
     }
     int64_t i = 0;
     for (const auto &literal : scanned.literals) {
-      auto *token = new (tokens + i) LiteralToken{
+      auto *record = new (parameters + i) ScannedParameter{{
           literal.kind, literal.value, ObString(),
           ObString(literal.end - literal.start, stmt.ptr() + literal.start),
-          literal.concatenated, static_cast<int32_t>(literal.first_part_length)};
-      if (token->is_numeric()) {
-        token->text = token->source;
+          literal.concatenated, static_cast<int32_t>(literal.first_part_length)}, {}};
+      auto &token = record->token;
+      if (token.is_numeric()) {
+        token.text = token.source;
       } else if (literal.content_start != literal.content_end) {
-        token->text.assign_ptr(text + literal.content_start,
-                               static_cast<int64_t>(literal.content_end - literal.content_start));
+        token.text.assign_ptr(text + literal.content_start,
+                              static_cast<int64_t>(literal.content_end - literal.content_start));
       }
-      auto *param = new (params + i) ObPCParam();
-      param->literal_ = token;
-      param->source_offset_ = literal.start;
-      param->sql_position_ = literal.sql_offset;
-      if (OB_FAIL(result.raw_params_.push_back(param))) return ret;
+      auto &param = record->parameter;
+      param.literal_ = &token;
+      param.source_offset_ = literal.start;
+      param.sql_position_ = literal.sql_offset;
+      if (OB_FAIL(result.raw_params_.push_back(&param))) return ret;
       ++i;
     }
   }

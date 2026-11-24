@@ -2060,24 +2060,26 @@ int ObResolverUtils::resolve_literal(const LiteralToken &literal,
           : literal.kind == peg::LiteralKind::Unsigned ? NumericKind::Unsigned
           : literal.kind == peg::LiteralKind::Decimal ? NumericKind::Decimal : NumericKind::Double,
           literal.integer, literal.text};
-      const auto spelling = peg::normalize_numeric_sign(literal.kind, literal.integer,
-          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(literal.text.ptr()),
-                                    literal.text.length()), options.numeric_sign);
-      if (!spelling.valid) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        numeric.integer = spelling.integer;
-        if (!spelling.compact_text.empty()) {
-          ret = ob_write_string(allocator,
-              ObString(spelling.compact_text.size(),
-                       reinterpret_cast<const char *>(spelling.compact_text.data())), numeric.text);
-        } else if (spelling.text_offset != 0) {
-          numeric.text.assign_ptr(literal.text.ptr() + spelling.text_offset,
-                                  literal.text.length() - static_cast<int64_t>(spelling.text_offset));
+      if (options.numeric_sign != NumericSignMode::Source) {
+        const auto spelling = peg::normalize_numeric_sign(literal.kind, literal.integer,
+            rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(literal.text.ptr()),
+                                      literal.text.length()), options.numeric_sign);
+        if (!spelling.valid) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          numeric.integer = spelling.integer;
+          if (!spelling.compact_text.empty()) {
+            ret = ob_write_string(allocator,
+                ObString(spelling.compact_text.size(),
+                         reinterpret_cast<const char *>(spelling.compact_text.data())), numeric.text);
+          } else if (spelling.text_offset != 0) {
+            numeric.text.assign_ptr(literal.text.ptr() + spelling.text_offset,
+                                    literal.text.length() - static_cast<int64_t>(spelling.text_offset));
+          }
         }
-        if (OB_SUCC(ret)) {
-          ret = resolve_numeric_literal(numeric, options.numeric, allocator, val, literal_prefix);
-        }
+      }
+      if (OB_SUCC(ret)) {
+        ret = resolve_numeric_literal(numeric, options.numeric, allocator, val, literal_prefix);
       }
       break;
     }

@@ -77,7 +77,7 @@ pub use inspect::syntax_literals;
 pub use batch::{compress_insert, compress_values, restore_parameter_sql};
 pub use prefix::{classify_statement, explain_body_offset, normalized_sql_length, is_single_statement, split_sql, fast_parameterization_allowed, transaction_command, insert_outline_hint};
 pub use parameterize::{projection_names, resolve_unary, UnaryOperand, UnaryResolution, ParameterEffects, parameterize, classify_parameter_tokens, rewrite_parameter_sql, fold_parameter_in_lists, unchecked_parameter_types};
-pub use scan::{begin_scan, finish_scan, Scanner};
+pub use scan::scan_sql;
 pub use fts::{parse_search_query, SearchNode, SearchTree};
 pub use embedded_sql::{embedded_sql_symbols, rewrite_embedded_sql};
 pub use lex::{decode_binary_literal, identifier_requires_quotes, normalize_numeric_sign, integer_literal_is_nonnegative};
