@@ -203,7 +203,7 @@ int ObTextRetrievalTokenIter::get_next_row()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (!token_doc_cnt_calculated_ && OB_FAIL(calculate_token_doc_cnt())) {
   } else if (OB_FAIL(query::das_scan_next_row(inv_idx_scan_iter_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
     }
@@ -242,7 +242,7 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (!token_doc_cnt_calculated_ && OB_FAIL(calculate_token_doc_cnt())) {
   } else if (OB_FAIL(query::das_scan_next_rows(
                  inv_idx_scan_iter_, count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -356,45 +356,34 @@ int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::O
   return ret;
 }
 
-int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
+int ObTextRetrievalTokenIter::calculate_token_doc_cnt()
 {
   int ret = OB_SUCCESS;
-  int64_t logical_row_cnt = 0;
-  int64_t physical_row_cnt = 0;
-  ObSEArray<ObEstRowCountRecord, 1> est_records;
-  ObArenaAllocator allocator;
-  const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
-  ObAccessService *access_service = NULL;
-  storage::ObTableScanRange table_scan_range;
-  ObSimpleBatch batch;
-  batch.type_ = ObSimpleBatch::T_SCAN;
-  batch.range_ = &inv_idx_agg_param_->key_ranges_.at(0);
-  ObTableScanParam est_param;
-  est_param.index_id_ = inv_idx_agg_param_->index_id_;
-  est_param.scan_flag_ = inv_idx_agg_param_->scan_flag_;
-  est_param.tablet_id_ = inv_idx_agg_param_->tablet_id_;
-  est_param.tx_id_ = inv_idx_agg_param_->tx_id_;
-  est_param.schema_version_ = inv_idx_agg_param_->schema_version_;
-  est_param.frozen_version_ = GET_BATCH_ROWS_READ_SNAPSHOT_VERSION;
-  if (OB_ISNULL(access_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(table_scan_range.init(*inv_idx_agg_param_, batch, allocator))) {
-  } else if (OB_FAIL(access_service->estimate_row_count(est_param,
-                                                        table_scan_range,
-                                                        timeout_us,
-                                                        est_records,
-                                                        logical_row_cnt,
-                                                        physical_row_cnt))) {
+  ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx_);
+  guard.set_batch_idx(0);
+  int64_t count = 1;
+  if (eval_ctx_->is_vectorized()) {
+    count = 0;
+    ret = query::das_scan_next_rows(inv_idx_agg_iter_, count, 1);
+    if (OB_ITER_END == ret && 1 == count) {
+      ret = OB_SUCCESS;
+    }
   } else {
-    token_doc_cnt_ = logical_row_cnt;
-    token_doc_cnt_calculated_ = true;
-    sql::ObExpr *total_doc_cnt_param_expr = relevance_expr_->args_[sql::ObExprBM25::TOTAL_DOC_CNT_PARAM_IDX];
-    if (OB_ISNULL(total_doc_cnt_param_expr)) {
+    ret = query::das_scan_next_row(inv_idx_agg_iter_);
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(1 != count)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const ObDatum &doc_cnt = inv_idx_agg_expr_->locate_expr_datum(*eval_ctx_, 0);
+    sql::ObExpr *total_doc_cnt_expr = relevance_expr_->args_[sql::ObExprBM25::TOTAL_DOC_CNT_PARAM_IDX];
+    if (OB_UNLIKELY(doc_cnt.is_null()) || OB_ISNULL(total_doc_cnt_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      int64_t total_doc_cnt = 0;
-      total_doc_cnt = total_doc_cnt_param_expr->locate_expr_datum(*eval_ctx_, 0).get_int();
+      token_doc_cnt_ = doc_cnt.get_int();
+      const int64_t total_doc_cnt = total_doc_cnt_expr->locate_expr_datum(*eval_ctx_, 0).get_int();
       max_token_relevance_ = sql::ObExprBM25::query_token_weight(token_doc_cnt_, total_doc_cnt);
+      token_doc_cnt_calculated_ = true;
     }
   }
   return ret;

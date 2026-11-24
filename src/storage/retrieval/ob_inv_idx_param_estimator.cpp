@@ -215,13 +215,23 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
     if (est_ctx_.estimated_total_doc_cnt_ <= 0) {
       if (OB_ISNULL(est_ctx_.total_doc_cnt_iter_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(query::das_scan_next_row(est_ctx_.total_doc_cnt_iter_))) {
-        if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        } else {
-          total_doc_cnt_ = 0;
-        }
       } else {
-        total_doc_cnt_ = est_ctx_.total_doc_cnt_expr_->locate_expr_datum(eval_ctx, 0).get_int();
+        int64_t count = 1;
+        if (eval_ctx.is_vectorized()) {
+          count = 0;
+          ret = query::das_scan_next_rows(est_ctx_.total_doc_cnt_iter_, count, 1);
+          if (OB_ITER_END == ret && 1 == count) {
+            ret = OB_SUCCESS;
+          }
+        } else {
+          ret = query::das_scan_next_row(est_ctx_.total_doc_cnt_iter_);
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_UNLIKELY(1 != count)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          total_doc_cnt_ = est_ctx_.total_doc_cnt_expr_->locate_expr_datum(eval_ctx, 0).get_int();
+        }
       }
     } else if (OB_ISNULL(est_ctx_.total_doc_cnt_expr_)) {
       ret = OB_ERR_UNEXPECTED;
