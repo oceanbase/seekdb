@@ -195,9 +195,7 @@ int ObReplayServiceSubmitTask::next_log(const SCN &replayable_point,
           || !replayable_point.is_valid()) {
         // do nothing
       } else if (!next_min_scn.is_valid()) {
-        // should only occurs when wal has no log
-        CLOG_LOG(INFO, "next_min_scn is invalid", K(type_), K(replayable_point),
-                 K(next_min_scn), K(next_to_submit_scn), K(ret), K(iterator_));
+        ret = replay_status_->update_submit_lsn(iterator_.get_next_lsn());
       } else if (next_min_scn < base_scn) {
         // More block-aligned prefix logs may arrive later. Keep the checkpoint SCN as the
         // replay lower bound until the iterator reaches that checkpoint.
@@ -1014,6 +1012,18 @@ SCN ObReplayStatus::get_base_scn() const
 {
   ObLockGuard<ObSpinLock> guard(progress_lock_);
   return base_scn_;
+}
+
+int ObReplayStatus::update_submit_lsn(const LSN &lsn)
+{
+  ObLockGuard<ObSpinLock> guard(progress_lock_);
+  int ret = OB_SUCCESS;
+  if (lsn < next_to_submit_lsn_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    next_to_submit_lsn_ = lsn;
+  }
+  return ret;
 }
 
 int ObReplayStatus::update_submit_log_meta_info(const LSN &lsn, const SCN &scn)

@@ -113,6 +113,7 @@ fn path_sync_preserves_stage_and_secondary_close_and_closes_once() {
                 flush: (stage == 1 || stage == 2).then_some(28),
                 close: (stage == 2 || stage == 3).then_some(5),
                 closes: 0,
+                ..SyncFault::default()
             }
         });
         let result = sync_directory(Path::new("."));

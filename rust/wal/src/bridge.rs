@@ -101,6 +101,12 @@ mod ffi {
             end_lsn: u64,
             end_scn: u64,
         );
+        unsafe fn report_fatal_ffi(
+            path: &str,
+            operation: &str,
+            raw_os_error: i32,
+            no_space: bool,
+        );
     }
 
     extern "Rust" {
@@ -121,6 +127,7 @@ mod ffi {
             stream: &Stream,
             callbacks: *mut u8,
         ) -> Code;
+        fn set_failure_callback_ffi(stream: &Stream) -> Code;
         fn submit_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult;
         fn copy_imported_group(source_lsn: u64, source_scn: u64, bytes: &[u8])
             -> ImportedGroupResult;
@@ -140,6 +147,7 @@ mod ffi {
         fn payload(cursor: &Cursor) -> &[u8];
         fn lsn(cursor: &Cursor) -> u64;
         fn end_lsn(cursor: &Cursor) -> u64;
+        fn next_lsn(cursor: &Cursor) -> u64;
         fn scn(cursor: &Cursor) -> u64;
         fn log_id(cursor: &Cursor) -> i64;
         fn next_min_scn(cursor: &Cursor) -> u64;
@@ -273,6 +281,17 @@ unsafe fn set_flush_callback_ffi(
             callbacks as *mut u8,
             end_lsn,
             end_scn,
+        );
+    }))
+}
+
+fn set_failure_callback_ffi(stream: &Stream) -> Code {
+    code(stream.set_failure_callback(|failure| unsafe {
+        ffi::report_fatal_ffi(
+            &failure.path.to_string_lossy(),
+            failure.operation,
+            failure.raw_os_error.unwrap_or(0),
+            matches!(failure.code, Error::NoSpace),
         );
     }))
 }
@@ -470,6 +489,9 @@ fn lsn(cursor: &Cursor) -> u64 {
 }
 fn end_lsn(cursor: &Cursor) -> u64 {
     cursor.end_lsn()
+}
+fn next_lsn(cursor: &Cursor) -> u64 {
+    cursor.next_lsn()
 }
 fn scn(cursor: &Cursor) -> u64 {
     cursor.scn()

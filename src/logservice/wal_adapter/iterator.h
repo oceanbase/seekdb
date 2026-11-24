@@ -152,6 +152,11 @@ public:
     return is_valid() ? LSN(wal_rs::end_lsn(**cursor_)) : LSN();
   }
 
+  LSN get_next_lsn() const
+  {
+    return is_inited_ && cursor_.has_value() ? LSN(wal_rs::next_lsn(**cursor_)) : LSN();
+  }
+
   bool is_inited() const { return is_inited_; }
   bool is_valid() const { return is_inited_ && cursor_.has_value() && has_entry_; }
 

@@ -24,6 +24,48 @@ fn names(entries: Entries) -> Vec<OsString> {
     names
 }
 
+#[cfg(unix)]
+#[test]
+fn directory_sync_retries_only_interruptions() {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            SYNC_FAULT.with(|fault| {
+                let mut fault = fault.borrow_mut();
+                fault.owner_flushes.clear();
+                fault.owner_flush_calls = 0;
+            });
+        }
+    }
+
+    let temporary = TempDirectory::new();
+    let directory = Directory::open(&temporary.0).unwrap();
+    let _reset = Reset;
+    SYNC_FAULT.with(|fault| {
+        fault
+            .borrow_mut()
+            .owner_flushes
+            .extend([libc::EINTR, libc::EINTR, 0]);
+    });
+    directory.sync().unwrap();
+    SYNC_FAULT.with(|fault| assert_eq!(fault.borrow().owner_flush_calls, 3));
+
+    SYNC_FAULT.with(|fault| {
+        let mut fault = fault.borrow_mut();
+        fault.owner_flush_calls = 0;
+        fault.owner_flushes.extend([libc::EIO, 0]);
+    });
+    assert_eq!(
+        directory.sync().unwrap_err().raw_os_error(),
+        Some(libc::EIO)
+    );
+    SYNC_FAULT.with(|fault| {
+        let fault = fault.borrow();
+        assert_eq!(fault.owner_flush_calls, 1);
+        assert_eq!(fault.owner_flushes.len(), 1);
+    });
+}
+
 #[test]
 fn independent_cursors_retain_the_directory_after_owner_drop() {
     let temporary = TempDirectory::new();

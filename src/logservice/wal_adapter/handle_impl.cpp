@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX WAL
 #include "logservice/wal_adapter/handle_impl.h"
 #include <cstring>
+#include <string>
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_structured_event_logger.h"
 
@@ -44,6 +45,22 @@ void publish_flush_ffi(uint8_t *context, const uint64_t end_lsn,
   SCN end_scn;
   assign_scn(end_scn, end_scn_value);
   (void)callbacks->update_end_lsn(LSN(end_lsn), end_scn);
+}
+
+void report_fatal_ffi(rust::Str path, rust::Str operation, const int32_t raw_os_error,
+    const bool no_space)
+{
+  const int ret = no_space ? common::OB_LOG_OUTOF_DISK_SPACE : OB_IO_ERROR;
+  const std::string segment(path);
+  const std::string action(operation);
+  LOG_ERROR("fatal WAL I/O failure", KR(ret), "segment", segment.c_str(),
+      "operation", action.c_str(), "raw_os_error", raw_os_error, KERRNOMSG(raw_os_error));
+  fprintf(stderr, "FATAL WAL I/O failure: segment=%s operation=%s raw_os_error=%d (%s) ret=%d\n",
+      segment.c_str(), action.c_str(), raw_os_error, strerror(raw_os_error), ret);
+  fflush(stderr);
+  OB_LOGGER.stop();
+  OB_LOGGER.wait();
+  _Exit(1);
 }
 }
 
@@ -73,6 +90,9 @@ int HandleImpl::init(::rust::Box<wal_rs::Stream> stream)
     if (OB_SUCC(ret)) {
       ret = from_rust_code(wal_rs::set_flush_callback_ffi(
           **stream_, reinterpret_cast<uint8_t *>(&fs_cb_wrapper_)));
+    }
+    if (OB_SUCC(ret)) {
+      ret = from_rust_code(wal_rs::set_failure_callback_ffi(**stream_));
     }
     if (OB_SUCC(ret)) {
       is_inited_ = true;

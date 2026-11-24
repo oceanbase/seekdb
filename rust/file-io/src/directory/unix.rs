@@ -74,10 +74,42 @@ impl Owner {
         Ok(())
     }
     pub(super) fn sync(&self) -> io::Result<()> {
-        if unsafe { libc::fsync(self.0.as_raw_fd()) } != 0 {
-            return Err(io::Error::last_os_error());
+        loop {
+            #[cfg(test)]
+            let injected = super::SYNC_FAULT.with(|fault| {
+                let mut fault = fault.borrow_mut();
+                fault.owner_flush_calls += 1;
+                fault.owner_flushes.pop_front()
+            });
+            #[cfg(test)]
+            let result = injected.map_or_else(
+                || {
+                    if unsafe { libc::fsync(self.0.as_raw_fd()) } == 0 {
+                        Ok(())
+                    } else {
+                        Err(io::Error::last_os_error())
+                    }
+                },
+                |code| {
+                    if code == 0 {
+                        Ok(())
+                    } else {
+                        Err(io::Error::from_raw_os_error(code))
+                    }
+                },
+            );
+            #[cfg(not(test))]
+            let result = if unsafe { libc::fsync(self.0.as_raw_fd()) } == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            };
+            match result {
+                Ok(()) => return Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => (),
+                Err(error) => return Err(error),
+            }
         }
-        Ok(())
     }
     pub(super) fn close(self) -> io::Result<()> {
         crate::close_file(self.0)
