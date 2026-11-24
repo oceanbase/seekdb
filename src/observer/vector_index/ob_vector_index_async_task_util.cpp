@@ -37,6 +37,7 @@
 #include "storage/ob_value_row_iterator.h"
 #include "observer/vector_index/ob_ivf_async_task.h"
 #include "share/config/ob_config_helper.h"
+#include "sql/das/ob_das_dml_vec_iter.h"
 
 namespace oceanbase
 {
@@ -1881,9 +1882,13 @@ int ObVecIndexAsyncTask::delete_tablet_data(
         }
       } else if (OB_ISNULL(datum_row) || !datum_row->is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (check_null_chunk && !datum_row->storage_datums_[2].is_null()) {
+      } else if (check_null_chunk &&
+                 (!datum_row->storage_datums_[2].is_null() ||
+                  datum_row->storage_datums_[1].get_string() !=
+                      ObString::make_string(ObVecIndexDMLIterator::VEC_DELTA_INSERT))) {
         // log_table: [vid] [type] [chunk].
-        // skip not null chunk, which means they are not embedded.
+        // Keep pending inserts and their delete markers together until refresh
+        // consumes them. A NULL chunk on a delete does not mean it was embedded.
       } else if (OB_FAIL(row_iter.add_row(*datum_row))) {
       } else {
         cur_row_count += 1;

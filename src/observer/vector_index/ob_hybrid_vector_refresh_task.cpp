@@ -479,6 +479,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
     } else if (FALSE_IT(tsc_iter = static_cast<ObTableScanIterator *>(scan_iter))) {
     } else if (OB_ISNULL(tsc_iter)) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(task_ctx->pending_scan_iter_.init())) {
     } else if (task_ctx->index_id_column_ids_.empty() && OB_FAIL(get_index_id_column_ids(adaptor))) {
     } else if (task_ctx->embedded_table_column_ids_.empty() && OB_FAIL(get_embedded_table_column_ids(adaptor))) {
     } else if (OB_TRY_LOCK_ROW_CONFLICT == task_ctx->task_status_.last_error_code_) {
@@ -495,16 +496,29 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
     ObSEArray<int64_t, 4> tmp_embedding_vids;
     ObSEArray<blocksstable::ObDatumRow *, 4> tmp_embedding_rows;
     delta_delete_iter.init();
-    while (OB_SUCC(ret) && cur_row_count < task_ctx->batch_cnt_) {
+    int64_t last_vid = 0;
+    while (OB_SUCC(ret)) {
       blocksstable::ObDatumRow *datum_row = nullptr;
       blocksstable::ObDatumRow *copied_row = nullptr;
-      if (OB_FAIL(tsc_iter->get_next_row(datum_row))) {
+      if (OB_ITER_END == (ret = task_ctx->pending_scan_iter_.get_next_row(datum_row))) {
+        ret = tsc_iter->get_next_row(datum_row);
+      }
+      if (OB_FAIL(ret)) {
         if (OB_ITER_END != ret) {
         }
       } else if (OB_ISNULL(datum_row) || !datum_row->is_valid()) {
         ret = OB_ERR_UNEXPECTED;
       } else if (datum_row->get_column_count() < 4) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (cur_row_count >= task_ctx->batch_cnt_ &&
+                 datum_row->storage_datums_[0].get_int() != last_vid) {
+        // Keep each VID group in one transaction. Own the next group's
+        // lookahead row while embedding and committing the current batch.
+        task_ctx->pending_scan_iter_.reset();
+        if (OB_FAIL(task_ctx->pending_scan_iter_.init())) {
+        } else if (OB_FAIL(task_ctx->pending_scan_iter_.add_row(*datum_row))) {
+        }
+        break;
       } else if (OB_FAIL(delta_delete_iter.add_row(*datum_row))) {
       } else if (OB_FAIL(delta_delete_iter.get_next_row(copied_row))) {
       } else {
@@ -513,6 +527,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
         if (op.length() != 1) {
           ret = OB_ERR_UNEXPECTED;
         } else {
+          last_vid = copied_row->storage_datums_[0].get_int();
           if (op.ptr()[0] == sql::ObVecIndexDMLIterator::VEC_DELTA_INSERT[0] && !copied_row->storage_datums_[2].is_null()) {
             if (OB_FAIL(tmp_chunk_array.push_back(copied_row->storage_datums_[2].get_string()))) {
             } else if (OB_FAIL(tmp_embedding_vids.push_back(copied_row->storage_datums_[0].get_int()))) {
@@ -994,6 +1009,7 @@ void ObHybridVectorRefreshTaskCtx::set_task_finish()
 {
   int ret = OB_SUCCESS;
   task_status_.all_finished_ = true;
+  pending_scan_iter_.reset();
   status_ = ObHybridVectorRefreshTaskStatus::TASK_FINISH;
   delta_delete_iter_.reset();
   ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
