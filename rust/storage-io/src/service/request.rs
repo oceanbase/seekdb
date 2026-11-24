@@ -486,6 +486,15 @@ impl RequestState {
         if progress.phase != Phase::Pending {
             return CancelOutcome::NotPending;
         }
+        if matches!(status, CompletionStatus::TimedOut)
+            && progress
+                .control
+                .as_ref()
+                .and_then(|control| control.cell.start_deadline.as_ref())
+                .is_some_and(|deadline| !deadline.expire())
+        {
+            return CancelOutcome::NotPending;
+        }
         progress.phase = Phase::Delivering(std::thread::current().id());
         let callback = progress.callback.take();
         let lifetime = progress.lifetime.take();
@@ -528,6 +537,7 @@ impl RequestState {
         }
     }
     fn wait(&self, until: Option<Instant>) -> bool {
+        let mut deadline = self.options.policy.deadline;
         let mut progress = self.progress.lock().unwrap();
         loop {
             match progress.phase {
@@ -542,7 +552,8 @@ impl RequestState {
                 }
                 Phase::Pending => {
                     let now = Instant::now();
-                    if self.options.policy.deadline.is_some_and(|d| d <= now) {
+                    if deadline.is_some_and(|d| d <= now) {
+                        deadline = None;
                         drop(progress);
                         self.cancel(CompletionStatus::TimedOut);
                         progress = self.progress.lock().unwrap();
@@ -551,7 +562,7 @@ impl RequestState {
                     if until.is_some_and(|d| d <= now) {
                         return false;
                     }
-                    let end = match (until, self.options.policy.deadline) {
+                    let end = match (until, deadline) {
                         (Some(a), Some(b)) => Some(a.min(b)),
                         (a, b) => a.or(b),
                     };
@@ -660,7 +671,7 @@ pub(super) fn deliver(state: Arc<RequestState>, completion: Completion) {
     if state
         .options
         .policy
-        .deadline
+        .completion_deadline()
         .is_some_and(|until| until <= Instant::now())
     {
         drop(progress);

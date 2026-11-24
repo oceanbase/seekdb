@@ -268,23 +268,25 @@ impl Endpoint {
             } else {
                 Some(deadline(options.timeout_us as u64)?)
             };
+            let mut policy = RequestPolicy::for_storage_io(
+                deadline,
+                execution,
+                self.native_aio(),
+                alignment,
+                if callback.is_some() {
+                    CompletionRequirement::FullBuffer
+                } else {
+                    CompletionRequirement::RequestedWindow
+                },
+            );
+            policy.deadline_before_start = options.deadline_before_start;
             let request = RequestOptions {
                 device: self.id,
                 execution,
                 length: plan.length,
                 alignment,
                 window: plan.window_start..end,
-                policy: RequestPolicy::for_storage_io(
-                    deadline,
-                    execution,
-                    self.native_aio(),
-                    alignment,
-                    if callback.is_some() {
-                        CompletionRequirement::FullBuffer
-                    } else {
-                        CompletionRequirement::RequestedWindow
-                    },
-                ),
+                policy,
                 tag: 0,
                 statistics_lane: Some(options.statistics_lane),
             };

@@ -109,45 +109,6 @@ pub(super) fn legacy_bytes(path: &Path) -> io::Result<Vec<u8>> {
 
 #[cfg(windows)]
 pub(super) fn legacy_bytes(path: &Path) -> io::Result<Vec<u8>> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Globalization::{WideCharToMultiByte, CP_ACP};
-    let wide: Vec<u16> = path.as_os_str().encode_wide().collect();
-    let len = i32::try_from(wide.len()).map_err(|_| io::ErrorKind::InvalidInput)?;
-    let size = unsafe {
-        WideCharToMultiByte(
-            CP_ACP,
-            0,
-            wide.as_ptr(),
-            len,
-            std::ptr::null_mut(),
-            0,
-            std::ptr::null(),
-            std::ptr::null_mut(),
-        )
-    };
-    if size == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let mut bytes = vec![0; size as usize];
-    if unsafe {
-        WideCharToMultiByte(
-            CP_ACP,
-            0,
-            wide.as_ptr(),
-            len,
-            bytes.as_mut_ptr(),
-            size,
-            std::ptr::null(),
-            std::ptr::null_mut(),
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    // Reject default-character and best-fit substitutions in the legacy byte API.
-    let decoded = legacy_path(&bytes)?;
-    if !decoded.as_os_str().encode_wide().eq(wide) {
-        return Err(io::ErrorKind::InvalidData.into());
-    }
-    Ok(bytes)
+    let path = path.to_str().ok_or(io::ErrorKind::InvalidData)?;
+    Ok(path.as_bytes().to_vec())
 }

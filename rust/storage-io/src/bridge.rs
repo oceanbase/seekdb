@@ -147,6 +147,7 @@ pub mod ffi {
         offset: u64,
         length: usize,
         timeout_us: i64,
+        deadline_before_start: bool,
         statistics_lane: usize,
         worker_fault: i32,
     }

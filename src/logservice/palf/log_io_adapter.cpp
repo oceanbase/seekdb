@@ -53,8 +53,9 @@ int LogIOAdapter::pwrite(const LogFile &file, const char *buf, int64_t count,
   descriptor.set_write();
   descriptor.set_sync();
   descriptor.set_sys_module_id(CLOG_WRITE_IO);
-  const auto options = make_request_options(descriptor, storage_io::RequestMode::Write,
+  auto options = make_request_options(descriptor, storage_io::RequestMode::Write,
       offset, count, 300L * 1000L * 1000L);
+  options.deadline_before_start = true;
   ObIOHandle handle;
   int ret = accept_io_request((*file)->submit_named(options,
       {reinterpret_cast<const uint8_t *>(buf), static_cast<size_t>(count)}, nullptr), handle);

@@ -322,7 +322,7 @@ fn retire(
 }
 
 fn cancelled_status(cell: &ControlCell) -> Option<CompletionStatus> {
-    cell.check().err().map(|error| {
+    cell.check_completion().err().map(|error| {
         if error.kind() == io::ErrorKind::TimedOut {
             CompletionStatus::TimedOut
         } else {
@@ -395,6 +395,9 @@ fn physical_completion(
             io::ErrorKind::InvalidData,
             "invalid physical completion count",
         )),
+        Err(error) if policy.deadline_before_start && error.kind() == io::ErrorKind::TimedOut => {
+            CompletionStatus::TimedOut
+        }
         Err(error) => {
             if matches!(
                 error.kind(),
@@ -721,12 +724,7 @@ impl Driver {
                 };
                 if active.cell.cancelled.load(Ordering::Acquire)
                     || !active.cell.device_open.load(Ordering::Acquire)
-                    || active
-                        .cell
-                        .options
-                        .policy
-                        .deadline
-                        .is_some_and(|until| until <= now)
+                    || active.cell.expired_before_dispatch(now)
                 {
                     return Some((id, None));
                 }
@@ -740,12 +738,7 @@ impl Driver {
             self.queued.retain(|queued| *queued != id);
             if active.cell.cancelled.load(Ordering::Acquire)
                 || !active.cell.device_open.load(Ordering::Acquire)
-                || active
-                    .cell
-                    .options
-                    .policy
-                    .deadline
-                    .is_some_and(|d| d <= now)
+                || active.cell.expired_before_dispatch(now)
             {
                 let status = if !active.cell.device_open.load(Ordering::Acquire) {
                     CompletionStatus::Shutdown

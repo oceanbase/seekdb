@@ -161,6 +161,7 @@ pub mod ffi {
     }
 }
 
+/// Decodes a C++ path as UTF-8 on Windows and raw path bytes on Unix.
 pub fn legacy_path(bytes: &[u8]) -> io::Result<std::borrow::Cow<'_, std::path::Path>> {
     if bytes.is_empty() || bytes.contains(&0) {
         return Err(io::ErrorKind::InvalidInput.into());
@@ -174,41 +175,8 @@ pub fn legacy_path(bytes: &[u8]) -> io::Result<std::borrow::Cow<'_, std::path::P
     }
     #[cfg(windows)]
     {
-        use std::os::windows::ffi::OsStringExt;
-        use windows_sys::Win32::Globalization::{
-            MultiByteToWideChar, CP_ACP, MB_ERR_INVALID_CHARS,
-        };
-        let len = i32::try_from(bytes.len()).map_err(|_| io::ErrorKind::InvalidInput)?;
-        let size = unsafe {
-            MultiByteToWideChar(
-                CP_ACP,
-                MB_ERR_INVALID_CHARS,
-                bytes.as_ptr(),
-                len,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if size == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let mut wide = vec![0; size as usize];
-        if unsafe {
-            MultiByteToWideChar(
-                CP_ACP,
-                MB_ERR_INVALID_CHARS,
-                bytes.as_ptr(),
-                len,
-                wide.as_mut_ptr(),
-                size,
-            )
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(std::borrow::Cow::Owned(
-            std::ffi::OsString::from_wide(&wide).into(),
-        ))
+        let path = std::str::from_utf8(bytes).map_err(|_| io::ErrorKind::InvalidInput)?;
+        Ok(std::borrow::Cow::Borrowed(std::path::Path::new(path)))
     }
 }
 

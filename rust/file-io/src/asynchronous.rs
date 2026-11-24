@@ -17,7 +17,7 @@ use std::any::Any;
 use std::collections::{HashSet, VecDeque};
 use std::fs::File;
 use std::io;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -93,6 +93,60 @@ impl FileOwner {
     }
 }
 
+/// Arbitrates between the first execution and a deadline that only bounds its start.
+pub struct StartDeadline {
+    deadline: Instant,
+    state: AtomicU8,
+}
+
+impl StartDeadline {
+    const PENDING: u8 = 0;
+    const STARTED: u8 = 1;
+    const EXPIRED: u8 = 2;
+
+    pub fn new(deadline: Instant) -> Self {
+        Self {
+            deadline,
+            state: AtomicU8::new(Self::PENDING),
+        }
+    }
+
+    pub fn expire(&self) -> bool {
+        matches!(
+            self.state.compare_exchange(
+                Self::PENDING,
+                Self::EXPIRED,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ),
+            Ok(_) | Err(Self::EXPIRED)
+        )
+    }
+
+    pub fn has_started(&self) -> bool {
+        self.state.load(Ordering::Acquire) == Self::STARTED
+    }
+
+    fn start(&self) -> io::Result<()> {
+        match self.state.compare_exchange(
+            Self::PENDING,
+            Self::STARTED,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) if Instant::now() < self.deadline => Ok(()),
+            Err(Self::STARTED) => Ok(()),
+            _ => Err(io::ErrorKind::TimedOut.into()),
+        }
+    }
+}
+
+struct OperationControl {
+    cancelled: Arc<AtomicBool>,
+    deadline: Option<Instant>,
+    start_deadline: Option<Arc<StartDeadline>>,
+}
+
 /// Owns the entire allocation, including any prefix completed by earlier attempts.
 pub struct Operation {
     file: FileOwner,
@@ -103,7 +157,7 @@ pub struct Operation {
     keep_alive: Option<Box<dyn Send>>,
     completion_context: Option<Box<dyn Any + Send>>,
     worker_fault: Option<WorkerFault>,
-    control: Option<(Arc<std::sync::atomic::AtomicBool>, Option<Instant>)>,
+    control: Option<OperationControl>,
 }
 
 impl std::fmt::Debug for Operation {
@@ -186,18 +240,26 @@ impl Operation {
 
     pub fn with_control(
         mut self,
-        cancelled: Arc<std::sync::atomic::AtomicBool>,
+        cancelled: Arc<AtomicBool>,
         deadline: Option<Instant>,
+        start_deadline: Option<Arc<StartDeadline>>,
     ) -> Self {
-        self.control = Some((cancelled, deadline));
+        self.control = Some(OperationControl {
+            cancelled,
+            deadline,
+            start_deadline,
+        });
         self
     }
     fn check_execution(&self) -> io::Result<()> {
-        if let Some((cancelled, deadline)) = &self.control {
-            if cancelled.load(Ordering::Acquire) {
+        if let Some(control) = &self.control {
+            if control.cancelled.load(Ordering::Acquire) {
                 return Err(io::ErrorKind::Interrupted.into());
             }
-            if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+            if let Some(deadline) = &control.start_deadline {
+                return deadline.start();
+            }
+            if control.deadline.is_some_and(|deadline| deadline <= Instant::now()) {
                 return Err(io::ErrorKind::TimedOut.into());
             }
         }

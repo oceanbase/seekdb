@@ -26,6 +26,10 @@ fn delayed_with_duration(
 ) -> Request {
     let mut request = spec(file, 4096);
     request.policy.deadline = deadline;
+    publish_delayed_write(service, request, delay)
+}
+
+fn publish_delayed_write(service: &Service, request: RequestSpec, delay: Duration) -> Request {
     let mut admission = prepare(service, request, Direction::Write, &[0x61; 4096]);
     if let admission::Preparation::Prepared(operation) =
         std::mem::replace(&mut admission.state, admission::Preparation::Reserved)
@@ -101,6 +105,56 @@ fn deadline_expiry_does_not_release_running_buffer() {
     drop(waiter);
     assert_eq!(service.snapshot().unwrap().reserved_bytes, 0);
     service.shutdown().unwrap();
+}
+
+#[test]
+fn start_deadline_preserves_a_running_writes_result() {
+    let directory = Directory::new();
+    let file = directory.file();
+    let service = service();
+    service.start_progress_worker().unwrap();
+    let cutoff = Instant::now() + Duration::from_millis(200);
+    let mut request = spec(&file, 4096);
+    request.policy.deadline = Some(cutoff);
+    request.policy.deadline_before_start = true;
+    let waiter = publish_delayed_write(&service, request, Duration::from_millis(600));
+
+    assert!(waiter.wait_until(cutoff).unwrap().is_none());
+    let completion = waiter.wait(deadline()).unwrap();
+    assert!(matches!(completion.status, CompletionStatus::Complete));
+    assert_eq!(fs::read(directory.0.join("file")).unwrap(), [0x61; 4096]);
+    service.shutdown().unwrap();
+}
+
+#[test]
+fn start_deadline_expires_a_queued_write_without_touching_the_file() {
+    // With one backend slot the request waits in the driver. With two it can wait in Tokio.
+    for depth in [1, 2] {
+        let directory = Directory::new();
+        let file = directory.file();
+        let service = Service::start(config()).unwrap();
+        service
+            .register_device(DeviceConfig {
+                id: DEVICE,
+                worker: Backend::new(BackendKind::Worker { threads: 1 }, depth).unwrap(),
+                native: None,
+            })
+            .unwrap();
+        service.start_progress_worker().unwrap();
+        let running = delayed_with_duration(&service, &file, None, Duration::from_millis(600));
+        let cutoff = Instant::now() + Duration::from_millis(100);
+        let mut request = spec(&file, 4096);
+        request.policy.deadline = Some(cutoff);
+        request.policy.deadline_before_start = true;
+        let queued = service.write(request, &[0x71; 4096]).unwrap();
+
+        let completion = queued.wait(cutoff + Duration::from_millis(200)).unwrap();
+        assert!(matches!(completion.status, CompletionStatus::TimedOut));
+        let completion = running.wait(deadline()).unwrap();
+        assert!(matches!(completion.status, CompletionStatus::Complete));
+        service.shutdown().unwrap();
+        assert_eq!(fs::read(directory.0.join("file")).unwrap(), [0x61; 4096]);
+    }
 }
 #[test]
 fn dropping_the_last_waiter_cannot_free_an_operation_early() {

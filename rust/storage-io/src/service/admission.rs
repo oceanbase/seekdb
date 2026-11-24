@@ -136,6 +136,7 @@ pub(super) struct ControlCell {
     pub charge: Charge,
     pub phase: AtomicU8,
     pub cancelled: Arc<AtomicBool>,
+    pub start_deadline: Option<Arc<file_io::StartDeadline>>,
     pub device_open: Arc<AtomicBool>,
     cancellations: Weak<Mutex<VecDeque<Cancellation>>>,
     pub wake: Weak<Wake>,
@@ -167,18 +168,29 @@ impl ControlCell {
         }
     }
     pub fn check(&self) -> io::Result<()> {
+        self.check_with_deadline(self.options.policy.deadline)
+    }
+    pub(super) fn check_completion(&self) -> io::Result<()> {
+        self.check_with_deadline(self.options.policy.completion_deadline())
+    }
+    pub(super) fn expired_before_dispatch(&self, now: Instant) -> bool {
+        self.options
+            .policy
+            .deadline
+            .is_some_and(|deadline| deadline <= now)
+            && self
+                .start_deadline
+                .as_ref()
+                .is_none_or(|deadline| !deadline.has_started())
+    }
+    fn check_with_deadline(&self, deadline: Option<Instant>) -> io::Result<()> {
         if !self.device_open.load(Ordering::Acquire) {
             return Err(io::ErrorKind::BrokenPipe.into());
         }
         if self.cancelled.load(Ordering::Acquire) {
             return Err(io::ErrorKind::Interrupted.into());
         }
-        if self
-            .options
-            .policy
-            .deadline
-            .is_some_and(|d| d <= Instant::now())
-        {
+        if deadline.is_some_and(|d| d <= Instant::now()) {
             return Err(io::ErrorKind::TimedOut.into());
         }
         Ok(())
@@ -243,6 +255,12 @@ impl Admission {
             id,
             device_open: Arc::clone(&gate.devices[&options.device]),
             cancellations: Arc::downgrade(&shared.cancellations),
+            start_deadline: options
+                .policy
+                .deadline
+                .filter(|_| options.policy.deadline_before_start)
+                .map(file_io::StartDeadline::new)
+                .map(Arc::new),
             options,
             charge: Charge {
                 ledger: Arc::clone(&shared.ledger),
@@ -426,7 +444,8 @@ impl Admission {
         };
         self.state = Preparation::Prepared(operation.with_control(
             Arc::clone(&self.cell.cancelled),
-            self.cell.options.policy.deadline,
+            self.cell.options.policy.completion_deadline(),
+            self.cell.start_deadline.clone(),
         ));
         Ok(())
     }

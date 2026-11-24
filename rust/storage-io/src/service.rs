@@ -66,6 +66,7 @@ pub enum CompletionRequirement {
 #[derive(Clone, Copy, Debug)]
 pub struct RequestPolicy {
     pub deadline: Option<Instant>,
+    pub deadline_before_start: bool,
     pub retry_alignment: Option<NonZeroUsize>,
     pub max_error_retries: usize,
     pub completion: CompletionRequirement,
@@ -81,6 +82,7 @@ impl RequestPolicy {
         let native = native_available && execution == Execution::PreferNative;
         Self {
             deadline,
+            deadline_before_start: false,
             retry_alignment: if native {
                 NonZeroUsize::new(alignment)
             } else {
@@ -90,12 +92,21 @@ impl RequestPolicy {
             completion,
         }
     }
+
+    fn completion_deadline(&self) -> Option<Instant> {
+        if self.deadline_before_start {
+            None
+        } else {
+            self.deadline
+        }
+    }
 }
 
 impl Default for RequestPolicy {
     fn default() -> Self {
         Self {
             deadline: None,
+            deadline_before_start: false,
             retry_alignment: None,
             max_error_retries: 0,
             completion: CompletionRequirement::RequestedWindow,
