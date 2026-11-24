@@ -1,0 +1,19 @@
+src/share/inner_table/ob_inner_table_schema_def.py
+  s_79d4f58c527014::t_33e470cced4d21 7602-7604
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "58581af9600b2cc2ff383d7bce1518eb9ca0319d",
+  "prompts": {},
+  "sessions": {
+    "s_79d4f58c527014": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20d15-1121-7ed3-a5ad-206715679f6d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
