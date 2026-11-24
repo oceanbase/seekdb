@@ -45,6 +45,9 @@ ObTextRetrievalTokenIter::ObTextRetrievalTokenIter()
     token_doc_cnt_(0),
     max_token_relevance_(-1.0),
     advance_doc_id_(),
+    token_obj_meta_(),
+    inv_idx_table_id_(common::OB_INVALID_ID),
+    token_range_tmpl_inited_(false),
     token_doc_cnt_calculated_(false),
     inv_idx_agg_cache_mode_(false),
     is_inited_(false)
@@ -96,7 +99,8 @@ void ObTextRetrievalTokenIter::reset()
 
 void ObTextRetrievalTokenIter::reuse()
 {
-  if (inv_idx_agg_cache_mode_ && !inv_idx_agg_param_->need_switch_param_) {
+  if (OB_NOT_NULL(inv_idx_agg_param_) && inv_idx_agg_cache_mode_
+      && !inv_idx_agg_param_->need_switch_param_) {
     // do nothing
   } else {
     token_doc_cnt_calculated_ = false;
@@ -203,7 +207,7 @@ int ObTextRetrievalTokenIter::get_next_row()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance() && !token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
   } else if (OB_FAIL(query::das_scan_next_row(inv_idx_scan_iter_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
     }
@@ -242,7 +246,7 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance() && !token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
   } else if (OB_FAIL(query::das_scan_next_rows(
                  inv_idx_scan_iter_, count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -302,7 +306,47 @@ int ObTextRetrievalTokenIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::ObArenaAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1)) {
+  if (OB_ISNULL(inv_idx_scan_param_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!need_calc_relevance()) {
+    // Without relevance calculation there is no inverted index aggregate param
+    // to keep the token range template, so remember the template attributes
+    // once and rebuild the whole range of every token from them.
+    ObNewRange scan_range;
+    ObObj tmp_obj;
+    ObObj *obj_ptr = nullptr;
+    const int64_t obj_cnt = INV_IDX_ROWKEY_COL_CNT * 2;
+    if (OB_UNLIKELY(inv_idx_scan_param_->key_ranges_.count() != 1)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!token_range_tmpl_inited_) {
+      const ObNewRange &tmpl_range = inv_idx_scan_param_->key_ranges_.at(0);
+      token_obj_meta_ = tmpl_range.start_key_.get_obj_ptr()->get_meta();
+      inv_idx_table_id_ = tmpl_range.table_id_;
+      token_range_tmpl_inited_ = true;
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(obj_ptr = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * obj_cnt)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FALSE_IT(tmp_obj.set_string(ObVarcharType, token))) {
+    } else if (OB_FALSE_IT(tmp_obj.set_meta_type(token_obj_meta_))) {
+    } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, obj_ptr[0]))) {
+    } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, obj_ptr[INV_IDX_ROWKEY_COL_CNT]))) {
+    } else if (OB_FALSE_IT(obj_ptr[1].set_min_value())) {
+    } else if (OB_FALSE_IT(obj_ptr[INV_IDX_ROWKEY_COL_CNT + 1].set_max_value())) {
+    } else {
+      scan_range.table_id_ = inv_idx_table_id_;
+      scan_range.start_key_.assign(obj_ptr, INV_IDX_ROWKEY_COL_CNT);
+      scan_range.end_key_.assign(&obj_ptr[INV_IDX_ROWKEY_COL_CNT], INV_IDX_ROWKEY_COL_CNT);
+      scan_range.border_flag_.set_inclusive_start();
+      scan_range.border_flag_.set_inclusive_end();
+      if (OB_FAIL(query::das_scan_reuse(inv_idx_scan_iter_))) {
+      } else if (OB_UNLIKELY(!inv_idx_scan_param_->key_ranges_.empty())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(inv_idx_scan_param_->key_ranges_.push_back(scan_range))) {
+      } else if (OB_FAIL(query::das_scan_rescan(inv_idx_scan_iter_))) {
+      }
+    }
+  } else if (OB_UNLIKELY(inv_idx_agg_param_->key_ranges_.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObNewRange scan_range = inv_idx_agg_param_->key_ranges_.at(0);
@@ -520,13 +564,16 @@ int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
 int ObTextRetrievalDaaTTokenIter::save_docids()
 {
   int ret = OB_SUCCESS;
+  // The skip bitmap is only allocated when relevance is calculated; all scanned
+  // rows are valid hits otherwise.
+  const sql::ObBitVector *skip = token_iter_->get_skip();
   if (OB_ISNULL(inv_scan_domain_id_col_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     cur_idx_ = 0;
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
+      if (OB_ISNULL(skip) || OB_LIKELY(!skip->at(i))) {
         if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
         };
       }

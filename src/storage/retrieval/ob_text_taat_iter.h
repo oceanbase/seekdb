@@ -56,6 +56,7 @@ public:
       mem_context_(nullptr),
       query_tokens_(nullptr),
       bm25_param_estimator_(),
+      estimated_total_doc_cnt_(0),
       mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
       function_lookup_mode_(false) {}
   virtual ~ObTextTaaTIter() {}
@@ -70,6 +71,7 @@ protected:
   lib::MemoryContext mem_context_;
   ObIArray<ObString> *query_tokens_;
   ObBM25ParamEstimator bm25_param_estimator_;
+  int64_t estimated_total_doc_cnt_;
   sql::ObMatchAgainstMode mode_flag_;
   bool function_lookup_mode_;
 private:

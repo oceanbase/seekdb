@@ -12041,7 +12041,7 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   } else {
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
-    tr_info.pushdown_match_filter_ = match_pred;
+    tr_info.pushdown_match_filter_ = tr_info.need_calc_relevance_ ? match_pred : nullptr;
     // The mapping table is absent when the data-table rowkey is used as the document ID.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
@@ -12170,6 +12170,86 @@ int ObLogPlan::prepare_text_retrieval_merge(const ObIArray<ObRawExpr *> &merge_m
   return ret;
 }
 
+// Whether the MATCH score can be observed above the scan. Only a pure retrieval
+// filter (e.g. COUNT(*) WHERE MATCH ...) may skip the BM25 pipeline; every other
+// shape keeps the exact score.
+static bool text_expr_contains(const ObRawExpr *expr, const ObRawExpr *target)
+{
+  bool found = false;
+  if (OB_NOT_NULL(expr)) {
+    found = (expr == target);
+    for (int64_t i = 0; !found && i < expr->get_param_count(); ++i) {
+      found = text_expr_contains(expr->get_param_expr(i), target);
+    }
+  }
+  return found;
+}
+
+static bool text_retrieval_needs_relevance(const ObDMLStmt *const_stmt,
+                                           const ObMatchFunRawExpr *match_expr)
+{
+  bool needed = true;
+  ObDMLStmt *stmt = const_cast<ObDMLStmt *>(const_stmt);
+  ObSelectStmt *select_stmt = NULL;
+  if (OB_ISNULL(stmt) || OB_ISNULL(match_expr) || !stmt->is_select_stmt()) {
+  } else if (OB_FALSE_IT(select_stmt = static_cast<ObSelectStmt *>(stmt))) {
+  } else if (NATURAL_LANGUAGE_MODE != match_expr->get_mode_flag() || match_expr->is_es_match()) {
+    // Boolean / phrase / query expansion modes rely on the exact score and the
+    // pushed down match filter to decide whether a document matches. ES match
+    // carries its own minimum_should_match semantics and is out of scope.
+  } else if (match_expr->get_columns_boosts().count() > 0) {
+    // A column boost may weight the score of a matching document down to zero.
+  } else if (1 != stmt->get_table_items().count() || select_stmt->has_order_by() ||
+             !select_stmt->get_group_exprs().empty() || !select_stmt->get_rollup_exprs().empty() ||
+             !select_stmt->get_having_exprs().empty() ||
+             !select_stmt->get_window_func_exprs().empty() ||
+             !stmt->get_subquery_exprs().empty() || 1 != stmt->get_match_exprs().count()) {
+  } else {
+    bool score_used = false;
+    for (int64_t i = 0; !score_used && i < select_stmt->get_select_item_size(); ++i) {
+      score_used = text_expr_contains(select_stmt->get_select_item(i).expr_, match_expr);
+    }
+    for (int64_t i = 0; !score_used && i < select_stmt->get_aggr_item_size(); ++i) {
+      score_used = text_expr_contains(select_stmt->get_aggr_item(i), match_expr);
+    }
+    // A column reference forces an index back lookup of the document rowkey, and
+    // that lookup path requires the relevance column to be projected.
+    bool col_used = false;
+    for (int64_t i = 0; !col_used && i < select_stmt->get_select_item_size(); ++i) {
+      col_used = select_stmt->get_select_item(i).expr_->has_flag(CNT_COLUMN);
+    }
+    for (int64_t i = 0; !col_used && i < select_stmt->get_aggr_item_size(); ++i) {
+      col_used = select_stmt->get_aggr_item(i)->has_flag(CNT_COLUMN);
+    }
+    // The score may be dropped only when the MATCH predicate is used purely as a
+    // boolean filter (a bare condition or a boolean context), the only forms the
+    // index scan path accepts. Any comparison or arithmetic use of the score
+    // keeps BM25.
+    int64_t match_cond_cnt = 0;
+    bool filter_only = true;
+    for (int64_t i = 0; i < stmt->get_condition_exprs().count(); ++i) {
+      ObRawExpr *cond = stmt->get_condition_exprs().at(i);
+      if (OB_NOT_NULL(cond) && text_expr_contains(cond, match_expr)) {
+        ++match_cond_cnt;
+        bool is_filter_only = cond->has_flag(IS_MATCH_EXPR);
+        if (!is_filter_only && T_OP_BOOL == cond->get_expr_type() && 1 == cond->get_param_count()) {
+          ObRawExpr *param = cond->get_param_expr(0);
+          is_filter_only = OB_NOT_NULL(param) && param->has_flag(IS_MATCH_EXPR);
+        }
+        filter_only = filter_only && is_filter_only;
+      } else if (OB_NOT_NULL(cond) && cond->has_flag(CNT_COLUMN)) {
+        // A predicate on a document column forces an index back lookup, which
+        // needs the relevance column projected.
+        filter_only = false;
+      }
+    }
+    if (!score_used && !col_used && 1 == match_cond_cnt && filter_only) {
+      needed = false;
+    }
+  }
+  return needed;
+}
+
 int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
                                            const uint64_t index_table_id,
                                            ObMatchFunRawExpr *match_against,
@@ -12186,7 +12266,7 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
   uint64_t fwd_idx_tid = OB_INVALID_ID;
   uint64_t inv_idx_tid = OB_INVALID_ID;
   ObSEArray<ObAuxTableMetaInfo, 4> index_infos;
-  bool need_calc_relevance = true;
+  bool need_calc_relevance = text_retrieval_needs_relevance(get_stmt(), match_against);
   ObSEArray<ObExprConstraint, 2> constraints;
   uint64_t docid_col_id = OB_INVALID_ID;
   if (OB_ISNULL(match_against) || OB_ISNULL(get_stmt()) || OB_ISNULL(get_optimizer_context().get_query_ctx())) {
