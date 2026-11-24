@@ -1,0 +1,25 @@
+src/sql/code_generator/ob_tsc_cg_service.cpp
+  s_afbadf5659c3af::t_6cb36cb976217e 1833,1841-1843,1854-1856,1915-1916
+src/storage/retrieval/ob_inv_idx_param_estimator.cpp
+  s_afbadf5659c3af::t_b559a836a8aa09 218-225,227-233
+src/storage/retrieval/ob_text_retrieval_token_iter.cpp
+  s_afbadf5659c3af::t_8957b1b5c04a09 206,245,359,362-375,378-380,383-384,386
+src/storage/retrieval/ob_text_retrieval_token_iter.h
+  s_afbadf5659c3af::t_884a55e35495af 92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2c89687d5977179719c8117f21271033eb6e0d8f",
+  "prompts": {},
+  "sessions": {
+    "s_afbadf5659c3af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c64-58a5-7da2-ab8b-d0a6018b63cb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}
