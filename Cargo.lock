@@ -2330,7 +2330,7 @@ name = "wal"
 version = "0.1.0"
 dependencies = [
  "cxx",
- "libc",
+ "file-io",
 ]
 
 [[package]]

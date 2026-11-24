@@ -9,4 +9,4 @@ crate-type = ["rlib"]
 
 [dependencies]
 cxx = "1"
-libc = "0.2"
+file-io = { path = "../file-io" }

@@ -644,4 +644,17 @@ fn synchronous_file_writes_remain_synchronous_with_or_without_direct_io() {
         assert_eq!(flags & libc::O_ACCMODE, libc::O_RDWR);
         assert_eq!(flags & libc::O_DIRECT != 0, direct);
     }
+
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true);
+    let file = open_data_synchronous_read_write_with_options(
+        &mut options,
+        &directory.0.join("data"),
+        false,
+    )
+    .unwrap();
+    // SAFETY: F_GETFL reads flags from this live, owned descriptor.
+    let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
+    assert_ne!(flags, -1);
+    assert_eq!(flags & libc::O_SYNC, libc::O_DSYNC);
 }
