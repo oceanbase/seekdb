@@ -1,0 +1,21 @@
+src/observer/vector_index/ob_hybrid_vector_refresh_task.cpp
+  s_316c61c2ca7b50::t_4b0a663b4f5ff1 482,499-500,503-506,513-521,530,1012
+src/observer/vector_index/ob_hybrid_vector_refresh_task.h
+  s_316c61c2ca7b50::t_aeddae7a17624f 69,99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d903898975b1ee57e17e0e66687a6c90d76f2de8",
+  "prompts": {},
+  "sessions": {
+    "s_316c61c2ca7b50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20832-b996-7773-825e-2cb6868d3222",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
