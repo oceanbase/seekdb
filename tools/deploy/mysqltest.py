@@ -5,7 +5,6 @@ from __future__ import print_function
 
 import argparse
 from collections import Counter, namedtuple
-from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -371,7 +370,7 @@ def mysqltest_environment(args):
     return environment
 
 
-def run_case(args, deploy_dir, case, tmp_dir, log_dir):
+def run_case(args, deploy_dir, case, tmp_dir, log_dir, environment=None):
     command = [
         str(args.mysqltest),
         "--host={}".format(args.host),
@@ -407,22 +406,16 @@ def run_case(args, deploy_dir, case, tmp_dir, log_dir):
     print("[ RUN      ] {}".format(case_name), flush=True)
     started = time.monotonic()
     try:
-        with ExitStack() as fixtures:
-            environment = mysqltest_environment(args)
-            if case.name == "vector_index.hybrid_rebuild_null":
-                environment["SEEKDB_TEST_EMBEDDING_URL"] = fixtures.enter_context(
-                    embedding_endpoint()
-                )
-            result = subprocess.run(
-                command,
-                cwd=str(deploy_dir),
-                env=environment,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                timeout=CASE_TIMEOUT,
-                universal_newlines=True,
-                check=False,
-            )
+        result = subprocess.run(
+            command,
+            cwd=str(deploy_dir),
+            env=environment if environment is not None else mysqltest_environment(args),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=CASE_TIMEOUT,
+            universal_newlines=True,
+            check=False,
+        )
         return_code = result.returncode
         output = decode_output(result.stdout)
     except subprocess.TimeoutExpired as exc:
@@ -561,29 +554,32 @@ def command_run(args):
         tmp_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        for index, case in enumerate(selected_cases):
-            return_code = None
-            output = ""
-            retries = 0 if args.record else MAX_CASE_RETRIES
-            for retry_index in range(retries + 1):
-                if retry_index > 0:
-                    print(
-                        "[ RETRY   ] {} ({}/{})".format(
-                            case.name, retry_index, MAX_CASE_RETRIES
-                        ),
-                        flush=True,
+        with embedding_endpoint() as endpoint:
+            environment = mysqltest_environment(args)
+            environment["SEEKDB_TEST_EMBEDDING_URL"] = endpoint
+            for index, case in enumerate(selected_cases):
+                return_code = None
+                output = ""
+                retries = 0 if args.record else MAX_CASE_RETRIES
+                for retry_index in range(retries + 1):
+                    if retry_index > 0:
+                        print(
+                            "[ RETRY   ] {} ({}/{})".format(
+                                case.name, retry_index, MAX_CASE_RETRIES
+                            ),
+                            flush=True,
+                        )
+                        prepare_instance(args, repo_root, sdb_script, deploy_dir)
+                    return_code, output = run_case(
+                        args, deploy_dir, case, tmp_dir, log_dir, environment
                     )
-                    prepare_instance(args, repo_root, sdb_script, deploy_dir)
-                return_code, output = run_case(
-                    args, deploy_dir, case, tmp_dir, log_dir
-                )
-                if return_code == 0:
-                    break
-            if return_code != 0:
-                failed_cases.append(case.name)
-                save_case_failure(args, case.name, output)
-                if index + 1 < len(selected_cases):
-                    prepare_instance(args, repo_root, sdb_script, deploy_dir)
+                    if return_code == 0:
+                        break
+                if return_code != 0:
+                    failed_cases.append(case.name)
+                    save_case_failure(args, case.name, output)
+                    if index + 1 < len(selected_cases):
+                        prepare_instance(args, repo_root, sdb_script, deploy_dir)
     except Exception as exc:
         error = str(exc)
         print("[mysqltest][ERROR] {}".format(error), file=sys.stderr)
