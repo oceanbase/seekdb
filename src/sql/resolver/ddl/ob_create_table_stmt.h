@@ -52,6 +52,7 @@ public:
   share::schema::ObIndexUsingType get_index_using_type();
   const share::schema::ObColumnSchemaV2 *get_column_schema(const common::ObString &column_name) const;
   obcall::ObCreateTableArg &get_create_table_arg();
+  const obcall::ObCreateTableArg &get_create_table_arg() const { return create_table_arg_; }
   virtual bool cause_implicit_commit() const { return false == create_table_arg_.schema_.is_mysql_tmp_table(); }
   void set_allocator(common::ObIAllocator &alloc) { view_need_privs_.set_allocator(&alloc); }
   share::schema::ObStmtNeedPrivs::NeedPrivs &get_view_need_privs() { return view_need_privs_; }

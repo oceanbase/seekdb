@@ -75,6 +75,7 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/share:_generated_inner_table_headers",
     "//src/share:_generated_local_virtual_table_headers",
     "//src/share:local_table_schema",
+    "//src/share:ai_column_task_notifier_interface",
     "//src/share:ai_endpoint_interface",
     "//src/share:admin_job_storage_interface",
     "//src/share:autoincrement_runtime",
@@ -546,6 +547,12 @@ final_link(
         # The shared test runtime retains the Rust in-process bridge, including
         # its reference to run_server. Supply the real implementation on Linux.
         "@platforms//os:linux": [":_unittest_in_process_entry", ":in_process_api"],
+        "//conditions:default": [],
+    }),
+    # The Rust staticlib bundles native bridges and their SDK dependencies.
+    # Resolve these archives on demand instead of force-loading them twice.
+    sdk_deps = select({
+        "@platforms//os:linux": ["//rust:bridges"],
         "//conditions:default": [],
     }),
     ordered_link_files = _ORDERED_LINK_FILES,

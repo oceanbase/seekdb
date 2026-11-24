@@ -82,13 +82,19 @@ public:
   virtual const char *get_type() const { return "ObEndTransAsyncCallback"; }
   virtual ObEndTransCallbackType get_callback_type() const { return ASYNC_CALLBACK_TYPE; }
   observer::ObSqlEndTransCb &get_mysql_end_trans_cb() { return mysql_end_trans_cb_; }
+  void set_owns_ai_task_wakeup(const bool owns_wakeup)
+  { ATOMIC_STORE(&owns_ai_task_wakeup_, owns_wakeup); }
+  bool owns_ai_task_wakeup() const
+  { return ATOMIC_LOAD(&owns_ai_task_wakeup_); }
   void reset()
   {
     ObExclusiveEndTransCallback::reset();
+    set_owns_ai_task_wakeup(false);
     mysql_end_trans_cb_.reset();
   }
 private:
   /* macro */
+  bool owns_ai_task_wakeup_;
   observer::ObSqlEndTransCb mysql_end_trans_cb_;
   DISALLOW_COPY_AND_ASSIGN(ObEndTransAsyncCallback);
 };

@@ -2391,6 +2391,31 @@ def_table_schema(
   )
 
 
+def_table_schema(
+  owner = 'zx534097',
+  table_name = '__all_ai_column_task',
+  table_id = '1126',
+  table_type = 'SYSTEM_TABLE',
+  gm_columns = ['gmt_create', 'gmt_modified'],
+  rowkey_columns = [
+    ('table_id', 'int'),
+    ('request_id', 'varbinary:16'),
+    ('column_id', 'int')
+  ],
+  is_cluster_private = False,
+  normal_columns = [
+    ('rowkey_predicate', 'longtext'),
+    ('spec_version', 'int', 'false'),
+    ('state', 'int', 'false'),
+    ('retry_count', 'int', 'false'),
+    ('eligible_ts', 'timestamp:6', 'false'),
+    ('lease_token', 'varbinary:16', 'true'),
+    ('last_error_code', 'int', 'true'),
+    ('last_error_message', 'varchar:1024', 'true')
+  ]
+  )
+
+
 
 
 
@@ -2423,8 +2448,7 @@ all_ai_model_endpoint_def = dict(
     table_type = 'SYSTEM_TABLE',
     gm_columns = ['gmt_create', 'gmt_modified'],
     rowkey_columns = [
-      ('endpoint_id', 'int'),
-      ('scope', 'varchar:128')
+      ('endpoint_id', 'int')
     ],
 
     is_cluster_private = False,
@@ -2439,10 +2463,44 @@ all_ai_model_endpoint_def = dict(
         ('request_model_name', 'varchar:128', 'true'),
         ('parameters', 'varchar:2048', 'true'),
         ('request_transform_fn', 'varchar:64', 'true'),
-        ('response_transform_fn', 'varchar:64', 'true')
+        ('response_transform_fn', 'varchar:64', 'true'),
+        ('max_concurrency', 'int', 'false', '8')
     ]
 )
 def_table_schema(**all_ai_model_endpoint_def)
+
+
+all_ai_column_def = dict(
+    owner = 'zx534097',
+    table_name = '__all_ai_column',
+    table_id = '1131',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int')
+    ],
+
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+      ('column_name', 'varchar:128', 'false'),
+      ('expr_text', 'longtext'),
+      ('normalized_expr', 'longtext'),
+      ('dependency_column_ids', 'varchar:4096', 'false'),
+      ('sql_mode', 'uint', 'false'),
+      ('time_zone', 'varchar:64', 'false'),
+      ('spec_version', 'int', 'false'),
+      ('max_retries', 'int', 'false'),
+      ('state_column_id', 'int', 'false'),
+      ('request_column_id', 'int', 'false'),
+      ('result_spec_column_id', 'int', 'false'),
+      ('schema_version', 'int', 'false')
+    ]
+)
+
+def_table_schema(**all_ai_column_def)
+def_table_schema(**gen_history_table_def(1132, all_ai_column_def))
 
 
 all_objauth_mysql_def = dict(
@@ -13514,14 +13572,14 @@ def_table_schema(
       ENDPOINT_ID,
       ENDPOINT_NAME,
       AI_MODEL_NAME,
-      SCOPE,
       URL,
       ACCESS_KEY,
       PROVIDER,
       REQUEST_MODEL_NAME,
       PARAMETERS,
       REQUEST_TRANSFORM_FN,
-      RESPONSE_TRANSFORM_FN
+      RESPONSE_TRANSFORM_FN,
+      MAX_CONCURRENCY
     FROM oceanbase.__all_ai_model_endpoint WHERE ENDPOINT_ID != -1;
   """.replace("\n", " ")
 )
@@ -14102,6 +14160,14 @@ def_sys_index_table(
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
   keywords = all_def_keywords['__all_ai_model_endpoint'])
+
+def_sys_index_table(
+  index_name = 'idx_ai_column_task_schedule',
+  index_table_id = 102057,
+  index_columns = ['state', 'eligible_ts'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
+  keywords = all_def_keywords['__all_ai_column_task'])
 
 def_sys_index_table(
   index_name = 'idx_objauth_mysql_user_id',

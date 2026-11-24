@@ -1,0 +1,1 @@
+--exec rm -f "$FILE_SQL_DATA_DIR/basic.csv" "$FILE_SQL_DATA_DIR/basic.jsonl" "$FILE_SQL_DATA_DIR/invalid.txt" "$FILE_SQL_DATA_DIR/simple.parquet" "$FILE_SQL_DATA_DIR/export.csv" && rmdir "$FILE_SQL_DATA_DIR"

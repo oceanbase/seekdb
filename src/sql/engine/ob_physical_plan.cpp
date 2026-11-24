@@ -43,6 +43,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     autoinc_params_(allocator_),
     stmt_need_privs_(allocator_),
     vars_(allocator_),
+    ai_column_refs_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_),
     sql_expression_factory_(allocator_),
     expr_op_factory_(allocator_),
     literal_stmt_type_(stmt::T_NONE),
@@ -132,6 +133,7 @@ void ObPhysicalPlan::reset()
   autoinc_params_.reset();
   stmt_need_privs_.reset();
   vars_.reset();
+  ai_column_refs_.reset();
   sql_expression_factory_.destroy();
   expr_op_factory_.destroy();
   literal_stmt_type_ = stmt::T_NONE;
@@ -601,6 +603,8 @@ inline bool ObPhysicalPlan::inner_check_if_is_expired(const int64_t first_exec_r
   return ret_bool;
 }
 
+OB_SERIALIZE_MEMBER(ObAIColumnRef, table_id_, column_id_);
+
 // force_trace_log is coordinator-local and is not serialized with the plan.
 OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     runtime_schema_version_, // this field is not used at runtime
@@ -623,6 +627,7 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     access_shape_,
                     use_px_,
                     vars_,
+                    ai_column_refs_,
                     px_dop_,
                     has_nested_sql_,
                     use_pdml_,

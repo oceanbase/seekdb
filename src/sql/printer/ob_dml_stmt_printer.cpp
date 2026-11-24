@@ -310,6 +310,70 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
       PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
       break;
     }
+    case TableItem::FILE_TABLE: {
+      if (OB_ISNULL(table_item->file_table_def_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("file table definition is null", K(ret));
+      } else {
+        const ObFileTableDef &def = *table_item->file_table_def_;
+        if (ObFileTableKind::SCAN == def.kind_ || ObFileTableKind::SCHEMA == def.kind_) {
+          if (ObFileFormat::CSV == def.format_) {
+            DATA_PRINTF("read_csv(");
+          } else if (ObFileFormat::JSONL == def.format_) {
+            DATA_PRINTF("read_ndjson(");
+          } else if (ObFileFormat::PARQUET == def.format_) {
+            DATA_PRINTF("read_parquet(");
+          } else {
+            ret = OB_ERR_UNEXPECTED;
+          }
+        } else if (ObFileTableKind::LIST == def.kind_) {
+          DATA_PRINTF("glob(");
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+        }
+        if (OB_SUCC(ret)) {
+          ObObj path_obj;
+          std::string glob_path;
+          if (ObFileTableKind::LIST == def.kind_) {
+            glob_path.assign(def.canonical_path_.ptr(), def.canonical_path_.length());
+            if (glob_path.empty() || '/' != glob_path.back()) {
+              glob_path.push_back('/');
+            }
+            glob_path.append(def.file_pattern_.ptr(), def.file_pattern_.length());
+            path_obj.set_varchar(ObString(static_cast<int32_t>(glob_path.length()), glob_path.data()));
+          } else {
+            path_obj.set_varchar(def.canonical_path_);
+          }
+          OZ (path_obj.print_sql_literal(buf_, buf_len_, *pos_, print_params_));
+          if (OB_SUCC(ret) && ObFileFormat::CSV == def.format_) {
+            if (!def.csv_header_) {
+              DATA_PRINTF(", header = false");
+            }
+            if (',' != def.csv_delimiter_) {
+              DATA_PRINTF(", delim = '%c'", def.csv_delimiter_);
+            }
+            if ('"' != def.csv_quote_) {
+              DATA_PRINTF(", quote = '%c'", def.csv_quote_);
+            }
+            if ('"' != def.csv_escape_) {
+              DATA_PRINTF(", escape = '%c'", def.csv_escape_);
+            }
+            if (def.all_varchar_) {
+              DATA_PRINTF(", all_varchar = true");
+            }
+            if (!def.nullstr_.empty()) {
+              ObObj null_obj;
+              null_obj.set_varchar(def.nullstr_);
+              DATA_PRINTF(", nullstr = ");
+              OZ (null_obj.print_sql_literal(buf_, buf_len_, *pos_, print_params_));
+            }
+          }
+          DATA_PRINTF(") ");
+          PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
+        }
+      }
+      break;
+    }
     case TableItem::JSON_TABLE: {
       switch (table_item->json_table_def_->table_type_) {
         case MulModeTableType::OB_ORA_JSON_TABLE_TYPE : {

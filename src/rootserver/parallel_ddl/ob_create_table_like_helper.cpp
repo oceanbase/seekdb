@@ -130,8 +130,10 @@ int ObCreateTableLikeHelper::generate_table_schema_()
                        new_table_schema))) {
     } else if (OB_FAIL(gen_object_ids_(obj_cnt, id_generator))) {
     } else if (OB_FAIL(id_generator.next(new_table_id))) {
+    } else if (FALSE_IT(new_table_schema.set_table_id(new_table_id))) {
+    } else if (OB_FAIL(new_table_schema.bind_ai_column_schema_ids())) {
+      LOG_WARN("failed to rebind AI columns to new table", K(ret), K(new_table_id));
     } else {
-      new_table_schema.set_table_id(new_table_id);
       new_table_schema.set_table_name(arg_.new_table_name_);
       new_table_schema.set_database_id(new_database_id);
       new_table_schema.set_define_user_id(arg_.define_user_id_);

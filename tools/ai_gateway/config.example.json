@@ -1,0 +1,43 @@
+{
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 19130
+  },
+  "public_path": "/v1/chat/completions",
+  "upstream": {
+    "url": "https://api.deepseek.com/chat/completions",
+    "timeout_seconds": 120
+  },
+  "admin_token_env": "AI_GATEWAY_ADMIN_TOKEN",
+  "max_request_bytes": 8388608,
+  "storage": {
+    "sqlite_path": "ai_gateway.sqlite3"
+  },
+  "faults": {
+    "enabled": false,
+    "seed": 20260818,
+    "fixed_delay_ms": 0,
+    "jitter_ms": 0,
+    "error_rate": 0.0,
+    "error_status": 503,
+    "disconnect_before_rate": 0.0,
+    "timeout_rate": 0.0,
+    "timeout_delay_ms": 65000,
+    "disconnect_after_rate": 0.0
+  },
+  "pricing": {
+    "currency": "USD",
+    "models": {
+      "deepseek-v4-flash": {
+        "cache_hit_input_per_million": "0.0028",
+        "cache_miss_input_per_million": "0.14",
+        "output_per_million": "0.28"
+      },
+      "deepseek-v4-pro": {
+        "cache_hit_input_per_million": "0.003625",
+        "cache_miss_input_per_million": "0.435",
+        "output_per_million": "0.87"
+      }
+    }
+  }
+}

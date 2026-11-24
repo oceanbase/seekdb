@@ -345,6 +345,11 @@ int get_dml_stmt_need_privs(
           const TableItem *table_item = dml_stmt->get_table_item(i);
           if (OB_ISNULL(table_item)) {
             ret = OB_ERR_UNEXPECTED;
+          } else if (table_item->is_file_table()) {
+            ObNeedPriv file_priv;
+            file_priv.priv_level_ = OB_PRIV_USER_LEVEL;
+            file_priv.priv_set_ = OB_PRIV_FILE;
+            ADD_NEED_PRIV(file_priv);
           } else if (TableItem::BASE_TABLE == table_item->type_
             || TableItem::ALIAS_TABLE == table_item->type_
             || table_item->is_view_table_) {
@@ -429,6 +434,12 @@ int get_alter_table_stmt_need_privs(
       need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
       ADD_NEED_PRIV(need_priv);
 
+    }
+    if (stmt->get_alter_table_schema().get_ai_column_schema_count() > 0) {
+      ObNeedPriv model_priv;
+      model_priv.priv_set_ = OB_PRIV_ACCESS_AI_MODEL;
+      model_priv.priv_level_ = OB_PRIV_USER_LEVEL;
+      ADD_NEED_PRIV(model_priv);
     }
     // check references privilege
     if (OB_SUCC(ret)) {
@@ -554,6 +565,12 @@ int get_create_table_stmt_need_privs(
       need_priv.table_ = stmt->get_table_name();
       need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
       ADD_NEED_PRIV(need_priv);
+      if (stmt->get_create_table_arg().schema_.get_ai_column_schema_count() > 0) {
+        ObNeedPriv model_priv;
+        model_priv.priv_set_ = OB_PRIV_ACCESS_AI_MODEL;
+        model_priv.priv_level_ = OB_PRIV_USER_LEVEL;
+        ADD_NEED_PRIV(model_priv);
+      }
       if (OB_SUCC(ret) && NULL != select_stmt) {
         OZ (ObPrivilegeCheck::get_stmt_need_privs(session_priv, select_stmt, need_privs));
       }

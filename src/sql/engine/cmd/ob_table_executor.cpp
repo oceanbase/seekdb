@@ -42,6 +42,8 @@
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 
 #include "sql/printer/ob_select_stmt_printer.h"
+#include "share/schema/ob_ai_column_schema.h"
+#include "share/schema/ob_latest_schema_guard.h"
 #include "share/ob_structured_event_logger.h"
 namespace oceanbase
 {
@@ -568,6 +570,294 @@ int ObAlterTableExecutor::refresh_schema_for_table()
   return ret;
 }
 
+namespace
+{
+
+int append_ai_backfill_identifier(ObSqlString &sql, const ObString &identifier)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql.append("`"))) {
+    LOG_WARN("failed to append identifier prefix", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < identifier.length(); ++i) {
+    if ('`' == identifier.ptr()[i]) {
+      if (OB_FAIL(sql.append("``"))) {
+        LOG_WARN("failed to escape identifier", K(ret), K(identifier));
+      }
+    } else if (OB_FAIL(sql.append(identifier.ptr() + i, 1))) {
+      LOG_WARN("failed to append identifier", K(ret), K(identifier));
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(sql.append("`"))) {
+    LOG_WARN("failed to append identifier suffix", K(ret));
+  }
+  return ret;
+}
+
+bool is_ai_retry_identifier_char(const char c)
+{
+  return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
+      || ('0' <= c && c <= '9') || '_' == c || '$' == c;
+}
+
+int append_ai_retry_status_expr(ObSqlString &sql,
+                                const ObString &state_column_name)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql.append("(CASE "))) {
+  } else if (OB_FAIL(append_ai_backfill_identifier(sql, state_column_name))) {
+  } else if (OB_FAIL(sql.append(
+                 " WHEN 1 THEN 'PENDING'"
+                 " WHEN 2 THEN 'READY'"
+                 " WHEN 3 THEN 'FAILED'"
+                 " ELSE 'INVALID' END)"))) {
+  }
+  return ret;
+}
+
+// STATUS is a pseudo column only inside AI COLUMN RETRY.  Quoted identifiers
+// are deliberately left untouched, so a real column named `status` remains
+// addressable.  String literals and quoted identifiers are also left untouched.
+int append_ai_retry_predicate(ObSqlString &sql,
+                              const ObString &predicate,
+                              const ObString &state_column_name)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  char quote = '\0';
+  while (OB_SUCC(ret) && pos < predicate.length()) {
+    const char c = predicate.ptr()[pos];
+    if ('\0' != quote) {
+      if (OB_FAIL(sql.append(predicate.ptr() + pos, 1))) {
+      } else if ('\\' == c && '`' != quote && pos + 1 < predicate.length()) {
+        ++pos;
+        if (OB_FAIL(sql.append(predicate.ptr() + pos, 1))) {
+        }
+      } else if (c == quote) {
+        if (pos + 1 < predicate.length()
+            && predicate.ptr()[pos + 1] == quote) {
+          ++pos;
+          if (OB_FAIL(sql.append(predicate.ptr() + pos, 1))) {
+          }
+        } else {
+          quote = '\0';
+        }
+      }
+      ++pos;
+    } else if ('\'' == c || '"' == c || '`' == c) {
+      quote = c;
+      if (OB_FAIL(sql.append(predicate.ptr() + pos, 1))) {
+      }
+      ++pos;
+    } else if (is_ai_retry_identifier_char(c)) {
+      const int64_t begin = pos;
+      while (pos < predicate.length()
+             && is_ai_retry_identifier_char(predicate.ptr()[pos])) {
+        ++pos;
+      }
+      const ObString token(static_cast<int32_t>(pos - begin),
+                           predicate.ptr() + begin);
+      if (0 == token.case_compare("STATUS")) {
+        if (OB_FAIL(append_ai_retry_status_expr(sql, state_column_name))) {
+          LOG_WARN("failed to append AI retry STATUS expression", K(ret));
+        }
+      } else if (OB_FAIL(sql.append(token))) {
+      }
+    } else {
+      if (OB_FAIL(sql.append(predicate.ptr() + pos, 1))) {
+      }
+      ++pos;
+    }
+  }
+  return ret;
+}
+
+int enumerate_ai_column_rows(obcall::ObAlterTableArg &alter_table_arg,
+                             ObSQLSessionInfo &session,
+                             const ObString &single_column_name,
+                             const ObString &predicate)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObString, 4> target_column_names;
+  ObSchemaGetterGuard runtime_schema_guard;
+  const ObTableSchema *runtime_table_schema = NULL;
+  const ObTableSchema *table_schema = NULL;
+  const ObDatabaseSchema *database_schema = NULL;
+  sqlclient::ObISQLConnectionGuard conn_guard;
+  sqlclient::ObISQLConnection *conn = NULL;
+  bool original_autocommit = true;
+  const bool old_internal_dml = session.is_ai_column_internal_dml();
+  const uint64_t old_backfill_column_id =
+      session.get_ai_column_backfill_column_id();
+
+  if (!single_column_name.empty()) {
+    if (OB_FAIL(target_column_names.push_back(single_column_name))) {
+      LOG_WARN("failed to collect explicit AI column action", K(ret),
+               K(single_column_name));
+    }
+  } else {
+    const AlterTableSchema &changes = alter_table_arg.alter_table_schema_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < changes.get_ai_column_schema_count(); ++i) {
+      const ObAIColumnSchema *definition = changes.get_ai_column_schema_by_idx(i);
+      if (OB_ISNULL(definition)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(target_column_names.push_back(definition->get_column_name()))) {
+        LOG_WARN("failed to collect AI column for backfill", K(ret));
+      }
+    }
+  }
+
+  ObLatestSchemaGuard latest_guard(GCTX.schema_service_);
+  if (OB_FAIL(ret) || target_column_names.empty()) {
+  } else if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema service is null for AI backfill", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+                 runtime_schema_guard))) {
+    LOG_WARN("failed to get runtime schema for AI backfill", K(ret));
+  } else if (OB_FAIL(runtime_schema_guard.get_table_schema(
+                 alter_table_arg.alter_table_schema_.get_origin_database_name(),
+                 alter_table_arg.alter_table_schema_.get_origin_table_name(),
+                 false, runtime_table_schema))) {
+    LOG_WARN("failed to resolve altered table for AI backfill", K(ret),
+             K(alter_table_arg.alter_table_schema_.get_origin_database_name()),
+             K(alter_table_arg.alter_table_schema_.get_origin_table_name()));
+  } else if (OB_ISNULL(runtime_table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("runtime altered table is null for AI backfill", K(ret));
+  } else if (OB_FAIL(latest_guard.get_table_schema(
+                 runtime_table_schema->get_table_id(), table_schema))) {
+    LOG_WARN("failed to load altered table for AI backfill", K(ret),
+             K(runtime_table_schema->get_table_id()));
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("altered table is null for AI backfill", K(ret),
+             K(runtime_table_schema->get_table_id()));
+  } else if (OB_FAIL(latest_guard.get_database_schema(
+                 table_schema->get_database_id(), database_schema))) {
+    LOG_WARN("failed to load AI backfill database", K(ret),
+             K(table_schema->get_database_id()));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("AI backfill database is null", K(ret),
+             K(table_schema->get_database_id()));
+  } else if (OB_FAIL(session.get_autocommit(original_autocommit))) {
+    LOG_WARN("failed to get autocommit for AI backfill", K(ret));
+  } else if (!original_autocommit && OB_FAIL(session.set_autocommit(true))) {
+    LOG_WARN("failed to enable autocommit for AI backfill", K(ret));
+  } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::
+                 create_connection_with_external_session(&session, conn_guard))) {
+    LOG_WARN("failed to create AI backfill connection", K(ret));
+  } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+    ret = OB_INNER_STAT_ERROR;
+    LOG_WARN("AI backfill connection is null", K(ret));
+  }
+
+  session.set_ai_column_internal_dml(false);
+  for (int64_t i = 0; OB_SUCC(ret) && i < target_column_names.count(); ++i) {
+    const ObColumnSchemaV2 *result_column =
+        table_schema->get_column_schema(target_column_names.at(i));
+    const ObAIColumnSchema *ai_schema = OB_ISNULL(result_column)
+        ? NULL : table_schema->get_ai_column_schema(
+                     result_column->get_column_id());
+    const ObColumnSchemaV2 *trigger_column = NULL;
+    const ObColumnSchemaV2 *state_column = NULL;
+    if (OB_ISNULL(result_column) || OB_ISNULL(ai_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("AI column action metadata is missing", K(ret),
+               K(target_column_names.at(i)));
+    } else if (OB_ISNULL(state_column = table_schema->get_column_schema(
+                                      ai_schema->get_state_column_id()))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("AI column state metadata is missing", K(ret), KPC(ai_schema));
+    } else if (!ai_schema->get_dependency_column_ids().empty()) {
+      trigger_column = table_schema->get_column_schema(ai_schema->get_dependency_column_ids().at(0));
+      if (OB_NOT_NULL(trigger_column) && trigger_column->is_generated_column()) {
+        ObSEArray<uint64_t, 4> inputs;
+        if (OB_FAIL(trigger_column->get_cascaded_column_ids(inputs))) {
+          LOG_WARN("failed to get AI input's base columns", K(ret));
+        } else {
+          trigger_column = inputs.empty() ? nullptr : table_schema->get_column_schema(inputs.at(0));
+        }
+      }
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(trigger_column)) {
+      for (ObTableSchema::const_column_iterator column_iter =
+               table_schema->column_begin();
+           OB_ISNULL(trigger_column)
+               && column_iter != table_schema->column_end();
+           ++column_iter) {
+        const ObColumnSchemaV2 *candidate = *column_iter;
+        if (OB_NOT_NULL(candidate) && !candidate->is_ai_column()
+            && !candidate->is_hidden() && !candidate->is_generated_column()) {
+          trigger_column = candidate;
+        }
+      }
+    }
+
+    ObSqlString sql;
+    int64_t affected_rows = 0;
+    if (OB_SUCC(ret) && OB_ISNULL(trigger_column)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("AI backfill has no ordinary trigger column", K(ret),
+               KPC(ai_schema));
+    } else if (OB_SUCC(ret) && OB_FAIL(sql.append("UPDATE /*+ USE_PLAN_CACHE(NONE) */ "))) {
+      LOG_WARN("failed to start AI backfill SQL", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(append_ai_backfill_identifier(
+                   sql, database_schema->get_database_name_str()))) {
+      LOG_WARN("failed to append AI backfill database", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(sql.append("."))) {
+      LOG_WARN("failed to append AI backfill qualifier", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(append_ai_backfill_identifier(
+                   sql, table_schema->get_table_name_str()))) {
+      LOG_WARN("failed to append AI backfill table", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(sql.append(" SET "))) {
+      LOG_WARN("failed to append AI backfill SET", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(append_ai_backfill_identifier(
+                   sql, trigger_column->get_column_name_str()))) {
+      LOG_WARN("failed to append AI backfill trigger column", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(sql.append(" = "))) {
+      LOG_WARN("failed to append AI backfill assignment", K(ret));
+    } else if (OB_SUCC(ret) && OB_FAIL(append_ai_backfill_identifier(
+                   sql, trigger_column->get_column_name_str()))) {
+      LOG_WARN("failed to finish AI backfill assignment", K(ret));
+    } else if (OB_SUCC(ret) && !predicate.empty()
+               && OB_FAIL(sql.append(" WHERE "))) {
+      LOG_WARN("failed to append AI retry WHERE", K(ret));
+    } else if (OB_SUCC(ret) && !predicate.empty()
+               && OB_FAIL(append_ai_retry_predicate(
+                      sql, predicate, state_column->get_column_name_str()))) {
+      LOG_WARN("failed to append AI retry predicate", K(ret), K(predicate));
+    } else if (OB_SUCC(ret)) {
+      session.set_ai_column_backfill_column_id(
+          result_column->get_column_id());
+      if (OB_FAIL(conn->execute_write(sql.string(), affected_rows, false))) {
+        LOG_WARN("failed to enumerate existing AI column rows", K(ret),
+                 K(sql), K(result_column->get_column_id()));
+      } else {
+        LOG_INFO("enumerated existing rows for AI column action",
+                 K(table_schema->get_table_id()),
+                 K(result_column->get_column_id()));
+      }
+    }
+  }
+
+  session.set_ai_column_backfill_column_id(old_backfill_column_id);
+  session.set_ai_column_internal_dml(old_internal_dml);
+  if (!original_autocommit) {
+    const int tmp_ret = session.set_autocommit(false);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to restore autocommit after AI backfill", K(tmp_ret));
+      if (OB_SUCC(ret)) {
+        ret = tmp_ret;
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace
+
 /* From version 3100 onwards, the alter table logic is to put index creation and other operations into the same rpc sent to rs, and after returning, synchronize each created index, etc., if an index creation fails, roll back all indexes
    MySQL mode supports alter table to perform index creation operations and other operations simultaneously, need to ensure that rs processes drop index after processing add index
    Otherwise, prefix indexes will have issues:
@@ -763,6 +1053,19 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
   OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
   if (OB_FAIL(ret)) {
     // do nothing
+  } else if (stmt.is_retry_ai_column()) {
+    ObSQLSessionInfo *my_session = ctx.get_my_session();
+    if (OB_ISNULL(my_session)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get session for AI column retry", K(ret));
+    } else if (OB_FAIL(enumerate_ai_column_rows(
+                   alter_table_arg, *my_session,
+                   stmt.get_retry_ai_column_name(),
+                   stmt.get_retry_ai_column_predicate()))) {
+      LOG_WARN("failed to retry AI column rows", K(ret),
+               K(stmt.get_retry_ai_column_name()),
+               K(stmt.get_retry_ai_column_predicate()));
+    }
   } else if (stmt.is_alter_triggers()) {
     if (stmt.get_tg_arg().trigger_infos_.count() > 0) {
       stmt.get_tg_arg().ddl_stmt_str_ = first_stmt;
@@ -866,6 +1169,16 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
             res.task_id_, res.ddl_need_retry_at_executor_, my_session,
             *ctx.get_query_runtime_environment(), ctx.local_command_service(), is_support_cancel))) {
         }
+      }
+    }
+    if (OB_SUCC(ret) && alter_table_arg.alter_table_schema_.get_ai_column_schema_count() > 0) {
+      if (OB_FAIL(refresh_schema_for_table())) {
+        LOG_WARN("failed to refresh schema before AI column backfill", K(ret));
+      } else if (OB_FAIL(enumerate_ai_column_rows(
+                     alter_table_arg, *my_session,
+                     ObString(), ObString()))) {
+        LOG_WARN("failed to backfill AI column definitions", K(ret),
+                 K(alter_table_arg.table_id_));
       }
     }
     char table_info_buffer[256];

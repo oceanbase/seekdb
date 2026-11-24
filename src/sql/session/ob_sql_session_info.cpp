@@ -146,6 +146,9 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       is_ignore_stmt_(false),
       ddl_info_(),
       is_table_name_hidden_(false),
+      ai_column_internal_dml_(false),
+      ai_column_backfill_column_id_(OB_INVALID_ID),
+      ai_task_wakeup_pending_(false),
       piece_cache_(NULL),
       is_load_data_exec_session_(false),
       pl_exact_err_msg_(),
@@ -293,6 +296,9 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     priv_user_id_ = OB_INVALID_ID;
     prelock_ = false;
     ddl_info_.reset();
+    ai_column_internal_dml_ = false;
+    ai_column_backfill_column_id_ = OB_INVALID_ID;
+    ai_task_wakeup_pending_ = false;
     cur_exec_ctx_ = nullptr;
     // Process-lifetime dependencies are construction state, not connection
     // state. COM_RESET_CONNECTION must not silently detach them. These

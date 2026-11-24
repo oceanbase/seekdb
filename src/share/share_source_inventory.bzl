@@ -369,6 +369,8 @@ SHARE_UNITY_GROUPS = [
             "src/share/schema/ob_schema_getter_guard_priv.cpp",
             "src/share/schema/ob_schema_struct.cpp",
             "src/share/schema/ob_server_schema_service.cpp",
+            "src/share/schema/ob_ai_column_schema.cpp",
+            "src/share/schema/ob_ai_column_sql_service.cpp",
             "src/share/schema/ob_table_schema.cpp",
             "src/share/schema/ob_latest_schema_guard.cpp",
         ],

@@ -19,6 +19,7 @@
 #include <inttypes.h>
 #include "sql/resolver/dcl/ob_grant_resolver.h"
 #include "sql/resolver/ob_resolver_utils.h"
+#include "share/schema/ob_schema_utils.h"
 #include "sql/resolver/cmd/ob_show_table_status_sql.h"
 #include "sql/printer/ob_schema_printer.h"
 
@@ -151,6 +152,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_ENGINE)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_OPEN_TABLES)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_USER)
+            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_AI_COLUMNS)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -415,6 +417,41 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                   GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COLUMNS, OB_SYS_DATABASE_NAME,OB_ALL_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
                 }
               }
+            }
+          }
+        }();
+        break;
+      }
+      case T_SHOW_AI_COLUMNS: {
+        [&] {
+          if (OB_UNLIKELY(parse_tree.num_child_ != 3 || NULL == parse_tree.children_)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
+          } else if (OB_UNLIKELY(NULL == parse_tree.children_[0])) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("parser tree child is NULL", K(ret), K(parse_tree.children_[0]));
+          } else {
+            ObString show_db_name;
+            uint64_t show_db_id = OB_INVALID_ID;
+            ObString show_table_name;
+            uint64_t show_table_id = OB_INVALID_ID;
+            bool is_view = false;
+            show_resv_ctx.condition_node_ = parse_tree.children_[2];
+            show_resv_ctx.stmt_type_ = stmt::T_SHOW_AI_COLUMNS;
+            if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], parse_tree.children_[1],
+                                                database_name.empty(), T_SHOW_AI_COLUMNS, real_id,
+                                                show_db_name, show_db_id, show_table_name,
+                                                show_table_id, is_view))) {
+              LOG_WARN("fail to resolve SHOW AI COLUMNS table", K(ret));
+            } else if (is_view) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED, "SHOW AI COLUMNS from a view is");
+            } else {
+              GEN_SQL_STEP_1(ObShowSqlSet::SHOW_AI_COLUMNS);
+              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_AI_COLUMNS,
+                             OB_SYS_DATABASE_NAME,
+                             OB_ALL_AI_COLUMN_TNAME,
+                             ObSchemaUtils::get_extract_schema_id(show_table_id));
             }
           }
         }();
@@ -1807,6 +1844,7 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
                  && parse_tree->type_ != T_SHOW_COLLATION
                  && parse_tree->type_ != T_SHOW_TRACE
                  && parse_tree->type_ != T_SHOW_COLUMNS
+                 && parse_tree->type_ != T_SHOW_AI_COLUMNS
                  && parse_tree->type_ != T_SHOW_TABLE_STATUS
                  && parse_tree->type_ != T_SHOW_INDEXES
                  && parse_tree->type_ != T_SHOW_PARAMETERS
@@ -2377,6 +2415,14 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_COLUMNS,
                         R"(SELECT "FIELD" AS "FIELD", "TYPE" AS "TYPE", "NULL" AS "NULL", "KEY" AS "KEY", "DEFAULT" AS "DEFAULT", "EXTRA" AS "EXTRA" )"
                         R"(FROM %s.%s  WHERE TABLE_ID = %" PRId64 " AND IS_HIDDEN = 0)",
                        "Field");
+DEFINE_SHOW_CLAUSE_SET(SHOW_AI_COLUMNS,
+                       NULL,
+                       "SELECT column_name AS `Column`, expr_text AS `Expression`, "
+                       "spec_version AS `Spec_Version`, "
+                       "max_retries AS `Max_Retries` "
+                       "FROM %s.%s WHERE table_id = %lu ORDER BY column_id",
+                       NULL,
+                       "Column");
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_COLUMNS,
                        NULL,
                        "SELECT field AS `Field`, type AS `Type`, collation AS `Collation`, `NULL` AS `Null`, `KEY` AS `Key`, `DEFAULT` AS `Default`, extra AS `Extra`, `PRIVILEGES` AS `Privileges`, `COMMENT` AS `Comment` \

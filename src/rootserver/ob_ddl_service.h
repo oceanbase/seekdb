@@ -89,6 +89,7 @@ class ObDDLService : public query::ObIAuxIndexSchemaChecker
 {
 public:
   friend class ObPLDDLService;
+  friend class ObTableHelper;
   ObDDLService();
   virtual ~ObDDLService() {}
 
@@ -236,6 +237,10 @@ public:
       uint64_t &curr_udt_set_id,
       ObDDLOperator *ddl_operator,
       common::ObMySQLTransaction *trans);
+  int apply_ai_column_definition(
+      const share::schema::AlterTableSchema &alter_table_schema,
+      const share::schema::ObColumnSchemaV2 &column_schema,
+      share::schema::ObTableSchema &new_table_schema);
   int gen_alter_column_new_table_schema_offline(
       const share::schema::ObTableSchema &origin_table_schema,
       share::schema::AlterTableSchema &alter_table_schema,
@@ -969,6 +974,13 @@ int check_will_be_having_domain_index_operation(
                               share::schema::ObSchemaGetterGuard &schema_guard,
                               const uint64_t data_format_version,
                               const share::ObForkTableInfo &fork_table_info = share::ObForkTableInfo());
+  int prepare_ai_column_metadata_(
+      share::schema::ObTableSchema &data_table_schema);
+  int persist_ai_column_hidden_columns_for_alter_(
+      const share::schema::ObTableSchema &origin_table_schema,
+      share::schema::ObTableSchema &new_table_schema,
+      ObDDLOperator &ddl_operator,
+      ObMySQLTransaction &trans);
   int set_new_database_options(const obcall::ObAlterDatabaseArg &arg,
                                share::schema::ObDatabaseSchema &new_database_schema);
   int set_new_table_options(
@@ -1399,6 +1411,7 @@ int check_will_be_having_domain_index_operation(
                                  common::ObIAllocator &allocator);
   int pre_check_orig_column_schema(
       const share::schema::AlterColumnSchema &alter_column_schema,
+      const share::schema::AlterTableSchema &alter_table_schema,
       const share::schema::ObTableSchema &origin_table_schema,
       common::hash::ObHashSet<ObColumnNameHashWrapper> &update_column_name_set);
   int check_generated_column_modify_authority(

@@ -29,6 +29,7 @@
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
+#include "sql/optimizer/ob_log_file_scan.h"
 #include "sql/optimizer/ob_log_json_table.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
@@ -45,6 +46,8 @@
 #include "sql/optimizer/ob_log_stat_collector.h"
 #include "sql/optimizer/ob_log_expand.h"
 #include "sql/engine/ob_operator_factory.h"
+#include "sql/resolver/dml/ob_dml_stmt.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/basic/ob_limit_op.h"
 #include "sql/engine/basic/ob_values_op.h"
 #include "sql/engine/sort/ob_sort_op.h"
@@ -95,6 +98,7 @@
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/engine/basic/ob_function_table_op.h"
+#include "sql/engine/basic/ob_file_scan_op.h"
 #include "sql/engine/basic/ob_json_table_op.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/basic/ob_stat_collector_op.h"
@@ -5459,9 +5463,24 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   } else if (OB_FAIL(deep_copy_obj(alloc, op.get_closed_cht(), spec.closed_cht_))) {
   } else if (OB_FAIL(deep_copy_obj(alloc, op.get_escaped_cht(), spec.escaped_cht_))) {
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
+    LOG_WARN("fail to set external properties", K(op.get_external_properties()), K(ret));
+  } else if (OB_FAIL(ob_write_string(alloc, op.get_copy_nullstr(), spec.copy_nullstr_))) {
+    LOG_WARN("fail to set COPY null string", K(ret));
+  } else if (OB_FAIL(spec.copy_header_names_.init(op.get_copy_header_names().count()))) {
+    LOG_WARN("fail to init COPY header names", K(ret));
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {
   } else {
+    spec.is_copy_ = op.is_copy();
+    spec.write_header_ = op.write_header();
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_copy_header_names().count(); ++i) {
+      ObString name;
+      if (OB_FAIL(ob_write_string(alloc, op.get_copy_header_names().at(i), name))) {
+        LOG_WARN("fail to copy COPY header name", K(ret), K(i));
+      } else if (OB_FAIL(spec.copy_header_names_.push_back(name))) {
+        LOG_WARN("fail to append COPY header name", K(ret), K(i));
+      }
+    }
     ObString var;
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_user_vars().count(); ++i) {
       var.reset();
@@ -5497,7 +5516,6 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
     const bool in_root_job)
 {
   UNUSED(in_root_job);
-  ObIAllocator &alloc = phy_plan_->get_allocator();
   ObRawExpr *value_raw_expr = nullptr;
   ObExpr *value_expr = nullptr;
   int ret = OB_SUCCESS;
@@ -5527,6 +5545,115 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
         OZ (spec.column_exprs_.push_back(rt_expr));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObStaticEngineCG::generate_spec(ObLogFileScan &op, ObFileScanSpec &spec,
+                                    const bool in_root_job)
+{
+  UNUSED(in_root_job);
+  int ret = OB_SUCCESS;
+  ObIAllocator &alloc = phy_plan_->get_allocator();
+  const ObFileTableDef *file_def = op.get_file_table_def();
+  if (OB_ISNULL(op.get_stmt()) || OB_ISNULL(file_def)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid logical file scan", K(ret), KP(file_def));
+  } else if (OB_FAIL(spec.column_exprs_.init(op.get_stmt()->get_column_size()))) {
+    LOG_WARN("failed to init file scan expressions", K(ret));
+  } else if (OB_FAIL(spec.output_column_idxs_.init(file_def->columns_.count()))) {
+    LOG_WARN("failed to init file output indexes", K(ret));
+  } else if (OB_FAIL(spec.file_column_names_.init(file_def->columns_.count()))) {
+    LOG_WARN("failed to init file column names", K(ret));
+  } else if (OB_FAIL(spec.file_column_types_.init(file_def->columns_.count()))) {
+    LOG_WARN("failed to init file column types", K(ret));
+  } else if (OB_FAIL(spec.source_column_names_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source column names", K(ret));
+  } else if (OB_FAIL(spec.source_original_names_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source original names", K(ret));
+  } else if (OB_FAIL(spec.source_type_names_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source type names", K(ret));
+  } else if (OB_FAIL(spec.source_column_types_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source column types", K(ret));
+  } else if (OB_FAIL(spec.source_column_nullable_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source column nullable flags", K(ret));
+  } else if (OB_FAIL(ob_write_string(alloc, file_def->canonical_path_, spec.file_path_))) {
+    LOG_WARN("failed to copy file scan path", K(ret));
+  } else if (OB_FAIL(ob_write_string(alloc, file_def->file_pattern_, spec.file_pattern_))) {
+    LOG_WARN("failed to copy file pattern", K(ret));
+  } else if (OB_FAIL(ob_write_string(alloc, file_def->secure_file_priv_, spec.secure_file_priv_))) {
+    LOG_WARN("failed to copy secure file privilege", K(ret));
+  } else {
+    spec.kind_ = static_cast<int32_t>(file_def->kind_);
+    spec.file_format_ = static_cast<int32_t>(file_def->format_);
+    spec.csv_delimiter_ = file_def->csv_delimiter_;
+    spec.csv_quote_ = file_def->csv_quote_;
+    spec.csv_escape_ = file_def->csv_escape_;
+    spec.csv_header_ = file_def->csv_header_;
+    spec.all_varchar_ = file_def->all_varchar_;
+    if (OB_FAIL(ob_write_string(alloc, file_def->nullstr_, spec.nullstr_))) {
+      LOG_WARN("failed to copy csv null string", K(ret));
+    }
+    spec.device_ = file_def->device_;
+    spec.inode_ = file_def->inode_;
+    spec.file_size_ = file_def->file_size_;
+    spec.modified_time_ns_ = file_def->modified_time_ns_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < file_def->columns_.count(); ++i) {
+      ObString source_name;
+      if (OB_FAIL(ob_write_string(alloc, file_def->columns_.at(i).source_name_, source_name))) {
+        LOG_WARN("failed to copy file source name", K(ret), K(i));
+      } else if (OB_FAIL(spec.file_column_names_.push_back(source_name))) {
+        LOG_WARN("failed to append file source name", K(ret), K(i));
+      } else if (OB_FAIL(spec.file_column_types_.push_back(
+                   static_cast<int32_t>(file_def->columns_.at(i).type_)))) {
+        LOG_WARN("failed to append file column type", K(ret), K(i));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < file_def->source_columns_.count(); ++i) {
+      ObString column_name;
+      ObString source_name;
+      ObString source_type_name;
+      if (OB_FAIL(ob_write_string(alloc, file_def->source_columns_.at(i).column_name_, column_name))) {
+        LOG_WARN("failed to copy schema column name", K(ret), K(i));
+      } else if (OB_FAIL(ob_write_string(alloc, file_def->source_columns_.at(i).source_name_, source_name))) {
+        LOG_WARN("failed to copy schema source name", K(ret), K(i));
+      } else if (OB_FAIL(ob_write_string(alloc, file_def->source_columns_.at(i).source_type_name_,
+                                        source_type_name))) {
+        LOG_WARN("failed to copy schema source type", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_column_names_.push_back(column_name))) {
+        LOG_WARN("failed to append schema column name", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_original_names_.push_back(source_name))) {
+        LOG_WARN("failed to append schema source name", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_type_names_.push_back(source_type_name))) {
+        LOG_WARN("failed to append schema source type", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_column_types_.push_back(
+                   static_cast<int32_t>(file_def->source_columns_.at(i).type_)))) {
+        LOG_WARN("failed to append schema column type", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_column_nullable_.push_back(
+                   file_def->source_columns_.at(i).nullable_ ? 1 : 0))) {
+        LOG_WARN("failed to append schema nullable flag", K(ret), K(i));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {
+      if (OB_FAIL(mark_expr_self_produced(op.get_output_exprs().at(i)))) {
+        LOG_WARN("failed to mark file expression produced", K(ret));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_stmt()->get_column_size(); ++i) {
+      ObExpr *rt_expr = nullptr;
+      const ColumnItem *column = op.get_stmt()->get_column_item(i);
+      if (OB_ISNULL(column) || OB_ISNULL(column->expr_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (column->table_id_ == op.get_table_id()
+                 && column->expr_->is_explicited_reference()) {
+        if (OB_FAIL(mark_expr_self_produced(column->expr_))) {
+        } else if (OB_FAIL(generate_rt_expr(*column->expr_, rt_expr))) {
+        } else if (OB_FAIL(spec.column_exprs_.push_back(rt_expr))) {
+        } else if (OB_FAIL(spec.output_column_idxs_.push_back(
+                     static_cast<int64_t>(column->column_id_ - OB_APP_MIN_COLUMN_ID)))) {
+        }
       }
     }
   }
@@ -5672,6 +5799,98 @@ int ObStaticEngineCG::set_properties_pre(const ObLogPlan &log_plan, ObPhysicalPl
   return ret;
 }
 
+namespace
+{
+int add_ai_column_ref(const ObDMLStmt &stmt,
+                      const ObColumnRefRawExpr &column_expr,
+                      ObPhysicalPlan &phy_plan)
+{
+  int ret = OB_SUCCESS;
+  const ColumnItem *column_item = stmt.get_column_item_by_id(
+      column_expr.get_table_id(), column_expr.get_column_id());
+  const TableItem *table_item = stmt.get_table_item_by_id(
+      column_expr.get_table_id());
+  if (OB_ISNULL(column_item) || OB_ISNULL(table_item)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("AI column or table item is missing", K(ret), K(column_expr),
+             KP(column_item), KP(table_item));
+  } else {
+    // base_tid_/base_cid_ on UPDATE may point at a generated column's
+    // dependency after rewrite.  For an ordinary base table, ref_id_ and the
+    // original column id identify the AI column schema directly.
+    const uint64_t table_id = table_item->is_basic_table()
+        ? table_item->ref_id_
+        : (OB_INVALID_ID == column_item->base_tid_
+            ? column_item->table_id_ : column_item->base_tid_);
+    const uint64_t column_id = table_item->is_basic_table()
+        ? column_item->column_id_
+        : (OB_INVALID_ID == column_item->base_cid_
+            ? column_item->column_id_ : column_item->base_cid_);
+    if (OB_FAIL(phy_plan.add_ai_column_ref(
+            ObAIColumnRef(table_id, column_id)))) {
+      LOG_WARN("failed to add AI column plan reference", K(ret),
+               K(table_id), K(column_id));
+    }
+  }
+  return ret;
+}
+
+int collect_ai_column_refs(const ObDMLStmt &stmt, ObPhysicalPlan &phy_plan)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> referenced_columns;
+  if (stmt.is_select_stmt()) {
+    const ObIArray<ColumnItem> &column_items = stmt.get_column_items();
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_items.count(); ++i) {
+      const ObColumnRefRawExpr *column_expr = column_items.at(i).expr_;
+      if (OB_NOT_NULL(column_expr) && column_expr->is_ai_column()
+          && OB_FAIL(add_ai_column_ref(stmt, *column_expr, phy_plan))) {
+        LOG_WARN("failed to collect SELECT AI column", K(ret), K(i));
+      }
+    }
+  } else if (stmt.is_update_stmt() || stmt.is_delete_stmt()) {
+    // DML writes add implicit AI result assignments.  Only predicates and
+    // ORDER BY expressions are reads and therefore participate in strict mode.
+    if (OB_FAIL(ObRawExprUtils::extract_column_exprs(
+            stmt.get_condition_exprs(), referenced_columns))) {
+      LOG_WARN("failed to extract DML predicate columns", K(ret));
+    }
+    const ObIArray<OrderItem> &order_items = stmt.get_order_items();
+    for (int64_t i = 0; OB_SUCC(ret) && i < order_items.count(); ++i) {
+      if (OB_FAIL(ObRawExprUtils::extract_column_exprs(
+              order_items.at(i).expr_, referenced_columns))) {
+        LOG_WARN("failed to extract DML order columns", K(ret), K(i));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < referenced_columns.count(); ++i) {
+      const ObRawExpr *raw_expr = referenced_columns.at(i);
+      if (OB_NOT_NULL(raw_expr) && raw_expr->is_column_ref_expr()
+          && static_cast<const ObColumnRefRawExpr *>(raw_expr)->is_ai_column()
+          && OB_FAIL(add_ai_column_ref(
+                 stmt, *static_cast<const ObColumnRefRawExpr *>(raw_expr),
+                 phy_plan))) {
+        LOG_WARN("failed to collect DML AI column read", K(ret), K(i));
+      }
+    }
+  }
+
+  ObSEArray<ObSelectStmt *, 8> child_stmts;
+  if (OB_SUCC(ret) && OB_FAIL(stmt.get_child_stmts(child_stmts))) {
+    LOG_WARN("failed to get child statements for AI column collection", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
+    if (OB_ISNULL(child_stmts.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("child statement is null", K(ret), K(i));
+    } else if (OB_FAIL(SMART_CALL(
+                   collect_ai_column_refs(*child_stmts.at(i), phy_plan)))) {
+      LOG_WARN("failed to collect child AI column references", K(ret), K(i));
+    }
+  }
+  return ret;
+}
+} // namespace
+
 int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan)
 {
   int ret = OB_SUCCESS;
@@ -5794,6 +6013,11 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
         plan_ctx->set_runtime_schema_version(runtime_schema_version);
       }
     }
+  }
+
+  if (OB_SUCC(ret)
+      && OB_FAIL(collect_ai_column_refs(*log_plan.get_stmt(), phy_plan))) {
+    LOG_WARN("failed to collect AI column plan references", K(ret));
   }
 
   //set user and system variables
@@ -6118,6 +6342,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_FUNCTION_TABLE: {
       type = PHY_FUNCTION_TABLE;
+      break;
+    }
+    case log_op_def::LOG_FILE_SCAN: {
+      type = PHY_FILE_SCAN;
       break;
     }
     case log_op_def::LOG_JSON_TABLE: {

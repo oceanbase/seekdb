@@ -261,6 +261,7 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_vector",
     ] + [
         "//src/share:_generated_inner_table_headers",
+        "//src/share:ai_column_task_notifier_interface",
         "//src/share:ai_endpoint_interface",
         "//src/share:autoincrement_runtime",
         "//src/share:cache",
@@ -425,4 +426,12 @@ cc_library(
     ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
+)
+
+cc_library(
+    name = "file_sql_test_headers",
+    testonly = True,
+    hdrs = ["engine/basic/ob_file_scan_utils.h"],
+    deps = [":sql_runtime_interface"],
+    visibility = ["//unittest/sql:__pkg__"],
 )

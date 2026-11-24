@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
+#include "sql/resolver/ddl/ob_ai_column_resolver.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -881,6 +882,46 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         // won't be here
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "unexpected branch", K(ret));
+      }
+    }
+
+    // Bind AI metadata after every user column has been resolved. This keeps
+    // forward references deterministic and lets us reject AI-to-AI chains.
+    // Normal CREATE TABLE resolves columns and constraints in one RESOLVE_ALL
+    // pass, while CTAS resolves its explicit columns in RESOLVE_COL_ONLY and
+    // constraints later in RESOLVE_NON_COL.  Attach metadata in both passes
+    // that actually resolve columns; otherwise a normal CREATE keeps only the
+    // AI column flag and silently loses the table-owned AI definition.
+    if (OB_SUCC(ret) && RESOLVE_NON_COL != resolve_rule) {
+      ObSEArray<const ObColumnSchemaV2 *, SEARRAY_INIT_NUM> resolved_col_ptrs;
+      for (int64_t i = 0; OB_SUCC(ret) && i < resolved_cols_count; ++i) {
+        if (OB_FAIL(resolved_col_ptrs.push_back(&resolved_cols.at(i)))) {
+          SQL_RESV_LOG(WARN, "failed to prepare AI column dependency list", K(ret), K(i));
+        }
+      }
+      ObAIColumnResolver ai_resolver(*session_info_, *schema_checker_);
+      for (int32_t i = 0, col_pos = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
+        ParseNode *element = node->children_[i];
+        if (nullptr != element && T_COLUMN_DEFINITION == element->type_) {
+          CK (col_pos >= 0 && col_pos < resolved_cols_count);
+          if (OB_SUCC(ret) && ObAIColumnResolver::is_ai_column_definition(element)) {
+            ObColumnSchemaV2 &resolved_column = resolved_cols.at(col_pos);
+            ObColumnSchemaV2 *stored_column =
+                table_schema.get_column_schema(resolved_column.get_column_id());
+            ObAIColumnSchema ai_column_schema(allocator_);
+            if (OB_ISNULL(stored_column)) {
+              ret = OB_ERR_UNEXPECTED;
+              SQL_RESV_LOG(WARN, "stored AI column schema is null", K(ret), K(col_pos));
+            } else if (OB_FAIL(ai_resolver.resolve(
+                           *element, table_schema.get_table_id(), *stored_column,
+                           resolved_col_ptrs, ai_column_schema))) {
+              SQL_RESV_LOG(WARN, "failed to resolve AI column metadata", K(ret), K(col_pos));
+            } else if (OB_FAIL(table_schema.add_ai_column_schema(ai_column_schema))) {
+              SQL_RESV_LOG(WARN, "failed to attach AI column metadata", K(ret), K(col_pos));
+            }
+          }
+          ++col_pos;
+        }
       }
     }
 

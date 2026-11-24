@@ -73,7 +73,6 @@ int local_check_ai_model_exists(const ObString &ai_model_name)
 }
 const int64_t ObAiServiceExecutor::SPECIAL_ENDPOINT_ID_FOR_VERSION = -1;
 const int64_t ObAiServiceExecutor::INIT_ENDPOINT_VERSION = 0;
-const char *ObAiServiceExecutor::SPECIAL_ENDPOINT_SCOPE_FOR_VERSION = "";
 
 int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allocator, const ObString &endpoint_name, const ObIJsonBase &create_jbase)
 {
@@ -267,8 +266,8 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
                                                            EXCLUSIVE,
                                                            timeout,
                                                            conn))) {
-  } else if (OB_FAIL(sql.assign_fmt("SELECT VERSION FROM %s WHERE endpoint_id = %" PRId64 " AND scope = '%s'",
-      OB_ALL_AI_MODEL_ENDPOINT_TNAME, SPECIAL_ENDPOINT_ID_FOR_VERSION, SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
+  } else if (OB_FAIL(sql.assign_fmt("SELECT VERSION FROM %s WHERE endpoint_id = %" PRId64,
+      OB_ALL_AI_MODEL_ENDPOINT_TNAME, SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
@@ -306,7 +305,6 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
       ObSqlString buffer;
       int64_t affected_rows = 0;
       if (OB_FAIL(sql.add_pk_column("endpoint_id", SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
-      } else if (OB_FAIL(sql.add_pk_column("scope", SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
       } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
       } else if (OB_FAIL(sql.splice_update_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
       } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
@@ -332,7 +330,6 @@ int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction 
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   if (OB_FAIL(sql.add_pk_column("endpoint_id", SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
-  } else if (OB_FAIL(sql.add_pk_column("scope", SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
   } else if (OB_FAIL(sql.add_column("version", INIT_ENDPOINT_VERSION))) {
   } else if (OB_FAIL(sql.add_column("endpoint_name", ""))) {
   } else if (OB_FAIL(sql.add_column("ai_model_name", ""))) {
