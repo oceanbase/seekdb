@@ -68,6 +68,28 @@ pub struct RequestPolicy {
     pub max_error_retries: usize,
     pub completion: CompletionRequirement,
 }
+impl RequestPolicy {
+    pub fn for_storage_io(
+        deadline: Option<Instant>,
+        execution: Execution,
+        native_available: bool,
+        alignment: usize,
+        completion: CompletionRequirement,
+    ) -> Self {
+        let native = native_available && execution == Execution::PreferNative;
+        Self {
+            deadline,
+            retry_alignment: if native {
+                NonZeroUsize::new(alignment)
+            } else {
+                None
+            },
+            max_error_retries: if native { 10 } else { 0 },
+            completion,
+        }
+    }
+}
+
 impl Default for RequestPolicy {
     fn default() -> Self {
         Self {

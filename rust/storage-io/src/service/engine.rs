@@ -223,13 +223,7 @@ impl DirectRequest {
         {
             return Some(CompletionStatus::Shutdown);
         }
-        self.cell.check().err().map(|error| {
-            if error.kind() == io::ErrorKind::TimedOut {
-                CompletionStatus::TimedOut
-            } else {
-                CompletionStatus::Cancelled
-            }
-        })
+        cancelled_status(&self.cell)
     }
 
     fn retired(&mut self, operation: Operation, result: io::Result<usize>) {
@@ -266,7 +260,6 @@ impl DirectRequest {
             transferred: self.transferred,
             error_retries: self.error_retries,
             request: self.request.take(),
-            window: self.cell.options.window.clone(),
             cell: Arc::clone(&self.cell),
             route: Some(0),
             last_cost: self.cost,
@@ -283,27 +276,17 @@ impl DirectRequest {
     }
 
     fn finish(&mut self, operation: Option<Operation>, status: CompletionStatus) {
-        let operation = retired_operation(operation, &status);
-        self.cell.phase.store(FINISHED, Ordering::Release);
-        if matches!(
-            status,
-            CompletionStatus::Cancelled | CompletionStatus::TimedOut | CompletionStatus::Shutdown
-        ) {
-            self.cell.charge.release_bytes();
-        }
+        let operation = retire(&self.cell, operation, &status);
         self.release_reservation();
         if let Some(request) = self.request.take() {
-            request.complete(Completion {
-                id: self.cell.id,
-                tag: self.cell.options.tag,
-                status,
-                transferred: self.transferred,
-                depth_cost: self.cost,
-                physical_attempts: self.attempts,
+            request.complete(completion(
+                &self.cell,
                 operation,
-                window: self.cell.options.window.clone(),
-                _cell: Some(Arc::clone(&self.cell)),
-            });
+                status,
+                self.transferred,
+                self.cost,
+                self.attempts,
+            ));
         }
         self.release_active();
     }
@@ -315,7 +298,8 @@ impl Drop for DirectRequest {
     }
 }
 
-fn retired_operation(
+fn retire(
+    cell: &ControlCell,
     mut operation: Option<Operation>,
     status: &CompletionStatus,
 ) -> Option<Operation> {
@@ -323,13 +307,48 @@ fn retired_operation(
         operation.buffer_mut().zero_uninitialized();
         operation.release_keep_alive();
     }
-    if matches!(
+    let discard_buffer = matches!(
         status,
         CompletionStatus::Cancelled | CompletionStatus::TimedOut | CompletionStatus::Shutdown
-    ) {
-        None
-    } else {
-        operation
+    );
+    if discard_buffer {
+        drop(operation.take());
+    }
+    cell.phase.store(FINISHED, Ordering::Release);
+    if discard_buffer {
+        cell.charge.release_bytes();
+    }
+    operation
+}
+
+fn cancelled_status(cell: &ControlCell) -> Option<CompletionStatus> {
+    cell.check().err().map(|error| {
+        if error.kind() == io::ErrorKind::TimedOut {
+            CompletionStatus::TimedOut
+        } else {
+            CompletionStatus::Cancelled
+        }
+    })
+}
+
+fn completion(
+    cell: &Arc<ControlCell>,
+    operation: Option<Operation>,
+    status: CompletionStatus,
+    transferred: usize,
+    depth_cost: DepthCost,
+    physical_attempts: u64,
+) -> Completion {
+    Completion {
+        id: cell.id,
+        tag: cell.options.tag,
+        status,
+        transferred,
+        depth_cost,
+        physical_attempts,
+        operation,
+        window: cell.options.window.clone(),
+        _cell: Some(Arc::clone(cell)),
     }
 }
 
@@ -410,7 +429,6 @@ pub(super) struct Active {
     pub transferred: usize,
     error_retries: usize,
     request: Option<Box<dyn RequestCompletion>>,
-    window: Range<usize>,
     pub(super) cell: Arc<ControlCell>,
     route: Option<usize>,
     last_cost: DepthCost,
@@ -622,7 +640,6 @@ impl Driver {
             transferred: 0,
             error_retries: 0,
             request,
-            window: options.window.clone(),
             route: None,
             last_cost: cost,
             attempts: 0,
@@ -818,12 +835,7 @@ impl Driver {
             self.finish(active, Some(retired.operation), CompletionStatus::Shutdown);
             return;
         }
-        if let Err(error) = active.cell.check() {
-            let status = if error.kind() == io::ErrorKind::TimedOut {
-                CompletionStatus::TimedOut
-            } else {
-                CompletionStatus::Cancelled
-            };
+        if let Some(status) = cancelled_status(&active.cell) {
             self.finish(active, Some(retired.operation), status);
             return;
         }
@@ -835,7 +847,7 @@ impl Driver {
             &mut active.transferred,
             &mut active.error_retries,
             &policy,
-            active.window.end,
+            active.cell.options.window.end,
         ) {
             PhysicalCompletion::Retry(operation) => {
                 active.stage = Stage::Queued(operation);
@@ -855,59 +867,17 @@ impl Driver {
             transferred,
             last_cost,
             attempts,
-            window,
             ..
         } = active;
         let operation = operation.or(match stage {
             Stage::Queued(operation) => Some(operation),
             Stage::Submitted(_) => None,
         });
-        let operation = retired_operation(operation, &status);
-        cell.phase.store(FINISHED, Ordering::Release);
-        if matches!(
-            status,
-            CompletionStatus::Cancelled | CompletionStatus::TimedOut | CompletionStatus::Shutdown
-        ) {
-            cell.charge.release_bytes();
-        }
+        let operation = retire(&cell, operation, &status);
         if let Some(request) = request {
             self.deliveries.push_back((
                 request,
-                Completion {
-                    id: cell.id,
-                    tag: cell.options.tag,
-                    status,
-                    transferred,
-                    depth_cost: last_cost,
-                    physical_attempts: attempts,
-                    operation,
-                    window,
-                    _cell: Some(Arc::clone(&cell)),
-                },
-            ));
-        }
-    }
-    fn deliver(
-        &mut self,
-        active: &mut Active,
-        operation: Option<Operation>,
-        status: CompletionStatus,
-    ) {
-        active.cell.phase.store(FINISHED, Ordering::Release);
-        if let Some(request) = active.request.take() {
-            self.deliveries.push_back((
-                request,
-                Completion {
-                    id: active.cell.id,
-                    tag: active.cell.options.tag,
-                    status,
-                    transferred: active.transferred,
-                    depth_cost: active.last_cost,
-                    physical_attempts: active.attempts,
-                    operation,
-                    window: active.window.clone(),
-                    _cell: Some(Arc::clone(&active.cell)),
-                },
+                completion(&cell, operation, status, transferred, last_cost, attempts),
             ));
         }
     }
@@ -919,7 +889,21 @@ impl Driver {
             self.active.insert(id, active);
             return CancelOutcome::NotPending;
         }
-        self.deliver(&mut active, None, status);
+        // A submitted request can publish cancellation before the backend retires it.
+        active.cell.phase.store(FINISHED, Ordering::Release);
+        if let Some(request) = active.request.take() {
+            self.deliveries.push_back((
+                request,
+                completion(
+                    &active.cell,
+                    None,
+                    status,
+                    active.transferred,
+                    active.last_cost,
+                    active.attempts,
+                ),
+            ));
+        }
         match active.stage {
             Stage::Queued(_) => {
                 self.queued.retain(|queued| *queued != id);
@@ -1187,11 +1171,7 @@ impl Driver {
             );
         }
     }
-    pub(super) fn reconfigure(
-        &mut self,
-        config: Config,
-        now: Instant,
-    ) -> Result<(), ConfigError> {
+    pub(super) fn reconfigure(&mut self, config: Config, now: Instant) -> Result<(), ConfigError> {
         self.validate_config(&config)?;
         self.prepare_capacity(&config)
             .map_err(ConfigError::Invalid)?;

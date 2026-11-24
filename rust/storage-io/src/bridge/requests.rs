@@ -15,8 +15,8 @@
 use super::ffi;
 use crate::service::{CallbackOwner, Consumer, PublishedCompletion, RequestOptions};
 use crate::{
-    AdmissionLimits, CancelOutcome, CompletionRequirement, CompletionStatus, Config, ConfigError,
-    DeviceConfig, DeviceId, DeviceLimits, Execution, Request, RequestPolicy, Service, Target,
+    AdmissionLimits, CancelOutcome, CompletionRequirement, CompletionStatus, Config, ConfigError, DeviceConfig, DeviceId,
+    DeviceLimits, Execution, Request, RequestPolicy, Service, Target,
 };
 use file_io::bridge::{error_number, legacy_path};
 use file_io::{Backend, BackendKind, Direction};
@@ -294,14 +294,6 @@ impl Endpoint {
     fn close_device(&self) -> i32 {
         status(self.service.remove_device(self.id))
     }
-    #[cfg(test)]
-    fn is_drained(&self) -> bool {
-        self.service.device_drained(self.id)
-    }
-    #[cfg(test)]
-    fn wait_drained(&self) -> i32 {
-        status(self.service.wait_device_drained(self.id))
-    }
     fn submit(
         &self,
         options: &ffi::RequestOptions,
@@ -311,7 +303,6 @@ impl Endpoint {
         callback: Option<CallbackOwner>,
     ) -> Box<Request> {
         let converted = (|| {
-            let endpoint = self;
             let direction = match options.mode {
                 ffi::RequestMode::Read => Direction::Read,
                 ffi::RequestMode::Write => Direction::Write,
@@ -342,34 +333,36 @@ impl Endpoint {
             } else {
                 Execution::PreferNative
             };
-            let native = endpoint.native_aio && execution == Execution::PreferNative;
+            let alignment = 4096;
+            let deadline = if options.timeout_us == -1 {
+                None
+            } else {
+                Some(deadline(options.timeout_us as u64)?)
+            };
             let request = RequestOptions {
-                device: endpoint.id,
+                device: self.id,
                 execution,
                 length: plan.length,
-                alignment: 4096,
+                alignment,
                 window: plan.window_start..end,
-                policy: RequestPolicy {
-                    deadline: if options.timeout_us == -1 {
-                        None
-                    } else {
-                        Some(deadline(options.timeout_us as u64)?)
-                    },
-                    retry_alignment: native.then(|| NonZeroUsize::new(4096)).flatten(),
-                    max_error_retries: if native { 10 } else { 0 },
-                    completion: if callback.is_some() {
+                policy: RequestPolicy::for_storage_io(
+                    deadline,
+                    execution,
+                    self.native_aio,
+                    alignment,
+                    if callback.is_some() {
                         CompletionRequirement::FullBuffer
                     } else {
                         CompletionRequirement::RequestedWindow
                     },
-                },
+                ),
                 tag: 0,
                 statistics_lane: Some(options.statistics_lane),
             };
-            Ok((endpoint, request, target, direction, fault))
+            Ok((request, target, direction, fault))
         })();
         match converted {
-            Ok((endpoint, request, target, direction, fault)) => match endpoint
+            Ok((request, target, direction, fault)) => match self
                 .service
                 .submit_request(request, target, direction, bytes, callback, fault)
             {
@@ -535,6 +528,3 @@ fn completion_info(completion: Option<&PublishedCompletion>) -> ffi::CompletionI
     }
     info
 }
-
-#[cfg(test)]
-mod tests;

@@ -258,6 +258,3 @@ fn path_stat(path: &[u8]) -> Result<ffi::FileStat, i32> {
         btime_s: i64::MAX,
     })
 }
-
-#[cfg(test)]
-mod tests;

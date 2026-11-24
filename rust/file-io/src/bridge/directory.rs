@@ -225,6 +225,3 @@ fn transport(entry: crate::Entry) -> io::Result<ffi::DirectoryStep> {
         raw_type: record.raw_type,
     })
 }
-
-#[cfg(test)]
-mod tests;

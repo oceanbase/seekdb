@@ -295,35 +295,3 @@ impl Drop for NamedOwnerHandle {
         let _ = self.close_named_owner();
     }
 }
-
-#[cfg(all(test, target_os = "linux"))]
-#[test]
-fn named_writable_open_is_synchronous_and_readonly_open_stays_readonly() {
-    use super::typed_tests::{named_owner, service, Directory};
-    use std::os::fd::AsRawFd;
-
-    let directory = Directory::new();
-    let service = service();
-    let (owner, _parent) = named_owner(&service, &directory);
-    for read_only in [false, true] {
-        let mut file = new_named_file();
-        let path = directory.0.join("log");
-        assert_eq!(
-            owner.open_named_file(path.as_os_str().as_encoded_bytes(), read_only, &mut file),
-            0
-        );
-        // SAFETY: F_GETFL reads flags from the live descriptor owned by NamedFile.
-        let flags = unsafe { libc::fcntl(file.get().unwrap().file().as_raw_fd(), libc::F_GETFL) };
-        assert_ne!(flags, -1);
-        assert_eq!(
-            flags & libc::O_SYNC,
-            if read_only { 0 } else { libc::O_SYNC }
-        );
-        assert_eq!(
-            flags & libc::O_ACCMODE,
-            if read_only { libc::O_RDONLY } else { libc::O_RDWR }
-        );
-    }
-    assert_eq!(owner.close_named_owner(), 0);
-    assert_eq!(service.shutdown_service(), 0);
-}

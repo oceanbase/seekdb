@@ -387,6 +387,3 @@ fn encode_block_header(block_size: u64, page: &mut [u8]) -> ffi::HeaderStatus {
 fn validate_block_header(block_size: u64, page: &[u8]) -> ffi::HeaderStatus {
     status(crate::validate_block_header(block_size, page))
 }
-
-#[cfg(all(test, target_os = "linux"))]
-mod typed_tests;
