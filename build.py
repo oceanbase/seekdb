@@ -181,7 +181,7 @@ def _route_options(
                 remote_config = True
     defaults = []
     if (
-        command in ("build", "test", "run", "coverage")
+        command in ("build", "test", "run")
         and re.fullmatch(r"[0-9]+", jobs)
         and not remote_executor
         and not remote_config
@@ -239,7 +239,7 @@ def main(arguments: List[str]) -> int:
     command, *arguments = arguments
     if command.startswith("-"):
         parser.error("put the command before its options, for example: build -o build3 seekdb")
-    if os.name == "nt" and command in ("build", "test", "run", "coverage"):
+    if os.name == "nt" and command in ("build", "test", "run"):
         _check_windows_toolset()
     separator = arguments.index("--") if "--" in arguments else len(arguments)
     options, remaining = bootstrap.parse_known_args(arguments[:separator])

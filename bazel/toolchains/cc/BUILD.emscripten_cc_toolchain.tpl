@@ -40,7 +40,6 @@ cc_toolchain_config(
         "objcopy": "sdk/bin/llvm-objcopy",
         "objdump": "sdk/bin/llvm-objdump",
         "strip": "sdk/bin/llvm-strip",
-        "gcov": "/usr/bin/false",
         "dwp": "/usr/bin/false",
     },
 )

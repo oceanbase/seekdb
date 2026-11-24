@@ -98,7 +98,6 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
         "ld.lld",
         "lld",
         "llvm-ar",
-        "llvm-cov",
         "llvm-cxxfilt",
         "llvm-dwp",
         "llvm-nm",
