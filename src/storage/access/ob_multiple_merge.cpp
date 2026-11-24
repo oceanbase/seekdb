@@ -63,7 +63,6 @@ ObMultipleMerge::ObMultipleMerge()
       skip_bit_(nullptr),
       long_life_allocator_(nullptr),
       stmt_iter_pool_(nullptr),
-      out_project_cols_(),
       lob_reader_(),
       scan_state_(ScanState::NONE)
   {
@@ -148,16 +147,8 @@ int ObMultipleMerge::init(
     unprojected_row_.count_ = 0;
     get_table_param_ = &get_table_param;
     access_param_->iter_param_.set_tablet_handle(get_table_param.tablet_iter_.get_tablet_handle_ptr());
-    const ObITableReadInfo *read_info = access_param_->iter_param_.get_read_info();
     const int64_t batch_size = access_param_->iter_param_.vectorized_enabled_ ? access_param_->get_op()->get_batch_size() : 1;
-    for (int64_t i = 0; OB_SUCC(ret) && i < param.iter_param_.out_cols_project_->count(); i++) {
-      if (OB_FAIL(out_project_cols_.push_back(read_info->get_columns_desc().at(param.iter_param_.out_cols_project_->at(i))))) {
-      } else if (out_project_cols_.at(i).col_type_.is_lob_storage()) {
-        out_project_cols_.at(i).col_type_.set_has_lob_header();
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(prepare_read_tables())) {
+    if (OB_FAIL(prepare_read_tables())) {
     } else if (OB_ISNULL(skip_bit_ = to_bit_vector(long_life_allocator_->alloc(ObBitVector::memory_size(batch_size))))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_UNLIKELY(access_param_->iter_param_.need_truncate_filter()) &&
@@ -319,15 +310,6 @@ int ObMultipleMerge::switch_table(
     if (OB_ISNULL(read_info)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected null read_info", K(ret));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < param.iter_param_.out_cols_project_->count(); i++) {
-        if (OB_FAIL(out_project_cols_.push_back(read_info->get_columns_desc().at(param.iter_param_.out_cols_project_->at(i))))) {
-        } else if (out_project_cols_.at(i).col_type_.is_lob_storage()) {
-          out_project_cols_.at(i).col_type_.set_has_lob_header();
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
     } else if (OB_FAIL(prepare_read_tables())) {
     } else if (OB_UNLIKELY(param.iter_param_.need_truncate_filter()) && OB_FAIL(prepare_truncate_filter())) {
     } else if (OB_FAIL(alloc_row_store(context, param))) {
@@ -912,7 +894,6 @@ void ObMultipleMerge::reset()
   reset_iter_array();
   inner_reset();
   tables_.reset();
-  out_project_cols_.reset();
   long_life_allocator_ = nullptr;
   stmt_iter_pool_ = nullptr;
   inited_ = false;
@@ -940,7 +921,6 @@ void ObMultipleMerge::reclaim()
   tables_.reuse();
   unprojected_row_.row_flag_.reset();
   unprojected_row_.trans_info_ = nullptr;
-  out_project_cols_.reuse();
 }
 
 void ObMultipleMerge::inner_reset()
