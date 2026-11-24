@@ -7652,10 +7652,9 @@ SELECT
     when 0 then 'MEMTABLE' when 1 then 'TX_DATA_MEMTABLE' when 2 then 'TX_CTX_MEMTABLE'
     when 3 then 'LOCK_MEMTABLE' when 10 then 'MAJOR' when 11 then 'MINOR'
     when 12 then 'MINI' when 13 then 'META'
-    when 14 then 'DDL_DUMP' when 15 then 'REMOTE_LOGICAL_MINOR' when 16 then 'DDL_MEM'
-    when 17 then 'DDL_MEM_MINI_SSTABLE' when 18 then 'MDS_MINI' when 19 then 'MDS_MINOR'
-    when 20 then 'MICRO_MINI_SSTABLE' when 21 then 'INC_MAJOR'
-    when 22 then 'INC_MAJOR_DDL_DUMP' when 23 then 'INC_MAJOR_DDL_MEM'
+    when 14 then 'DDL_DUMP' when 15 then 'DDL_MEM' when 16 then 'DDL_MEM_MINI_SSTABLE'
+    when 17 then 'MDS_MINI' when 18 then 'MDS_MINOR' when 19 then 'MICRO_MINI_SSTABLE'
+    when 20 then 'INC_MAJOR' when 21 then 'INC_MAJOR_DDL_DUMP' when 22 then 'INC_MAJOR_DDL_MEM'
     else 'INVALID'
  end) as TABLE_TYPE,
  M.TABLET_ID,
