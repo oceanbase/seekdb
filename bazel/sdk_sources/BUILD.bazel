@@ -42,7 +42,6 @@ sdk_archives(
 )
 
 _IOS_SOURCE_REPOSITORIES = [
-    "@sdk_abseil",
     "@sdk_boost",
     "@sdk_roaring",
 ]

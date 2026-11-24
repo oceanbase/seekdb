@@ -149,7 +149,6 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/standby:standby",
     "//src/storage:tablet_autoincrement_handler_internal",
     "//src/storage:tablet_autoincrement_service_internal",
-    "//bazel/third_party:absl_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
     "//bazel/third_party:roaring_headers",

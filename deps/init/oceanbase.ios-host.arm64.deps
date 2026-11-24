@@ -6,7 +6,6 @@ arch=arm64
 repo=https://mirrors.oceanbase.com/oceanbase/development-kit/darwin/13/arm64
 
 [deps]
-devdeps-abseil-cpp-20211102.0-20260126.tar.gz
 devdeps-boost-1.74.0-20260126.tar.gz
 devdeps-roaringbitmap-croaring-3.0.0-20260126.tar.gz
 

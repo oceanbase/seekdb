@@ -110,7 +110,6 @@ _ROOTSERVER_NATIVE_DEPS = [
     "//src/sql:sql_runtime_interface",
     "//src/storage:_textual_ob_keybtree",
     "//src/storage:storage_runtime_interface",
-    "//bazel/third_party:absl_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
     "//bazel/third_party:roaring_headers",

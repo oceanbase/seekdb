@@ -1,11 +1,5 @@
 {
   "sources": {
-    "abseil": {
-      "version": "20211102.0",
-      "url": "https://codeload.github.com/abseil/abseil-cpp/tar.gz/refs/tags/20211102.0",
-      "sha256": "dcf71b9cba8dc0ca9940c4b316a0c796be8fab42b070bb6b7cab62b48f0e66c4",
-      "source_directory": "abseil-cpp-20211102.0"
-    },
     "roaring": {
       "version": "3.0.0",
       "url": "https://codeload.github.com/RoaringBitmap/CRoaring/tar.gz/refs/tags/v3.0.0",

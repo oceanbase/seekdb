@@ -15,7 +15,6 @@ SDK_HEADERS = {
         "linkopts": select({"@platforms//os:linux": ["-pthread"], "//conditions:default": []}),
     },
     "sanity_headers": {"hdrs": ["sanity/include/sanity/**/*.h"], "includes": ["sanity/include"]},
-    "absl_headers": _headers("absl"),
     "boost_headers": _headers("boost"),
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
@@ -70,14 +69,12 @@ NATIVE_LINK_FILES = [
 _WINDOWS_SHARED = {
     "libcrypto": ("openssl/libcrypto.lib", "openssl_bin/libcrypto-3-x64.dll", []),
     "libssl": ("openssl/libssl.lib", "openssl_bin/libssl-3-x64.dll", [":libcrypto"]),
-    "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
     "pthreads": ("lib/pthreadVC3.lib", "bin/pthreadVC3.dll", []),
     "openmp": ("lib/libomp.lib", "bin/libomp.dll", []),
 }
 
 _WINDOWS_HEADER_LIBRARIES = {
-    "absl_headers": [":absl"],
     "openssl_headers": [":libssl"],
     "roaring_headers": [":roaring"],
     "vsag_headers": [":vsag"],
@@ -103,7 +100,6 @@ def _windows_libraries():
     )
     # Archives within one upstream package stay private to its library target.
     archives = {
-        "absl": (native.glob(["lib/absl_*.lib"]), [":abseil_dll"]),
         "vsag": (["lib/" + name + ".lib" for name in [
             "cpuinfo", "simd", "vsag_static", "diskann", "openblas",
             "antlr4-runtime-static", "antlr4-autogen", "fmt",
@@ -129,8 +125,6 @@ def sdk_targets(windows = False):
     for name, attributes in SDK_HEADERS.items():
         if windows and name in _WINDOWS_HEADER_LIBRARIES:
             attributes = attributes | {"deps": _WINDOWS_HEADER_LIBRARIES[name]}
-        if windows and name == "absl_headers":
-            attributes = attributes | {"defines": ["ABSL_CONSUME_DLL"]}
         if windows and name == "curl_headers":
             attributes = attributes | {"defines": ["CURL_STATICLIB"]}
         cc_library(name = name, **(attributes | {"hdrs": native.glob(attributes["hdrs"], allow_empty = True)}))
@@ -154,7 +148,6 @@ def sdk_targets(windows = False):
         _windows_libraries()
 
 _SOURCE_HEADERS = {
-    "absl_headers": ("abseil", "abseil"),
     "roaring_headers": ("roaring", "roaring"),
 }
 
