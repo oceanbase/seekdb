@@ -92,7 +92,12 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
         repository_ctx.file("BUILD.bazel", "# The bundled toolchain is Linux-only.\n")
         return
     architecture = host_substitutions(repository_ctx)["@HOST_CPU@"]
-    devtools = repository_ctx.workspace_root.get_child("deps", "3rd", "usr", "local", "oceanbase", "devtools")
+    prebuilt = repository_ctx.workspace_root.get_child("deps", "prebuilt", "native")
+    devtools = prebuilt.get_child("llvm")
+    manifest = devtools.get_child("manifest.json")
+    repository_ctx.watch(manifest)
+    if not manifest.exists:
+        devtools = repository_ctx.workspace_root.get_child("deps", "3rd", "usr", "local", "oceanbase", "devtools")
     for tool_name in [
         "clang",
         "ld.lld",
@@ -111,7 +116,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
             fail("bundled tool is missing: %s" % tool)
 
     repository_ctx.symlink(devtools, "devtools")
-    gcc = repository_ctx.workspace_root.get_child("deps", "prebuilt", "native", "gcc")
+    gcc = prebuilt.get_child("gcc")
     if not gcc.get_child("lib", "gcc").exists:
         fail("GCC runtime is missing: %s; run ./build.py init" % gcc)
     repository_ctx.symlink(gcc, "gcc")

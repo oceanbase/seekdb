@@ -14,7 +14,7 @@ SDK_HEADERS = {
         "defines": ["_GLIBCXX_USE_CXX11_ABI=1"],
         "linkopts": select({"@platforms//os:linux": ["-pthread"], "//conditions:default": []}),
     },
-    "sanity_headers": {"hdrs": ["devtools/include/sanity/**/*.h"], "includes": ["devtools/include"]},
+    "sanity_headers": {"hdrs": ["sanity/include/sanity/**/*.h"], "includes": ["sanity/include"]},
     "absl_headers": _headers("absl"),
     "boost_headers": _headers("boost"),
     "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
@@ -54,12 +54,11 @@ SDK_IMPORTS = {
 SDK_FILEGROUPS = {
     "ios_locked_metadata": {"srcs": ["locked_manifests/*.json"]},
     "ios_locked_licenses": {"srcs": ["locked_licenses/**/*"]},
-    "sanity_pass": {"srcs": ["devtools/lib64/libsanitypass.so"]},
+    "sanity_pass": {"srcs": ["sanity/lib/libsanitypass.so"]},
 }
 
 HOST_FILES = [
     "devtools/bin/llvm-objcopy",
-    "devtools/lib64/libsanitypass.so",
 ]
 
 NATIVE_LINK_FILES = [

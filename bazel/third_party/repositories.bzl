@@ -119,7 +119,19 @@ def _third_party_headers_repository_impl(repository_ctx):
             _link_directory_contents(repository_ctx, [locked_headers, headers], "include")
         else:
             repository_ctx.symlink(headers, "include")
-    repository_ctx.symlink(sdk + "/devtools", "devtools")
+    devtools = repository_ctx.path(sdk + "/devtools")
+    if platform == "native" and repository_ctx.os.name == "linux":
+        prebuilt = repository_ctx.path(locked_sdk)
+        llvm = prebuilt.get_child("llvm")
+        manifest = llvm.get_child("manifest.json")
+        repository_ctx.watch(manifest)
+        if manifest.exists:
+            devtools = llvm
+            repository_ctx.symlink(prebuilt.get_child("ob-sanity"), "sanity")
+        else:
+            repository_ctx.symlink(devtools.get_child("include"), "sanity/include")
+            repository_ctx.symlink(devtools.get_child("lib64"), "sanity/lib")
+    repository_ctx.symlink(devtools, "devtools")
     locked_libraries = locked_sdk + "/lib"
     if locked_libraries != libraries and repository_ctx.path(locked_libraries).exists:
         _link_directory_contents(repository_ctx, [locked_libraries, libraries], "lib")
