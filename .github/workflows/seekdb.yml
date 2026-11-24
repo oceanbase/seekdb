@@ -123,7 +123,7 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
 
-      - name: Run mysqltest with sqltest (24 workers)
+      - name: Run SQL regression tests
         shell: bash
         run: |
           set -euo pipefail
