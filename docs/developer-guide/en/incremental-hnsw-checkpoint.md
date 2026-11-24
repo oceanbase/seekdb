@@ -477,6 +477,85 @@ Catch-up distinguishes three SCNs that the old single-target wording conflated:
   `coverage_scn = F <= O`, but replay after restore still starts at `F + 1`,
   never at `O + 1`.
 
+#### ASYNC change-stream drain certificate
+
+A heap-table HNSW index with `sync_mode=ASYNC` needs one more ordering proof.
+Foreground DML skips delta-buffer maintenance for this mode
+(`src/sql/optimizer/ob_del_upd_log_plan.cpp:1358-1385`). The change stream later
+creates the index-id record, and `build_insert_buffer_from_events_()` preserves
+the original source commit SCN by writing `event.commit_version_` into its SCN
+column (`src/observer/change_stream/ob_cs_plugin_async_index.cpp:788-799`). That
+record is not required to exist when the base transaction commits.
+
+Consequently, a quiescent base table, no active storage transaction, a completed
+adapter mutation gate, and an empty index-id scan at `O` do **not** close an ASYNC
+frontier. An event with source SCN `r <= F` can still be in the fetch/dispatch/
+worker queues. Its projection transaction can commit at `s > O`, after the scan;
+restore then starts at `F + 1` and permanently skips the late record whose key is
+still `r`. The mutation gate only serializes adapter mutations that have already
+reached `write_to_vsag_()`. It neither drains these queues nor orders a future
+index-id transaction before `O`.
+
+Catch-up therefore uses two additional values in a drain certificate:
+
+- `A` is the **committed applied watermark**, a source-commit-SCN watermark, not
+  an MVCC snapshot. In the current worker, plugin commits and
+  `ObGlobalStatProxy::advance_change_stream_applied_scn()` use the same
+  `ctx->trans_`; only after `trans_.end(true)` succeeds does the worker update the
+  dispatcher's in-memory applied SCN
+  (`ob_change_stream_worker.cpp:231-273`). A pre-commit `max_commit_scn_`, an
+  in-flight batch, or a merely queued event is not included in `A`.
+- `D` is a **closed change-stream drain frontier**. Establishing `D >= F`
+  requires a stable runtime schema and dispatcher epoch, a source-log fence
+  captured for `F`, processing through that fence, and ordered completion of every
+  dispatched batch before the barrier. `ObChangeStreamMgr::wait_refresh_scn()`
+  already implements a GTS-target/LSN-fence/batch-barrier sequence and publishes
+  its target as `refresh_scn_` (`ob_change_stream_mgr.cpp:161-307`). It is a
+  candidate building block, not a checkpoint drain API that this document claims
+  has been integrated or run.
+
+The required relation is not simply `A >= F`. `A` is the greatest source SCN
+actually applied, so an idle suffix can legitimately have `A < D` and `A < F`.
+Instead, after draining through `F`, read the committed watermark `A_D` and
+require:
+
+```text
+D >= F
+for every change-stream event e relevant to this index:
+  e.source_scn <= F  =>  e.source_scn <= A_D
+                          and projection(e) committed before the certificate
+```
+
+Thus no source-SCN hole at or below `F` remains queued, while an idle stream need
+not manufacture a transaction just to advance `A` to `F`. If an implementation
+uses only an applied-watermark wait and has no closed-fence proof, it may close
+only the prefix actually covered by that watermark; it cannot claim the idle
+suffix, and an explicit flush whose `R` is above that prefix remains pending.
+
+Only after this certificate exists may catch-up choose `O`. The certificate must
+bind `(D, A_D, schema_version, dispatcher_epoch)` and prove that every projection
+transaction for a relevant event at or below `F` is committed and visible at `O`.
+The implementation must also verify that `A_D` and those projection writes are
+visible together at `O`: the current same-transaction worker ordering makes the
+persisted applied-SCN update and index-id inserts commit atomically, so a snapshot
+that sees that update must also see the corresponding index-id records. A later
+in-memory dispatcher update alone is not the durability proof.
+
+There is currently no checkpoint-facing API that returns this whole certificate
+or binds an applied-watermark read to the checkpoint's `O`. Supplying and testing
+that binding, including recovery/epoch invalidation and the source-ordering proof
+for the LSN fence, is an implementation prerequisite. Until then the attempt must
+defer; it must not infer atomic visibility from function names or from the adapter
+gate. The HNSW graph and membership updates are outside the projection
+transaction and can occur before its commit, so their gate and containment checks
+remain necessary even after the durable visibility proof succeeds.
+
+Events accepted after the fence must have source SCN above `F` and are left for
+tail replay. If the schema, epoch, fence ordering, committed-watermark read, or
+post-drain snapshot check cannot be validated, discard the certificate and retry
+with a fresh `F` and `O`, or defer. Never choose `O` first and treat a later drain
+as retroactively validating that scan.
+
 Each bounded catch-up iteration drives the following stages:
 
 1. **Delta-buffer reconcile.** Run the refresh transfer for every committed
@@ -489,40 +568,54 @@ Each bounded catch-up iteration drives the following stages:
    transfer also removes the copied rows from the delta-buffer table
    (`:360-375`). No orphan classification may run before this reconcile
    completes (see "Coverage boundary", step 4).
-2. **Commit-visible index-id replay.** Wait for the transfer commits, then
-   obtain `O` after those commits. A transferred row preserves its original key
-   `r <= F`, but its insertion can commit at `s > F` and advance
-   `last_dml_scn_` to `s`; therefore `r <= F` does **not** make the row visible
-   to an MVCC read at `F`. Call `complete_index_mem_data_incremental()` with
-   separate `(F, O)` inputs: `read_local_tablet()` initializes its MVCC snapshot
-   from `O`, while the scan and replay accept only preserved index-id row SCNs
-   at or below `F`. A later row visible at `O` but having row SCN above `F` is
-   left for tail replay rather than silently included in this checkpoint.
-   An implementation may instead merge the committed transfer output directly
-   into the actual `vbitmap_data_` baseline, but only if it applies the same
-   inserts, deletes, duplicate handling, and row-SCN bound as replay at `O`.
-   Updating a temporary `resolved` set is not an alternative.
-3. **Close and publish the frontier.** `F` is commit-visible at `O` only when
+2. **ASYNC change-stream drain.** For a heap-table ASYNC index, obtain the
+   certificate above through the current `F` before choosing `O`. A paused or
+   lagging stream makes this stage wait within the attempt's bound and then defer
+   with reason `change_stream_not_drained`; it never falls back to base-table
+   quiescence, active-transaction checks, or an empty index-id scan. Immediate
+   mode does not need this stage.
+3. **Commit-visible index-id replay.** Wait for the transfer commits and the
+   ASYNC drain certificate, then obtain `O` after all of them. A transferred row
+   preserves its original key `r <= F`, but its insertion can commit at `s > F`
+   and advance `last_dml_scn_` to `s`; therefore `r <= F` does **not** make the
+   row visible to an MVCC read at `F`. An ASYNC projection likewise preserves
+   its source `r` even when its transaction commits after an earlier would-be
+   snapshot. Call `complete_index_mem_data_incremental()` with separate `(F, O)`
+   inputs: `read_local_tablet()` initializes its MVCC snapshot from `O`, while
+   the scan and replay accept only preserved index-id row SCNs at or below `F`.
+   A later row visible at `O` but having row SCN above `F` is left for tail
+   replay rather than silently included in this checkpoint. An implementation
+   may instead merge the committed transfer output directly into the actual
+   `vbitmap_data_` baseline, but only if it applies the same inserts, deletes,
+   duplicate handling, and row-SCN bound as replay at `O`. Updating a temporary
+   `resolved` set is not an alternative.
+4. **Close and publish the frontier.** `F` is commit-visible at `O` only when
    every transaction capable of adding or changing an index-id record with row
-   SCN at or below `F` is committed and visible there. Establish that guarantee
-   from the storage/transaction snapshot protocol or by quiescence; if it cannot
-   be established, advance `O` and retry within the bound or defer. Replay must
+   SCN at or below `F` is committed and visible there. For ASYNC this explicitly
+   includes the certified change-stream prefix, not just transactions currently
+   visible to storage. Establish the remaining guarantee from the
+   storage/transaction snapshot protocol or by quiescence; if it cannot be
+   established, advance `O` and retry within the bound or defer. Replay must
    reach iterator end for the entire `(old_frontier, F]` interval and publish
    every returned insert and delete into the actual `vbitmap_data_` baseline.
    Only then set `vbitmap_data_->scn_ = F`. This publication is required even
    when the scan returns no rows; neither the largest returned row key nor an
    empty scan may leave the old SCN in place. An error, timeout, invisible
-   transfer, or short scan leaves the previous frontier unchanged.
-4. **Vector materialization and revalidation.** Drain the `QUERY_ROWKEY_VEC` /
+   transfer, invalid drain certificate, or short scan leaves the previous
+   frontier unchanged.
+5. **Vector materialization and revalidation.** Drain the `QUERY_ROWKEY_VEC` /
    `complete_delta_buffer_table_data()` work for every live vector accepted by
-   that replay and set its membership bit. Then re-read `last_dml_scn_` and
-   check for unreconciled delta-buffer rows at or below `F`. If
-   `last_dml_scn_ > F`, or the frontier is otherwise stale, start the next
-   bounded iteration with a higher `F` and a fresh post-transfer `O`; the next
-   `(old_frontier, F]` scan may be empty and must still close that frontier.
-   A quiescent attempt finishes only with `last_dml_scn_ <= F` and a fully
-   scanned, commit-visible baseline at `F`. Continuous invalidation exhausts
-   the bound and defers rather than weakening these rules.
+   that replay and set its membership bit. Then re-read `last_dml_scn_`, check
+   for unreconciled delta-buffer rows at or below `F`, and revalidate the ASYNC
+   certificate's schema, epoch, `(D, A_D)` and visibility at `O`. If
+   `last_dml_scn_ > F`, the drain certificate is invalid, or the frontier is
+   otherwise stale, start the next bounded iteration with a higher `F` as needed,
+   a new drain certificate, and a fresh post-transfer/post-drain `O`; the next
+   `(old_frontier, F]` scan may be empty and must still close that frontier. A
+   quiescent attempt finishes only with `last_dml_scn_ <= F`, a fully scanned,
+   commit-visible baseline at `F`, and, for ASYNC, a valid drain certificate
+   through `F`. Continuous invalidation exhausts the bound and defers rather
+   than weakening these rules.
 
 `refresh_bitmap_background()` currently discards the synthetic
 query context after advancing `vbitmap_data_`, and `try_sync_vbitmap_memdata()`
@@ -542,8 +635,10 @@ Under the Option 1 contract the complete sequence is:
 
 1. Admit the attempt against its memory and stall budgets. Without holding the
    mutation gate for write, run the catch-up above — including the delta-buffer
-   reconcile — when stale, and also after any previous deferral for stale
-   visibility, incomplete membership, or incomplete delta-buffer transfer.
+   reconcile and, for heap-table ASYNC, the change-stream drain certificate —
+   when stale, and also after any previous deferral for stale visibility,
+   incomplete membership, incomplete delta-buffer transfer, or an undrained
+   change stream.
 2. Take the mutation gate for write, then `incr_data_->bitmap_rwlock_` for write,
    then `vbitmap_data_`'s lock pair.
 3. Under those locks, re-read `incr_data_->last_dml_scn_` and
@@ -553,20 +648,25 @@ Under the Option 1 contract the complete sequence is:
    boundary checks in "Coverage boundary". Require
    `coverage_scn = vbitmap_data_->scn_ = F`, where `F` is the final fully
    scanned, commit-visible frontier from catch-up, and require
-   `last_dml_scn_ <= F <= O` for the `O` that produced this baseline. For an
-   explicit flush also require `F >= R`. Orphan bits are excluded from that
-   derived view only when the delta-buffer reconcile of step 1 has made every
-   committed durable record with row SCN at or below `F` visible at `O` and
-   replayed it into the serialized `resolved`; if it has not, the attempt is
-   stale and is deferred, never pruned against the incomplete view. If any
-   other check fails, release, record a deferred attempt with its reason, and
-   publish nothing. The next retry starts with catch-up, not another immediate
-   capture.
+   `last_dml_scn_ <= F <= O` for the `O` that produced this baseline. For ASYNC,
+   additionally require a certificate with unchanged schema and dispatcher
+   epoch, `D >= F`, every relevant source event at or below `F` included in its
+   committed `A_D`, and `O` chosen after the drain with `A_D` and all covered
+   projection writes visible at that snapshot. Neither the mutation gate nor
+   `last_dml_scn_ <= F` substitutes for this check. For an explicit flush also
+   require `F >= R`. Orphan bits are excluded from that derived view only when
+   the step-1 reconcile and any required ASYNC drain have made every committed
+   durable record with row SCN at or below `F` visible at `O` and replayed it
+   into the serialized `resolved`; if they have not, the attempt is stale and is
+   deferred, never pruned against the incomplete view. If any other check fails,
+   release, record a deferred attempt with its reason, and publish nothing. The
+   next retry starts with catch-up, not another immediate capture.
 4. Still under the gate, copy the raw adapter membership bitmap and both
    visibility bitmaps with `roaring64_bitmap_copy()`, then remove every orphan
-   bit — classified only after the step-1 delta-buffer reconcile —
-   from the membership copy to materialize `checkpoint_membership`. Copies
-   are required: the handles are not a snapshot, and the bitmaps keep mutating.
+   bit — classified only after the step-1 delta-buffer reconcile and any required
+   ASYNC change-stream drain — from the membership copy to materialize
+   `checkpoint_membership`. Copies are required: the handles are not a snapshot,
+   and the bitmaps keep mutating.
 5. Still under the gate, serialize `incr_data_->index_` into the staging buffer,
    then append `vid_bound_` and the watermarks. A physical orphan vertex may be
    present in this graph payload, but its VID is absent from the persisted
@@ -891,16 +991,20 @@ catch-up before the next capture; catch-up may advance `vbitmap_data_->scn_`, bu
 that alone never publishes a checkpoint.
 
 An explicit flush is exposed for planned shutdowns. It waits for an in-progress
-checkpoint to finish, runs the same background delta-buffer reconcile,
-commit-visible replay, frontier closing, and vector materialization outside the
-exclusive hold, and then requests capture if the pending set is non-empty. It
-reports success only when the published closed frontier satisfies `F >= R` for
-its requested row-SCN boundary `R`; a later transfer commit or observation
-snapshot does not by itself prove that `R` was covered. It is a best-effort
-operation: a shutdown that times out must still exit, and the next start must
-fall back to replay. Flush must make progress for an ingest-only immediate-mode
-workload without manufacturing an ANN query, including a quiescent single batch
-whose forced refresh advances `last_dml_scn_` beyond `R`.
+checkpoint to finish, runs the same background delta-buffer reconcile, required
+ASYNC change-stream drain, commit-visible replay, frontier closing, and vector
+materialization outside the exclusive hold, and then requests capture if the
+pending set is non-empty. It reports success only when the published closed
+frontier satisfies `F >= R` for its requested row-SCN boundary `R`; a later
+transfer commit, observation snapshot, or quiescent base table does not by itself
+prove that `R` was covered. For heap-table ASYNC, the successful flush must also
+hold the drain certificate through `F`; if the stream is paused or lagging, flush
+waits within its deadline and then reports a deferral/timeout rather than success.
+It is a best-effort operation: a shutdown that times out must still exit, and the
+next start must fall back to replay. Flush must make progress for an ingest-only
+immediate-mode workload without manufacturing an ANN query, including a quiescent
+single batch whose forced refresh advances `last_dml_scn_` beyond `R`, and for an
+ASYNC workload after its queued source events have been released and caught up.
 
 ## Observability
 
@@ -1142,6 +1246,45 @@ one-to-one:
     `covered_vid_lookups=0`, the inserted row is returned, and no covered graph
     or membership work occurs on the first query.
 
+16. **Paused ASYNC change-stream → flush → catch-up → restart.** Create a
+    heap-table HNSW index with `sync_mode=ASYNC`. Add a test-only dispatch gate
+    after a base `INSERT` has committed with source SCN `r` but before its
+    change-stream transaction can begin index-id projection; this is fixture
+    instrumentation, not an assertion that a production pause API already exists.
+    While the event is withheld, assert that the base table is quiescent, there is
+    no active projection transaction or corresponding index-id row, and the
+    committed applied watermark is still `A0 < r`. Request a flush with `R >= r`.
+    The flush must wait for a drain certificate and then time out or defer with
+    `change_stream_not_drained`: it must not choose an `O` to close `F >= r`,
+    publish such a checkpoint, report success, or treat the quiescent base and
+    adapter gate as drain evidence. Any older published generation must retain
+    its previous coverage below `r`.
+
+    Record an unrelated observation SCN `O_before` while the flush is waiting,
+    then release the event. Allow its projection to commit at `s > O_before`, and
+    assert that the new index-id key is still the original `r`, not `s`. Only
+    after the projection transaction commits may the committed applied watermark
+    advance to `A_D >= r` and the batch barrier complete. Catch-up must then
+    obtain `D >= F >= R`, choose a fresh post-drain `O2 >= s`, verify at `O2` that
+    `A_D` and the index-id projection are both visible, replay the row into the
+    actual visibility baseline, materialize its vector, and publish the pending
+    flush checkpoint. No pre-release index-id scan or the fixture's `O_before`
+    may be reused for this catch-up.
+
+    Restart immediately after that successful flush with no intervening DML or
+    ANN query. Because replay starts at `F + 1` and the projected key is `r <= F`,
+    this is the exact case that an early `O_before` scan would lose permanently.
+    Assert that the restored checkpoint contains the VID and committed visibility,
+    the mandatory tail scan reports `tail_rows=0`, the first ANN query returns the
+    inserted row with no covered graph/membership insertion or
+    `prepare_delta_mem_data()` lookup, and results match a full-replay control.
+    Repeat with a suspension after graph/membership processing but before
+    `ctx->trans_.end(true)`: pre-commit `max_commit_scn_` and adapter mutations
+    must not advance the drain proof. After release, the same committed snapshot
+    `O2` must expose both the index-id row and its applied-SCN update. These are
+    acceptance requirements for the later implementation, not integration-test
+    results from this documentation change.
+
 Correctness must hold for runs where the checkpoint is interrupted at every stage:
 before publish, after publish but before the reader observes it, and after the reader
 observes it but before the previous generation is retired.
@@ -1159,19 +1302,22 @@ observes it but before the previous generation is retired.
    `handle_insert_embedded_table_rows()` graph/VID-bound/membership sequence.
    Seed each forced synchronous replay query from the restored visibility
    baseline before its tail scan or any cached early return. Add background
-   catch-up through delta-buffer reconcile, split `(F, O)` index-id replay,
-   closed-frontier publication after non-empty and empty scans, and vector
-   materialization. Checkpointing stays off
-   by default; the only behaviour change is that a valid checkpoint is restored
-   when present. Phase 1 is not shippable without every piece: the gate makes
-   capture atomic, the committed-membership and live-set proofs make the claimed
-   prefix complete, the post-transfer snapshot and closed frontier let a forced
-   refresh make bounded progress, catch-up lets an ingest-only workload reach
-   that state without a query, the delta-buffer reconcile keeps below-threshold
-   committed rows out of the orphan classification, orphan reconciliation makes
-   capture terminate after rollback, and the forced initial scan plus live-set
-   completion consumers make post-checkpoint durable rows visible after restart
-   without rebuilding covered tombstones.
+   catch-up through delta-buffer reconcile, the heap-table ASYNC change-stream
+   drain certificate and committed-watermark/`O` visibility binding, split
+   `(F, O)` index-id replay, closed-frontier publication after non-empty and
+   empty scans, and vector materialization. Checkpointing stays off by default;
+   the only behaviour change is that a valid checkpoint is restored when present.
+   Phase 1 is not shippable without every piece: the gate makes capture atomic,
+   the committed-membership and live-set proofs make the claimed prefix complete,
+   the ASYNC drain certificate prevents a queued source-SCN prefix from appearing
+   after `O`, the post-transfer/post-drain snapshot and closed frontier let a
+   forced refresh or released change-stream batch make bounded progress,
+   catch-up lets an ingest-only workload reach that state without a query, the
+   delta-buffer reconcile keeps below-threshold committed rows out of the orphan
+   classification, orphan reconciliation makes capture terminate after rollback,
+   and the forced initial scan plus live-set completion consumers make
+   post-checkpoint durable rows visible after restart without rebuilding covered
+   tombstones.
 2. Scheduling on size and age, plus the observability surface and the flush entry
    point, all using the phase-1 catch-up before capture and stale retry.
 3. Replacement catch-up (Option A), gated behind its own switch, carrying the
@@ -1284,3 +1430,18 @@ mutation-gate hold justifies building the immutable-generation option.
     complete graph, VID-bound and membership sequence, with concurrent-capture
     suspension points after graph insertion and before the final membership
     update.
+- Revision 8:
+  - Closed the heap-table ASYNC frontier against queued change-stream events.
+    Projection preserves the original source commit SCN even when its index-id
+    transaction commits after a capture snapshot, so base-table quiescence,
+    active-transaction checks, and the adapter mutation gate cannot replace a
+    source-log fence plus ordered batch-commit drain before choosing `O`.
+  - Distinguished the committed applied watermark `A` from the closed drain
+    frontier `D`: an idle suffix may have `A < F`, but every relevant event at or
+    below `F` must be included in `A_D` and have its projection committed before
+    capture. Required `A_D` and projection writes to be visible together at the
+    post-drain `O`, and explicitly left the checkpoint-facing certificate and
+    consistent-read binding as implementation prerequisites.
+  - Added a paused-change-stream → flush → catch-up → restart acceptance fixture
+    that requires deferral while an event with `r <= F` is withheld, followed by
+    post-commit catch-up and correct checkpoint restore from `F + 1`.
