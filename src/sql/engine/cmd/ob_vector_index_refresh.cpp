@@ -422,6 +422,10 @@ int ObVectorIndexRefresher::do_refresh() {
           } else if (OB_FAIL(refresh_ctx_->trans_->write(freeze_sql.ptr(), affected_rows))) {
             LOG_ERROR("fail to execute major freeze sql, continue other tablet id", KR(ret), K(tablet_id),
                       K(freeze_sql));
+            if (OB_MAJOR_FREEZE_NOT_ALLOW == ret || OB_MAJOR_FREEZE_NOT_FINISHED == ret) {
+              // Scheduling rejections leave the refresh transaction usable for other tablets.
+              refresh_ctx_->trans_->reset_last_error();
+            }
             ret = OB_SUCCESS;
           } else {
             LOG_INFO("execute major freeze success", K(tablet_id), K(affected_rows));
