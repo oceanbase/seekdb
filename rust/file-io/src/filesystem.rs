@@ -35,15 +35,47 @@ pub fn open_read_write(path: &Path, direct_io: bool) -> io::Result<std::fs::File
 pub fn open_synchronous_read_write(path: &Path, direct_io: bool) -> io::Result<std::fs::File> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true).write(true);
+    open_synchronous_read_write_with_mode(
+        &mut options,
+        path,
+        direct_io,
+        SynchronousMode::DataAndMetadata,
+    )
+}
+
+/// Opens a file whose successful writes include data and data-retrieval metadata durability.
+pub fn open_data_synchronous_read_write_with_options(
+    options: &mut std::fs::OpenOptions,
+    path: &Path,
+    direct_io: bool,
+) -> io::Result<std::fs::File> {
+    open_synchronous_read_write_with_mode(options, path, direct_io, SynchronousMode::Data)
+}
+
+enum SynchronousMode {
+    Data,
+    DataAndMetadata,
+}
+
+fn open_synchronous_read_write_with_mode(
+    options: &mut std::fs::OpenOptions,
+    path: &Path,
+    direct_io: bool,
+    mode: SynchronousMode,
+) -> io::Result<std::fs::File> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_SYNC);
+        options.custom_flags(match mode {
+            SynchronousMode::Data => libc::O_DSYNC,
+            SynchronousMode::DataAndMetadata => libc::O_SYNC,
+        });
     }
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
         use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_WRITE_THROUGH;
+        let _ = mode;
         options.custom_flags(FILE_FLAG_WRITE_THROUGH | crate::direct::direct_io_flag(direct_io));
     }
     let file = options.open(path)?;

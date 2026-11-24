@@ -19,9 +19,9 @@ use crate::format::{
     Result, SegmentHeader, BLOCK_SIZE, ENTRY_HEADER_SIZE, GROUP_HEADER_SIZE, MAX_LOG_BODY_SIZE,
     PHYSICAL_BLOCK_SIZE, SEGMENT_HEADER_SIZE,
 };
+use file_io::{AlignedBuffer, Allocation};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
@@ -1273,9 +1273,9 @@ impl State {
     fn read_record(&self, lsn: u64) -> Result<(RecordMeta, Vec<u8>)> {
         let id = block_id(lsn);
         let segment = self.segments.get(&id).ok_or(Error::OutLower)?;
-        let mut file = File::open(segment_path(&self.directory, id))?;
+        let file = File::open(segment_path(&self.directory, id))?;
         read_record_from(
-            &mut file,
+            &file,
             segment.length,
             lsn,
             self.end_lsn.min((id + 1) * BLOCK_SIZE),
@@ -1289,10 +1289,9 @@ impl State {
         if physical_offset(lsn) + remaining > segment.length {
             return Err(Error::Corrupt);
         }
-        let mut file = File::open(segment_path(&self.directory, id))?;
-        file.seek(SeekFrom::Start(physical_offset(lsn)))?;
+        let file = File::open(segment_path(&self.directory, id))?;
         let mut padding = zeroed_bytes(remaining as usize)?;
-        file.read_exact(&mut padding)?;
+        file_io::read_exact_at(&file, &mut padding, physical_offset(lsn))?;
         if padding.iter().any(|byte| *byte != 0) {
             return Err(Error::Corrupt);
         }
@@ -1368,7 +1367,7 @@ fn base_after_record(curr_lsn: u64, record: &RecordMeta) -> BaseInfo {
 }
 
 fn read_record_from(
-    file: &mut File,
+    file: &File,
     segment_length: u64,
     lsn: u64,
     limit: u64,
@@ -1376,9 +1375,8 @@ fn read_record_from(
     if physical_offset(lsn) + GROUP_HEADER_SIZE as u64 > segment_length {
         return Err(Error::OutUpper);
     }
-    file.seek(SeekFrom::Start(physical_offset(lsn)))?;
     let mut header_bytes = zeroed_bytes(GROUP_HEADER_SIZE)?;
-    file.read_exact(&mut header_bytes)?;
+    file_io::read_exact_at(file, &mut header_bytes, physical_offset(lsn))?;
     if header_bytes.iter().all(|byte| *byte == 0) {
         return Err(Error::OutUpper);
     }
@@ -1393,7 +1391,11 @@ fn read_record_from(
     }
     let mut bytes = zeroed_bytes(record_len as usize)?;
     bytes[..GROUP_HEADER_SIZE].copy_from_slice(&header_bytes);
-    file.read_exact(&mut bytes[GROUP_HEADER_SIZE..])?;
+    file_io::read_exact_at(
+        file,
+        &mut bytes[GROUP_HEADER_SIZE..],
+        physical_offset(lsn) + GROUP_HEADER_SIZE as u64,
+    )?;
     let header = validate_group(&bytes, lsn)?;
     Ok((
         RecordMeta {
@@ -1454,16 +1456,14 @@ impl SegmentScanner {
                     return Err(Error::Corrupt);
                 }
                 let mut padding = zeroed_bytes(remaining as usize)?;
-                self.file.seek(SeekFrom::Start(physical_offset(self.lsn)))?;
-                self.file.read_exact(&mut padding)?;
+                file_io::read_exact_at(&self.file, &mut padding, physical_offset(self.lsn))?;
                 if padding.iter().any(|byte| *byte != 0) {
                     return Err(Error::Corrupt);
                 }
                 self.lsn += remaining;
                 continue;
             }
-            let (record, bytes) =
-                read_record_from(&mut self.file, self.segment_length, self.lsn, self.limit)?;
+            let (record, bytes) = read_record_from(&self.file, self.segment_length, self.lsn, self.limit)?;
             let header = &record.header;
             if header.committed_end_lsn != self.lsn
                 || header.log_id != self.next_log_id
@@ -1486,14 +1486,13 @@ impl SegmentScanner {
 }
 
 fn tail_can_be_truncated(scanner: &SegmentScanner) -> Result<bool> {
-    let mut file = scanner.file.try_clone()?;
+    let file = scanner.file.try_clone()?;
     let mut offset = physical_offset(scanner.lsn);
-    file.seek(SeekFrom::Start(offset))?;
     let mut saw_zero = false;
     let mut bytes = [0; 16384];
     while offset < scanner.segment_length {
         let count = bytes.len().min((scanner.segment_length - offset) as usize);
-        file.read_exact(&mut bytes[..count])?;
+        file_io::read_exact_at(&file, &mut bytes[..count], offset)?;
         for byte in &bytes[..count] {
             if saw_zero && *byte != 0 {
                 return Ok(false);
@@ -1574,13 +1573,13 @@ fn open_state(directory: &Path) -> Result<State> {
         }
         let path = segment_path(directory, id);
         let metadata = (|| {
-            let mut file = File::open(&path)?;
+            let file = File::open(&path)?;
             let length = file.metadata()?.len();
             if !(SEGMENT_HEADER_SIZE..=PHYSICAL_BLOCK_SIZE).contains(&length) {
                 return Err(Error::Corrupt);
             }
             let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
-            file.read_exact(&mut segment_header)?;
+            file_io::read_exact_at(&file, &mut segment_header, 0)?;
             let header = validate_segment_header(&segment_header, id)?;
             if block_id(header.start_lsn) != id
                 || header.start_lsn < manifest.base_lsn
@@ -1723,7 +1722,7 @@ impl ManifestWriter {
     }
 
     fn open(directory: &Path) -> Result<(Manifest, Self)> {
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .open(directory.join(MANIFEST_FILE))?;
@@ -1731,7 +1730,7 @@ impl ManifestWriter {
             return Err(Error::Corrupt);
         }
         let mut bytes = [0; MANIFEST_FILE_SIZE];
-        file.read_exact(&mut bytes)?;
+        file_io::read_exact_at(&file, &mut bytes, 0)?;
         let first = Self::decode_slot(&bytes[..MANIFEST_SIZE]);
         let second = Self::decode_slot(&bytes[MANIFEST_SIZE..]);
         let (generation, manifest) = match (first, second) {
@@ -1764,9 +1763,7 @@ impl ManifestWriter {
         let generation = self.generation.checked_add(1).ok_or(Error::Invalid)?;
         let bytes = Self::encode_slot(manifest, generation);
         let slot = self.generation % 2;
-        self.file
-            .seek(SeekFrom::Start(slot * MANIFEST_SIZE as u64))?;
-        self.file.write_all(&bytes)?;
+        file_io::write_all_at(&self.file, &bytes, slot * MANIFEST_SIZE as u64)?;
         self.file.sync_data()?;
         self.generation = generation;
         Ok(())
@@ -1819,23 +1816,15 @@ impl ManifestWriter {
     }
 }
 
-#[cfg(unix)]
-#[cfg(unix)]
 fn read_append_tail(path: &Path, valid_length: u64) -> Result<Vec<u8>> {
     let tail_len = valid_length as usize % DIO_ALIGNMENT;
     if tail_len == 0 {
         return Ok(Vec::new());
     }
-    let mut file = OpenOptions::new().read(true).open(path)?;
-    file.seek(SeekFrom::Start(valid_length - tail_len as u64))?;
+    let file = OpenOptions::new().read(true).open(path)?;
     let mut tail = zeroed_bytes(tail_len)?;
-    file.read_exact(&mut tail)?;
+    file_io::read_exact_at(&file, &mut tail, valid_length - tail_len as u64)?;
     Ok(tail)
-}
-
-#[cfg(not(unix))]
-fn read_append_tail(_path: &Path, _valid_length: u64) -> Result<Vec<u8>> {
-    Ok(Vec::new())
 }
 
 fn open_append_file(id: u64, path: &Path, create: bool, tail: Vec<u8>) -> Result<AppendFile> {
@@ -1845,14 +1834,9 @@ fn open_append_file(id: u64, path: &Path, create: bool, tail: Vec<u8>) -> Result
         .truncate(false)
         .read(true)
         .write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_DIRECT | libc::O_DSYNC);
-    }
     let file = AppendFile {
         id,
-        file: options.open(path)?,
+        file: file_io::open_data_synchronous_read_write_with_options(&mut options, path, true)?,
         tail,
     };
     if create {
@@ -1864,34 +1848,15 @@ fn open_append_file(id: u64, path: &Path, create: bool, tail: Vec<u8>) -> Result
 }
 
 impl AppendFile {
-    #[cfg(target_os = "linux")]
     fn allocate(&self) -> Result<()> {
-        use std::os::fd::AsRawFd;
-
-        if unsafe {
-            libc::fallocate(
-                self.file.as_raw_fd(),
-                0,
-                0,
-                PHYSICAL_BLOCK_SIZE as libc::off_t,
-            )
-        } != 0
-        {
-            return Err(std::io::Error::last_os_error().into());
-        }
+        file_io::allocate(&self.file, 0..PHYSICAL_BLOCK_SIZE, Allocation::Reserve)?;
         Ok(())
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    fn allocate(&self) -> Result<()> {
-        self.set_len(PHYSICAL_BLOCK_SIZE)
     }
 
     fn set_len(&self, len: u64) -> Result<()> {
         Ok(self.file.set_len(len)?)
     }
 
-    #[cfg(unix)]
     fn write(&mut self, start: u64, bytes: &[u8]) -> Result<()> {
         let prefix_len = self.tail.len();
         let aligned_start = start
@@ -1903,12 +1868,13 @@ impl AppendFile {
             .checked_add(DIO_ALIGNMENT - 1)
             .map(|len| len / DIO_ALIGNMENT * DIO_ALIGNMENT)
             .ok_or(Error::Invalid)?;
-        let mut buffer = AlignedBuffer::new(write_len)?;
+        let mut buffer =
+            AlignedBuffer::zeroed(write_len, DIO_ALIGNMENT).map_err(|_| Error::NoMemory)?;
         let output = buffer.as_mut_slice();
         output[..prefix_len].copy_from_slice(&self.tail);
         output[prefix_len..logical_len].copy_from_slice(bytes);
         output[logical_len..].fill(0);
-        pwrite_all(&self.file, aligned_start, output)?;
+        file_io::write_all_at(&self.file, output, aligned_start)?;
         let tail_len = logical_len % DIO_ALIGNMENT;
         let mut tail = Vec::new();
         tail.try_reserve_exact(tail_len).map_err(|_| Error::NoMemory)?;
@@ -1916,81 +1882,10 @@ impl AppendFile {
         self.tail = tail;
         Ok(())
     }
-
-    #[cfg(not(unix))]
-    fn write(&mut self, start: u64, bytes: &[u8]) -> Result<()> {
-        self.file.seek(SeekFrom::Start(start))?;
-        self.file.write_all(bytes)?;
-        self.file.sync_data()?;
-        Ok(())
-    }
-}
-
-#[cfg(unix)]
-struct AlignedBuffer {
-    pointer: *mut u8,
-    len: usize,
-}
-
-#[cfg(unix)]
-impl AlignedBuffer {
-    fn new(len: usize) -> Result<Self> {
-        let mut pointer = std::ptr::null_mut();
-        if unsafe { libc::posix_memalign(&mut pointer, DIO_ALIGNMENT, len) } != 0 {
-            return Err(Error::NoMemory);
-        }
-        Ok(Self {
-            pointer: pointer.cast(),
-            len,
-        })
-    }
-
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.pointer, self.len) }
-    }
-}
-
-#[cfg(unix)]
-impl Drop for AlignedBuffer {
-    fn drop(&mut self) {
-        unsafe { libc::free(self.pointer.cast()) };
-    }
-}
-
-#[cfg(unix)]
-fn pwrite_all(file: &File, offset: u64, bytes: &[u8]) -> Result<()> {
-    use std::os::fd::AsRawFd;
-
-    let mut written = 0;
-    while written < bytes.len() {
-        let result = unsafe {
-            libc::pwrite(
-                file.as_raw_fd(),
-                bytes.as_ptr().add(written).cast(),
-                bytes.len() - written,
-                (offset + written as u64) as libc::off_t,
-            )
-        };
-        if result < 0 {
-            let error = std::io::Error::last_os_error();
-            if error.kind() == std::io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error.into());
-        }
-        if result == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "short WAL write").into());
-        }
-        written += result as usize;
-        if written < bytes.len() && written % DIO_ALIGNMENT != 0 {
-            return Err(Error::Io);
-        }
-    }
-    Ok(())
 }
 
 pub(crate) fn sync_directory(directory: &Path) -> Result<()> {
-    File::open(directory)?.sync_all()?;
+    file_io::Directory::open(directory)?.sync()?;
     Ok(())
 }
 
@@ -2006,6 +1901,7 @@ fn sync_directory(_directory: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Seek, SeekFrom, Write};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);

@@ -49,8 +49,9 @@ pub use durability::{
 };
 pub use filesystem::{
     canonical_existing, create_dir, create_dir_all, create_new_read_write, exists,
-    lexical_absolute, metadata, open_read_write, open_synchronous_read_write, publish_file, remove_dir, remove_file, rename,
-    symlink_file, symlink_metadata, truncate_path,
+    lexical_absolute, metadata, open_data_synchronous_read_write_with_options, open_read_write,
+    open_synchronous_read_write, publish_file, remove_dir, remove_file, rename, symlink_file,
+    symlink_metadata, truncate_path,
 };
 pub use identity::FileIdentity;
 pub use ownership::{close_file, ExclusiveFile};
