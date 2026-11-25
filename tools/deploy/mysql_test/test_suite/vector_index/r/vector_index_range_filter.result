@@ -1,0 +1,208 @@
+DROP TABLE IF EXISTS vector_range_filter;
+DROP TABLE IF EXISTS vector_range_digits;
+CREATE TABLE vector_range_digits (n INT PRIMARY KEY);
+INSERT INTO vector_range_digits VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE vector_range_filter (
+id INT PRIMARY KEY,
+embedding VECTOR(3) NOT NULL,
+age INT,
+flag INT NOT NULL,
+tag VARCHAR(8) NOT NULL,
+KEY idx_age(age),
+KEY idx_tag(tag(2))
+) ORGANIZATION HEAP;
+INSERT INTO vector_range_filter
+SELECT n, CONCAT('[', n, ',1,0]'), IF(MOD(n,1000)=0,NULL,MOD(n,1000)), MOD(n,2),
+IF(MOD(n,2)=0,'abb','aba')
+FROM (SELECT a.n+10*b.n+100*c.n+1000*d.n AS n
+FROM vector_range_digits a, vector_range_digits b,
+vector_range_digits c, vector_range_digits d) numbers;
+DROP TABLE vector_range_digits;
+CREATE VECTOR INDEX idx_vector ON vector_range_filter(embedding)
+WITH (distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=128,sync_mode=immediate);
+ANALYZE TABLE vector_range_filter;
+SET ob_hnsw_ef_search=64;
+# An unfiltered vector scan does not require a scalar pre-filter.
+SELECT id FROM vector_range_filter
+ORDER BY l2_distance(embedding,'[9999,1,0]') APPROXIMATE LIMIT 5;
+id
+9999
+9998
+9997
+9996
+9995
+# A selective scalar index supplies the adaptive pre-filter range.
+EXPLAIN BASIC SELECT id FROM vector_range_filter WHERE age < 10 AND age < 20 AND age < 30
+ORDER BY l2_distance(embedding,'[0,1,0]') APPROXIMATE LIMIT 5;
+Query Plan
+=========================================================================
+|ID|OPERATOR                               |NAME                        |
+-------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|vector_range_filter(idx_age)|
+=========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([vector_range_filter.id]), filter([vector_range_filter.age < 10], [vector_range_filter.age < 20], [vector_range_filter.age < 30]), rowset=256
+      access([vector_range_filter.__pk_increment], [vector_range_filter.age], [vector_range_filter.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true,true,true],
+      range_key([vector_range_filter.age], [vector_range_filter.__pk_increment]), range(NULL,MAX ; 10,MIN)
+# Every redundant bound is enforced by the extracted index range.
+SELECT id FROM vector_range_filter WHERE age < 10 AND age < 20 AND age < 30
+ORDER BY l2_distance(embedding,'[0,1,0]') APPROXIMATE LIMIT 5;
+id
+1
+2
+3
+4
+5
+SELECT id FROM vector_range_filter WHERE age < 10
+ORDER BY l2_distance(embedding,'[0,1,0]') LIMIT 5;
+id
+1
+2
+3
+4
+5
+# A non-indexed residual predicate must still filter candidates.
+SELECT id FROM vector_range_filter WHERE age < 10 AND age < 20 AND flag=0
+ORDER BY l2_distance(embedding,'[0,1,0]') APPROXIMATE LIMIT 5;
+id
+2
+4
+6
+8
+1002
+SELECT id FROM vector_range_filter WHERE age < 10 AND flag=0
+ORDER BY l2_distance(embedding,'[0,1,0]') LIMIT 5;
+id
+2
+4
+6
+8
+1002
+# Strict/inclusive boundaries and NULL retain their SQL semantics.
+SELECT id FROM vector_range_filter WHERE age > 5 AND age <= 10 AND age < 20
+ORDER BY l2_distance(embedding,'[0,1,0]') APPROXIMATE LIMIT 5;
+id
+6
+7
+8
+9
+10
+SELECT id FROM vector_range_filter WHERE age < NULL AND age < 20
+ORDER BY l2_distance(embedding,'[0,1,0]') APPROXIMATE LIMIT 5;
+id
+SELECT id FROM vector_range_filter WHERE age IS NULL
+ORDER BY l2_distance(embedding,'[0,1,0]') APPROXIMATE LIMIT 5;
+id
+0
+1000
+2000
+3000
+4000
+# Prefix-index ranges are inexact and must retain the full predicate.
+EXPLAIN BASIC SELECT /*+ INDEX(vector_range_filter idx_tag) */ id
+FROM vector_range_filter WHERE tag='aba'
+ORDER BY l2_distance(embedding,'[0,1,0]') APPROXIMATE LIMIT 5;
+Query Plan
+=========================================================================
+|ID|OPERATOR                               |NAME                        |
+-------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|vector_range_filter(idx_tag)|
+=========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([vector_range_filter.id]), filter([column_conv(VARCHAR,utf8mb4_general_ci,length:2,NOT NULL,substr(vector_range_filter.tag, 1, 2)) = substr('aba',
+       1, 2)], [vector_range_filter.tag = 'aba']), rowset=256
+      access([vector_range_filter.__pk_increment], [vector_range_filter.tag], [vector_range_filter.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true,false],
+      range_key([vector_range_filter.__substr2_20], [vector_range_filter.__pk_increment]), range(ab,MIN ; ab,MAX)
+SELECT /*+ INDEX(vector_range_filter idx_tag) */ id
+FROM vector_range_filter WHERE tag='aba'
+ORDER BY l2_distance(embedding,'[0,1,0]') APPROXIMATE LIMIT 5;
+id
+1
+3
+5
+7
+9
+SELECT id FROM vector_range_filter WHERE tag='aba'
+ORDER BY l2_distance(embedding,'[0,1,0]') LIMIT 5;
+id
+1
+3
+5
+7
+9
+# Rebinding changes the tightest bound without discarding any predicate.
+PREPARE vector_range_stmt FROM 'SELECT id FROM vector_range_filter WHERE age < ? AND age < ? ORDER BY l2_distance(embedding,''[9999,1,0]'') APPROXIMATE LIMIT 5';
+SET @bound1=10, @bound2=20;
+EXECUTE vector_range_stmt USING @bound1,@bound2;
+id
+9009
+9008
+9007
+9006
+9005
+SET @bound1=30, @bound2=4;
+EXECUTE vector_range_stmt USING @bound1,@bound2;
+id
+9003
+9002
+9001
+8003
+8002
+SET @bound1=NULL, @bound2=20;
+EXECUTE vector_range_stmt USING @bound1,@bound2;
+id
+SET @bound1=1000, @bound2=900;
+EXECUTE vector_range_stmt USING @bound1,@bound2;
+id
+9899
+9898
+9897
+9896
+9895
+SET @bound1=4, @bound2=30;
+EXECUTE vector_range_stmt USING @bound1,@bound2;
+id
+9003
+9002
+9001
+8003
+8002
+DEALLOCATE PREPARE vector_range_stmt;
+# The vector-index hint starts the adaptive iterative-filter path.
+EXPLAIN BASIC SELECT /*+ INDEX(vector_range_filter idx_vector) */ id
+FROM vector_range_filter WHERE age < 900 AND age < 1000
+ORDER BY l2_distance(embedding,'[9999,1,0]') APPROXIMATE LIMIT 5;
+Query Plan
+===========================================================================
+|ID|OPERATOR                                          |NAME               |
+---------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)|vector_range_filter|
+===========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([vector_range_filter.id]), filter([vector_range_filter.age < 900], [vector_range_filter.age < 1000]), rowset=256
+      access([vector_range_filter.__pk_increment], [vector_range_filter.age], [vector_range_filter.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,false],
+      range_key([vector_range_filter.__pk_increment]), range(MIN ; MAX)always true
+SELECT /*+ INDEX(vector_range_filter idx_vector) */ id
+FROM vector_range_filter WHERE age < 900 AND age < 1000
+ORDER BY l2_distance(embedding,'[9999,1,0]') APPROXIMATE LIMIT 5;
+id
+9899
+9898
+9897
+9896
+9895
+SELECT id FROM vector_range_filter WHERE age < 900
+ORDER BY l2_distance(embedding,'[9999,1,0]') LIMIT 5;
+id
+9899
+9898
+9897
+9896
+9895
+DROP TABLE vector_range_filter;
