@@ -1,0 +1,85 @@
+DROP TABLE IF EXISTS ann_predicate_absorption;
+CREATE TABLE ann_predicate_absorption (
+id INT PRIMARY KEY,
+embedding VECTOR(3) NOT NULL,
+category INT,
+parity VARCHAR(8),
+KEY idx_category(category)
+) ORGANIZATION HEAP;
+INSERT INTO ann_predicate_absorption VALUES
+(1, '[1,0,0]', 1, 'even'),
+(2, '[2,0,0]', 2, 'even'),
+(3, '[3,0,0]', 1, 'odd'),
+(4, '[4,0,0]', 2, 'odd'),
+(5, '[5,0,0]', NULL, 'even'),
+(6, '[6,0,0]', NULL, NULL),
+(7, '[7,0,0]', 1, NULL),
+(8, '[8,0,0]', 2, NULL);
+CREATE VECTOR INDEX absorption_hnsw ON ann_predicate_absorption(embedding)
+WITH (distance=l2, type=hnsw, lib=vsag, m=16,
+ef_construction=128, sync_mode=immediate);
+ANALYZE TABLE ann_predicate_absorption;
+SET ob_hnsw_ef_search=64;
+# AND absorption, including UNKNOWN values of P and Q
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 AND (category=1 OR parity='even')
+AND (category=1 OR parity='even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+id
+1
+3
+7
+# OR absorption must preserve the same SQL three-valued semantics
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 OR (category=1 AND parity='even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+id
+1
+3
+7
+# The physical filter must contain only the absorbed predicate
+EXPLAIN SELECT id FROM ann_predicate_absorption
+WHERE category=N AND (category=N OR parity='even')
+AND (category=N OR parity='even')
+ORDER BY lN_distance(embedding, '[N,N,N]') APPROXIMATE LIMIT N;
+Query Plan
+=
+|ID|OPERATOR |NAME |EST.ROWS|EST.TIME(us)|
+-
+|N |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_predicate_absorption(idx_category)|N |N |
+=
+Outputs & filters:
+-
+ N - output([ann_predicate_absorption.id]), filter([ann_predicate_absorption.category = N]), rowset=N
+ access([ann_predicate_absorption.__pk_increment], [ann_predicate_absorption.category], [ann_predicate_absorption.id]), partitions(pN)
+ is_index_back=true, is_global_index=false, filter_before_indexback[true],
+ range_key([ann_predicate_absorption.category], [ann_predicate_absorption.__pk_increment]), range(N,MIN ; N,MAX)
+# A non-absorbed OR remains effective
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 OR parity='even'
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+id
+1
+2
+3
+5
+7
+# NOT and constant predicates retain their semantics
+SELECT id FROM ann_predicate_absorption
+WHERE NOT (category=1 AND (category=1 OR parity='even'))
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+id
+2
+4
+8
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 AND (category=1 OR parity='even') AND FALSE
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+id
+# LIMIT and OFFSET are preserved
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 AND (category=1 OR parity='even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 1 OFFSET 1;
+id
+3
+DROP TABLE ann_predicate_absorption;
