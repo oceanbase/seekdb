@@ -23,7 +23,6 @@
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "data_plane/transaction/ob_tx_control.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
-#include "data_plane/transaction/ob_tx_desc_lifecycle.h"
 // ------------------------------------------------------------------------------------------
 // Implimentation notes:
 // there are two relation we need care:
@@ -1720,11 +1719,6 @@ int64_t tx_desc_seq_base(const transaction::ObTxDesc *desc)
   return OB_NOT_NULL(desc) ? desc->get_seq_base() : 0;
 }
 
-uint64_t tx_desc_operation_sequence(const transaction::ObTxDesc *desc)
-{
-  return OB_NOT_NULL(desc) ? desc->get_op_sn() : 0;
-}
-
 int tx_desc_serialize(const transaction::ObTxDesc *desc,
                       char *buf,
                       int64_t buf_len,
@@ -1922,49 +1916,6 @@ int abort_transaction(transaction::ObTxDesc &tx, ObTxAbortReason reason)
 void force_release_tx_when_tenant_gone(transaction::ObTxDesc &tx)
 {
   transaction::ObTransService::force_release_tx_when_session_destroy(tx);
-}
-
-int clone_tx_desc(common::ObIAllocator &allocator,
-                  transaction::ObTxDesc *source,
-                  transaction::ObTxDesc *&clone)
-{
-  int ret = OB_SUCCESS;
-  int64_t serialized_length = 0;
-  int64_t serialize_pos = 0;
-  int64_t deserialize_pos = 0;
-  void *buffer = nullptr;
-  clone = nullptr;
-  if (OB_ISNULL(source)) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "unexpected null transaction descriptor", K(ret));
-  } else if (FALSE_IT(serialized_length = source->get_serialize_size())) {
-  } else if (OB_ISNULL(buffer = allocator.alloc(serialized_length))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    TRANS_LOG(WARN, "failed to allocate transaction descriptor buffer",
-              K(ret), K(serialized_length));
-  } else if (OB_FAIL(source->serialize(
-                 static_cast<char *>(buffer), serialized_length, serialize_pos))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->acquire_tx(
-                 static_cast<const char *>(buffer), serialize_pos,
-                 deserialize_pos, clone))) {
-  } else if (OB_ISNULL(clone) || serialize_pos != deserialize_pos) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "invalid cloned transaction descriptor",
-              K(ret), KP(clone), K(serialize_pos), K(deserialize_pos));
-    if (OB_NOT_NULL(clone)) {
-      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->release_tx(*clone);
-      clone = nullptr;
-    }
-  }
-  return ret;
-}
-
-void release_tx_desc(transaction::ObTxDesc *&desc)
-{
-  if (OB_NOT_NULL(desc)) {
-    ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->release_tx(*desc);
-    desc = nullptr;
-  }
 }
 
 } // namespace data_plane

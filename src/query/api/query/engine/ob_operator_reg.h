@@ -306,13 +306,6 @@ class ObPxMultiPartSSTableInsertOp;
 class ObPxMultiPartSSTableInsertOpInput;
 REGISTER_OPERATOR(ObLogInsert, PHY_PX_MULTI_PART_SSTABLE_INSERT, ObPxMultiPartSSTableInsertSpec, ObPxMultiPartSSTableInsertOp, ObPxMultiPartSSTableInsertOpInput);
 
-class ObLogicalOperator;
-class ObTableRowStoreSpec;
-class ObTableRowStoreOp;
-class ObTableRowStoreOpInput;
-REGISTER_OPERATOR(ObLogicalOperator, PHY_TABLE_ROW_STORE, ObTableRowStoreSpec,
-                  ObTableRowStoreOp, ObTableRowStoreOpInput);
-
 class ObLogExprValues;
 class ObExprValuesSpec;
 class ObExprValuesOp;

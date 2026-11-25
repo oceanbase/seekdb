@@ -179,8 +179,6 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
   return ret;
 }
 
-OB_SERIALIZE_MEMBER((ObExprToType, ObFuncExprOperator), expect_type_, cast_mode_);
-
 int ObExprToType::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const
 {

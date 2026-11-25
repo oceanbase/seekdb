@@ -26,7 +26,6 @@ namespace sql
 {
 class ObExprRegexp : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION_V(1);
 public:
   explicit  ObExprRegexp(common::ObIAllocator &alloc);
   virtual ~ObExprRegexp();

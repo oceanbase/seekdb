@@ -45,17 +45,8 @@ class ObOperator;
 class ObOpInput;
 class ObExecFeedbackNode;
 
-struct ObPhyOpSeriCtx
-{
-  public:
-  ObPhyOpSeriCtx() : row_id_list_(NULL), exec_ctx_(NULL) {}
-  const void *row_id_list_;
-  const ObExecContext *exec_ctx_;
-};
-
 class ObOpSchemaObj
 {
-  OB_UNIS_VERSION(1);
 public:
   ObOpSchemaObj()
     : obj_type_(common::ObMaxType),
@@ -80,9 +71,6 @@ public:
 public:
   common::ObObjType obj_type_;
   bool is_not_null_;
-  // Because ObSortColumn is serializable, but ObSortColumn does not use the serialization framework for information
-  // Adding any field inside ObSortColumn will have compatibility issues
-  // So we put the null first last information here
   ObOrderDirection order_type_;
 };
 
@@ -288,16 +276,6 @@ public:
   static int find_target_specs(T &spec, const FILTER &f, common::ObIArray<T *> &res);
 
   bool is_vectorized() const { return 0 != max_batch_size_; }
-  virtual int serialize(char *buf, int64_t buf_len, int64_t &pos, ObPhyOpSeriCtx &seri_ctx) const
-  {
-    UNUSED(seri_ctx);
-    return serialize(buf, buf_len, pos);
-  }
-  virtual int64_t get_serialize_size(const ObPhyOpSeriCtx &seri_ctx) const
-  {
-    UNUSED(seri_ctx);
-    return get_serialize_size();
-  }
 private:
   int create_operator_recursive(ObExecContext &exec_ctx, ObOperator *&op) const;
   int create_op_input_recursive(ObExecContext &exec_ctx) const;

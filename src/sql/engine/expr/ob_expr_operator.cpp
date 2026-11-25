@@ -61,8 +61,6 @@ static bool is_string_literal_cmp_operand(const ObRawExpr *expr)
 }
 #endif
 
-OB_SERIALIZE_MEMBER(ObFuncInputType, calc_meta_, max_length_, flag_);
-
 // TODO: use ObRawExprResType instead of ObExprResType in sql executor
 OB_DEF_SERIALIZE_SIMPLE(ObExprResType)
 {
@@ -632,8 +630,6 @@ ObCollationType ObExprOperator::get_default_collation_type(
   }
   return collation_type;
 }
-
-OB_SERIALIZE_MEMBER(ObExprOperator, row_dimension_, real_param_num_, result_type_, input_types_, id_);
 
 int ObExprOperator::aggregate_collations(ObObjMeta &type,
                                          const ObObjMeta *types,
@@ -1689,32 +1685,6 @@ bool ObArithExprOperator::is_datetime_add_minus_calc(const common::ObObjType cal
               || ObExprMinus::minus_datetime == arith_funcs[ob_obj_type_class(calc_type)]));
 }
 
-int ObRelationalExprOperator::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  cmp_op_func2_ = NULL;
-  ret = ObExprOperator::deserialize(buf, data_len, pos);
-  if (OB_SUCC(ret) && (IS_COMMON_COMPARISON_OP(type_) || T_FUN_SYS_STRCMP == type_)
-                   && ObExprOperator::NOT_ROW_DIMENSION == row_dimension_
-                   && real_param_num_ == 2) {
-    if (input_types_.count() != 2) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("unexpected error. invalid input types",
-                K(ret),
-                K(type_),
-                K(real_param_num_),
-                K(input_types_.count()));
-    } else {
-      ObObjType left_operand_type = input_types_.at(0).get_calc_type();
-      ObObjType right_operand_type = input_types_.at(1).get_calc_type();
-      if (OB_FAIL(set_cmp_func(left_operand_type, right_operand_type))) {
-        cmp_op_func2_ = NULL;//defensive code
-      }
-    }
-  }
-  return ret;
-}
-
 int ObRelationalExprOperator::compare(ObObj &result,
                                       const ObObj &obj1,
                                       const ObObj &obj2,
@@ -2755,11 +2725,6 @@ int ObRelationalExprOperator::eval_compare_composite(CollectionPredRes &cmp_resu
 
   return ret;
 }
-
-OB_SERIALIZE_MEMBER((ObSubQueryRelationalExpr, ObExprOperator),
-                    subquery_key_,
-                    left_is_iter_,
-                    right_is_iter_);
 
 int ObSubQueryRelationalExpr::assign(const ObExprOperator &other)
 {
@@ -4818,35 +4783,6 @@ int ObMinMaxExprOperator::calc_with_cast(ObObj &result,
     }
   }
   return ret;
-}
-
-int ObMinMaxExprOperator::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  need_cast_ = true;//defensive code
-  if (OB_FAIL(ObExprOperator::deserialize(buf, data_len, pos))) {
-  } else {
-    OB_UNIS_DECODE(need_cast_);
-  }
-  return ret;
-}
-
-int ObMinMaxExprOperator::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObExprOperator::serialize(buf, buf_len, pos))) {
-  } else {
-    OB_UNIS_ENCODE(need_cast_);
-  }
-  return ret;
-}
-
-int64_t ObMinMaxExprOperator::get_serialize_size() const
-{
-  int64_t len = 0;
-  BASE_ADD_LEN((ObMinMaxExprOperator, ObExprOperator));
-  OB_UNIS_ADD_LEN(need_cast_);
-  return len;
 }
 
 //ObLocationExprOperator

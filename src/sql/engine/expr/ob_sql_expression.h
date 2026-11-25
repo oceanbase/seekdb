@@ -27,32 +27,6 @@
 #include "sql/engine/sort/ob_base_sort.h"
 #include "sql/engine/ob_operator.h"         // ObOpSchemaObj
 class ObAggregateFunctionTest;
-// This macro requires parameters for the construction of expr, so it has not been unified yet
-#define OB_UNIS_DECODE_EXPR_DLIST(Type, expr_list, phy_plan) \
-  do { \
-    int64_t list_count = 0; \
-    OB_UNIS_DECODE(list_count); \
-    if (OB_UNLIKELY(list_count < 0)) { \
-    } else { \
-      for (int64_t i = 0; OB_SUCC(ret) && i < list_count; ++i) { \
-        Type *p = NULL; \
-        if (OB_FAIL(ObSqlExpressionUtil::make_sql_expr((phy_plan), p))) { \
-          LOG_WARN("make sql expr failed", K(i), K(list_count), K(ret)); \
-        } else if (OB_ISNULL(p)) { \
-          ret = OB_BAD_NULL_ERROR; \
-          LOG_WARN("sql expr is null", K(i), K(list_count), K(ret)); \
-        } else if (OB_FAIL(p->deserialize(buf, data_len, pos))) { \
-          LOG_WARN("deserialize expr failed", K(i), K(list_count), K(ret)); \
-        } else { \
-          if (!(expr_list).add_last(p)) { \
-            ret = OB_ERR_UNEXPECTED; \
-            LOG_WARN("add expr list failed", K(i), K(list_count), K(ret)); \
-          } \
-        } \
-      } \
-    } \
-  } while(0)
-
 namespace oceanbase
 {
 namespace sql
@@ -61,7 +35,6 @@ class ObPhysicalPlan;
 
 class ObSqlExpression: public common::ObISqlExpression, public common::ObDLinkBase<ObSqlExpression>
 {
-  OB_UNIS_VERSION_V(1);
 public:
   enum ExpressionType
   {
@@ -128,7 +101,6 @@ private:
 protected:
   friend class ::ObAggregateFunctionTest;
   common::ObIAllocator &inner_alloc_;
-  // Fast expressions are not serialized with worker execution state.
   ObFastExprOperator *fast_expr_;
   ObInfixExpression infix_expr_;
   int32_t array_param_index_;
@@ -155,7 +127,6 @@ inline bool ObSqlExpression::is_empty() const
 
 class ObColumnExpression: public ObSqlExpression, public common::ObIColumnExpression
 {
-  OB_UNIS_VERSION_V(1);
 public:
   ObColumnExpression(common::ObIAllocator &alloc, int64_t item_count = 0);
   virtual ~ObColumnExpression();
@@ -188,7 +159,6 @@ inline void ObColumnExpression::reset()
 
 class ObAggregateExpression: public ObColumnExpression
 {
-  OB_UNIS_VERSION_V(1);
 public:
   ObAggregateExpression(common::ObIAllocator &alloc, int64_t item_count = 0);
   virtual ~ObAggregateExpression();

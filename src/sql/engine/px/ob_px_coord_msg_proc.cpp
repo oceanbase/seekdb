@@ -118,13 +118,6 @@ int ObPxSubCoordMsgProc::on_whole_msg(
   return proc.on_whole_msg(sqc_ctx_, dtl::DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG, pkt);
 }
 
-int ObPxSubCoordMsgProc::on_whole_msg(
-    const ObOptStatsGatherWholeMsg &pkt) const
-{
-  ObDhWholeeMsgProc<ObOptStatsGatherWholeMsg> proc;
-  return proc.on_whole_msg(sqc_ctx_, dtl::DH_OPT_STATS_GATHER_WHOLE_MSG, pkt);
-}
-
 int ObPxSubCoordMsgProc::on_whole_msg(const ObJoinFilterCountRowWholeMsg &pkt) const
 {
   ObDhWholeeMsgProc<ObJoinFilterCountRowWholeMsg> proc;

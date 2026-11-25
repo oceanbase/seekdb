@@ -199,7 +199,6 @@ public:
 
 struct ObDASIRScanRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASIRScanRtDef()
     : ObDASAttachRtDef(DAS_OP_IR_SCAN),
@@ -281,7 +280,6 @@ public:
 
 struct ObDASIRAuxLookupRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASIRAuxLookupRtDef()
     : ObDASAttachRtDef(DAS_OP_IR_AUX_LOOKUP) {}
@@ -374,7 +372,6 @@ public:
 
 struct ObDASFuncLookupRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASFuncLookupRtDef()
     : ObDASAttachRtDef(DAS_OP_FUNC_LOOKUP) {}
@@ -442,7 +439,6 @@ public:
 
 struct ObDASIREsMatchRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASIREsMatchRtDef()
     : ObDASAttachRtDef(DAS_OP_IR_ES_MATCH),
@@ -470,7 +466,6 @@ public:
 
 struct ObDASIREsScoreRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASIREsScoreRtDef()
     : ObDASAttachRtDef(DAS_OP_IR_ES_SCORE) {}

@@ -960,7 +960,6 @@ OB_SERIALIZE_MEMBER_TEMP(template<typename T>, ObEnumBitSet<T>, flag_);
 // Implicit cursor information
 struct ObImplicitCursorInfo
 {
-  OB_UNIS_VERSION(1);
 public:
   ObImplicitCursorInfo()
   : stmt_id_(common::OB_INVALID_INDEX),

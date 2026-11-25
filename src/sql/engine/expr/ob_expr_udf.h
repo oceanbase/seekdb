@@ -110,7 +110,6 @@ class ObExprUDF : public ObFuncExprOperator
     common::ObArenaAllocator ctx_allocator_;
   };
 
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprUDF(common::ObIAllocator &alloc);
   virtual ~ObExprUDF();

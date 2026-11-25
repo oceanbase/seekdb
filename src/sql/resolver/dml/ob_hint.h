@@ -355,7 +355,6 @@ struct ObGlobalHint {
 // used in physical plan
 struct ObPhyPlanHint
 {
-  OB_UNIS_VERSION(1);
 public:
   ObPhyPlanHint()
       : read_consistency_(common::INVALID_CONSISTENCY),

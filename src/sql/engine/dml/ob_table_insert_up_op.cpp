@@ -127,12 +127,6 @@ int ObTableInsertUpOp::check_need_exec_single_row()
   return ret;
 }
 
-ObDasParallelType ObTableInsertUpOp::check_das_parallel_type()
-{
-  return DAS_SERIALIZATION;
-}
-
-
 int ObTableInsertUpOp::inner_open()
 {
   int ret = OB_SUCCESS;
@@ -191,13 +185,6 @@ int ObTableInsertUpOp::inner_open_with_das()
      mem_attr.label_ = "SqlInsUpUpd";
      upd_rtctx_.das_ref_.set_expr_frame_info(expr_frame_info);
      upd_rtctx_.das_ref_.set_mem_attr(mem_attr);
-     ObDasParallelType type = ObTableModifyOp::check_das_parallel_type();
-     if (DAS_SERIALIZATION != type) {
-       type = DAS_BLOCKING_PARALLEL;
-       LOG_TRACE("this sql use das parallel submit for insert_up", K(check_das_parallel_type()));
-     }
-     upd_rtctx_.das_ref_.get_das_parallel_ctx().set_das_parallel_type(type);
-     upd_rtctx_.das_ref_.get_das_parallel_ctx().set_das_dop(ctx_.get_das_ctx().get_real_das_dop());
   }
   return ret;
 }
@@ -914,11 +901,8 @@ int ObTableInsertUpOp::load_batch_insert_up_rows(bool &is_iter_end,
   int row_count = 0;
   bool is_first_insert_row = true;
   NG_TRACE_TIMES(2, insert_up_start_load_row);
-  int64_t default_row_store_mem_limit = OB_DEFAULT_INSERT_UP_MEMORY_LIMIT;
+  const int64_t default_row_store_mem_limit = OB_DEFAULT_INSERT_UP_MEMORY_LIMIT;
   int64_t simulate_batch_count = - EVENT_CALL(EventTable::EN_TABLE_INSERT_UP_BATCH_ROW_COUNT);
-  if (upd_rtctx_.das_ref_.get_parallel_type() != DAS_SERIALIZATION) {
-    default_row_store_mem_limit = OB_DEFAULT_INSERT_UP_MEMORY_LIMIT * 5; // 10M
-  }
 
   while (OB_SUCC(ret) && !reach_mem_limit) {
     bool is_skipped = false;

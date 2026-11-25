@@ -27,9 +27,7 @@ namespace oceanbase {
 namespace sql {
 
 class ObOptStatsGatherPieceMsg;
-class ObOptStatsGatherWholeMsg;
 typedef ObPieceMsgP<ObOptStatsGatherPieceMsg> ObOptStatsGatherPieceMsgP;
-typedef ObWholeMsgP<ObOptStatsGatherWholeMsg> ObOptStatsGatherWholeMsgP;
 class ObOptStatsGatherPieceMsgListener;
 class ObOptStatsGatherPieceMsgCtx;
 class ObPxCoordInfo;
@@ -80,29 +78,6 @@ public:
   uint64_t target_osg_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObOptStatsGatherPieceMsg);
-};
-
-// whole msg is useless, since we don't need the feed back. px only pass the piece msg to osg.
-class ObOptStatsGatherWholeMsg
-  : public ObDatahubWholeMsg<dtl::ObDtlMsgType::DH_OPT_STATS_GATHER_WHOLE_MSG>
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  using WholeMsgProvider = ObWholeMsgProvider<ObOptStatsGatherPieceMsg, ObOptStatsGatherWholeMsg>;
-public:
-  ObOptStatsGatherWholeMsg() : ready_state_(0) {};
-  ~ObOptStatsGatherWholeMsg() = default;
-  int assign(const ObOptStatsGatherWholeMsg &other)
-  {
-    ready_state_ = other.ready_state_;
-    return common::OB_SUCCESS;
-  }
-  void reset()
-  {
-    ready_state_ = 0;
-  }
-  VIRTUAL_TO_STRING_KV(K_(ready_state));
-  int ready_state_;
 };
 
 class ObOptStatsGatherPieceMsgCtx : public ObPieceMsgCtx

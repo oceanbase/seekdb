@@ -18,13 +18,10 @@
 #define _OB_SQL_ENGINE_PX_NEW_ROW_H_
 
 #include "lib/allocator/ob_allocator.h"
-#include "common/row/ob_row.h"
-#include "common/object/ob_object.h"
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_msg_type.h"
 #include "sql/dtl/ob_dtl_processor.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
-#include "sql/engine/basic/ob_chunk_row_store.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 
 namespace oceanbase
@@ -58,7 +55,7 @@ public:
   }
 
   // return left rows for non interm result.
-  // For interm result (%datum_iter_ or %row_iter_ not null):
+  // For interm result (%datum_iter_ not null):
   //   return 0 for no more rows, return INT64_MAX for has more rows.
   int64_t left_rows() const
   {
@@ -81,9 +78,6 @@ public:
                           ObEvalCtx &eval_ctx,
                           const ObChunkDatumStore::StoredRow **srows,
                           const int64_t read_rows);
-  // get row interface for PX_CHUNK_ROW
-  int get_next_row(common::ObNewRow &row);
-
   // get row interface for PX_DATUM_ROW
   int get_next_row(const ObIArray<ObExpr*> &exprs,
                    const ObIArray<ObExpr*> &dynamic_const_exprs,
@@ -100,9 +94,8 @@ public:
   void reset();
 
 private:
-  template <typename BLOCK, typename ROW>
   // return NULL for iterate end.
-  const ROW *next_store_row();
+  const ObChunkDatumStore::StoredRow *next_store_row();
 
   void move_to_iterated(const int64_t rows);
   void free(dtl::ObDtlLinkedBuffer *buf);
@@ -129,55 +122,15 @@ private:
   ObChunkDatumStore::Iterator *datum_iter_;
 };
 
-class ObPxNewRow
-  : public dtl::ObDtlMsgTemp<dtl::ObDtlMsgType::PX_NEW_ROW>
+class ObPxNewRow : public dtl::ObDtlMsg
 {
-  OB_UNIS_VERSION_V(1);
 public:
-  // for deserialize
-  ObPxNewRow()
-    : des_row_buf_(nullptr),
-      des_row_buf_size_(0),
-      row_(nullptr),
-      exprs_(nullptr),
-      row_cell_count_(0),
-      type_(dtl::ObDtlMsgType::PX_NEW_ROW) {}
-  // for serialize
-  ObPxNewRow(const common::ObNewRow &row)
-    : des_row_buf_(nullptr),
-      des_row_buf_size_(0),
-      row_(&row),
-      exprs_(nullptr),
-      row_cell_count_(row.get_count()),
-      type_(dtl::ObDtlMsgType::PX_CHUNK_ROW)
-      {}
-  ObPxNewRow(const common::ObIArray<ObExpr*> &exprs, dtl::ObDtlMsgType type)
-    : des_row_buf_(nullptr),
-      des_row_buf_size_(0),
-      row_(nullptr),
-      exprs_(&exprs),
-      row_cell_count_(exprs.count()),
-      type_(type)
-      {}
-  ~ObPxNewRow() { }
-  void set_eof_row();
-  void reset() {}
-
-  OB_INLINE const common::ObNewRow* get_row() const { return row_; }
+  ObPxNewRow() : exprs_(nullptr) {}
+  explicit ObPxNewRow(const common::ObIArray<ObExpr*> &exprs) : exprs_(&exprs) {}
+  dtl::ObDtlMsgType get_type() const override { return dtl::ObDtlMsgType::PX_DATUM_ROW; }
   OB_INLINE const common::ObIArray<ObExpr*>* get_exprs() const { return exprs_; }
-  inline dtl::ObDtlMsgType get_data_type() const
-  { return type_; }
-  inline void set_data_type(const dtl::ObDtlMsgType type)
-  {  type_ = type; }
-  TO_STRING_KV(K_(row_cell_count), K_(des_row_buf_size));
 private:
-  static const int64_t EOF_ROW_FLAG = -1;
-  char *des_row_buf_; // Used to point to the serialized content of row_ during deserialization
-  int64_t des_row_buf_size_; // Used to record the length of the serialized content of row_ during deserialization, reference needed when get_row
-  const common::ObNewRow *row_; // Serialize row_ before serialization, used for serialization
   const common::ObIArray<ObExpr*> *exprs_;
-  int64_t row_cell_count_; // row_cell_count_ takes a special value -1 to indicate EOFRow, get_row returns OB_ITER_END
-  dtl::ObDtlMsgType type_;
   DISALLOW_COPY_AND_ASSIGN(ObPxNewRow);
 };
 }

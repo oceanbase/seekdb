@@ -159,8 +159,6 @@ int TableAccessTargetBuilder::build_related_tablet_info(const TableAccessPlan &t
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObTableRowCount, op_id_, row_count_);
-
 int ObConfigInfoInPC::load_influence_plan_config()
 {
   int ret = OB_SUCCESS;

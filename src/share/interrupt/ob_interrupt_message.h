@@ -29,9 +29,7 @@ namespace obcall
 struct ObInterruptStackInfo
 {
   static constexpr int64_t BUF1_SIZE = 128;
-public:
-  OB_UNIS_VERSION(1);
-public:
+
   ObInterruptStackInfo() : pos1_(0)
   {
     buf1_[0] = '\0';
@@ -64,11 +62,6 @@ public:
 private:
   char buf1_[BUF1_SIZE]; // Allow to piggyback text messages up to 128 letters long and end with 0
   int64_t pos1_; // writable position of buf1_
-  // NOTE:
-  // If you need to expand this structure, please continue to add buf2_, buf3_, etc., do not modify the length of buf1_
-  // Otherwise there will be version compatibility issues
-  // char buf2_[BUF1_SIZE]; // Allow to piggyback text messages up to 128 letters long and end with 0
-  // int64_t pos2_; // actual use length of buf1_
 };
 
 };
@@ -80,9 +73,6 @@ namespace common
 // Need to add the interrupt number, interrupt source, and auxiliary copy in the interrupt information
 struct ObInterruptCode
 {
-public:
-  OB_UNIS_VERSION(1);
-public:
   ObInterruptCode() : code_(0), info_()
   {
   }
@@ -108,29 +98,6 @@ public:
 };
 
 }; // ns common
-
-namespace obcall
-{
-struct ObInterruptMessage
-{
-  OB_UNIS_VERSION(1);
-
-public:
-  ObInterruptMessage()
-      : first_(0), last_(0), code_(0), info_() {};
-  ObInterruptMessage(uint64_t first, uint64_t last, int code) :
-      first_(first), last_(last), code_(code), info_() {};
-  ObInterruptMessage(uint64_t first, uint64_t last, common::ObInterruptCode &code) :
-      first_(first), last_(last), code_(code.code_), info_(code.info_) {};
-  TO_STRING_KV(K_(first), K_(last), K_(code), K_(info));
-  uint64_t first_;
-  uint64_t last_;
-  // For compatibility, code_ and info_ are not combined into ObInterruptCode
-  int code_;
-  ObInterruptStackInfo info_;
-};
-
-} // namespace obcall
 
 } // namespace oceanbase
 

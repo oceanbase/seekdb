@@ -59,8 +59,6 @@ public:
 
 struct ObPxTabletInfo
 {
-  OB_UNIS_VERSION(1);
-public:
   ObPxTabletInfo() : tablet_id_(), logical_row_count_(0), physical_row_count_(0) {}
   virtual ~ObPxTabletInfo() = default;
   void assign(const ObPxTabletInfo &partition_info) {
@@ -298,9 +296,7 @@ private:
 };
 
 class ObPxInitSqcResultMsg
-  : public dtl::ObDtlMsgTemp<dtl::ObDtlMsgType::INIT_SQC_RESULT>
 {
-  OB_UNIS_VERSION_V(1);
 public:
   ObPxInitSqcResultMsg()
       : dfo_id_(common::OB_INVALID_ID),
@@ -309,12 +305,6 @@ public:
         task_count_(0),
         err_msg_(),
         sqc_order_gi_tasks_(false) {}
-  virtual ~ObPxInitSqcResultMsg() = default;
-  void reset()
-  {
-    err_msg_.reset();
-    tablets_info_.reset();
-  }
   TO_STRING_KV(K_(dfo_id), K_(sqc_id), K_(rc), K_(task_count));
 public:
   int64_t dfo_id_;
@@ -322,7 +312,6 @@ public:
   int rc_; // error code
   int64_t task_count_;
   ObPxUserErrorMsg err_msg_; // for error msg & warning msg
-  // No need to serialize
   ObSEArray<ObPxTabletInfo, 8> tablets_info_;
   bool sqc_order_gi_tasks_;
 };
@@ -379,34 +368,6 @@ public:
   ObPxUserErrorMsg err_msg_; // for error msg & warning msg
   int64_t sqc_memstore_row_read_count_; // the total memstore read row count of this sqc
   int64_t sqc_ssstore_row_read_count_; // the total ssstore read row count of this sqc
-};
-
-class ObPxFinishTaskResultMsg
-  : public dtl::ObDtlMsgTemp<dtl::ObDtlMsgType::FINISH_TASK_RESULT>
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObPxFinishTaskResultMsg()
-      : dfo_id_(common::OB_INVALID_ID),
-        sqc_id_(common::OB_INVALID_ID),
-        task_id_(common::OB_INVALID_ID),
-        rc_(common::OB_ERR_UNEXPECTED) {}
-  virtual ~ObPxFinishTaskResultMsg() = default;
-  int assign(const ObPxFinishTaskResultMsg &other)
-  {
-    dfo_id_ = other.dfo_id_;
-    sqc_id_ = other.sqc_id_;
-    task_id_ = other.task_id_;
-    rc_ = other.rc_;
-    return common::OB_SUCCESS;
-  }
-  void reset() {}
-  TO_STRING_KV(K_(dfo_id), K_(sqc_id), K_(task_id), K_(rc));
-public:
-  int64_t dfo_id_;
-  int64_t sqc_id_;
-  int64_t task_id_;
-  int rc_;
 };
 
 }

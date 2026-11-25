@@ -142,7 +142,6 @@ private:
   ObParallelDfoScheduler parallel_scheduler_;
   ObPxMsgProc msg_proc_; // msg_loop processing message callback function
   ObPxFinishSqcResultP sqc_finish_msg_proc_;
-  ObPxInitSqcResultP sqc_init_msg_proc_;
   ObBarrierPieceMsgP barrier_piece_msg_proc_;
   ObWinbufPieceMsgP winbuf_piece_msg_proc_;
   ObPxQcInterruptedP interrupt_proc_;

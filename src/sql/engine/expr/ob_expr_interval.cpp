@@ -32,8 +32,6 @@ ObExprInterval::ObExprInterval(common::ObIAllocator &alloc) :
 {
 }
 
-OB_SERIALIZE_MEMBER((ObExprInterval, ObExprOperator), use_binary_search_);
-
 int ObExprInterval::assign(const ObExprOperator &other)
 {
   int ret = OB_SUCCESS;

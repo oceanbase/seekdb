@@ -34,7 +34,6 @@ class ObP2PDatahubMsgBase;
 
 class ObRFBloomFilterMsg final : public ObP2PDatahubMsgBase
 {
-  OB_UNIS_VERSION_V(1);
 public:
   ObRFBloomFilterMsg() : bloom_filter_() {}
   ~ObRFBloomFilterMsg() { destroy(); }
@@ -81,11 +80,9 @@ public:
 
 class ObRFRangeFilterMsg : public ObP2PDatahubMsgBase
 {
-  OB_UNIS_VERSION_V(1);
 public:
   struct MinMaxCellSize
   {
-    OB_UNIS_VERSION_V(1);
   public:
     MinMaxCellSize() : min_datum_buf_size_(0), max_datum_buf_size_(0) {}
     virtual ~MinMaxCellSize() = default;
@@ -193,7 +190,6 @@ public:
 
 class ObRFInFilterMsg : public ObP2PDatahubMsgBase
 {
-  OB_UNIS_VERSION_V(1);
 public:
   struct ObRFInFilterNode {
     ObRFInFilterNode()

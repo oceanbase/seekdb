@@ -28,11 +28,6 @@ using namespace common;
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER((ObExprUDF, ObFuncExprOperator),
-                     udf_id_, result_type_, params_type_,
-                     udf_package_id_, params_desc_, reserved_udt_udf_,
-                     subprogram_path_, loc_, reserved_udt_cons_);
-
 ObExprUDF::ObExprUDF(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_UDF, N_UDF, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
                          INTERNAL_IN_MYSQL_MODE),

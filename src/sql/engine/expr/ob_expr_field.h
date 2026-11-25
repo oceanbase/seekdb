@@ -32,11 +32,6 @@ public:
   virtual ~ObExprField() {};
   virtual int assign(const ObExprOperator &other);
 public:
-  //serialize and deserialize
-  virtual int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
-  virtual int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
-  virtual int64_t get_serialize_size() const;
-public:
   virtual int calc_result_typeN(ObExprResType &type,
                                 ObExprResType *type_stack,
                                 int64_t param_num,

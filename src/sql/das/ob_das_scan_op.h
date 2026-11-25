@@ -145,7 +145,6 @@ public:
 struct ObDASScanRtDef : ObDASBaseRtDef
 {
   friend class DASOpResultIter;
-  OB_UNIS_VERSION(2);
 public:
   ObDASScanRtDef()
     : ObDASBaseRtDef(DAS_OP_TABLE_SCAN),
@@ -237,7 +236,6 @@ class ObDASScanOp : public ObIDASTaskOp
 {
   friend class DASOpResultIter;
   friend class ObDASMergeIter;
-  OB_UNIS_VERSION(2);
 public:
   ObDASScanOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASScanOp();
@@ -245,7 +243,6 @@ public:
   virtual int open_op() override;
   virtual int release_op() override;
   virtual int record_task_result_to_rtdef() override { return OB_SUCCESS; }
-  virtual int assign_task_result(ObIDASTaskOp *other) override { return OB_SUCCESS; }
   storage::ObTableScanParam &get_scan_param() { return scan_param_; }
   const storage::ObTableScanParam &get_scan_param() const { return scan_param_; }
   storage::ObTableScanParam *get_local_lookup_param();

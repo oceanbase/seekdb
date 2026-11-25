@@ -26,7 +26,6 @@ namespace sql
 {
 class ObExprRandom: public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 	class ObExprRandomCtx: public ObExprOperatorCtx
 	{
 	public:

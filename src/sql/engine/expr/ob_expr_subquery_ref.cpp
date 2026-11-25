@@ -86,51 +86,6 @@ int ObExprSubQueryRef::ExtraInfo::deep_copy(common::ObIAllocator &allocator,
   return ret;
 }
 
-OB_DEF_SERIALIZE(ObExprSubQueryRef)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObExprOperator::serialize(buf, buf_len, pos))) {
-  }
-  bool is_scalar = static_cast<bool>(extra_.is_scalar_);
-  int64_t iter_idx = static_cast<int64_t>(extra_.iter_idx_);
-  LST_DO_CODE(OB_UNIS_ENCODE,
-              is_scalar,
-              extra_info_.scalar_result_type_,
-              iter_idx);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObExprSubQueryRef)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObExprOperator::deserialize(buf, data_len, pos))) {
-  }
-  bool is_scalar = false;
-  int64_t iter_idx = 0;
-  LST_DO_CODE(OB_UNIS_DECODE,
-              is_scalar,
-              extra_info_.scalar_result_type_,
-              iter_idx);
-  if (OB_SUCC(ret)) {
-    extra_.is_scalar_ = static_cast<uint16_t>(is_scalar);
-    extra_.iter_idx_ = static_cast<uint16_t>(iter_idx);
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObExprSubQueryRef)
-{
-  int64_t len = 0;
-  bool is_scalar = static_cast<bool>(extra_.is_scalar_);
-  int64_t iter_idx = static_cast<int64_t>(extra_.iter_idx_);
-  len += ObExprOperator::get_serialize_size();
-  LST_DO_CODE(OB_UNIS_ADD_LEN,
-              is_scalar,
-              extra_info_.scalar_result_type_,
-              iter_idx);
-  return len;
-}
-
 
 ObExprSubQueryRef::ObExprSubQueryRef(ObIAllocator &alloc)
   : ObExprOperator(alloc, T_REF_QUERY,

@@ -63,7 +63,6 @@ DATA_PLANE_API_INTERFACE_HEADERS = [
     "api/data_plane/transaction/ob_i_tx_callback.h",
     "api/data_plane/transaction/ob_lock_wait_stat.h",
     "api/data_plane/transaction/ob_tx_control.h",
-    "api/data_plane/transaction/ob_tx_desc_lifecycle.h",
     "api/data_plane/transaction/ob_tx_exec_result.h",
     "api/data_plane/transaction/ob_tx_options.h",
     "api/data_plane/truncate_info/ob_truncate_info.h",

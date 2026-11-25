@@ -22,45 +22,6 @@
 
 namespace oceanbase {
 namespace common {
-using namespace sql;
-
-OB_DEF_SERIALIZE(ObOptSystemStat) {
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE,
-              last_analyzed_,
-              cpu_speed_,
-              disk_seq_read_speed_,
-              disk_rnd_read_speed_,
-              network_speed_
-              );
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObOptSystemStat) {
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN,
-              last_analyzed_,
-              cpu_speed_,
-              disk_seq_read_speed_,
-              disk_rnd_read_speed_,
-              network_speed_
-              );
-  return len;
-}
-
-OB_DEF_DESERIALIZE(ObOptSystemStat) {
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE,
-              last_analyzed_,
-              cpu_speed_,
-              disk_seq_read_speed_,
-              disk_rnd_read_speed_,
-              network_speed_
-              );
-  return ret;
-}
-
-
 OptSystemIoBenchmark& OptSystemIoBenchmark::get_instance()
 {
   static OptSystemIoBenchmark benchmark;

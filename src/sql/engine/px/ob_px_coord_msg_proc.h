@@ -38,7 +38,6 @@ class ObInitChannelWholeMsg;
 class ObReportingWFPieceMsg;
 class ObReportingWFWholeMsg;
 class ObOptStatsGatherPieceMsg;
-class ObOptStatsGatherWholeMsg;
 class ObJoinFilterCountRowPieceMsg;
 class ObJoinFilterCountRowWholeMsg;
 // The purpose of abstracting this interface class is to decouple MsgProc and ObPxCoord
@@ -46,7 +45,6 @@ class ObIPxCoordMsgProc
 {
 public:
   // msg processor callback
-  virtual int on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg &pkt) = 0;
   virtual int on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinishSqcResultMsg &pkt) = 0;
   virtual int on_eof_row(ObExecContext &ctx) = 0;
   virtual int on_sqc_init_fail(ObDfo &dfo, ObPxSqcMeta &sqc) = 0;
@@ -83,8 +81,6 @@ public:
   virtual int on_whole_msg(
       const ObReportingWFWholeMsg &pkt) const = 0;
   virtual int on_whole_msg(
-      const ObOptStatsGatherWholeMsg &pkt) const = 0;
-  virtual int on_whole_msg(
       const ObJoinFilterCountRowWholeMsg &pkt) const = 0;
   // SQC is interrupted
   virtual int on_interrupted(const ObInterruptCode &ic) const = 0;
@@ -116,8 +112,6 @@ public:
       const ObInitChannelWholeMsg &pkt) const;
   virtual int on_whole_msg(
       const ObReportingWFWholeMsg &pkt) const;
-  virtual int on_whole_msg(
-      const ObOptStatsGatherWholeMsg &pkt) const;
   virtual int on_whole_msg(
       const ObJoinFilterCountRowWholeMsg &pkt) const;
  private:

@@ -48,8 +48,6 @@ int ObMinMaxValEval::deep_copy(const ObMinMaxValEval &other, ObIAllocator &alloc
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObOptOSGColumnStat, *col_stat_);
-
 void ObOptOSGColumnStat::reset()
 {
   if (col_stat_ != NULL) {
@@ -348,8 +346,6 @@ int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMet
   }
   return ret;
 }
-
-OB_SERIALIZE_MEMBER(ObOptOSGSampleHelper, sample_rate_, sample_value_, k_);
 
 }
 }

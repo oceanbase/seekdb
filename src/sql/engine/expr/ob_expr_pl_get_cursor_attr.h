@@ -27,7 +27,6 @@ namespace sql
 {
 class ObExprPLGetCursorAttr : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprPLGetCursorAttr(common::ObIAllocator &alloc);
   virtual ~ObExprPLGetCursorAttr();

@@ -29,11 +29,6 @@ int ObPxFinishSqcResultP::process(const ObPxFinishSqcResultMsg &pkt)
   return msg_proc_.on_sqc_finish_msg(ctx_, pkt);
 }
 
-int ObPxInitSqcResultP::process(const ObPxInitSqcResultMsg &pkt)
-{
-  return msg_proc_.on_sqc_init_msg(ctx_, pkt);
-}
-
 int ObPxQcInterruptedP::process(const ObInterruptCode &pkt)
 {
   return msg_proc_.on_interrupted(ctx_, pkt);

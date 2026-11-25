@@ -32,7 +32,6 @@ class ObDtlChannel;
 
 class ObDtlDfoKey
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDtlDfoKey() :
     px_sequence_id_(common::OB_INVALID_ID), qc_id_(-1),
@@ -78,7 +77,6 @@ public:
 
 class ObDtlOpInfo
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDtlOpInfo() :
     dop_(-1), plan_id_(-1), exec_id_(-1), session_id_(-1), database_id_(0),
@@ -200,7 +198,6 @@ public:
 // [start_, end_) is the result range of parameter with id = batch_id_.
 struct ObDtlBatchInfo
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDtlBatchInfo()
     : batch_id_(common::OB_INVALID_ID), start_(0), end_(0), rows_(0)
@@ -220,7 +217,6 @@ public:
 class ObDtlLinkedBuffer
     : public common::ObLink
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDtlLinkedBuffer()
       : buf_(), size_(), pos_(), is_data_msg_(false), seq_no_(0),

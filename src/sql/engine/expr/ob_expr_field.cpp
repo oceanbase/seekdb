@@ -133,35 +133,6 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprField::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  need_cast_ = true;//defensive code
-  if (OB_FAIL(ObVectorExprOperator::deserialize(buf, data_len, pos))) {
-  } else {
-    OB_UNIS_DECODE(need_cast_);
-  }
-  return ret;
-}
-
-int ObExprField::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObVectorExprOperator::serialize(buf, buf_len, pos))) {
-  } else {
-    OB_UNIS_ENCODE(need_cast_);
-  }
-  return ret;
-}
-
-int64_t ObExprField::get_serialize_size() const
-{
-  int64_t len = 0;
-  BASE_ADD_LEN((ObExprField, ObVectorExprOperator));
-  OB_UNIS_ADD_LEN(need_cast_);
-  return len;
-}
-
 int ObExprField::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &expr) const
 {
   int ret = OB_SUCCESS;

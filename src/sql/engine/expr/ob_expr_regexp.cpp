@@ -116,9 +116,6 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
 }
 
 
-OB_SERIALIZE_MEMBER((ObExprRegexp, ObFuncExprOperator),
-                    regexp_idx_, pattern_is_const_, value_is_const_);
-
 
 int ObExprRegexp::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const
 {

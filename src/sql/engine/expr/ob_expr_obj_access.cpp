@@ -45,12 +45,6 @@ OB_SERIALIZE_MEMBER(ObExprObjAccess::ExtraInfo,
                     coll_idx_,
                     extend_size_);
 
-OB_SERIALIZE_MEMBER((ObExprObjAccess, ObExprOperator),
-                    info_.param_idxs_,
-                    info_.access_idx_cnt_,
-                    info_.for_write_,
-                    info_.property_type_,
-                    info_.coll_idx_);
                     // extend_size_ is not needed here, we got extend size from result_type_
 
 ObExprObjAccess::ObExprObjAccess(ObIAllocator &alloc)

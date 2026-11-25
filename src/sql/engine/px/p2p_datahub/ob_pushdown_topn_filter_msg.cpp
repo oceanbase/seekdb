@@ -28,7 +28,6 @@ namespace sql
 {
 
 OB_SERIALIZE_MEMBER(ObTopNFilterCmpMeta, ser_cmp_func_, obj_meta_);
-OB_SERIALIZE_MEMBER(ObTopNFilterCompare, build_meta_, filter_meta_, is_ascending_, null_pos_);
 OB_SERIALIZE_MEMBER(ObPushDownTopNFilterInfo, enabled_, p2p_dh_id_, effective_sk_cnt_,
                     total_sk_cnt_, cmp_metas_, dh_msg_type_, expr_ctx_id_, is_shared_, is_shuffle_,
                     max_batch_size_, adaptive_filter_ratio_);
@@ -58,35 +57,6 @@ int ObPushDownTopNFilterInfo::init(int64_t p2p_dh_id, int64_t effective_sk_cnt,
 }
 
 
-OB_DEF_SERIALIZE(ObPushDownTopNFilterMsg)
-{
-  int ret = OB_SUCCESS;
-  BASE_SER((ObPushDownTopNFilterMsg, ObP2PDatahubMsgBase));
-  LST_DO_CODE(OB_UNIS_ENCODE, total_sk_cnt_, compares_, heap_top_datums_, cells_size_,
-              data_version_, is_fetch_with_ties_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObPushDownTopNFilterMsg)
-{
-  int ret = OB_SUCCESS;
-  BASE_DESER((ObPushDownTopNFilterMsg, ObP2PDatahubMsgBase));
-  LST_DO_CODE(OB_UNIS_DECODE, total_sk_cnt_, compares_, heap_top_datums_, cells_size_,
-              data_version_, is_fetch_with_ties_);
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(adjust_cell_size())) {
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObPushDownTopNFilterMsg)
-{
-  int64_t len = 0;
-  BASE_ADD_LEN((ObPushDownTopNFilterMsg, ObP2PDatahubMsgBase));
-  LST_DO_CODE(OB_UNIS_ADD_LEN, total_sk_cnt_, compares_, heap_top_datums_, cells_size_,
-              data_version_, is_fetch_with_ties_);
-  return len;
-}
 ObPushDownTopNFilterMsg::ObPushDownTopNFilterMsg()
     : ObP2PDatahubMsgBase(), total_sk_cnt_(0), datum_access_ctx_(nullptr),
       compares_(allocator_), heap_top_datums_(allocator_),

@@ -30,7 +30,6 @@ namespace sql
 
 class ObExprCollectionConstruct : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprCollectionConstruct(common::ObIAllocator &alloc);
   virtual ~ObExprCollectionConstruct();

@@ -25,16 +25,6 @@ namespace oceanbase
 namespace pl
 {
 
-OB_SERIALIZE_MEMBER(ObPlParamInfo,
-                    flag_,
-                    scale_,
-                    type_,
-                    ext_real_type_,
-                    is_typed_null_value_,  // FARM COMPAT WHITELIST
-                    col_type_,
-                    pl_type_,
-                    udt_id_);
-
 void ObPLCacheObject::reset()
 {
   ObILibCacheObject::reset();

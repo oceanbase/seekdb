@@ -41,7 +41,6 @@ struct ObExprRegexpSessionVariables {
   {}
   int64_t regexp_stack_limit_;
   int64_t regexp_time_limit_;
-  OB_UNIS_VERSION(1);
 };
 
 class ObExprRegexContext : public ObExprOperatorCtx

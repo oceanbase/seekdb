@@ -31,7 +31,6 @@
 #include "share/ob_server_struct.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
 #include "sql/engine/px/ob_px_row_store.h"
-#include "sql/engine/basic/ob_chunk_row_store.h"
 #include "lib/ob_define.h"
 #include "lib/lock/ob_futex.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
@@ -40,7 +39,6 @@ namespace oceanbase {
 
 // forward declarations
 namespace common {
-class ObNewRow;
 class ObScanner;
 class ObThreadCond;
 }  // common
@@ -52,9 +50,8 @@ namespace dtl {
 enum DtlWriterType
 {
   CONTROL_WRITER = 0,
-  CHUNK_ROW_WRITER = 1,
-  CHUNK_DATUM_WRITER = 2,
-  MAX_WRITER = 3
+  CHUNK_DATUM_WRITER,
+  MAX_WRITER
 };
 
 static DtlWriterType msg_writer_map[] =
@@ -70,15 +67,15 @@ static DtlWriterType msg_writer_map[] =
   MAX_WRITER, // 8
   MAX_WRITER, // 9
   CONTROL_WRITER, // TESTING
-  CONTROL_WRITER, // INIT_SQC_RESULT
+  MAX_WRITER, // RESERVED_11
   CONTROL_WRITER, // FINISH_SQC_RESULT
-  CONTROL_WRITER, // FINISH_TASK_RESULT
+  MAX_WRITER, // RESERVED_13
   CONTROL_WRITER, // PX_RECEIVE_DATA_CHANNEL
   CONTROL_WRITER, // PX_TRANSMIT_DATA_CHANNEL
   CONTROL_WRITER, // PX_CANCEL_DFO
-  MAX_WRITER, // PX_NEW_ROW
+  MAX_WRITER, // RESERVED_17
   CONTROL_WRITER, // UNBLOCKING_DATA_FLOW
-  CHUNK_ROW_WRITER, // PX_CHUNK_ROW
+  MAX_WRITER, // RESERVED_19
   CONTROL_WRITER, // DRAIN_DATA_FLOW
   CONTROL_WRITER, // PX_BLOOM_FILTER_CHANNEL
   CONTROL_WRITER, // PX_BLOOM_FILTER_DATA
@@ -97,7 +94,7 @@ static DtlWriterType msg_writer_map[] =
   CONTROL_WRITER, // DH_SECOND_STAGE_REPORTING_WF_PIECE_MSG,
   CONTROL_WRITER, // DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG,
   CONTROL_WRITER, // DH_OPT_STATS_GATHER_PIECE_MSG,
-  CONTROL_WRITER, // DH_OPT_STATS_GATHER_WHOLE_MSG,
+  MAX_WRITER, // RESERVED_38
   CONTROL_WRITER, // DH_SP_WINFUNC_PX_PIECE_MSG
   CONTROL_WRITER, // DH_SP_WINFUNC_PX_WHOLE_MSG
   CONTROL_WRITER, // DH_RD_WINFUNC_PX_PIECE_MSG
@@ -109,11 +106,7 @@ static DtlWriterType msg_writer_map[] =
 };
 
 static_assert(ARRAYSIZEOF(msg_writer_map) == ObDtlMsgType::MAX, "invalid ms_writer_map size");
-// Add Encoder interface, convenient for broadcast's dtl channel agent and dtl channel to use this interface to unify write msg logic
-// 3 types of Encoder
-// 1) control message
-// 2) ObRow message
-// 3) Array<ObExprs> new engine message
+// Shared interface for control and datum buffer writers.
 class ObDtlChannelEncoder
 {
 public:
@@ -121,7 +114,6 @@ public:
   virtual int need_new_buffer(const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new) = 0;
   virtual void write_msg_type(ObDtlLinkedBuffer*) = 0;
   virtual int init(ObDtlLinkedBuffer *buffer) = 0;
-  virtual int serialize() = 0;
 
   virtual void reset() = 0;
   virtual int64_t used() = 0;
@@ -144,7 +136,8 @@ public:
   {
     UNUSED(ctx);
     ObDtlMsgHeader header;
-    need_size = header.get_serialize_size() + msg.get_serialize_size();
+    need_size = header.get_serialize_size()
+                + static_cast<const ObDtlControlMsg &>(msg).get_serialize_size();
     need_new = nullptr == write_buffer_ || (write_buffer_->size() - write_buffer_->pos() < need_size);
     return common::OB_SUCCESS;
   }
@@ -154,7 +147,6 @@ public:
     write_buffer_ = buffer;
     return common::OB_SUCCESS;
   }
-  virtual int serialize() { return common::OB_SUCCESS; }
   virtual void reset() { write_buffer_ = nullptr; }
   virtual int64_t used() { return write_buffer_->pos(); }
   virtual int64_t rows() { return 1; }
@@ -163,60 +155,6 @@ public:
   DtlWriterType type_;
   ObDtlLinkedBuffer *write_buffer_;
 };
-
-class ObDtlRowMsgWriter : public ObDtlChannelEncoder
-{
-public:
-  ObDtlRowMsgWriter();
-  virtual ~ObDtlRowMsgWriter();
-
-  virtual DtlWriterType type() { return type_; }
-  int init(ObDtlLinkedBuffer *buffer);
-  void reset();
-
-  int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof);
-  int serialize();
-
-  virtual int need_new_buffer(
-    const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new);
-
-  OB_INLINE int64_t used() { return block_->data_size(); }
-  OB_INLINE int64_t rows() { return static_cast<int64_t>(block_->rows()); }
-  OB_INLINE int64_t remain() { return block_->remain(); }
-  int handle_eof() { return common::OB_SUCCESS; };
-
-  virtual void write_msg_type(ObDtlLinkedBuffer* buffer)
-  {
-    buffer->msg_type() = ObDtlMsgType::PX_CHUNK_ROW;
-  }
-private:
-  DtlWriterType type_;
-  ObChunkRowStore row_store_;
-  ObChunkRowStore::Block* block_;
-  ObDtlLinkedBuffer *write_buffer_;
-};
-
-OB_INLINE int ObDtlRowMsgWriter::write(
-  const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(eval_ctx);
-  UNUSED(is_eof);
-  const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
-  const ObNewRow *row = px_row.get_row();
-  if (nullptr != row) {
-    if (OB_FAIL(row_store_.add_row(*row))) {
-    }
-    write_buffer_->pos() = used();
-  } else {
-    if (OB_FAIL(serialize())) {
-    }
-    write_buffer_->is_eof() = is_eof;
-    // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send
-    write_buffer_->pos() = used();
-  }
-  return ret;
-}
 
 class ObDtlDatumMsgWriter : public ObDtlChannelEncoder
 {
@@ -229,7 +167,6 @@ public:
   void reset();
 
   int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof);
-  int serialize();
 
   int need_new_buffer(const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new);
 
@@ -456,7 +393,6 @@ protected:
   int64_t got_from_dtl_cache_;
 
   ObDtlControlMsgWriter ctl_msg_writer_;
-  ObDtlRowMsgWriter row_msg_writer_;
   ObDtlDatumMsgWriter datum_msg_writer_;
   ObDtlChannelEncoder *msg_writer_;
   // row/datum store iterator for interm result iteration.

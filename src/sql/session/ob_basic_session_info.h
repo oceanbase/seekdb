@@ -826,7 +826,6 @@ public:
   typedef common::ObSEArray<share::ObSysVarClassType, 64> SysVarIds;
   class SysVarIncInfo
   {
-    OB_UNIS_VERSION_V(1);
   public:
     SysVarIncInfo();
     virtual ~SysVarIncInfo();

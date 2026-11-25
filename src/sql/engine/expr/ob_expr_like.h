@@ -133,7 +133,6 @@ public:
     // string helper to calc substring etc.
     void *string_searcher_;
   };
-  OB_UNIS_VERSION_V(1);
 public:
   explicit  ObExprLike(common::ObIAllocator &alloc);
   virtual ~ObExprLike();

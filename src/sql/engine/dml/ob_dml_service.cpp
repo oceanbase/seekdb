@@ -969,9 +969,6 @@ int ObDMLService::split_upd_to_del_and_ins(const ObUpdCtDef &upd_ctdef,
                                            ObChunkDatumStore::StoredRow *&new_row)
 {
   int ret = OB_SUCCESS;
-  if (dml_rtctx.das_ref_.get_parallel_type() == DAS_STREAMING_PARALLEL) {
-    dml_rtctx.das_ref_.get_das_parallel_ctx().set_das_parallel_type(DAS_BLOCKING_PARALLEL);
-  }
   if (OB_LIKELY(old_tablet_access != new_tablet_access && !upd_ctdef.multi_ctdef_->is_enable_row_movement_)) {
     ret = OB_ERR_UPD_CAUSE_PART_CHANGE;
   } else if (OB_ISNULL(upd_rtdef.ddel_rtdef_)) {
@@ -1670,62 +1667,6 @@ int ObDMLService::init_lock_rtdef(ObDMLRtCtx &dml_rtctx,
   return init_das_dml_rtdef(dml_rtctx, lock_ctdef.das_ctdef_, lock_rtdef.das_rtdef_, access_meta);
 }
 
-int ObDMLService::check_agg_task_state(ObDMLRtCtx &dml_rtctx, ObIDASTaskOp *das_op, int64_t row_size, bool &reach_mem_limit)
-{
-  int ret = OB_SUCCESS;
-  ObDasAggregatedTask *agg_task = nullptr;
-  reach_mem_limit = false;
-  int64_t simulate_buffer_size = - EVENT_CALL(EventTable::EN_DAS_SIMULATE_AGG_TASK_BUFF_LIMIT);
-  int64_t buffer_size_limit = das::OB_DAS_TASK_BUFFER_SIZE;
-  if (OB_UNLIKELY(simulate_buffer_size > 0)) {
-    buffer_size_limit = simulate_buffer_size;
-  }
-  if (dml_rtctx.das_ref_.get_parallel_type() != DAS_SERIALIZATION) {
-    if (OB_ISNULL(agg_task = das_op->get_agg_task())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (FALSE_IT(agg_task->add_mem_used(row_size))) {
-      // do nothing
-    } else if (agg_task->get_mem_used() >= buffer_size_limit) {
-      agg_task->start_status_ = DAS_AGG_TASK_REACH_MEM_LIMIT;
-      reach_mem_limit = true;
-      LOG_TRACE("this agg_task buff is reach memory limit", K(agg_task->get_mem_used()), K(buffer_size_limit));
-    }
-  }
-  return ret;
-}
-
-int ObDMLService::parallel_submit_das_task(ObDMLRtCtx &dml_rtctx, ObDasAggregatedTask *agg_task)
-{
-  int ret = OB_SUCCESS;
-  if (dml_rtctx.das_ref_.get_parallel_type() == DAS_SERIALIZATION) {
-    // not support parallel_submit
-    LOG_TRACE("can't parallel submit", K(dml_rtctx.das_ref_.get_parallel_type()));
-  } else if (dml_rtctx.das_ref_.get_parallel_type() == DAS_STREAMING_PARALLEL) {
-    if (dml_rtctx.das_ref_.get_submitted_task_count() >= dml_rtctx.das_ref_.get_das_dop()) {
-      LOG_INFO("submitted tasks reach dop", "submitted_cnt", dml_rtctx.das_ref_.get_submitted_task_count(),
-          "das_dop", dml_rtctx.das_ref_.get_das_dop());
-    } else if (OB_FAIL(dml_rtctx.das_ref_.parallel_submit_agg_task(agg_task))) {
-    } else {
-      dml_rtctx.add_das_parallel_task_size(agg_task->get_mem_used());
-      dml_rtctx.das_ref_.get_das_parallel_ctx().add_submitted_task_count(1);
-      LOG_TRACE("succeed parallel submit one agg_task", K(agg_task), K(agg_task->get_start_status()),
-              K(dml_rtctx.get_das_task_memory_size()), K(dml_rtctx.get_das_parallel_task_size()));
-    }
-  } else if (dml_rtctx.das_ref_.get_parallel_type() == DAS_BLOCKING_PARALLEL) {
-    // Blocking submission, temporarily not committing, but will wait until there are enough parallel task numbers to truly submit all at once
-    if (dml_rtctx.das_ref_.get_submitted_task_count() >= dml_rtctx.das_ref_.get_das_dop()) {
-      LOG_INFO("submitted tasks reach dop", "submitted_cnt", dml_rtctx.das_ref_.get_submitted_task_count(),
-          "das_dop", dml_rtctx.das_ref_.get_das_dop());
-    } else {
-      dml_rtctx.add_das_parallel_task_size(agg_task->get_mem_used());
-      dml_rtctx.das_ref_.get_das_parallel_ctx().add_submitted_task_count(1);
-      LOG_TRACE("block parallel submit one agg_task", K(agg_task), K(agg_task->get_start_status()),
-              K(dml_rtctx.get_das_task_memory_size()), K(dml_rtctx.get_das_parallel_task_size()));
-    }
-  }
-  return ret;
-}
-
 template <int N>
 int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
                                       ObDASDMLBaseRtDef &rtdef,
@@ -1738,7 +1679,6 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
 {
   int ret = OB_SUCCESS;
   bool need_retry = false;
-  bool reach_agg_mem_limit = false;
   bool is_strict_defensive_check = trans_info_expr == nullptr ? false : true;
   typedef typename das_reg::ObDASOpTypeTraits<N>::DASCtDef CtDefType;
   typedef typename das_reg::ObDASOpTypeTraits<N>::DASRtDef RtDefType;
@@ -1808,16 +1748,6 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
     // do nothing
   } else if (OB_NOT_NULL(trans_info_expr) &&
       OB_FAIL(ObDMLService::add_trans_info_datum(trans_info_expr, dml_rtctx.get_eval_ctx(), stored_row))) {
-  } else if (dml_rtctx.das_ref_.get_parallel_type() != DAS_SERIALIZATION) {
-    // parallel submit
-    if (OB_FAIL(check_agg_task_state(dml_rtctx, dml_op, stored_row->row_size_, reach_agg_mem_limit))) {
-    } else if (!reach_agg_mem_limit) {
-    } else if (OB_FAIL(parallel_submit_das_task(dml_rtctx, dml_op->get_agg_task()))) {
-    } else {
-      dml_rtctx.das_ref_.clear_task_map();
-    }
-  } else {
-    // serialize submit
   }
   return ret;
 }

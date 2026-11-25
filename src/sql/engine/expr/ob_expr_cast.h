@@ -78,7 +78,6 @@ static_assert(common::ObMaxType + 1 == sizeof(CAST_STRING_DEFUALT_LENGTH) / size
 extern int cast_eval_arg_batch(const ObExpr &, ObEvalCtx &, const ObBitVector &, const int64_t);
 class ObExprCast: public ObFuncExprOperator
 {
-  OB_UNIS_VERSION_V(1);
   const static int32_t OB_LITERAL_MAX_INT_LEN = 21;
 public:
   ObExprCast();

@@ -36,22 +36,13 @@ public:
   int end_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op);
   int get_das_task_id(int64_t &das_id);
   int rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op);
-  void set_max_concurrency(int32_t cpu_count);
-  int32_t get_das_concurrency_limit() const { return das_concurrency_limit_; };
   int retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op);
-  int parallel_execute_das_task(common::ObIArray<ObIDASTaskOp *> &task_list);
-  int parallel_submit_das_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task);
-  int push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task);
-  int collect_das_copy_refs(ObIArray<ObIDASTaskOp*> &task_list, ObDASCopyContext &copy_context);
 private:
   int execute_local_das_task(ObDasAggregatedTask &task_ops);
   int clear_task_exec_env(ObDASRef &das_ref, ObIDASTaskOp &task_op);
   int do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list);
-  int collect_das_copy_attach_refs(ObDASCopyContext &copy_context,
-                                   ObDASBaseRtDef *attach_rtdef);
 private:
   ObDASIDAllocator id_allocator_;
-  int32_t das_concurrency_limit_;
 };
 }  // namespace sql
 }  // namespace oceanbase

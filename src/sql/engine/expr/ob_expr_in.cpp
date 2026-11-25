@@ -615,14 +615,6 @@ int ObExprInOrNotIn::eval_pl_udt_in(const ObExpr &expr,
 }
 
 
-OB_SERIALIZE_MEMBER(ObExprInOrNotIn,
-                    row_dimension_,
-                    real_param_num_,
-                    result_type_,
-                    input_types_,
-                    id_,
-                    param_flags_);
-
 ObExprIn::ObExprIn(ObIAllocator &alloc)
   : ObExprInOrNotIn(alloc, T_OP_IN, N_IN)
 {}

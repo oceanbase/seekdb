@@ -35,14 +35,6 @@ void ObPhyPlanHint::reset()
   parallel_ = -1;
 }
 
-OB_SERIALIZE_MEMBER(ObPhyPlanHint,
-                    read_consistency_,
-                    query_timeout_,
-                    plan_cache_policy_,
-                    force_trace_log_,
-                    log_level_,
-                    parallel_);
-
 int ObPhyPlanHint::deep_copy(const ObPhyPlanHint &other, ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;

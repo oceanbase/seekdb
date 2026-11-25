@@ -25,7 +25,6 @@ namespace sql
 {
 class ObExprRand: public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 	class ObExprRandCtx: public ObExprOperatorCtx
 	{
 	public:

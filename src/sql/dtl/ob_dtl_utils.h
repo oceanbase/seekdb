@@ -59,12 +59,10 @@ class ObTransmitEofAsynSender : public ObDtlAsynSender
 public:
   ObTransmitEofAsynSender(ObIArray<ObDtlChannel*> &channels,
                           int64_t timeout_ts,
-                          sql::ObEvalCtx *eval_ctx,
-                          ObDtlMsgType type) :
+                          sql::ObEvalCtx *eval_ctx) :
     ObDtlAsynSender(channels),
     timeout_ts_(timeout_ts),
-    eval_ctx_(eval_ctx),
-    type_(type)
+    eval_ctx_(eval_ctx)
   {}
 
  virtual int action(ObDtlChannel *ch);
@@ -72,7 +70,6 @@ public:
 private:
   int64_t timeout_ts_;
   sql::ObEvalCtx *eval_ctx_;
-  ObDtlMsgType type_;
 };
 
 

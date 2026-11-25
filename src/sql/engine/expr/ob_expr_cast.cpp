@@ -708,26 +708,5 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprCast, raw_expr) {
   return ret;
 }
 
-OB_DEF_SERIALIZE(ObExprCast)
-{
-  int ret = OB_SUCCESS;
-  ret = ObExprOperator::serialize_(buf, buf_len, pos);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObExprCast)
-{
-  int ret = OB_SUCCESS;
-  ret = ObExprOperator::deserialize_(buf, data_len, pos);
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObExprCast)
-{
-  int64_t len = 0;
-  len = ObExprOperator::get_serialize_size_();
-  return len;
-}
-
 }
 }

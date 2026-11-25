@@ -199,7 +199,6 @@ OB_SERIALIZE_MEMBER(ObDMLBaseCtDef,
                     view_check_exprs_,
                     is_primary_index_,
                     is_table_without_pk_, // FARM COMPAT WHITELIST, renamed
-                    reserved_advanced_trigger_,
                     trans_info_expr_,
                     is_vec_hnsw_index_vid_opt_);
 

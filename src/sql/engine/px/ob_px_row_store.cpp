@@ -24,75 +24,6 @@
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-/*
- * This file describes:
- * To improve efficiency, ObPxNewRow does some rather trick things in the deserialization process
- *
- * ObPxNewRow copies the serialized row payload out of the local DTL buffer.
- * The linked buffer can then be released when its processing callback ends,
- * while the decoded row remains valid for get_next_row().
- */
-
-void ObPxNewRow::set_eof_row()
-{
-  row_cell_count_ = EOF_ROW_FLAG;
-  des_row_buf_size_ = 0;
-  des_row_buf_ = NULL;
-}
-
-OB_DEF_SERIALIZE(ObPxNewRow)
-{
-  int ret = OB_SUCCESS;
-  OB_UNIS_ENCODE(row_cell_count_);
-  if (OB_FAIL(ret)) {
-  } else if (OB_LIKELY(NULL != row_)) {
-    for (int64_t idx = 0; OB_SUCC(ret) && idx < row_->get_count(); ++idx) {
-      const ObObj &cell = row_->get_cell(idx);
-      if (OB_FAIL(serialization::encode(buf, buf_len, pos, cell))) {
-      }
-    }
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObPxNewRow)
-{
-  int64_t len = 0;
-  OB_UNIS_ADD_LEN(row_cell_count_);
-  if (OB_LIKELY(NULL != row_ && row_cell_count_ > 0)) {
-    for (int64_t idx = 0; idx < row_->get_count(); ++idx) {
-      const ObObj &cell = row_->get_cell(idx);
-      len += serialization::encoded_length(cell);
-    }
-  }
-  return len;
-}
-
-OB_DEF_DESERIALIZE(ObPxNewRow)
-{
-  int ret = OB_SUCCESS;
-  // reset value
-  des_row_buf_ = NULL;
-  des_row_buf_size_ = 0;
-  OB_UNIS_DECODE(row_cell_count_);
-  if (OB_FAIL(ret)) {
-  } else if (OB_LIKELY(row_cell_count_ > 0)) {
-    if (OB_UNLIKELY(pos >= data_len)) {
-      ret = OB_SERIALIZE_ERROR;
-    } else {
-      // Delay reading row's cells until the get_row stage
-      des_row_buf_ = (char*)buf + pos;
-      des_row_buf_size_ = data_len - pos;
-      pos += des_row_buf_size_;
-    }
-  }
-  return ret;
-}
-// Used to copy row from DTL memory to get_next_row context for output
-// If not copied, the memory of row will be released after the DTL process call ends,
-// get_next_row will obtain an illegal memory reference
-// Decode the buffered row and construct an ObNewRow view.
-
 int ObReceiveRowReader::add_buffer(dtl::ObDtlLinkedBuffer &buf, bool &transferred)
 {
   int ret = OB_SUCCESS;
@@ -186,16 +117,15 @@ void ObReceiveRowReader::move_to_iterated(const int64_t rows)
   cur_iter_pos_ = 0;
 }
 
-template <typename BLOCK, typename ROW>
-const ROW *ObReceiveRowReader::next_store_row()
+const ObChunkDatumStore::StoredRow *ObReceiveRowReader::next_store_row()
 {
-  const ROW *srow = NULL;
+  const ObChunkDatumStore::StoredRow *srow = NULL;
   if (NULL != recv_head_) {
-    BLOCK *b = reinterpret_cast<BLOCK *>(recv_head_->buf());
+    auto *b = reinterpret_cast<ObChunkDatumStore::Block *>(recv_head_->buf());
     if (cur_iter_rows_ == b->rows_) {
       move_to_iterated(b->rows_);
       if (NULL != recv_head_) {
-        b = reinterpret_cast<BLOCK *>(recv_head_->buf());
+        b = reinterpret_cast<ObChunkDatumStore::Block *>(recv_head_->buf());
       } else {
         b = NULL;
       }
@@ -261,8 +191,7 @@ int ObReceiveRowReader::get_next_row(const ObIArray<ObExpr*> &exprs,
     }
   } else {
     free_iterated_buffers();
-    const ObChunkDatumStore::StoredRow *srow
-        = next_store_row<ObChunkDatumStore::Block, ObChunkDatumStore::StoredRow>();
+    const ObChunkDatumStore::StoredRow *srow = next_store_row();
     if (NULL == srow) {
       ret = OB_ITER_END;
     } else {
@@ -350,7 +279,7 @@ int ObReceiveRowReader::get_next_batch(const ObIArray<ObExpr*> &exprs,
     read_rows = 0;
     const Store::StoredRow *srow = NULL;
     while (read_rows < max_rows
-           && NULL != (srow = next_store_row<Store::Block, Store::StoredRow>())) {
+           && NULL != (srow = next_store_row())) {
       srows[read_rows++] = srow;
     }
     if (0 == read_rows) {

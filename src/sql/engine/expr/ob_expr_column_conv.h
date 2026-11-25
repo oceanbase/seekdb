@@ -76,7 +76,6 @@ private:
 
 class ObExprColumnConv : public ObBaseExprColumnConv, public ObFuncExprOperator
 {
-  OB_UNIS_VERSION_V(1);
 public:
   //objs[0]  type
   //objs[1] collation_type

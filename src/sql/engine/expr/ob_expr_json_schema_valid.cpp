@@ -25,8 +25,6 @@ using namespace common;
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER((ObExprJsonSchemaValid, ObFuncExprOperator), json_schema_);
-
 ObExprJsonSchemaValid::ObExprJsonSchemaValid(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_JSON_SCHEMA_VALID, N_JSON_SCHEMA_VALID, OB_JSON_SCHEMA_EXPR_ARG_NUM, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),
       json_schema_(ObString::make_empty_string()) {}

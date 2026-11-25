@@ -28,12 +28,6 @@ using namespace common;
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER(ObKillSessionArg,
-                    sess_id_,
-                    user_id_,
-                    is_query_,
-                    has_user_super_privilege_);
-
 int ObKillSessionArg::init(ObExecContext &ctx, const ObKillStmt &stmt)
 {
   int ret = OB_SUCCESS;

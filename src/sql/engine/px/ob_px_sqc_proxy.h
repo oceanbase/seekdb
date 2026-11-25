@@ -107,6 +107,8 @@ public:
                                           const PieceMsg &piece, int64_t timeout_ts, bool need_sync,
                                           bool need_wait_whole_msg, const WholeMsg *&whole);
 
+  int send_dh_piece_msg(const dtl::ObDtlControlMsg &piece, int64_t timeout_ts);
+
   // for root thread
   int check_task_finish_status(int64_t timeout_ts);
 
@@ -156,8 +158,6 @@ private:
       bool need_sync,
       bool send_piece,
       bool need_wait_whole_msg);
-  template <class PieceMsg>
-  int send_dh_piece_msg(const PieceMsg &piece, int64_t timeout_ts);
   /* variables */
 public:
   ObSqcCtx &sqc_ctx_;
@@ -284,20 +284,6 @@ int ObPxSQCProxy::inner_get_dh_msg(
   return ret;
 }
 
-template <class PieceMsg>
-int ObPxSQCProxy::send_dh_piece_msg(const PieceMsg &piece, int64_t timeout_ts)
-{
-  int ret = common::OB_SUCCESS;
-  ObLockGuard<ObSpinLock> lock_guard(dtl_lock_);
-  dtl::ObDtlChannel *ch = sqc_arg_.sqc_.get_sqc_channel();
-  if (OB_ISNULL(ch)) {
-    ret = common::OB_ERR_UNEXPECTED;
-    SQL_LOG(WARN, "empty channel", K(ret));
-  } else if (OB_FAIL(ch->send(piece, timeout_ts))) {
-  } else if (OB_FAIL(ch->flush())) {
-  }
-  return ret;
-}
 }
 }
 #endif /* __OB_SQL_PX_SQC_PROXY_H__ */

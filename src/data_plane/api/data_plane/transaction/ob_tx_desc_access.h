@@ -47,7 +47,6 @@ bool tx_desc_in_tx_or_has_extra_state(const transaction::ObTxDesc *desc);
 bool tx_desc_is_clean(const transaction::ObTxDesc *desc);
 uint32_t tx_desc_session_id(const transaction::ObTxDesc *desc);
 int64_t tx_desc_seq_base(const transaction::ObTxDesc *desc);
-uint64_t tx_desc_operation_sequence(const transaction::ObTxDesc *desc);
 int tx_desc_serialize(const transaction::ObTxDesc *desc,
                       char *buf,
                       int64_t buf_len,

@@ -2178,22 +2178,6 @@ int ObOptEstCostModel::get_qual_cmp_tc(const ObRawExpr *qual, ObObjTypeClass &cm
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObCostTableScanSimpleInfo,
-                    is_index_back_,
-                    is_global_index_,
-                    part_count_,
-                    table_micro_blocks_,
-                    index_micro_blocks_,
-                    range_count_,
-                    table_row_count_,
-                    postix_filter_qual_cost_per_row_,
-                    table_filter_qual_cost_per_row_,
-                    index_scan_project_cost_per_row_,
-                    index_back_project_cost_per_row_,
-                    row_width_,
-                    is_spatial_index_,
-                    index_id_);
-
 int ObCostTableScanSimpleInfo::init(const ObCostTableScanInfo &est_cost_info)
 {
   int ret = OB_SUCCESS;

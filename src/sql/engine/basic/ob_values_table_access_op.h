@@ -24,7 +24,6 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObPhyOpSeriCtx;
 
 class ObValuesTableAccessSpec : public ObOpSpec
 {

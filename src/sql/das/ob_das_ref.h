@@ -20,7 +20,6 @@
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_factory.h"
 #include "sql/das/ob_das_def_reg.h"
-#include "data_plane/transaction/ob_tx_desc_lifecycle.h"
 
 namespace oceanbase
 {
@@ -29,115 +28,13 @@ namespace sql
 class ObDASScanOp;
 class ObDASInsertOp;
 
-enum ObDasAggTaskStartStatus
-{
-  DAS_AGG_TASK_UNSTART = 0,
-  DAS_AGG_TASK_REACH_MEM_LIMIT,
-  DAS_AGG_TASK_PARALLEL_EXEC
-};
-
-enum ObDasParallelType
-{
-  DAS_SERIALIZATION = 0,
-  DAS_STREAMING_PARALLEL,
-  DAS_BLOCKING_PARALLEL
-};
-
-struct DASParallelContext
-{
-public:
-  DASParallelContext()
-    :  parallel_type_(DAS_SERIALIZATION),
-       submitted_task_count_(0),
-       das_dop_(0),
-       tx_desc_bak_(nullptr),
-       has_refreshed_tx_desc_scn_(false)
-  {
-  }
-  ~DASParallelContext() {}
-  void set_das_dop(int64_t das_dop) { das_dop_ = das_dop; }
-  void set_das_parallel_type(ObDasParallelType v) { parallel_type_ = v; }
-  void add_submitted_task_count(int64_t v) { submitted_task_count_ += v; }
-  void reset_task_count() { submitted_task_count_ = 0; }
-  ObDasParallelType get_parallel_type() { return parallel_type_; }
-  int64_t get_submitted_task_count() { return submitted_task_count_; }
-  int64_t get_das_dop() { return das_dop_; }
-  void reuse()
-  {
-    submitted_task_count_ = 0;
-    has_refreshed_tx_desc_scn_ = false;
-  }
-  void reset()
-  {
-    parallel_type_ = DAS_SERIALIZATION;
-    submitted_task_count_ = 0;
-    data_plane::release_tx_desc(tx_desc_bak_);
-    has_refreshed_tx_desc_scn_ = false;
-  }
-  void set_tx_desc_bak(transaction::ObTxDesc *v) { tx_desc_bak_ = v; }
-  transaction::ObTxDesc *get_tx_desc_bak() { return tx_desc_bak_; }
-  int deep_copy_tx_desc(ObIAllocator &alloc, transaction::ObTxDesc *src_tx_desc);
-  int refresh_tx_desc_bak(ObIAllocator &alloc, transaction::ObTxDesc *src_tx_desc);
-  int release_tx_desc();
-  TO_STRING_KV(K_(parallel_type),
-               K_(submitted_task_count),
-               K_(das_dop),
-               "tx_desc_bak", data_plane::ObTxDescLogView(tx_desc_bak_),
-               K_(has_refreshed_tx_desc_scn));
-public:
-  ObDasParallelType parallel_type_;
-  int64_t submitted_task_count_;
-  int64_t das_dop_;
-  transaction::ObTxDesc *tx_desc_bak_;
-  bool has_refreshed_tx_desc_scn_;
-};
-
-struct DASRefCountContext
-{
-public:
-  DASRefCountContext();
-  void inc_concurrency_limit_with_signal();
-  void inc_concurrency_limit();
-  int32_t get_max_das_task_concurrency() const { return max_das_task_concurrency_; };
-  ~DASRefCountContext() {}
-  int32_t get_current_concurrency() const
-  {
-    return ATOMIC_LOAD(&das_task_concurrency_limit_);
-  }
-  int dec_concurrency_limit();
-  common::ObThreadCond &get_cond() { return cond_; }
-  int acquire_task_execution_resource(int64_t timeout_ts);
-  void interrupt_other_workers(int ret)
-  {
-    ObThreadCondGuard guard(cond_);
-    if (err_ret_ == OB_SUCCESS) {
-      err_ret_ = ret;
-    }
-  }
-  int get_interrupted_err_code() { return ATOMIC_LOAD(&err_ret_); }
-  void reuse() { need_wait_ = false; }
-  void set_need_wait(bool v) { need_wait_ = v; }
-  bool is_need_wait() { return need_wait_; }
-  TO_STRING_KV(K(max_das_task_concurrency_), K(das_task_concurrency_limit_));
-public:
-  int32_t max_das_task_concurrency_;
-  int32_t das_task_concurrency_limit_;
-  int err_ret_;
-  common::ObThreadCond cond_;
-  bool need_wait_;
-  bool is_inited_;
-};
-
 struct ObDasAggregatedTask
 {
  public:
   ObDasAggregatedTask()
     : tasks_(),
       failed_tasks_(),
-      success_tasks_(),
-      start_status_(DAS_AGG_TASK_UNSTART),
-      mem_used_(0),
-      save_ret_(OB_SUCCESS)
+      success_tasks_()
   {
   }
   ~ObDasAggregatedTask() { reset(); };
@@ -161,31 +58,12 @@ struct ObDasAggregatedTask
   {
     return tasks_.get_size() != 0 || failed_tasks_.get_size() != 0;
   }
-  void set_start_status(ObDasAggTaskStartStatus status) { start_status_ = status; }
-  void add_mem_used(int64_t mem_used) { mem_used_ += mem_used; }
-  int64_t get_mem_used() { return mem_used_; }
-  void set_save_ret(int ret) { save_ret_ = ret; }
-  int get_save_ret() { return save_ret_; }
-  bool execute_success()
-  {
-    return save_ret_ == OB_SUCCESS && (!has_not_execute_task());
-  }
-  bool has_parallel_submiitted()
-  {
-    return start_status_ == DAS_AGG_TASK_PARALLEL_EXEC;
-  }
-  ObDasAggTaskStartStatus get_start_status() { return start_status_; }
-  TO_STRING_KV(K(start_status_),
-               K(tasks_.get_size()),
+  TO_STRING_KV(K(tasks_.get_size()),
                K(failed_tasks_.get_size()),
-               K(success_tasks_.get_size()),
-               K(save_ret_));
+               K(success_tasks_.get_size()));
   DasTaskLinkedList tasks_;
   DasTaskLinkedList failed_tasks_;
   DasTaskLinkedList success_tasks_;
-  ObDasAggTaskStartStatus start_status_;
-  int64_t mem_used_;
-  int save_ret_;
 };
 
 struct DasRefKey
@@ -250,13 +128,6 @@ public:
                      DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT);
   bool has_task() const { return !batched_tasks_.empty(); }
   int32_t get_das_task_cnt() const { return batched_tasks_.get_size(); }
-  ObDasParallelType get_parallel_type() { return das_parallel_ctx_.get_parallel_type(); }
-  bool is_parallel_submit() { return get_parallel_type() != DAS_SERIALIZATION; }
-  int64_t get_submitted_task_count() { return das_parallel_ctx_.get_submitted_task_count(); }
-  int64_t get_das_dop() { return das_parallel_ctx_.get_das_dop(); }
-  DASParallelContext &get_das_parallel_ctx() { return das_parallel_ctx_; }
-
-  int parallel_submit_agg_task(ObDasAggregatedTask *agg_task);
   int execute_all_task();
   int execute_all_task(DasAggregatedTaskList &agg_task_list);
   int retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_tasks);
@@ -273,12 +144,9 @@ public:
   ObEvalCtx &get_eval_ctx() { return eval_ctx_; };
   void reset();
   void reuse();
-  DASRefCountContext &get_das_ref_count_ctx() { return das_ref_count_ctx_; }
-  void clear_task_map();
 private:
   DISABLE_COPY_ASSIGN(ObDASRef);
   int create_task_map();
-  int wait_all_executing_tasks();
   bool check_rcode_can_retry(int ret);
 private:
   typedef common::ObObjNode<ObIDASTaskOp*> DasOpNode;
@@ -302,8 +170,6 @@ private:
   int64_t task_cnt_;
   int64_t init_mem_used_;
   ObDASRefMap task_map_;
-  DASRefCountContext das_ref_count_ctx_;
-  DASParallelContext das_parallel_ctx_;
 public:
   //all flags
   union {

@@ -28,7 +28,6 @@ namespace sql
 
 class ObInfixExprItem : public ObPostExprItem
 {
-  OB_UNIS_VERSION(1);
 public:
   ObInfixExprItem()
       : ObPostExprItem(),
@@ -72,7 +71,6 @@ protected:
 //
 class ObInfixExpression
 {
-  OB_UNIS_VERSION(1);
 public:
   const static int64_t TSI_STACK_IDENTIFIER = 3; // 1 and 2 used in ob_postfix_expression.cpp
   const static int64_t STACK_ALLOC_STACK_SIZE = 128;

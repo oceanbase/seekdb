@@ -24,7 +24,6 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObPhyOpSeriCtx;
 
 class ObExprValuesSpec : public ObOpSpec
 {
@@ -43,12 +42,6 @@ public:
   INHERIT_TO_STRING_KV("op_spec", ObOpSpec, K(array_group_idx_));
   int64_t get_value_count() const { return values_.count(); }
   int64_t get_is_strict_json_desc_count() const { return is_strict_json_desc_.count(); }
-  virtual int serialize(char *buf,
-                        int64_t buf_len,
-                        int64_t &pos,
-                        ObPhyOpSeriCtx &seri_ctx) const override;
-  virtual int64_t get_serialize_size(const ObPhyOpSeriCtx &seri_ctx) const override;
-  int64_t get_serialize_size_(const ObPhyOpSeriCtx &seri_ctx) const;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprValuesSpec);
 public:

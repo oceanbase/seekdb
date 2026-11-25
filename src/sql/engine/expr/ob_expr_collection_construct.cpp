@@ -25,10 +25,6 @@ using namespace common;
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER(
-    (ObExprCollectionConstruct, ObFuncExprOperator),
-    type_, not_null_, elem_type_, capacity_, udt_id_);
-
 OB_SERIALIZE_MEMBER(ObExprCollectionConstruct::ExtraInfo,
                     type_, not_null_, elem_type_, capacity_, udt_id_);
 

@@ -133,8 +133,6 @@ struct ObParamInfo
   bool is_typed_null_value_;
   common::ObCollationType col_type_;
   common::ObPrecision precision_;
-
-  OB_UNIS_VERSION_V(1);
 };
 
 class ObPlanCacheObject : public ObILibCacheObject

@@ -22,22 +22,6 @@
 #include "sql/engine/dml/ob_dml_service.h"
 namespace oceanbase
 {
-namespace common
-{
-namespace serialization
-{
-template <>
-struct EnumEncoder<false, const sql::ObDASLockCtDef *> : sql::DASCtRefEncoder<sql::ObDASLockCtDef>
-{
-};
-
-template <>
-struct EnumEncoder<false, sql::ObDASLockRtDef *> : sql::DASRtRefEncoder<sql::ObDASLockRtDef>
-{
-};
-} // end namespace serialization
-} // end namespace common
-
 using namespace common;
 using namespace storage;
 namespace sql
@@ -112,18 +96,6 @@ int ObDASLockOp::record_task_result_to_rtdef()
   return ret;
 }
 
-int ObDASLockOp::assign_task_result(ObIDASTaskOp *other)
-{
-  int ret = OB_SUCCESS;
-  if (other->get_type() != get_type()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObDASLockOp *lock_op = static_cast<ObDASLockOp *>(other);
-    affected_rows_ = lock_op->get_affected_rows();
-  }
-  return ret;
-}
-
 int ObDASLockOp::init_task_info(uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
@@ -146,11 +118,6 @@ int ObDASLockOp::write_row(const ExprFixedArray &row,
   }
   return ret;
 }
-
-OB_SERIALIZE_MEMBER((ObDASLockOp, ObIDASTaskOp),
-                    lock_ctdef_,
-                    lock_rtdef_,
-                    lock_buffer_);
 
 }  // namespace sql
 }  // namespace oceanbase

@@ -16,11 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "rust/config.h"
-#include "query/runtime/ob_query_runtime_environment.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
+#include "sql/das/ob_das_scan_op.h"
 #include "sql/das/ob_das_utils.h"
-#include "sql/das/ob_das_parallel_handler.h"
 #include "sql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
@@ -33,8 +32,7 @@ namespace sql
 {
 
 ObDataAccessService::ObDataAccessService()
-  : id_allocator_(),
-    das_concurrency_limit_(INT32_MAX)
+  : id_allocator_()
 {
 }
 
@@ -214,108 +212,6 @@ int ObDataAccessService::do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list) {
     }
   }
   return ret;
-}
-
-int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task)
-{
-  int ret = OB_SUCCESS;
-  ObDASParallelTask *task = nullptr;
-  query::ObIQueryRuntimeEnvironment *runtime =
-      das_ref.get_exec_ctx().get_query_runtime_environment();
-  ObPhysicalPlanCtx *plan_ctx = das_ref.get_exec_ctx().get_physical_plan_ctx();
-  int64_t timeout_ts = plan_ctx->get_timeout_timestamp();
-  if (OB_ISNULL(runtime)) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "query runtime environment is null", KR(ret));
-  } else if (OB_ISNULL(task = ObDASParallelTaskFactory::alloc(das_ref.get_das_ref_count_ctx()))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(task->init(&agg_task, timeout_ts))) {
-  } else {
-    
-    if (OB_FAIL(runtime->submit_current_tenant_request(*task))) {
-    } else {
-    }
-  }
-  if (OB_FAIL(ret)) {
-    ObDASParallelTaskFactory::free(task);
-    task = NULL;
-  }
-  return ret;
-}
-int ObDataAccessService::parallel_execute_das_task(common::ObIArray<ObIDASTaskOp *> &task_list)
-{
-  int ret = OB_SUCCESS;
-  if (task_list.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(do_local_das_task(task_list))) {
-  }
-  return ret;
-}
-int ObDataAccessService::parallel_submit_das_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task)
-{
-  int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = das_ref.get_exec_ctx().get_my_session();
-  int64_t timeout_ts = session->get_query_timeout_ts();
-  if (OB_FAIL(das_ref.get_das_ref_count_ctx().acquire_task_execution_resource(timeout_ts))) {
-  } else if (OB_FAIL(push_parallel_task(das_ref, agg_task))) {
-    // NOTICE: if error occur, must release the reference count
-    das_ref.get_das_ref_count_ctx().inc_concurrency_limit();
-  }
-  return ret;
-}
-
-int ObDataAccessService::collect_das_copy_refs(ObIArray<ObIDASTaskOp*> &task_ops,
-                                               ObDASCopyContext &copy_context)
-{
-  int ret = OB_SUCCESS;
-  ObIDASTaskOp *task_op = nullptr;
-  for (int i = 0; OB_SUCC(ret) && i < task_ops.count(); i++) {
-    task_op = task_ops.at(i);
-    if (task_op->get_ctdef() != nullptr) {
-      if (OB_FAIL(add_var_to_array_no_dup(copy_context.ctdefs_, task_op->get_ctdef()))) {
-      }
-    }
-    if (OB_SUCC(ret) && task_op->get_rtdef() != nullptr) {
-      if (OB_FAIL(add_var_to_array_no_dup(copy_context.rtdefs_, task_op->get_rtdef()))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(append_array_no_dup(copy_context.ctdefs_, task_op->get_related_ctdefs()))) {
-      } else if (OB_FAIL(append_array_no_dup(copy_context.rtdefs_, task_op->get_related_rtdefs()))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(collect_das_copy_attach_refs(copy_context, task_op->get_attach_rtdef()))) {
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDataAccessService::collect_das_copy_attach_refs(ObDASCopyContext &copy_context,
-                                                       ObDASBaseRtDef *attach_rtdef)
-{
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(attach_rtdef)) {
-    if (attach_rtdef->ctdef_ != nullptr) {
-      if (OB_FAIL(add_var_to_array_no_dup(copy_context.ctdefs_, attach_rtdef->ctdef_))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(add_var_to_array_no_dup(copy_context.rtdefs_, attach_rtdef))) {
-      }
-    }
-    for (int i = 0; OB_SUCC(ret) && i < attach_rtdef->children_cnt_; ++i) {
-      if (OB_FAIL(collect_das_copy_attach_refs(copy_context, attach_rtdef->children_[i]))) {
-      }
-    }
-  }
-  return ret;
-}
-
-void ObDataAccessService::set_max_concurrency(int32_t cpu_count)
-{
-  das_concurrency_limit_ = 1;
 }
 
 }  // namespace sql

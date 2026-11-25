@@ -177,7 +177,6 @@ private:
                                                                     && !proxy.adjoining_root_dfo()
                                                                     && !proxy.get_transmit_use_interm_result(); }
   int try_wait_channel();
-  dtl::ObDtlMsgType get_data_msg_type() const { return data_msg_type_; }
 protected:
   ObArray<ObChunkDatumStore::Block *> ch_blocks_;
   ObArray<ObChunkDatumStore::BlockBufferWrap> blk_bufs_;
@@ -211,7 +210,6 @@ protected:
 
   unsigned short rand48_buf_[3];
   bool receive_channel_ready_;
-  dtl::ObDtlMsgType data_msg_type_;
 };
 
 inline void ObPxTransmitOp::update_row(const ObExpr *expr, int64_t tablet_id)
@@ -249,8 +247,6 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
         } else if (batch_param_remain_) {
           ret = OB_SUCCESS;
           ObPxNewRow px_eof_row;
-          px_eof_row.set_eof_row();
-          px_eof_row.set_data_type(data_msg_type_);
           for (int i = 0; i < task_channels_.count() && OB_SUCC(ret); i++) {
             dtl::ObDtlChannel *ch = task_channels_.at(i);
             if (OB_FAIL(ch->send(px_eof_row, phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, false))) {
@@ -368,8 +364,6 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
       if (OB_FAIL(try_wait_channel())) {
       } else if (batch_param_remain_) {
         ObPxNewRow px_eof_row;
-        px_eof_row.set_eof_row();
-        px_eof_row.set_data_type(data_msg_type_);
         ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
         if (OB_ISNULL(phy_plan_ctx)) {
           ret = OB_ERR_UNEXPECTED;
@@ -420,7 +414,7 @@ inline int ObPxTransmitOp::broadcast_rows(ObSliceIdxCalc &slice_calc)
       break;
     } else if (OB_FAIL(try_wait_channel())) {
     } else {
-      ObPxNewRow px_row(get_spec().output_, data_msg_type_);
+      ObPxNewRow px_row(get_spec().output_);
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
       batch_info_guard.set_batch_size(rows);
       for (int64_t i = 0; OB_SUCC(ret) && i < rows; i++) {

@@ -34,45 +34,6 @@ using namespace share;
 namespace sql
 {
 
-OB_DEF_SERIALIZE_SIZE(ObInfixExprItem)
-{
-  int64_t len = 0;
-  BASE_ADD_LEN((ObInfixExprItem, ObPostExprItem));
-  bool param_lazy = false;
-  bool is_called_in_sql = IS_EXPR_OP(get_item_type()) ? get_expr_operator()->is_called_in_sql() : true;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, param_idx_, param_num_, param_lazy,
-                               is_called_in_sql, is_boolean_);
-  return len;
-}
-
-OB_DEF_SERIALIZE(ObInfixExprItem)
-{
-  int ret = OB_SUCCESS;
-  BASE_SER((ObInfixExprItem, ObPostExprItem));
-  bool param_lazy = false;
-  bool is_called_in_sql = IS_EXPR_OP(get_item_type()) ? get_expr_operator()->is_called_in_sql() : true;
-  LST_DO_CODE(OB_UNIS_ENCODE, param_idx_, param_num_, param_lazy,
-                              is_called_in_sql, is_boolean_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObInfixExprItem)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObPostExprItem::deserialize(CURRENT_CONTEXT->get_arena_allocator(), buf, data_len, pos))) {
-  } else {
-    bool param_lazy = false;
-    bool is_called_in_sql = true;
-    LST_DO_CODE(OB_UNIS_DECODE, param_idx_, param_num_, param_lazy,
-                                is_called_in_sql, is_boolean_);
-    if (IS_EXPR_OP(get_item_type())) {
-      param_lazy_eval_ = get_expr_operator()->is_param_lazy_eval();
-      get_expr_operator()->set_is_called_in_sql(is_called_in_sql);
-    }
-  }
-  return ret;
-}
-
 // same with ob_write_expr_item in ob_postfix_expression.cpp
 int ObInfixExprItem::deep_copy(common::ObIAllocator &alloc, const bool only_obj /* = false */)
 {
@@ -116,41 +77,6 @@ ObInfixExpression::~ObInfixExpression()
 void ObInfixExpression::reset()
 {
   exprs_.reset(alloc_);
-}
-
-OB_DEF_SERIALIZE_SIZE(ObInfixExpression)
-{
-  int64_t len = 0;
-  OB_UNIS_ADD_LEN_ARRAY(exprs_.get_ptr(), exprs_.count());
-  return len;
-}
-
-OB_DEF_SERIALIZE(ObInfixExpression)
-{
-  int ret = OB_SUCCESS;
-  OB_UNIS_ENCODE_ARRAY(exprs_.get_ptr(), exprs_.count());
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObInfixExpression)
-{
-  int ret = OB_SUCCESS;
-  int64_t count = 0;
-  OB_UNIS_DECODE(count);
-  if (OB_SUCC(ret) && count > 0) {
-    if (OB_FAIL(exprs_.init(count, alloc_))) {
-    } else {
-      ObInfixExprItem tmp_expr_item;
-      for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
-        OB_UNIS_DECODE(tmp_expr_item);
-        if (OB_FAIL(ret)) {
-          // do mothing
-        } else if (OB_FAIL(exprs_.push_back(tmp_expr_item))) {
-        }
-      }
-    }
-  }
-  return ret;
 }
 
 int ObInfixExpression::set_item_count(const int64_t count)

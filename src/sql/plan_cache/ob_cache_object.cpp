@@ -39,15 +39,6 @@ void ObParamInfo::reset()
   precision_ = PRECISION_UNKNOWN_YET;
 }
 
-OB_SERIALIZE_MEMBER(ObParamInfo,
-                    flag_,
-                    scale_,
-                    type_,
-                    ext_real_type_,
-                    is_typed_null_value_,  // FARM COMPAT WHITELIST
-                    col_type_,
-                    precision_);
-
 ObPlanCacheObject::ObPlanCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext &mem_context)
   : ObILibCacheObject(ns, mem_context),
     runtime_schema_version_(OB_INVALID_VERSION),

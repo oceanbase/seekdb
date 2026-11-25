@@ -23,8 +23,6 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-OB_SERIALIZE_MEMBER((ObExprRand, ObFuncExprOperator), is_seed_const_);
-
 const uint64_t ObExprRand::ObExprRandCtx::max_value_ = 0x3FFFFFFFL;
 
 ObExprRand::ObExprRandCtx::ObExprRandCtx()

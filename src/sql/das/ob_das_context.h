@@ -84,7 +84,6 @@ public:
       group_rescan_cnt_(-1),
       use_snapshot_opt_(false),
       parent_table_set_(allocator),
-      real_das_dop_(0),
       flags_(0)
   {
     is_fk_cascading_ = 0;
@@ -173,8 +172,6 @@ public:
 
   int find_group_param_by_param_idx(int64_t param_idx,
                                     bool &exist, uint64_t &array_idx);
-  int64_t get_real_das_dop() { return real_das_dop_; }
-  void set_real_das_dop(int64_t v) { real_das_dop_ = v; }
   void set_use_snapshot_opt(bool v) { use_snapshot_opt_ = v; }
   bool get_use_snapshot_opt() { return use_snapshot_opt_; }
 
@@ -185,8 +182,7 @@ public:
                K_(is_fk_cascading),
                K_(snapshot),
                K_(savepoint),
-               K_(write_branch_id),
-               K_(real_das_dop));
+               K_(write_branch_id));
 private:
   DASRuntimeTableList table_accesses_;
   ObSqlCtx *sql_ctx_;
@@ -210,7 +206,6 @@ private:
   int64_t group_rescan_cnt_; //only allowed to be modified by GroupParamBackupGuard
   bool use_snapshot_opt_;
   DASTableIdList parent_table_set_; // The list of parent table, for inner sql.
-  int64_t real_das_dop_;
 public:
   union {
     uint64_t flags_;

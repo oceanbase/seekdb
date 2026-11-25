@@ -218,9 +218,6 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     pl_ctx_(NULL),
     package_guard_(NULL),
     pl_expr_allocator_(NULL),
-    row_id_list_(nullptr),
-    row_id_list_array_(),
-    total_row_count_(0),
     reusable_interm_result_(false),
     is_async_end_trans_(false),
     gi_task_map_(nullptr),
@@ -317,7 +314,6 @@ void ObExecContext::set_runtime_services(const RuntimeServices &services)
 
 ObExecContext::~ObExecContext()
 {
-  row_id_list_array_.reset();
   destroy_eval_allocator();
   reset_op_ctx();
   if (OB_NOT_NULL(exec_stat_collector_)) {
@@ -635,7 +631,6 @@ int ObExecContext::create_physical_plan_ctx()
     LOG_ERROR("no more memory to create physical_plan_ctx");
   } else {
     phy_plan_ctx_ = new (local_plan_ctx) ObPhysicalPlanCtx(allocator_);
-    phy_plan_ctx_->set_exec_ctx(this);
   }
   return ret;
 }
@@ -934,20 +929,6 @@ int ObExecContext::set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_r
   }
   return ret;
 }
-
-int ObExecContext::reset_one_row_id_list(const common::ObIArray<int64_t> *row_id_list)
-{
-  int ret = OB_SUCCESS;
-  CK(OB_NOT_NULL(row_id_list));
-  if (OB_SUCC(ret)) {
-    row_id_list_array_.reset();
-    total_row_count_ = 0;
-    OZ(row_id_list_array_.push_back(row_id_list));
-    total_row_count_ += row_id_list->count();
-  }
-  return ret;
-}
-
 
 int ObExecContext::get_group_pwj_map(GroupPWJTabletIdMap *&group_pwj_map)
 {

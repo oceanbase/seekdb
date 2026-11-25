@@ -67,8 +67,6 @@ enum CollectionPredRes {
 class ObFuncInputType
 {
 public:
-  OB_UNIS_VERSION_V(1);
-public:
   ObFuncInputType() :
       calc_meta_(), max_length_(0), flag_(0)
   {}
@@ -220,7 +218,6 @@ protected:
 
 class ObExprOperator : public common::ObDLinkBase<ObExprOperator>
 {
-  OB_UNIS_VERSION_V(1);
 public:
   friend class ObRawExpr;
   struct DatumCastExtraInfo : public ObIExprExtraInfo
@@ -1005,8 +1002,6 @@ public:
 class ObRelationalExprOperator : public ObExprOperator
 {
 public:
-  virtual int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
-public:
   ObRelationalExprOperator(common::ObIAllocator &alloc,
                            ObExprOperatorType type,
                            const char *name,
@@ -1360,7 +1355,6 @@ protected:
 
 class ObSubQueryRelationalExpr : public ObExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
 
   // extra info stored in ObExpr::extra_
@@ -1884,12 +1878,6 @@ public:
   {
   }
   virtual int assign(const ObExprOperator &other);
-public:
-  //serialize and deserialize
-  virtual int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
-  virtual int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
-  virtual int64_t get_serialize_size() const;
-public:
   OB_INLINE void set_need_cast(bool need_cast) {need_cast_ = need_cast;}
 protected:
   /*

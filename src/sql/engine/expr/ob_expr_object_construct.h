@@ -53,7 +53,6 @@ public:
 
 class ObExprObjectConstruct : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprObjectConstruct(common::ObIAllocator &alloc);
   virtual ~ObExprObjectConstruct();

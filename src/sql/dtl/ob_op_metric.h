@@ -18,7 +18,6 @@
 #define OB_OP_METRIC_H
 
 #include "lib/time/ob_time_utility.h"
-#include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase {
@@ -27,7 +26,6 @@ namespace sql {
 //         At the same time provide the calculation of interval time, through the switch to control whether to calculate these statistics, such as dtl write buffer time etc
 class ObOpMetric
 {
-  OB_UNIS_VERSION(1);
 public:
   ObOpMetric() :
     enable_audit_(false), id_(-1), type_(MetricType::DEFAULT_MAX), interval_cnt_(0), interval_start_time_(0), interval_end_time_(0),

@@ -53,7 +53,6 @@ private:
 
 class ObDASInsertOp : public ObIDASTaskOp
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASInsertOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASInsertOp() = default;
@@ -61,7 +60,6 @@ public:
   virtual int open_op() override;
   virtual int release_op() override;
   virtual int record_task_result_to_rtdef() override;
-  virtual int assign_task_result(ObIDASTaskOp *other) override;
   virtual int init_task_info(uint32_t row_extend_size) override;
   virtual const ObDASBaseCtDef *get_ctdef() const override { return ins_ctdef_; }
   virtual ObDASBaseRtDef *get_rtdef() override { return ins_rtdef_; }

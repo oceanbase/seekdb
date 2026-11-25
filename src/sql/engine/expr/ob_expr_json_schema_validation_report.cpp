@@ -25,8 +25,6 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-OB_SERIALIZE_MEMBER((ObExprJsonSchemaValidationReport, ObFuncExprOperator), json_schema_);
-
 ObExprJsonSchemaValidationReport::ObExprJsonSchemaValidationReport(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_JSON_SCHEMA_VALIDATION_REPORT, N_JSON_SCHEMA_VALIDATION_REPORT, OB_JSON_SCHEMA_EXPR_ARG_NUM, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),
       json_schema_(ObString::make_empty_string()) {}

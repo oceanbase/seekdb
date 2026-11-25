@@ -32,7 +32,6 @@ class ObBatchRows;
 class ObPxQueryRangeInfo;
 class ObP2PDatahubMsgBase
 {
-  OB_UNIS_VERSION_V(1);
 public:
 #define P2P_DATAHUB_MSG_TYPE(ACT)                                                                  \
   ACT(NOT_INIT, = 0)                                                                               \
@@ -52,8 +51,7 @@ public:
       is_ready_(false), is_empty_(true), ref_count_(0) {}
   virtual ~ObP2PDatahubMsgBase() {}
 
-  // this interface will be used both in send and receive process, ensure copy all
-  // members that need to been serialize.
+  // Copy the message state needed by the local datahub.
   virtual int assign(const ObP2PDatahubMsgBase &);
   virtual int merge(ObP2PDatahubMsgBase &) = 0;
   virtual int deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr) = 0;

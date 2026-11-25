@@ -29,8 +29,6 @@ namespace sql
 
 //////////////////////////// ObExprTypeToStr ////////////////////////////
 
-OB_SERIALIZE_MEMBER_INHERIT(ObExprTypeToStr, ObExprOperator, str_values_);
-
 int ObExprTypeToStr::assign(const ObExprOperator &other) {
   int ret = OB_SUCCESS;
   const ObExprTypeToStr *tmp_other = dynamic_cast<const ObExprTypeToStr*>(&other);

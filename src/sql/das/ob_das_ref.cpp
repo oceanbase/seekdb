@@ -29,71 +29,6 @@ using namespace observer;
 namespace sql
 {
 
-DASRefCountContext::DASRefCountContext()
-  : max_das_task_concurrency_(INT32_MAX),
-    das_task_concurrency_limit_(INT32_MAX),
-    err_ret_(OB_SUCCESS),
-    cond_(),
-    need_wait_(false),
-    is_inited_(false)
-{
-}
-
-void DASRefCountContext::inc_concurrency_limit_with_signal()
-{
-  ObThreadCondGuard guard(cond_);
-  if (__sync_add_and_fetch(&das_task_concurrency_limit_, 1) == max_das_task_concurrency_) {
-    cond_.signal();
-    LOG_TRACE("inc currency with signal", K(get_current_concurrency()));
-  }
-}
-
-void DASRefCountContext::inc_concurrency_limit()
-{
-  ATOMIC_INC(&das_task_concurrency_limit_);
-}
-
-int DASRefCountContext::dec_concurrency_limit()
-{
-  int ret = OB_SUCCESS;
-  int32_t cur = get_current_concurrency();
-  int32_t next = cur - 1;
-  if (OB_UNLIKELY(0 == cur)) {
-    ret = OB_SIZE_OVERFLOW;
-  } else {
-    while (ATOMIC_CAS(&das_task_concurrency_limit_, cur, next) != cur) {
-      cur = get_current_concurrency();
-      next = cur - 1;
-      if (OB_UNLIKELY(0 == cur)) {
-        ret = OB_SIZE_OVERFLOW;
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
-// not thread safe.
-int DASRefCountContext::acquire_task_execution_resource(int64_t timeout_ts)
-{
-  int ret = OB_SUCCESS;
-  OB_ASSERT(get_current_concurrency() >= 0);
-  set_need_wait(true);
-  if (!is_inited_ && OB_FAIL(cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-  } else if (FALSE_IT(is_inited_ = true)) {
-    // do nothing
-  } else if (OB_FAIL(dec_concurrency_limit())) {
-  }
-  if (OB_UNLIKELY(OB_SIZE_OVERFLOW == ret)) {
-    ret = OB_SUCCESS;
-    ObThreadCondGuard guard(cond_);
-    if (OB_FAIL(cond_.wait(timeout_ts - ObTimeUtility::current_time()))) {
-    } else if (OB_FAIL(dec_concurrency_limit())) {
-    }
-  }
-  return ret;
-}
-
 bool DasRefKey::operator==(const DasRefKey &other) const
 {
   return (tablet_access_ == other.tablet_access_ && op_type_ == other.op_type_
@@ -123,8 +58,6 @@ ObDASRef::ObDASRef(ObEvalCtx &eval_ctx, ObExecContext &exec_ctx)
     task_cnt_(0),
     init_mem_used_(exec_ctx.get_allocator().used()),
     task_map_(),
-    das_ref_count_ctx_(),
-    das_parallel_ctx_(),
     flags_(0)
 {
 }
@@ -159,8 +92,7 @@ ObIDASTaskOp* ObDASRef::find_das_task(const DASRuntimeTabletAccess *tablet_acces
           tmp_task->get_tablet_access() == tablet_access &&
           tmp_task->get_type() == op_type &&
           tmp_task->get_vec_datum_kind() == vec_datum_kind &&
-          !(tmp_task->is_write_buff_full()) &&
-          tmp_task->get_agg_task()->start_status_ == DAS_AGG_TASK_UNSTART) {
+          !tmp_task->is_write_buff_full()) {
         das_task = tmp_task;
       }
     }
@@ -186,8 +118,7 @@ int ObDASRef::create_task_map()
       ObIDASTaskOp *task = *task_iter;
       if (OB_ISNULL(task)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (task->is_write_buff_full() ||
-          task->get_agg_task()->start_status_ != DAS_AGG_TASK_UNSTART) {
+      } else if (task->is_write_buff_full()) {
       } else {
         DasRefKey key(task->get_tablet_access(), task->get_type(), task->get_vec_datum_kind());
         if (OB_FAIL(task_map_.set_refactored(key, task))) {
@@ -265,25 +196,6 @@ int ObDASRef::pick_del_task_to_first()
   return ret;
 }
 
-// The worker copy of a DAS task serializes tx_desc while the SQL thread can still modify it.
-// Copy tx_desc in the SQL thread before submitting the first concurrent task.
-// When the savepoint rollback occurs,tx_desc.op_sn_ will change.
-// tx_desc_bak_ must be refreshed to ensure that subsequent execution will not report errors.
-// The refresh_tx_desc_bak function handles the above logic.
-int ObDASRef::parallel_submit_agg_task(ObDasAggregatedTask *agg_task)
-{
-  int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = exec_ctx_.get_my_session();
-  agg_task->set_start_status(DAS_AGG_TASK_PARALLEL_EXEC);
-  if (OB_ISNULL(session)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_das_parallel_ctx().refresh_tx_desc_bak(get_das_alloc(), session->get_tx_desc()))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->parallel_submit_das_task(*this, *agg_task))) {
-  } else {
-  }
-  return ret;
-}
-
 int ObDASRef::execute_all_task()
 {
   int ret = OB_SUCCESS;
@@ -326,27 +238,13 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
   uint32_t finished_cnt = 0;
   while (finished_cnt < agg_task_list.get_size() && OB_SUCC(ret)) {
     finished_cnt = 0;
-    // execute tasks follows aggregated task state machine.
     DLIST_FOREACH_X(curr, agg_task_list.get_obj_list(), OB_SUCC(ret)) {
-      ObDasAggregatedTask* agg_task = curr->get_obj();
-      if (agg_task->has_unstart_tasks() && !agg_task->has_parallel_submiitted()) {
-        if (get_parallel_type() == DAS_SERIALIZATION) {
-          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->execute_das_task(*this, *agg_task))) {
-          } else {
-          }
-        } else {
-          if (OB_FAIL(parallel_submit_agg_task(agg_task))) {
-          } else {
-          }
-        }
+      ObDasAggregatedTask *agg_task = curr->get_obj();
+      if (agg_task->has_unstart_tasks() &&
+          OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->execute_das_task(*this, *agg_task))) {
       }
     }
 
-    // wait all existing tasks to be finished
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(wait_all_executing_tasks())) {
-    }
-    ret = COVER_SUCC(tmp_ret);
     if (OB_FAIL(ret) && check_rcode_can_retry(ret)) {
       ret = OB_SUCCESS;
     }
@@ -354,10 +252,7 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
     // check das task status.
     DLIST_FOREACH_X(curr, agg_task_list.get_obj_list(), OB_SUCC(ret)) {
       ObDasAggregatedTask* aggregated_task = curr->get_obj();
-      if (aggregated_task->has_parallel_submiitted() && aggregated_task->get_save_ret() != OB_SUCCESS) {
-        // all parallel_submit task can't retry
-        ret = aggregated_task->get_save_ret();
-      } else if (aggregated_task->has_not_execute_task()) {
+      if (aggregated_task->has_not_execute_task()) {
         // There are still tasks not completed
         if (aggregated_task->has_failed_tasks()) {
           // retry all failed tasks.
@@ -392,60 +287,12 @@ bool ObDASRef::check_rcode_can_retry(int ret)
   return bret;
 }
 
-int ObDASRef::wait_all_executing_tasks()
-{
-  int ret = OB_SUCCESS;
-  if (das_ref_count_ctx_.is_need_wait()) {
-    ObThreadCondGuard guard(das_ref_count_ctx_.get_cond());
-    while (OB_SUCC(ret) && OB_SUCC(get_exec_ctx().check_status()) &&
-           das_ref_count_ctx_.get_current_concurrency() < das_ref_count_ctx_.get_max_das_task_concurrency()) {
-      // we cannot use ObCond here because it can not explicitly lock mutex, causing concurrency problem.
-      if (OB_FAIL(das_ref_count_ctx_.get_cond().wait(1000))) {
-        if (ret != OB_TIMEOUT) {
-        } else {
-          ret = OB_SUCCESS;
-        }
-      }
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    int64_t save_ret = ret;
-    ret = OB_SUCCESS;
-
-    ObThreadCondGuard guard(das_ref_count_ctx_.get_cond());
-    while (das_ref_count_ctx_.get_current_concurrency() < das_ref_count_ctx_.get_max_das_task_concurrency()) {
-      if (OB_FAIL(das_ref_count_ctx_.get_cond().wait_us(500))) {
-        if (ret != OB_TIMEOUT) {
-        }
-      }
-    }
-
-    ret = save_ret;
-  }
-  return ret;
-}
-
-void ObDASRef::clear_task_map()
-{
-  if (task_map_.created()) {
-    task_map_.clear();
-  }
-}
-
 int ObDASRef::close_all_task()
 {
   int ret = OB_SUCCESS;
   int last_end_ret = OB_SUCCESS;
   if (has_task()) {
     ObSQLSessionInfo *session = nullptr;
-    int wait_ret = OB_SUCCESS;
-    if (get_parallel_type() != DAS_SERIALIZATION) {
-      // A concurrently submitted DAS task may still be executing.
-      if (OB_SUCCESS != (wait_ret = wait_all_executing_tasks())) {
-      }
-    }
-    ret = COVER_SUCC(wait_ret);
     DASTaskIter task_iter = begin_task_iter();
     while (!task_iter.is_end()) {
       int end_ret = OB_SUCCESS;
@@ -455,10 +302,7 @@ int ObDASRef::close_all_task()
       last_end_ret = (last_end_ret == OB_SUCCESS ? end_ret : last_end_ret);
     }
 
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
-    }
-    ret = COVER_SUCC(last_end_ret);
+    ret = last_end_ret;
 
     if (OB_ISNULL(session = exec_ctx_.get_my_session())) {
       ret = COVER_SUCC(OB_NOT_INIT);
@@ -510,26 +354,11 @@ int ObDASRef::create_das_task(const DASRuntimeTabletAccess *tablet_access,
 
 int ObDASRef::find_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task)
 {
-  int ret = OB_SUCCESS;
-  bool aggregated = false;
-  if (DAS_OP_TABLE_DELETE == op_type) {
-    DLIST_FOREACH_X(curr, del_aggregated_tasks_.get_obj_list(), !aggregated && OB_SUCC(ret)) {
-      ObDasAggregatedTask* aggregated_task = curr->get_obj();
-      if (aggregated_task->start_status_ == DAS_AGG_TASK_UNSTART) {
-        agg_task = aggregated_task;
-        aggregated = true;
-      }
-    }
-  } else {
-    DLIST_FOREACH_X(curr, aggregated_tasks_.get_obj_list(), !aggregated && OB_SUCC(ret)) {
-      ObDasAggregatedTask* aggregated_task = curr->get_obj();
-      if (aggregated_task->start_status_ == DAS_AGG_TASK_UNSTART) {
-        agg_task = aggregated_task;
-        aggregated = true;
-      }
-    }
+  DasAggregatedTaskList &tasks = DAS_OP_TABLE_DELETE == op_type ? del_aggregated_tasks_ : aggregated_tasks_;
+  if (!tasks.empty()) {
+    agg_task = tasks.get_obj_list().get_first()->get_obj();
   }
-  return ret;
+  return OB_SUCCESS;
 }
 
 int ObDASRef::create_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task)
@@ -583,8 +412,6 @@ void ObDASRef::reset()
   lookup_cnt_ = 0;
   task_cnt_ = 0;
   init_mem_used_ = 0;
-  das_ref_count_ctx_.reuse();
-  das_parallel_ctx_.reset();
   if (task_map_.created()) {
     task_map_.destroy();
   }
@@ -605,8 +432,6 @@ void ObDASRef::reuse()
   lookup_cnt_ = 0;
   task_cnt_ = 0;
   init_mem_used_ = 0;
-  das_ref_count_ctx_.reuse();
-  das_parallel_ctx_.reuse();
   if (task_map_.created()) {
     task_map_.destroy();
   }
@@ -714,46 +539,6 @@ int ObDasAggregatedTask::get_failed_tasks(common::ObSEArray<ObIDASTaskOp *, 2> &
 bool ObDasAggregatedTask::has_unstart_tasks() const
 {
   return tasks_.get_size() != 0 ;
-}
-
-
-int DASParallelContext::deep_copy_tx_desc(ObIAllocator &alloc, transaction::ObTxDesc *src_tx_desc)
-{
-  int ret = data_plane::clone_tx_desc(alloc, src_tx_desc, tx_desc_bak_);
-  if (OB_FAIL(ret)) {
-  }
-  return ret;
-}
-
-int DASParallelContext::release_tx_desc()
-{
-  int ret = OB_SUCCESS;
-  data_plane::release_tx_desc(tx_desc_bak_);
-  return ret;
-}
-
-int DASParallelContext::refresh_tx_desc_bak(ObIAllocator &alloc, transaction::ObTxDesc *src_tx_desc)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(tx_desc_bak_)) {
-    if (OB_FAIL(deep_copy_tx_desc(alloc, src_tx_desc))) {
-    }
-  } else if (data_plane::tx_desc_operation_sequence(tx_desc_bak_)
-             != data_plane::tx_desc_operation_sequence(src_tx_desc)) {
-    if (!has_refreshed_tx_desc_scn_) {
-      if (OB_FAIL(release_tx_desc())) {
-      } else if (OB_FAIL(deep_copy_tx_desc(alloc, src_tx_desc))) {
-      } else {
-        has_refreshed_tx_desc_scn_ = true;
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected tx_desc op_scn", K(ret),
-               "bak_op_sn", data_plane::tx_desc_operation_sequence(tx_desc_bak_),
-               "src_op_sn", data_plane::tx_desc_operation_sequence(src_tx_desc));
-    }
-  }
-  return ret;
 }
 
 }  // namespace sql

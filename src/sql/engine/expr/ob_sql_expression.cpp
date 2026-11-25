@@ -131,27 +131,6 @@ int ObSqlExpression::generate_idx_for_regexp_ops(int16_t &cur_regexp_op_count)
   return ret;
 }
 
-
-OB_DEF_SERIALIZE(ObSqlExpression) {
-  int ret = OB_SUCCESS;
-  OB_UNIS_ENCODE(infix_expr_);
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObSqlExpression) {
-  int64_t len = 0;
-  OB_UNIS_ADD_LEN(infix_expr_);
-
-  return len;
-}
-
-OB_DEF_DESERIALIZE(ObSqlExpression) {
-  int ret = OB_SUCCESS;
-  OB_UNIS_DECODE(infix_expr_);
-
-  return ret;
-}
-
 ObColumnExpression::~ObColumnExpression()
 {
 }
@@ -207,11 +186,6 @@ static struct obj_zero_init
     OBJ_ZERO.set_int(0);
   }
 } obj_zero_init;
-
-OB_SERIALIZE_MEMBER((ObColumnExpression, ObSqlExpression),
-                    result_index_,
-                    cs_type_,
-                    accuracy_);
 
 ObAggregateExpression::~ObAggregateExpression()
 {
@@ -307,15 +281,6 @@ int ObAggregateExpression::add_sort_column(const int64_t index,
   }
   return ret;
 }
-
-OB_SERIALIZE_MEMBER((ObAggregateExpression, ObColumnExpression),
-                    aggr_func_, is_distinct_, sort_columns_, separator_param_expr_,
-                    real_param_col_count_, aggr_cs_types_, output_column_count_, extra_infos_,
-                    window_size_param_expr_, item_size_param_expr_, is_need_deserialize_row_,
-                    pl_agg_udf_type_id_, pl_agg_udf_params_type_, result_type_, bucket_num_expr_);
-
-
-
 
 template <class T>
 int ObSqlExpressionUtil::make_expr(ObPhysicalPlan *physical_plan, T  *&expr)

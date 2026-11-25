@@ -45,7 +45,7 @@ class ObRequest: public common::ObLink
 {
 public:
   friend class ObSqlRequestOperator;
-  enum Type { OB_MYSQL, OB_TASK, OB_SQL_TASK, OB_DAS_PARALLEL_TASK };
+  enum Type { OB_MYSQL, OB_TASK, OB_SQL_TASK };
   enum Stat {
       OB_REQUEST_MYSQL_DELIVER            = 0,
       OB_REQUEST_RUNTIME_RECEIVED         = 1,

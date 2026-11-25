@@ -25,22 +25,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-namespace serialization
-{
-template <>
-struct EnumEncoder<false, const sql::ObDASInsCtDef *> : sql::DASCtRefEncoder<sql::ObDASInsCtDef>
-{
-};
-
-template <>
-struct EnumEncoder<false, sql::ObDASInsRtDef *> : sql::DASRtRefEncoder<sql::ObDASInsRtDef>
-{
-};
-} // end namespace serialization
-} // end namespace common
-
 using namespace common;
 using namespace storage;
 using namespace share;
@@ -320,19 +304,6 @@ int ObDASInsertOp::record_task_result_to_rtdef()
   ins_rtdef_->is_duplicated_ |= is_duplicated_;
   return ret;
 }
-int ObDASInsertOp::assign_task_result(ObIDASTaskOp *other)
-{
-  int ret = OB_SUCCESS;
-  if (other->get_type() != get_type()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObDASInsertOp *ins_op = static_cast<ObDASInsertOp *>(other);
-    affected_rows_ = ins_op->get_affected_rows();
-    is_duplicated_ = ins_op->get_is_duplicated();
-  }
-  return ret;
-}
-
 int ObDASInsertOp::init_task_info(uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
@@ -354,11 +325,6 @@ int ObDASInsertOp::write_row(const ExprFixedArray &row,
   }
   return ret;
 }
-
-OB_SERIALIZE_MEMBER((ObDASInsertOp, ObIDASTaskOp),
-                    ins_ctdef_,
-                    ins_rtdef_,
-                    insert_buffer_);
 
 void ObDASConflictIterator::reset()
 {

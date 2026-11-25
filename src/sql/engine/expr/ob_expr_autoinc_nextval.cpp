@@ -25,7 +25,6 @@ using namespace common;
 using namespace share;
 namespace sql
 {
-OB_SERIALIZE_MEMBER_INHERIT(ObExprAutoincNextval, ObExprOperator);
 ObExprAutoincNextval::ObExprAutoincNextval(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc,
                          T_FUN_SYS_AUTOINC_NEXTVAL,
@@ -383,12 +382,6 @@ int ObExprAutoincNextval::eval_nextval(
   }
   return ret;
 }
-
-OB_SERIALIZE_MEMBER(ObAutoincNextvalExtra,
-                    autoinc_table_id_,
-                    autoinc_col_id_,
-                    autoinc_table_name_,
-                    autoinc_column_name_);
 
 int ObAutoincNextvalExtra::init_autoinc_nextval_extra(common::ObIAllocator *allocator,
                                                       ObRawExpr *&expr,

@@ -30,7 +30,6 @@ namespace sql
 class ObPhysicalPlanCtx;
 class ObExprAutoincNextval : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION_V(1);
 public:
   explicit  ObExprAutoincNextval(common::ObIAllocator &alloc);
   ObExprAutoincNextval(
@@ -83,8 +82,6 @@ private:
 // used in expr.extra_ to pass in table and column info
 struct ObAutoincNextvalExtra
 {
-  OB_UNIS_VERSION_V(1);
-public:
   ObAutoincNextvalExtra()
     : autoinc_table_id_(common::OB_INVALID_ID),
       autoinc_col_id_(common::OB_INVALID_ID),

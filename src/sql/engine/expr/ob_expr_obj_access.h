@@ -29,7 +29,6 @@ namespace sql
 class ObObjAccessRawExpr;
 class ObExprObjAccess : public ObExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   class ExtraInfo;
   explicit ObExprObjAccess(common::ObIAllocator &alloc);

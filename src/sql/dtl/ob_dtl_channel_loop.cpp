@@ -143,7 +143,7 @@ int ObDtlChannelLoop::ObDtlChannelLoopProc::process(
   int ret = OB_SUCCESS;
   ObDtlMsgHeader header;
   if (buffer.is_data_msg()) {
-    last_msg_type_ = static_cast<int16_t>(ObDtlMsgType::PX_NEW_ROW);
+    last_msg_type_ = static_cast<int16_t>(ObDtlMsgType::PX_DATUM_ROW);
     if (last_msg_type_ >= static_cast<int16_t>(ObDtlMsgType::MAX)) {
       ret = OB_INVALID_ARGUMENT;
       SQL_DTL_LOG(WARN, "channel has received message with unknown type", K(last_msg_type_));

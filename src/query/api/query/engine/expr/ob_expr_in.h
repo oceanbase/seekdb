@@ -300,7 +300,6 @@ class ObExprInOrNotIn : public ObVectorExprOperator
     common::ObFixedArray<ObExprCalcType, common::ObIAllocator> cmp_types_;
   };
 
-  OB_UNIS_VERSION_V(1);
 public:
   ObExprInOrNotIn(common::ObIAllocator &alloc,
                   ObExprOperatorType type,

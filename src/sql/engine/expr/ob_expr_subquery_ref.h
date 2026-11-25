@@ -29,7 +29,6 @@ namespace sql
 class ObSubQueryIterator;
 class ObExprSubQueryRef : public ObExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   struct Extra : public ObExprExtraInfoAccess<Extra>
   {

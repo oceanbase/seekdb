@@ -1001,7 +1001,6 @@ enum ObOptDmlStatType {
 
 struct ObOptDmlStat
 {
-  OB_UNIS_VERSION(1);
 public:
   ObOptDmlStat ():
     table_id_(common::OB_INVALID_ID),

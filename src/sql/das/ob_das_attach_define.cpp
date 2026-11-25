@@ -21,8 +21,6 @@ namespace sql {
 OB_SERIALIZE_MEMBER(ObDASAttachCtDef,
                     result_output_);
 
-OB_SERIALIZE_MEMBER(ObDASAttachRtDef);
-
 OB_SERIALIZE_MEMBER((ObDASTableLookupCtDef, ObDASAttachCtDef));
 
 const ObDASScanCtDef *ObDASTableLookupCtDef::get_lookup_scan_ctdef() const
@@ -46,8 +44,6 @@ const ObDASScanCtDef *ObDASTableLookupCtDef::get_lookup_scan_ctdef() const
   }
   return scan_ctdef;
 }
-
-OB_SERIALIZE_MEMBER((ObDASTableLookupRtDef, ObDASAttachRtDef));
 
 ObDASScanRtDef *ObDASTableLookupRtDef::get_lookup_scan_rtdef()
 {
@@ -74,8 +70,6 @@ ObDASScanRtDef *ObDASTableLookupRtDef::get_lookup_scan_rtdef()
 OB_SERIALIZE_MEMBER((ObDASIndexProjLookupCtDef, ObDASTableLookupCtDef),
                      index_scan_proj_exprs_);
 
-OB_SERIALIZE_MEMBER((ObDASIndexProjLookupRtDef, ObDASTableLookupRtDef));
-
 OB_SERIALIZE_MEMBER((ObDASSortCtDef, ObDASAttachCtDef),
                     sort_exprs_,
                     sort_collations_,
@@ -84,23 +78,13 @@ OB_SERIALIZE_MEMBER((ObDASSortCtDef, ObDASAttachCtDef),
                     offset_expr_,
                     fetch_with_ties_);
 
-OB_SERIALIZE_MEMBER((ObDASSortRtDef, ObDASAttachRtDef));
-
 OB_SERIALIZE_MEMBER((ObDASDocIdMergeCtDef, ObDASAttachCtDef));
-
-OB_SERIALIZE_MEMBER((ObDASDocIdMergeRtDef, ObDASAttachRtDef));
 
 OB_SERIALIZE_MEMBER((ObDASVIdMergeCtDef, ObDASAttachCtDef));
 
-OB_SERIALIZE_MEMBER((ObDASVIdMergeRtDef, ObDASAttachRtDef));
-
 OB_SERIALIZE_MEMBER((ObDASDomainIdMergeCtDef, ObDASAttachCtDef), domain_types_);
 
-OB_SERIALIZE_MEMBER((ObDASDomainIdMergeRtDef, ObDASAttachRtDef));
-
 OB_SERIALIZE_MEMBER((ObDASIndexMergeCtDef, ObDASAttachCtDef), merge_type_, is_reverse_, merge_node_types_, rowkey_exprs_); // FARM COMPAT WHITELIST
-
-OB_SERIALIZE_MEMBER((ObDASIndexMergeRtDef, ObDASAttachRtDef));
 
 OB_DEF_SERIALIZE(ObDASAttachSpec)
 {

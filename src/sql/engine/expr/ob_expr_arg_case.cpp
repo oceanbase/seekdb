@@ -37,37 +37,6 @@ ObExprArgCase::~ObExprArgCase()
 {
 }
 
-int ObExprArgCase::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  need_cast_ = true;
-  ret = ObExprOperator::deserialize(buf, data_len, pos);
-  if (OB_SUCC(ret)) {
-    if (OB_UNLIKELY(input_types_.count() < 2 || input_types_.count() % 2 != 0)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      int64_t loop = input_types_.count() / 2;
-      bool all_are_numeric = ob_is_accurate_numeric_type(input_types_.at(0).get_calc_type());
-      bool all_same_type = true;
-      ObObjMeta case_meta = input_types_.at(0).get_calc_meta();
-      for (int64_t i = 1; OB_SUCC(ret) && i < loop; ++i) {
-        ObObjType type = input_types_.at(i).get_calc_type();
-        ObObjMeta param_meta = input_types_.at(i).get_calc_meta();
-        if (all_same_type && !ObSQLUtils::is_same_type_for_compare(case_meta, param_meta)) {
-          all_same_type = false;
-        }
-        if (all_are_numeric && (!ob_is_accurate_numeric_type(type))) {
-          all_are_numeric = false;
-        }
-      }//end for
-      if (OB_SUCC(ret)) {
-        need_cast_ = !(all_same_type || all_are_numeric);
-      }
-    }
-  }
-  return ret;
-}
-
 int ObExprArgCase::assign(const ObExprOperator &other)
 {
   int ret = OB_SUCCESS;

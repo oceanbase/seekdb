@@ -4577,7 +4577,6 @@ enum BoundExprIdx {
 
 struct Bound
 {
-  OB_UNIS_VERSION_V(1);
 public:
   Bound()
     : type_(BOUND_UNBOUNDED),

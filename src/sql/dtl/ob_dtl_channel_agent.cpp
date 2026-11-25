@@ -26,24 +26,14 @@ int ObDtlBufEncoder::switch_writer(const ObDtlMsg &msg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == msg_writer_)) {
-    if (msg.is_data_msg()) {
-      const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
-      if (DtlWriterType::CHUNK_ROW_WRITER == msg_writer_map[px_row.get_data_type()]) {
-        msg_writer_ = &row_msg_writer_;
-      } else if (DtlWriterType::CHUNK_DATUM_WRITER == msg_writer_map[px_row.get_data_type()]) {
-        msg_writer_ = &datum_msg_writer_;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unkown msg writer", K(msg.get_type()), K(msg_writer_->type()));
-      }
-      LOG_TRACE("msg writer", K(px_row.get_data_type()), K(msg_writer_->type()));
+    const DtlWriterType writer_type = msg_writer_map[msg.get_type()];
+    if (CHUNK_DATUM_WRITER == writer_type) {
+      msg_writer_ = &datum_msg_writer_;
+    } else if (CONTROL_WRITER == writer_type) {
+      msg_writer_ = &ctl_msg_writer_;
     } else {
-      if (DtlWriterType::CONTROL_WRITER == msg_writer_map[msg.get_type()]) {
-        msg_writer_ = &ctl_msg_writer_;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unkown msg writer", K(msg.get_type()), K(msg_writer_->type()));
-      }
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unknown msg writer", K(msg.get_type()), K(ret));
     }
   }
   return ret;
@@ -159,8 +149,8 @@ int ObDtlChanAgent::switch_buffer(int64_t need_size)
   // send last buffer
   if (OB_SUCC(ret) && OB_NOT_NULL(last_buffer)) {
     if (0 != last_buffer->pos()) {
-      if (OB_FAIL(dtl_buf_encoder_.serialize())) {
-      } else if (OB_FAIL(send_last_buffer(last_buffer))) {
+      dtl_buf_encoder_.finalize_buffer();
+      if (OB_FAIL(send_last_buffer(last_buffer))) {
       } else {
         dtl_buf_encoder_.reset_writer();
       }
@@ -188,8 +178,6 @@ int ObDtlChanAgent::flush()
     ret = OB_ERR_UNEXPECTED;
   } else if (last_buffer != current_buffer_) {
     ret = OB_ERR_UNEXPECTED;
-  // } else if (OB_FAIL(dtl_buf_encoder_.serialize())) {
-  //   LOG_WARN("failed to do serialize", K(ret));
   } else if (OB_FAIL(send_last_buffer(last_buffer))) {
   } else {
     dtl_buf_encoder_.reset_writer();
