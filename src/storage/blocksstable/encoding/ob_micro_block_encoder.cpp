@@ -424,7 +424,7 @@ int ObMicroBlockEncoder::build_rust_block(char *&buf, int64_t &size)
     micro_block::BridgeColumn column;
     column.obj_type = static_cast<uint8_t>(type);
     column.fixed_length = fixed_length > 0 ? static_cast<uint32_t>(fixed_length) : 0;
-    column.enable_bit_packing = false;
+    column.enable_bit_packing = ENCODING_ROW_STORE == ctx_.row_store_type_;
     columns.push_back(column);
   }
   for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < datum_rows_.count(); ++row_idx) {

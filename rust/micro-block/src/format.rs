@@ -36,6 +36,16 @@ pub(crate) fn is_signed_store_type(obj_type: u8) -> bool {
     matches!(obj_type, 1..=5 | 17..=20 | 31..=34 | 41 | 42)
 }
 
+pub(crate) fn integer_store_size(obj_type: u8) -> Option<usize> {
+    match obj_type {
+        1 | 6 | 21 => Some(1),
+        2 | 7 => Some(2),
+        3 | 4 | 8 | 9 | 11 | 13 | 19 | 41 => Some(4),
+        5 | 10 | 12 | 14 | 17 | 18 | 20 | 31..=34 | 42 => Some(8),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Header {
     pub header_size: usize,

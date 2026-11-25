@@ -293,6 +293,20 @@ int ObEncodeBlockGetReader::get_columns_rust(
         datum.pack_ = datum_len;
         MEMCPY(const_cast<char *>(datum.ptr_), &value, datum_len);
       }
+    } else if (4 == cell.kind) {
+      if (cell.offset > result.data.size()
+          || cell.length > result.data.size() - cell.offset) {
+        ret = OB_INVALID_DATA;
+      } else {
+        char *decoded = static_cast<char *>(decoder_allocator_.alloc(std::max<uint64_t>(cell.length, 1)));
+        if (OB_ISNULL(decoded)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          MEMCPY(decoded, result.data.data() + cell.offset, cell.length);
+          const ObObjType obj_type = col_header_[columns[result_column]].get_store_obj_type();
+          ret = load_data_to_datum(obj_type, decoded, cell.length, 0, datum);
+        }
+      }
     } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size_)
                || cell.length > static_cast<uint64_t>(block_size_) - cell.offset) {
       ret = OB_INVALID_DATA;
@@ -1116,6 +1130,20 @@ int ObMicroBlockDecoder::try_get_rows_rust(
           } else {
             datum.pack_ = datum_len;
             MEMCPY(const_cast<char *>(datum.ptr_), &value, datum_len);
+          }
+        } else if (4 == cell.kind) {
+          if (cell.offset > result.data.size()
+              || cell.length > result.data.size() - cell.offset) {
+            ret = OB_INVALID_DATA;
+          } else {
+            char *decoded = static_cast<char *>(decoder_allocator_.get_inner_allocator().alloc(
+                std::max<uint64_t>(cell.length, 1)));
+            if (OB_ISNULL(decoded)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+            } else {
+              MEMCPY(decoded, result.data.data() + cell.offset, cell.length);
+              ret = load_data_to_datum(obj_type, decoded, cell.length, integer_mask, datum);
+            }
           }
         } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size_)
                    || cell.length > static_cast<uint64_t>(block_size_) - cell.offset) {

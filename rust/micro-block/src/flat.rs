@@ -173,11 +173,12 @@ impl<'a> FlatBlock<'a> {
         crate::rowkey::find_bound(
             keys,
             kinds,
-            uca,
             lower_bound,
             range,
             self.column_count(),
-            |row, column| self.cell(row, column),
+            |row, column, query, kind| {
+                crate::rowkey::compare_cell(query, self.cell(row, column)?, kind, uca)
+            },
         )
     }
 
@@ -446,7 +447,7 @@ impl<'a> Cluster<'a> {
         )?;
         match self.special_value(index)? {
             VAL_NORMAL => Ok(Cell::Bytes(bytes)),
-            VAL_OUTROW => Err(Error::Unsupported),
+            VAL_OUTROW => Ok(Cell::Outrow(bytes)),
             VAL_NOP => Ok(Cell::Nop),
             VAL_NULL => Ok(Cell::Null),
             VAL_ENCODING_NORMAL => match bytes.len() {
@@ -537,7 +538,13 @@ mod tests {
     #[ignore = "requires MICRO_BLOCK_FLAT_FIXTURE_DIR with captured C++ blocks"]
     fn reencodes_every_captured_cpp_row_byte_for_byte() {
         let directory = PathBuf::from(std::env::var_os("MICRO_BLOCK_FLAT_FIXTURE_DIR").unwrap());
-        for name in ["flat0.bin", "flat1.bin", "flat2.bin", "flat3.bin", "wide.bin"] {
+        for name in [
+            "flat0.bin",
+            "flat1.bin",
+            "flat2.bin",
+            "flat3.bin",
+            "wide.bin",
+        ] {
             let bytes = std::fs::read(directory.join(name)).unwrap();
             let block = FlatBlock::new(&bytes).unwrap();
             for row_index in 0..block.row_count() {
@@ -556,12 +563,17 @@ mod tests {
                 let cells: Vec<FlatDatum<'_>> = (0..block.column_count())
                     .map(|column| match row.cell(column).unwrap() {
                         Cell::Bytes(bytes) => FlatDatum::Bytes(bytes),
+                        Cell::Outrow(bytes) => FlatDatum::Outrow(bytes),
                         Cell::UInt(_) => FlatDatum::Bytes(&integer_bytes[column]),
                         Cell::Null => FlatDatum::Null,
                         Cell::Nop => FlatDatum::Nop,
                     })
                     .collect();
-                assert_eq!(row.bytes, encode_row(&cells, row.info).unwrap(), "{name} row {row_index}");
+                assert_eq!(
+                    row.bytes,
+                    encode_row(&cells, row.info).unwrap(),
+                    "{name} row {row_index}"
+                );
             }
         }
     }

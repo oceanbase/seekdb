@@ -90,6 +90,7 @@ mod ffi {
         code: Code,
         rows: Vec<u32>,
         cells: Vec<CellDesc>,
+        data: Vec<u8>,
         row_meta: Vec<FlatRowMeta>,
     }
 
@@ -469,62 +470,82 @@ unsafe fn build_pax_block_impl(
     })
 }
 
-fn batch_result(result: Result<(Vec<u32>, Vec<ffi::CellDesc>)>) -> ffi::BatchResult {
+fn batch_result(result: Result<(Vec<u32>, Vec<ffi::CellDesc>, Vec<u8>)>) -> ffi::BatchResult {
     match result {
-        Ok((rows, cells)) => ffi::BatchResult {
+        Ok((rows, cells, data)) => ffi::BatchResult {
             code: ffi::Code::Ok,
             rows,
             cells,
+            data,
             row_meta: Vec::new(),
         },
         Err(error) => ffi::BatchResult {
             code: code(error),
             rows: Vec::new(),
             cells: Vec::new(),
+            data: Vec::new(),
             row_meta: Vec::new(),
         },
     }
 }
 
-fn describe_cells(block: &[u8], projection: crate::Projection<'_>) -> Vec<ffi::CellDesc> {
-    projection
-        .cells()
+fn describe_cells(
+    block: &[u8],
+    projection: crate::Projection<'_>,
+) -> (Vec<ffi::CellDesc>, Vec<u8>) {
+    let (cells, data) = projection.into_parts();
+    let descriptions = cells
         .iter()
         .map(|cell| match cell {
-            Cell::Null => ffi::CellDesc {
-                kind: 1,
-                offset: 0,
-                length: 0,
-                value: 0,
+            crate::read::ProjectionCell::Borrowed(cell) => match cell {
+                Cell::Null => ffi::CellDesc {
+                    kind: 1,
+                    offset: 0,
+                    length: 0,
+                    value: 0,
+                },
+                Cell::Nop => ffi::CellDesc {
+                    kind: 2,
+                    offset: 0,
+                    length: 0,
+                    value: 0,
+                },
+                Cell::Bytes(bytes) => ffi::CellDesc {
+                    kind: 0,
+                    offset: (bytes.as_ptr() as usize - block.as_ptr() as usize) as u64,
+                    length: bytes.len() as u32,
+                    value: 0,
+                },
+                Cell::Outrow(bytes) => ffi::CellDesc {
+                    kind: 5,
+                    offset: (bytes.as_ptr() as usize - block.as_ptr() as usize) as u64,
+                    length: bytes.len() as u32,
+                    value: 0,
+                },
+                Cell::UInt(value) => ffi::CellDesc {
+                    kind: 3,
+                    offset: 0,
+                    length: 0,
+                    value: *value,
+                },
             },
-            Cell::Nop => ffi::CellDesc {
-                kind: 2,
-                offset: 0,
-                length: 0,
+            crate::read::ProjectionCell::Decoded { offset, length } => ffi::CellDesc {
+                kind: 4,
+                offset: *offset as u64,
+                length: *length as u32,
                 value: 0,
-            },
-            Cell::Bytes(bytes) => ffi::CellDesc {
-                kind: 0,
-                offset: (bytes.as_ptr() as usize - block.as_ptr() as usize) as u64,
-                length: bytes.len() as u32,
-                value: 0,
-            },
-            Cell::UInt(value) => ffi::CellDesc {
-                kind: 3,
-                offset: 0,
-                length: 0,
-                value: *value,
             },
         })
-        .collect()
+        .collect();
+    (descriptions, data)
 }
 
 fn project_pax_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::BatchResult {
     batch_result((|| {
         let parsed = Block::new(block)?;
         let projection = parsed.project(rows, columns)?;
-        let cells = describe_cells(block, projection);
-        Ok((rows.to_vec(), cells))
+        let (cells, data) = describe_cells(block, projection);
+        Ok((rows.to_vec(), cells, data))
     })())
 }
 
@@ -545,7 +566,7 @@ fn project_flat_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::Batch
     let result = (|| {
         let parsed = FlatBlock::new(block)?;
         let (projection, row_info) = parsed.project(rows, columns)?;
-        let cells = describe_cells(block, projection);
+        let (cells, data) = describe_cells(block, projection);
         let row_meta = row_info
             .into_iter()
             .map(|info| ffi::FlatRowMeta {
@@ -554,13 +575,14 @@ fn project_flat_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::Batch
                 trans_id: info.trans_id,
             })
             .collect();
-        Ok((rows.to_vec(), cells, row_meta))
+        Ok((rows.to_vec(), cells, data, row_meta))
     })();
     match result {
-        Ok((rows, cells, row_meta)) => ffi::BatchResult {
+        Ok((rows, cells, data, row_meta)) => ffi::BatchResult {
             code: ffi::Code::Ok,
             rows,
             cells,
+            data,
             row_meta,
         },
         Err(error) => batch_result(Err(error)),
@@ -583,8 +605,8 @@ fn filter_project_uint(
             RowRange::new(range_start as usize, range_end as usize)?,
         )?;
         let projection = block_ref.project(&rows, columns)?;
-        let cells = describe_cells(block, projection);
-        Ok((rows, cells))
+        let (cells, data) = describe_cells(block, projection);
+        Ok((rows, cells, data))
     })())
 }
 

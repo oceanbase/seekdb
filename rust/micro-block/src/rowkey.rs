@@ -41,11 +41,10 @@ pub trait UcaTable {
 pub(crate) fn find_bound<'a>(
     keys: &[RowkeyValue<'_>],
     kinds: &[RowkeyKind],
-    uca: &dyn UcaTable,
     lower_bound: bool,
     range: crate::RowRange,
     column_count: usize,
-    mut cell: impl FnMut(usize, usize) -> Result<Cell<'a>>,
+    mut compare: impl FnMut(usize, usize, RowkeyValue<'_>, RowkeyKind) -> Result<Ordering>,
 ) -> Result<crate::RowkeyBound> {
     if keys.is_empty() || keys.len() != kinds.len() || keys.len() > column_count {
         return Err(Error::InvalidArgument);
@@ -57,7 +56,7 @@ pub(crate) fn find_bound<'a>(
         let middle = low + (high - low) / 2;
         let mut ordering = Ordering::Equal;
         for (index, (&query, &kind)) in keys.iter().zip(kinds).enumerate() {
-            ordering = compare_cell(query, cell(middle, index)?, kind, uca)?;
+            ordering = compare(middle, index, query, kind)?;
             if ordering != Ordering::Equal {
                 break;
             }
@@ -267,6 +266,9 @@ mod tests {
             lengths[0] = 4;
             let mut zero_page = vec![0; 1024];
             zero_page[0x20 * 4] = 1;
+            for character in 0x30..=0x39 {
+                zero_page[character * 4] = character as u16 + 1;
+            }
             for character in 0x41..=0x5a {
                 zero_page[character * 4] = character as u16 + 1;
                 zero_page[(character + 0x20) * 4] = character as u16 + 1;
@@ -434,9 +436,8 @@ mod tests {
     #[test]
     #[ignore = "requires MICRO_BLOCK_FLAT_FIXTURE_DIR with captured C++ blocks"]
     fn locates_flat_compound_and_prefix_keys() {
-        let directory = std::path::PathBuf::from(
-            std::env::var_os("MICRO_BLOCK_FLAT_FIXTURE_DIR").unwrap(),
-        );
+        let directory =
+            std::path::PathBuf::from(std::env::var_os("MICRO_BLOCK_FLAT_FIXTURE_DIR").unwrap());
         let bytes = std::fs::read(directory.join("flat0.bin")).unwrap();
         let block = crate::FlatBlock::new(&bytes).unwrap();
         let table = TestUca::new();
@@ -464,24 +465,61 @@ mod tests {
             .unwrap();
         assert_eq!((2, true), (bound.row, bound.equal));
         let bound = block
-            .find_rowkey_bound(
-                &[RowkeyValue::Int(10)],
-                &kinds[..1],
-                &table,
-                false,
-                range,
-            )
+            .find_rowkey_bound(&[RowkeyValue::Int(10)], &kinds[..1], &table, false, range)
             .unwrap();
         assert_eq!((5, true), (bound.row, bound.equal));
         let bound = block
-            .find_rowkey_bound(
-                &[RowkeyValue::Int(3)],
-                &kinds[..1],
-                &table,
-                true,
-                range,
-            )
+            .find_rowkey_bound(&[RowkeyValue::Int(3)], &kinds[..1], &table, true, range)
             .unwrap();
         assert_eq!((4, false), (bound.row, bound.equal));
+    }
+
+    #[test]
+    fn locates_prefix_encoded_unicode_keys() {
+        let table = TestUca::new();
+        let mut writer =
+            BlockWriter::new(WriterConfig::new(vec![ColumnSpec::variable(22)], 1)).unwrap();
+        for row in 0..128u32 {
+            writer
+                .append_row(&[OwnedDatum::Bytes(if row == 127 {
+                    "f".repeat(32).into_bytes()
+                } else {
+                    format!("{row:032x}").into_bytes()
+                })])
+                .unwrap();
+        }
+        let bytes = writer.finish().unwrap();
+        let header = crate::format::parse_header(&bytes).unwrap();
+        assert_eq!(bytes[header.header_size + 1], 7);
+        let block = Block::new(&bytes).unwrap();
+        for row in [0u32, 1, 63, 127] {
+            let key = if row == 127 {
+                "f".repeat(32)
+            } else {
+                format!("{row:032x}")
+            };
+            assert_eq!(
+                Some(row),
+                block
+                    .find_rowkey(
+                        &[RowkeyValue::Bytes(key.as_bytes())],
+                        &[RowkeyKind::UnicodeCi],
+                        &table,
+                    )
+                    .unwrap()
+            );
+        }
+        let missing = "g".repeat(32);
+        let bound = block
+            .find_rowkey_bound(
+                &[RowkeyValue::Bytes(missing.as_bytes())],
+                &[RowkeyKind::UnicodeCi],
+                &table,
+                true,
+                RowRange::new(0, block.row_count()).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(bound.row, 128);
+        assert!(!bound.equal);
     }
 }

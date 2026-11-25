@@ -986,11 +986,14 @@ int ObIMicroBlockFlatReader::read_rust_cell(
     datum.set_nop();
   } else if (3 == cell.kind) {
     datum.set_uint(cell.value);
-  } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size)
+  } else if ((0 != cell.kind && 5 != cell.kind)
+             || cell.offset > static_cast<uint64_t>(block_size)
              || cell.length > static_cast<uint64_t>(block_size) - cell.offset) {
     ret = OB_INVALID_DATA;
   } else if (OB_FAIL(datum.from_buf_enhance(
       reinterpret_cast<const char *>(header_) + cell.offset, cell.length))) {
+  } else if (5 == cell.kind) {
+    datum.set_outrow();
   }
   return ret;
 }
