@@ -1,0 +1,53 @@
+drop database if exists inlist_duplicate_membership;
+create database inlist_duplicate_membership;
+use inlist_duplicate_membership;
+create table docs(id int primary key, category int);
+insert into docs values (1,1),(2,2),(3,3),(4,4),(5,5),(6,null);
+Repeated values retain a compact native IN expression
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|# |TABLE FULL SCAN|docs|#       |#           |
+===============================================
+Outputs & filters:
+-------------------------------------
+  # - output([docs.id]), filter([docs.category IN (#, #, #)]), rowset=#
+      access([docs.id], [docs.category]), partitions(p#)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([docs.id]), range(MIN ; MAX)always true
+Reusing normalized SQL must retain newly distinct bindings
+id
+1
+2
+3
+id
+1
+2
+3
+4
+id
+1
+2
+3
+NULL and NOT IN retain three-valued logic
+id
+1
+2
+3
+id
+4
+5
+id
+Prepared statement bindings may change membership
+id
+1
+2
+id
+1
+2
+4
+id
+1
+2
+drop database inlist_duplicate_membership;
