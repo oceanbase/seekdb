@@ -1,0 +1,7 @@
+#owner: codex
+#owner group: optimizer
+--echo # Repeated IN literals must not trigger VALUES-table rewriting
+
+EXPLAIN SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 3) */
+  1 FROM dual WHERE 1 IN (1, 1, 1, 1);
+SELECT 1 FROM dual WHERE 1 IN (1, 1, 1, 1);
