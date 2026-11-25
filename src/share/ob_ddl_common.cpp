@@ -541,6 +541,40 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+// Shared DDL must quote identifiers without depending on the SQL module.
+static int append_ddl_column_identifier(
+    const ObString &column_name,
+    const bool is_shadow_column,
+    ObSqlString &sql_string)
+{
+  int ret = OB_SUCCESS;
+  const char *name = column_name.ptr();
+  const int64_t name_len = column_name.length();
+  int64_t start = 0;
+  if (name_len > 0 && OB_ISNULL(name)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql_string.append("`"))) {
+  } else if (is_shadow_column && OB_FAIL(sql_string.append("__SHADOW_"))) {
+  }
+  // Copy spans rather than appending ordinary identifier bytes one at a time.
+  for (int64_t i = 0; OB_SUCC(ret) && i < name_len; ++i) {
+    if ('`' == name[i]) {
+      if (OB_FAIL(sql_string.append(name + start, i - start + 1))) {
+      } else if (OB_FAIL(sql_string.append("`"))) {
+      } else {
+        start = i + 1;
+      }
+    }
+  }
+  if (OB_SUCC(ret) && start < name_len) {
+    ret = sql_string.append(name + start, name_len - start);
+  }
+  if (OB_SUCC(ret)) {
+    ret = sql_string.append("`");
+  }
+  return ret;
+}
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -549,7 +583,6 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
   // append comma
   if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
@@ -557,11 +590,10 @@ int ObDDLUtil::generate_column_name_str(
   }
   // append original column name
   if (OB_SUCC(ret) && with_origin_name) {
-    if (column_name_info.is_enum_set_need_cast_) {
-      // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
-      }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    // Enum and set values are cast to unsigned before being appended to a macro block.
+    if (column_name_info.is_enum_set_need_cast_ && OB_FAIL(sql_string.append("cast("))) {
+    } else if (OB_FAIL(append_ddl_column_identifier(column_name_info.column_name_, false, sql_string))) {
+    } else if (column_name_info.is_enum_set_need_cast_ && OB_FAIL(sql_string.append(" as unsigned)"))) {
     }
   }
   // append AS
@@ -571,8 +603,8 @@ int ObDDLUtil::generate_column_name_str(
   }
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_ddl_column_identifier(column_name_info.column_name_,
+        column_name_info.is_shadow_column_, sql_string))) {
     }
   }
   return ret;
