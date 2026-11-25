@@ -1,0 +1,31 @@
+# Balanced 129-predicate conjunction, including a nullable column
+ids
+2,3,4
+# Strongest bound comes last
+ids
+2,3,4
+# Inclusive upper bounds
+ids
+2,3,4,5
+# Lower bounds
+ids
+5,6,7
+ids
+4,5,6,7
+# Mixed operators and OR must preserve semantics
+ids
+2,3,4
+ids
+2,3,4,5,6
+# NULL bound must not be discarded
+cnt
+0
+# Cached parameterized queries must change the retained bound
+ids
+2,3,4
+ids
+2,3,4
+ids
+2,3,4,5,6
+ids
+NULL
