@@ -1,0 +1,19 @@
+src/observer/vector_index/ob_vector_index_async_task.cpp
+  s_9a923c4cef5d34::t_bd2718e3083116 418
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e671ef7a324c061cfdbed12a586055fbf2b68862",
+  "prompts": {},
+  "sessions": {
+    "s_9a923c4cef5d34": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a210a9-6032-78e0-a33f-58e5969d4b37",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
