@@ -1,15 +1,16 @@
 {
   "name": "zlib",
-  "version": "1.2.13",
+  "version": "1.2.13 (linux engine); 1.3.1 (windows, zlib1.dll)",
   "source": "https://zlib.net/",
-  "packaged_as": "Compression source/library in the native engine",
+  "packaged_as": "Compression library statically linked into the native engine; shared zlib1.dll on Windows x86_64 (vcpkg port 1.3.1, shipped as the libcurl runtime)",
   "license": "Zlib",
-  "modified": "unspecified",
+  "modified": "unspecified for the Linux engine build; the Windows vcpkg port applies build-system patches (0001-Prevent-invalid-inclusions-when-HAVE_-is-set-to-0, 0002-build-static-or-shared-not-both, 0003-android-and-mingw-fixes)",
   "license_files": [
-    "zlib.txt"
+    "zlib.txt",
+    "zlib-1.3.1.txt"
   ],
   "redistribution": "Retain the notice, do not misrepresent origin, and mark altered source versions.",
-  "evidence": "1.4.0 engine binary exports inflate 1.2.13; zlib 1.2.13 devkit package; licenses/zlib/zlib.txt",
+  "evidence": "1.4.0 engine binary exports inflate 1.2.13; zlib 1.2.13 devkit package; deps/init/oceanbase.windows.x86_64.deps; share/zlib/vcpkg.spdx.json zlib:x64-windows@1.3.1; bazel/third_party/targets.bzl curl_zlib_runtime; licenses/zlib/zlib.txt and zlib-1.3.1.txt",
   "shipped_in": [
     "engine"
   ]

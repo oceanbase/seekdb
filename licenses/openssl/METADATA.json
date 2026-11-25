@@ -1,15 +1,15 @@
 {
   "name": "OpenSSL",
-  "version": "1.1.1u",
+  "version": "1.1.1u (linux, macos, ios, android, wasm)",
   "source": "https://github.com/openssl/openssl/tree/OpenSSL_1_1_1u",
-  "packaged_as": "Static libssl and libcrypto native libraries",
+  "packaged_as": "Static libssl and libcrypto on Linux, macOS, iOS, Android and WASM; Windows ships OpenSSL 3 instead (see openssl-3)",
   "license": "OpenSSL and SSLeay",
   "modified": "No local patch recorded",
   "license_files": [
     "openssl-LICENSE.txt"
   ],
   "redistribution": "Retain the OpenSSL and original SSLeay license texts and the required acknowledgments.",
-  "evidence": "el8 manifest; deps/init/wasm/dependencies.json; bazel/third_party/targets.bzl",
+  "evidence": "deps/init/*.deps devdeps-openssl-static-1.1.1u and devdeps-openssl-1.1.1u; deps/init/wasm/dependencies.json; deps/init/ios/build.py; bazel/third_party/targets.bzl SDK_IMPORTS (static, non-Windows); licenses/openssl/openssl-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

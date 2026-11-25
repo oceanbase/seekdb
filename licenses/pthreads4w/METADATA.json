@@ -1,0 +1,16 @@
+{
+  "name": "pthreads4w",
+  "version": "3.0.0",
+  "source": "https://sourceforge.net/projects/pthreads4w/",
+  "packaged_as": "Shared pthreadVC3.dll on Windows x86_64 (vcpkg x64-windows port 3.0.0#14, development-kit package devdeps-pthreads-20260506)",
+  "license": "Apache-2.0",
+  "modified": "The vcpkg port applies build and install patches (use-md, fix-install, whitespace_in_path, fix-pthread_getname_np); no seekdb patch recorded",
+  "license_files": [
+    "LICENSE.txt"
+  ],
+  "redistribution": "Retain the Apache-2.0 text; pthread.h carries the Pthreads4w copyright notice.",
+  "evidence": "deps/init/oceanbase.windows.x86_64.deps; bazel/third_party/targets.bzl _WINDOWS_SHARED pthreads and windows_headers; include/_ptw32.h __PTW32_VERSION 3,0,0,0; share/pthreads/vcpkg.spdx.json pthreads:x64-windows@3.0.0#14; licenses/pthreads4w/LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}
