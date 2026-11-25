@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX PL
 
 #include <cstddef>
+#include "lib/worker.h"
 #include "pl/ob_pl_interface_pragma.h"
 
 namespace oceanbase
@@ -33,12 +34,15 @@ struct ObPLInterface {
 
 template <typename U, U func>
 struct interface_checker {
-  // These are the two supported PL C interface signatures. Any other
+  // These are the supported PL C interface signatures. Any other
   // signature yields a compile-time error.
   using T3 = int(&)(ObExecContext &, ParamStore &, ObObj &);
   using T_INTERFACE = int(&)(ObPLExecCtx &, ParamStore &, ObObj&);
 
+  using T_DEADLINE_INTERFACE = int(&)(ObPLExecCtx &, ParamStore &, ObObj &, int64_t);
+
   static_assert(std::is_same<U, T3>::value || std::is_same<U, T_INTERFACE>::value
+                || std::is_same<U, T_DEADLINE_INTERFACE>::value
                 || std::is_same<U, std::nullptr_t>::value,
                 "Unsupported PL C interface signature");
   static_assert(std::is_same<PL_C_INTERFACE_t, std::remove_reference_t<T_INTERFACE> *>::value,
@@ -48,6 +52,8 @@ struct interface_checker {
   {
     if constexpr (std::is_same<U, T3>::value) {
       return func(*pl_exec_ctx.exec_ctx_, param, obj);
+    } else if constexpr (std::is_same<U, T_DEADLINE_INTERFACE>::value) {
+      return func(pl_exec_ctx, param, obj, THIS_WORKER.get_timeout_ts());
     } else {
       return func(pl_exec_ctx, param, obj);
     }

@@ -17,8 +17,10 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_compress.h"
 
+#include "lib/compress/ob_compress_util.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "rust/compression.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -47,7 +49,7 @@ int ObExprCompress::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   ObExprResType tmp_type;
-  int64_t length = 0;
+  size_t length = 0;
   int64_t mbmaxlen = 0;
   type.set_varbinary();
   type.set_collation_level(CS_LEVEL_COERCIBLE);
@@ -56,7 +58,11 @@ int ObExprCompress::calc_result_type1(ObExprResType &type,
   OX (type1.set_calc_collation_type(tmp_type.get_collation_type()));
   OX (type1.set_calc_collation_level(tmp_type.get_collation_level()));
   OZ (ObCharset::get_mbmaxlen_by_coll(tmp_type.get_collation_type(), mbmaxlen));
-  OX (type.set_length(compressBound(type1.get_length() * mbmaxlen) + COMPRESS_HEADER_LEN + 1));
+  OX (length = type1.get_length() * mbmaxlen);
+  // SQL uses level 6, whose stored-block bound preserves the legacy metadata width.
+  // Runtime allocation still uses the backend's bound, which covers every level.
+  OX (type.set_length(length + (length >> 12) + (length >> 14) + (length >> 25) + 13
+                      + COMPRESS_HEADER_LEN + 1));
   return ret;
 }
 
@@ -78,18 +84,24 @@ int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     expr_datum.set_string(ObString::make_empty_string());
   } else {
     const ObString& str_val = arg->get_string();
-    uint64_t new_len = compressBound(str_val.length());
+    const auto bound = compression::compress_bound(
+        static_cast<uint8_t>(ZLIB_COMPRESSOR), str_val.length());
+    uint64_t new_len = bound.size;
     const int64_t buf_len = new_len + COMPRESS_HEADER_LEN + 1;
     char *buf = expr.get_str_res_mem(ctx, buf_len);
-    if (OB_ISNULL(buf)) {
+    if (compression::Code::Ok != bound.code) {
+      ret = common::compression_error_code(bound.code);
+    } else if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      uLongf new_len_zlib = static_cast<uLongf>(new_len);
-      if (OB_UNLIKELY(Z_OK != compress(reinterpret_cast<unsigned char*>(buf + COMPRESS_HEADER_LEN), &new_len_zlib,
-          reinterpret_cast<const unsigned char*>(str_val.ptr()), static_cast<uLong>(str_val.length())))) {
+      const auto result = compression::compress(
+          static_cast<uint8_t>(ZLIB_COMPRESSOR),
+          reinterpret_cast<const uint8_t *>(str_val.ptr()), str_val.length(),
+          reinterpret_cast<uint8_t *>(buf + COMPRESS_HEADER_LEN), new_len);
+      if (compression::Code::Ok != result.code) {
         ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
       } else {
-        new_len = static_cast<uint64_t>(new_len_zlib);
+        new_len = result.size;
         int32_t compress_header = str_val.length() & COMPRESS_HEADER_MASK;
         MEMCPY(buf, &compress_header, sizeof(compress_header));
         expr_datum.set_string(buf, new_len + COMPRESS_HEADER_LEN);
@@ -190,13 +202,16 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       } else if (orig_len > 0) {
         if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
         } else {
-          uLongf orig_len_zlib = static_cast<uLongf>(orig_len);
-          if (OB_UNLIKELY(Z_OK != uncompress(reinterpret_cast<unsigned char*>(buf), &orig_len_zlib,
-              reinterpret_cast<const unsigned char*>(str_val.ptr() + COMPRESS_HEADER_LEN), static_cast<uLong>(str_val.length() - COMPRESS_HEADER_LEN)))) {
+          const auto result = compression::decompress(
+              static_cast<uint8_t>(ZLIB_COMPRESSOR),
+              reinterpret_cast<const uint8_t *>(str_val.ptr() + COMPRESS_HEADER_LEN),
+              str_val.length() - COMPRESS_HEADER_LEN,
+              reinterpret_cast<uint8_t *>(buf), orig_len);
+          if (compression::Code::Ok != result.code) {
             expr_datum.set_null();
             LOG_USER_WARN(OB_ERR_ZLIB_DATA);
           } else {
-            orig_len = static_cast<uint64_t>(orig_len_zlib);
+            orig_len = result.size;
             if (OB_FAIL(output_result.lseek(orig_len, 0))) {
             } else {
               output_result.set_result();

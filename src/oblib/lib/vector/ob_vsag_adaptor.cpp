@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "ob_vsag_adaptor.h"
+#include <inttypes.h>
 #include <map>
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
@@ -783,7 +784,7 @@ int construct_vsag_sindi_search_param(float query_prune_ratio, uint64_t n_candid
   } else if (OB_FAIL(databuff_printf(result_param_str, 
                         buf_len, 
                         pos, 
-                        ",\"n_candidate\":%lu}}", n_candidate))) {
+                        ",\"n_candidate\":%" PRIu64 "}}", n_candidate))) {
   }
   if (OB_SUCC(ret)) {
     LOG_TRACE("search param", KCSTRING(result_param_str), K(lbt()));

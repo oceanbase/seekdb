@@ -28,9 +28,13 @@ cxxbridge_repository = use_repo_rule("//bazel:rust_repositories.bzl", "cxxbridge
 cxxbridge_repository(name = "cxxbridge_source")
 
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.render_config(
+    repositories = ["cxxbridge_deps"],
+    generate_cargo_toml_env_vars = False,
+)
 crate.annotation(
     crate = "*",
-    repositories = ["rust_crates", "external_crates"],
+    repositories = ["rust_crates"],
     build_script_env = {"DEBUG": "true", "PROFILE": "release"},
 )
 crate.annotation(
@@ -39,11 +43,40 @@ crate.annotation(
     additive_build_file = "//bazel:cxx_runtime.BUILD.bazel",
 )
 crate.annotation(
+    crate = "ring",
+    repositories = ["rust_crates"],
+    build_script_env = {"NUM_JOBS": "4"},
+)
+crate.annotation(
     crate = "spdlog-rs",
     version = "0.5.3",
     repositories = ["rust_crates"],
     patches = ["//bazel:spdlog-rs-emscripten.diff"],
     patch_args = ["-p1"],
+)
+# cc-rs uses this build-script budget for its parallel C compiler workers.
+crate.annotation(
+    crate = "zstd-sys",
+    version = "2.1.2+zstd.1.5.7",
+    repositories = ["rust_crates"],
+    build_script_env = {"NUM_JOBS": "4"},
+)
+# simsimd's build script compiles one amalgamated C file and, on failure,
+# retries with x86 SIMD backends disabled one at a time. Enabling the newest
+# four makes clang 17 peak above 58 GiB RSS and get OOM-killed, so every
+# uncached build pays four full retries before settling on the same backend
+# set. Disable those four up front to keep the result identical and the build
+# deterministic.
+crate.annotation(
+    crate = "simsimd",
+    version = "6.5.16",
+    repositories = ["rust_crates"],
+    build_script_env = {
+        "SIMSIMD_TARGET_SIERRA": "0",
+        "SIMSIMD_TARGET_TURIN": "0",
+        "SIMSIMD_TARGET_SAPPHIRE": "0",
+        "SIMSIMD_TARGET_GENOA": "0",
+    },
 )
 _RUST_PLATFORMS = [
     "x86_64-unknown-linux-gnu",
@@ -77,42 +110,7 @@ crate.from_cargo(
     isolated = False,
     supported_platform_triples = _RUST_PLATFORMS,
 )
-crate.annotation(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    build_script_env = {
-        "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=",
-        "CFLAGS": "-O2 -fPIC",
-        "MAKEFLAGS": "",
-        "NUM_JOBS": "4",
-    },
-    extra_aliased_targets = {"jemalloc_build": "build_script_build"},
-)
-crate.annotation_select(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    triples = [target for target in _RUST_PLATFORMS if target not in ["aarch64-apple-ios", "aarch64-apple-ios-sim"]],
-    build_script_env = {"JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_"},
-)
-crate.annotation_select(
-    crate = "seekdb-jemalloc-sys",
-    repositories = ["external_crates"],
-    triples = ["aarch64-apple-ios", "aarch64-apple-ios-sim"],
-    build_script_env = {
-        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=aarch64-apple-ios\n--with-lg-page=14\n--disable-zone-allocator",
-    },
-)
-crate.from_cargo(
-    name = "external_crates",
-    manifests = ["//deps/external:Cargo.toml"],
-    cargo_lockfile = "//deps/external:Cargo.lock",
-    cargo_config = "//bazel:rust_cargo_config.toml",
-    host_tools = "@rust_native//:BUILD.bazel",
-    skip_cargo_lockfile_overwrite = True,
-    isolated = False,
-    supported_platform_triples = _RUST_PLATFORMS,
-)
-use_repo(crate, "rust_crates", "cxxbridge_deps", "external_crates")
+use_repo(crate, "rust_crates", "cxxbridge_deps")
 
 host_tools_repository = use_repo_rule("//bazel:parser.bzl", "host_tools_repository")
 host_tools_repository(name = "host_tools")
@@ -167,30 +165,6 @@ use_repo(
 )
 
 register_toolchains("@local_config_cc_toolchains//:all")
-
-sdk_sources = use_extension("//bazel/sdk_sources:repositories.bzl", "sdk_sources")
-
-use_repo(
-    sdk_sources,
-    "sdk_abseil",
-    "sdk_s2_ios",
-    "sdk_s2_wasm",
-    "sdk_roaring",
-    "sdk_vsag_ios",
-    "sdk_vsag_wasm",
-    "sdk_cpuinfo",
-    "sdk_fmt",
-    "sdk_spdlog",
-    "sdk_nlohmann_json",
-    "sdk_robin_map",
-    "sdk_thread_pool",
-    "sdk_clapack",
-    "sdk_openblas",
-    "sdk_antlr4",
-    "sdk_lapack",
-    "sdk_openmp",
-    "sdk_boost",
-)
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 http_archive(

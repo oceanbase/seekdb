@@ -1,18 +1,20 @@
 name: 'translator'
 on:
-  issues:
-    types: [opened, edited]
-  issue_comment:
-    types: [created, edited]
-  discussion:
-    types: [created, edited]
-  discussion_comment:
-    types: [created, edited]
-  pull_request_target:
-    branches: [master, develop]
-    types: [opened, edited]
-  pull_request_review_comment:
-    types: [created, edited]
+  workflow_dispatch:
+  # Temporarily pause automatic translation. Uncomment these events to restore it.
+  # issues:
+  #   types: [opened, edited]
+  # issue_comment:
+  #   types: [created, edited]
+  # discussion:
+  #   types: [created, edited]
+  # discussion_comment:
+  #   types: [created, edited]
+  # pull_request_target:
+  #   branches: [master, develop]
+  #   types: [opened, edited]
+  # pull_request_review_comment:
+  #   types: [created, edited]
 
 jobs:
   translate:

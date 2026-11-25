@@ -19,8 +19,6 @@
 #include "rust/config.h"
 #include "ob_storage_object_handle.h"
 #include "storage/blocksstable/ob_block_manager.h"
-#include "share/ob_io_device_helper.h"
-#include "share/io/ob_io_manager.h"
 #include "share/config/ob_server_config.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -108,13 +106,14 @@ int ObStorageObjectHandle::report_bad_block() const
 
 
 
-int ObStorageObjectHandle::async_read(const ObStorageObjectReadInfo &read_info)
+int ObStorageObjectHandle::async_read(const ObStorageObjectReadInfo &read_info,
+    std::unique_ptr<storage_io::CallbackAdapter> callback)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    if (OB_FAIL(sn_async_read(read_info))) {
+    if (OB_FAIL(sn_async_read(read_info, std::move(callback)))) {
     }
   }
   return ret;
@@ -132,32 +131,18 @@ int ObStorageObjectHandle::async_write(const ObStorageObjectWriteInfo &write_inf
   return ret;
 }
 
-int ObStorageObjectHandle::sn_async_read(const ObStorageObjectReadInfo &read_info)
+int ObStorageObjectHandle::sn_async_read(const ObStorageObjectReadInfo &read_info,
+    std::unique_ptr<storage_io::CallbackAdapter> callback)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     reuse();
-    ObIOInfo io_info;
-    io_info.offset_ = read_info.offset_;
-    io_info.size_ = static_cast<int32_t>(read_info.size_);
-    io_info.flag_ = read_info.io_desc_;
-    io_info.callback_ = read_info.io_callback_;
-    io_info.fd_.first_id_ = read_info.macro_block_id_.first_id();
-    io_info.fd_.second_id_ = read_info.macro_block_id_.second_id();
-    io_info.fd_.third_id_ = read_info.macro_block_id_.third_id();
-    io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
-    io_info.flag_.set_sys_module_id(read_info.io_desc_.get_sys_module_id());
     const int64_t real_timeout_ms = min(read_info.io_timeout_ms_, config::_data_storage_io_timeout() / 1000L);
-    io_info.timeout_us_ = real_timeout_ms * 1000L;
-    io_info.user_data_buf_ = read_info.buf_;
-    io_info.buf_ = read_info.buf_; // for sync io
-    // resource manager level is higher than default
-    io_info.flag_.set_sys_module_id(read_info.io_desc_.get_sys_module_id());
 
-    io_info.flag_.set_read();
-    if (FAILEDx(ObIOManager::get_instance().aio_read(io_info, io_handle_))) {
+    if (FAILEDx(OB_SERVER_BLOCK_MGR.submit_read(read_info.macro_block_id_, read_info.offset_, read_info.size_,
+        read_info.io_desc_, real_timeout_ms * 1000L, std::move(callback), io_handle_))) {
     } else if (OB_FAIL(set_macro_block_id(read_info.macro_block_id_))) {
     }
   }
@@ -170,22 +155,10 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
   if (OB_UNLIKELY(!write_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObIOInfo io_info;
-    
-    io_info.offset_ = write_info.offset_;
-    io_info.size_ = write_info.size_;
-    io_info.buf_ = write_info.buffer_;
-    io_info.flag_ = write_info.io_desc_;
-    io_info.fd_.first_id_ = macro_id_.first_id();
-    io_info.fd_.second_id_ = macro_id_.second_id();
-    io_info.fd_.third_id_ = macro_id_.third_id();
-    io_info.fd_.device_handle_ = (nullptr == write_info.device_handle_) ? &LOCAL_DEVICE_INSTANCE : write_info.device_handle_;
-    io_info.flag_.set_sys_module_id(write_info.io_desc_.get_sys_module_id());
     const int64_t real_timeout_ms = min(write_info.io_timeout_ms_, config::_data_storage_io_timeout() / 1000L);
-    io_info.timeout_us_ = real_timeout_ms * 1000L;
 
-    io_info.flag_.set_write();
-    if (FAILEDx(ObIOManager::get_instance().aio_write(io_info, io_handle_))) {
+    if (FAILEDx(OB_SERVER_BLOCK_MGR.submit_write(macro_id_, write_info.offset_, write_info.buffer_, write_info.size_,
+        write_info.io_desc_, real_timeout_ms * 1000L, io_handle_))) {
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(OB_SERVER_BLOCK_MGR.update_write_time(macro_id_))) {
@@ -217,11 +190,6 @@ int ObStorageObjectHandle::wait()
 int ObStorageObjectHandle::get_io_time_us(int64_t &io_time_us) const
 {
   return io_handle_.get_io_time_us(io_time_us);
-}
-
-int ObStorageObjectHandle::check_is_finished(bool &is_finished)
-{
-  return io_handle_.check_is_finished(is_finished);
 }
 
 int ObStorageObjectHandle::set_macro_block_id(const MacroBlockId &macro_block_id)

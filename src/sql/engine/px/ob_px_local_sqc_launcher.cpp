@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_local_sqc_launcher.h"
-#include "lib/signal/ob_signal_struct.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/utility/serialization.h"
 #include "ob_px_sqc_handler.h"
@@ -152,7 +151,6 @@ int ObLocalSqcLauncher::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObPxInitSqcArgs &arg = sqc_handler.get_sqc_init_arg();
-    SQL_INFO_GUARD(arg.sqc_.get_monitoring_info().cur_sql_, session->get_cur_sql_id());
     ObWorkerSessionGuard worker_session_guard(session);
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     session->set_current_trace_id(ObCurTraceId::get_trace_id());
@@ -411,7 +409,6 @@ int ObLocalFastSqcLauncher::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObPxInitSqcArgs &arg = sqc_handler.get_sqc_init_arg();
-    SQL_INFO_GUARD(arg.sqc_.get_monitoring_info().cur_sql_, session->get_cur_sql_id());
     ObWorkerSessionGuard worker_session_guard(session);
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     ObDIActionGuard action_guard("PX SUB COORDINATOR");

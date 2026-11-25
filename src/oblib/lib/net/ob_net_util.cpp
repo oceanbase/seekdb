@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "lib/charset/ob_charset.h"
+#include <inttypes.h>
 #include "lib/net/ob_net_util.h"
 
 using namespace oceanbase::common;
@@ -396,7 +397,7 @@ int ObNetUtil::get_ifname_by_addr(const char *local_ip, char *if_name, uint64_t 
             WideCharToMultiByte(CP_UTF8, 0, cur->FriendlyName, -1, friendly, sizeof(friendly), nullptr, nullptr);
             if (if_name_len < strlen(friendly) + 1) {
               ret = OB_BUF_NOT_ENOUGH;
-              _LOG_ERROR("the buffer is not enough, need:%lu, have:%lu, ret:%d",
+              _LOG_ERROR("the buffer is not enough, need:%" PRIu64 ", have:%" PRIu64 ", ret:%d",
                          (unsigned long)(strlen(friendly) + 1), (unsigned long)if_name_len, ret);
             } else {
               snprintf(if_name, (size_t)if_name_len, "%s", friendly);
@@ -444,7 +445,7 @@ int ObNetUtil::get_ifname_by_addr(const char *local_ip, char *if_name, uint64_t 
           has_found = true;
           if (if_name_len < strlen(ifa->ifa_name) + 1) {
             ret = OB_BUF_NOT_ENOUGH;
-            _LOG_ERROR("the buffer is not enough, need:%lu, have:%lu, ret:%d",
+            _LOG_ERROR("the buffer is not enough, need:%" PRIu64 ", have:%" PRIu64 ", ret:%d",
                        strlen(ifa->ifa_name) + 1, if_name_len, ret);
           } else {
             snprintf(if_name, if_name_len, "%s", ifa->ifa_name);

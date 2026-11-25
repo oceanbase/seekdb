@@ -18,6 +18,7 @@
 #define OCEANBASE_MYSQL_PROXY_H_
 
 #include "common/mysqlclient/ob_isql_client.h"
+#include <inttypes.h>
 #include "common/timezone/ob_time_convert.h"  // ObTimeZoneInfoWrap (self-contained include)
 #include "common/mysqlclient/ob_mysql_result.h"
 
@@ -297,10 +298,10 @@ class ObMySQLProxy : public ObCommonSqlProxy
     SQL_COL_APPEND_VALUE(sql, values, (obj).member##_, #member, fmt)
 
 #define SQL_APPEND_INT_VALUE(sql, values, obj, member) \
-    SQL_COL_APPEND_VALUE(sql, values, static_cast<int64_t>((obj).member##_), #member, "%ld")
+    SQL_COL_APPEND_VALUE(sql, values, static_cast<int64_t>((obj).member##_), #member, "%" PRId64 "")
 
 #define SQL_APPEND_UINT_VALUE(sql, values, obj, member) \
-    SQL_COL_APPEND_VALUE(sql, values, static_cast<uint64_t>((obj).member##_), #member, "%lu")
+    SQL_COL_APPEND_VALUE(sql, values, static_cast<uint64_t>((obj).member##_), #member, "%" PRIu64 "")
 
 #define SQL_APPEND_CSTR_VALUE(sql, values, obj, member) \
     SQL_COL_APPEND_CSTR_VALUE(sql, values, (obj).member##_, #member)

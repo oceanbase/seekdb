@@ -1744,8 +1744,9 @@ int ObTransformSimplifyExpr::adjust_subquery_comparison_expr(ObRawExpr*& expr,
     ObItemType op_type = expr->get_expr_type();
     if (OB_ISNULL(param_expr_right)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if ((!param_expr_left->is_query_ref_expr() 
-                && !param_expr_right->is_query_ref_expr() 
+    } else if (((!param_expr_left->is_query_ref_expr()
+                 || param_expr_left->get_output_column() == 1)
+                && !param_expr_right->is_query_ref_expr()
                 && OB_FAIL(ObTransformUtils::query_cmp_to_value_cmp(expr->get_expr_type(), op_type)))
                || T_INVALID == op_type) {
       ret = OB_ERR_UNEXPECTED;

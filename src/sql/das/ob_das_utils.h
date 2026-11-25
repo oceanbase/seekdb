@@ -85,7 +85,7 @@ public:
     ObDASBaseRtDef *base_rtdef = nullptr;
     if (OB_FAIL(find_child_das_def(root_ctdef, root_rtdef, op_type, base_ctdef, base_rtdef))) {
     } else if (OB_ISNULL(base_ctdef) || OB_ISNULL(base_rtdef)) {
-      ret = common::OB_ERR_UNEXPECTED;
+      ret = common::OB_ENTRY_NOT_EXIST;
       SQL_DAS_LOG(WARN, "can not find the target op def", K(ret), K(op_type), KP(base_ctdef), KP(base_rtdef));
     } else {
       target_ctdef = static_cast<const CtDefType*>(base_ctdef);

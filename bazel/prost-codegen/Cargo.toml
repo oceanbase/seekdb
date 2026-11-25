@@ -1,0 +1,10 @@
+[package]
+name = "prost-codegen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[dependencies]
+tonic-prost-build = { version = "=0.14.6", default-features = false, features = ["transport"] }
+prost-build = { version = "=0.14.3", default-features = false }
+prost-types = "=0.14.3"
+protox = "=0.9.1"

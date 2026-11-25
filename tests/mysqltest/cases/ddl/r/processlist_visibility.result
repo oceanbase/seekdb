@@ -1,0 +1,37 @@
+DROP USER IF EXISTS 'processlist_owner'@'%';
+DROP USER IF EXISTS 'processlist_plain'@'%';
+DROP USER IF EXISTS 'processlist_admin'@'%';
+DROP ROLE IF EXISTS processlist_monitor;
+CREATE USER 'processlist_owner'@'%';
+CREATE USER 'processlist_plain'@'%';
+CREATE USER 'processlist_admin'@'%';
+CREATE ROLE processlist_monitor;
+GRANT PROCESS ON *.* TO processlist_monitor;
+GRANT processlist_monitor TO 'processlist_admin'@'%';
+SELECT CURRENT_USER() AS actor;
+actor
+processlist_plain@%
+SELECT COUNT(*) AS visible_peer_sessions FROM information_schema.processlist WHERE ID = @victim_id;
+visible_peer_sessions
+0
+SELECT 1 AS victim_alive;
+victim_alive
+1
+SELECT CURRENT_USER() AS actor;
+actor
+processlist_admin@%
+SET ROLE NONE;
+SELECT COUNT(*) AS visible_peer_sessions FROM information_schema.processlist WHERE ID = @victim_id;
+visible_peer_sessions
+0
+SET ROLE ALL;
+SELECT COUNT(*) AS visible_peer_sessions FROM information_schema.processlist WHERE ID = @victim_id;
+visible_peer_sessions
+1
+SELECT 1 AS victim_alive;
+victim_alive
+1
+DROP USER 'processlist_owner'@'%';
+DROP USER 'processlist_plain'@'%';
+DROP USER 'processlist_admin'@'%';
+DROP ROLE processlist_monitor;

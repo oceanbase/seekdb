@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_ddl_retry_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "share/ob_ddl_sim_point.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
@@ -256,7 +257,7 @@ int ObDDLRetryTask::check_schema_change_done()
       if (OB_UNLIKELY(!proxy.is_inited())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(query_string.assign_fmt(
-          " SELECT status FROM %s WHERE task_id = %lu",
+          " SELECT status FROM %s WHERE task_id = %" PRIu64 "",
           OB_ALL_DDL_TASK_STATUS_TNAME, task_id_))) {
       } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_CHECK_SCHEMA_CHANGED_SLOW))) {
       } else if (OB_FAIL(proxy.read(res, query_string.ptr()))) {
@@ -297,7 +298,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         arg->task_id_ = task_id_;
         ObDDLUtil::get_ddl_rpc_timeout_for_database(
             *GCTX.schema_service_, object_id_, timeout_us);
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_database(*arg, drop_database_res); }))) {
+        if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_database(*arg, drop_database_res); }))) {
         } else {
           affected_rows_ = drop_database_res.affected_row_;
         }
@@ -308,7 +309,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObDropTableArg *arg = static_cast<obcall::ObDropTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_table(*arg, res); }))) {
+        if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_table(*arg, res); }))) {
         }
         break;
       }
@@ -317,7 +318,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObTruncateTableArg *arg = static_cast<obcall::ObTruncateTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->truncate_table(*arg, res); }))) {
+        if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->truncate_table(*arg, res); }))) {
         }
         break;
       }
@@ -330,7 +331,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObAlterTableArg *arg = static_cast<obcall::ObAlterTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->alter_table(*arg, alter_table_res_); }))) {
+        if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->alter_table(*arg, alter_table_res_); }))) {
         }
         break;
       }

@@ -1883,7 +1883,7 @@ int ObDASIvfPQScanIter::check_can_pre_compute(
     bool &pre_compute_table)
 {
   int ret = OB_SUCCESS;
-  int64_t ksub = 1L << nbits_;
+  int64_t ksub = 1ULL << nbits_;
   pre_compute_table = false;
   if (dis_type_ == oceanbase::sql::ObExprVectorDistance::ObVecDisType::EUCLIDEAN) {
     if (OB_FAIL(get_pq_precomputetable_cache(is_vectorized, pre_cache_guard, pre_cent_cache, pre_compute_table))) {
@@ -1909,7 +1909,7 @@ int ObDASIvfPQScanIter::calc_nearest_limit_rowkeys_in_cids(
   int ret = OB_SUCCESS;
 
   int64_t sub_dim = dim_ / m_;
-  int64_t ksub = 1L << nbits_;
+  int64_t ksub = 1ULL << nbits_;
   IvfRowkeyHeap nearest_rowkey_heap(
       vec_op_alloc_, search_vec/*unused*/, dis_type_, sub_dim,
       get_nprobe(limit_param_, 1), similarity_threshold_); // pq do not need to 
@@ -2181,6 +2181,9 @@ int ObDASIvfBaseScanIter::get_rowkey_brute_post(bool is_vectorized, IvfRowkeyHea
             float distance = 0.0f;
             ObRowkey main_rowkey;
             if (OB_FAIL(calc_vec_dis<float>(reinterpret_cast<float *>(c_vec.ptr()), search_vec, dim_, distance, raw_dis_type))) {
+              if (OB_ERR_NULL_VALUE == ret) {
+                ret = OB_SUCCESS;
+              }
             } else if (OB_FAIL(get_main_rowkey_brute(mem_context_->get_arena_allocator(), brute_ctdef, main_rowkey_cnt, main_rowkey))) {
             } else if (OB_FAIL(nearest_rowkey_heap.push_center(main_rowkey, distance))) {
             }
@@ -2211,6 +2214,9 @@ int ObDASIvfBaseScanIter::get_rowkey_brute_post(bool is_vectorized, IvfRowkeyHea
             float distance = 0.0f;
             ObRowkey main_rowkey;
             if (OB_FAIL(calc_vec_dis<float>(reinterpret_cast<float *>(c_vec.ptr()), search_vec, dim_, distance, raw_dis_type))) {
+              if (OB_ERR_NULL_VALUE == ret) {
+                ret = OB_SUCCESS;
+              }
             } else if (OB_FAIL(get_main_rowkey_brute(mem_context_->get_arena_allocator(), brute_ctdef, main_rowkey_cnt, main_rowkey))) {
             } else if (OB_FAIL(nearest_rowkey_heap.push_center(main_rowkey, distance))) {
             }
@@ -2701,7 +2707,7 @@ int ObDASIvfPQScanIter::try_write_pq_precompute_table_cache(
       if (is_pq_cent_cache_usable && is_ivf_cent_cache_usable) {
         
           ObArenaAllocator tmp_allocator;
-          int64_t ksub = 1L << nbits_;
+          int64_t ksub = 1ULL << nbits_;
           int64_t sub_dim = dim_ / m_;
           float *ivf_centers = ivf_cent_cache->get_centroids();
           float *pq_center = pq_cent_cache->get_centroids(); // m * ksub * sub_dim
@@ -2728,7 +2734,7 @@ int ObDASIvfPQScanIter::try_write_pq_precompute_table_cache(
                                                                   sub_dim,
                                                                   ksub);
               }
-              ObVectorL2Distance<float>::fvec_madd(m_ * ksub, r_norms, 2.0, tab, tab);
+              ObVectorL2Distance<float>::fvec_madd_in_place(m_ * ksub, r_norms, 2.0, tab);
             }
           }
         if (OB_SUCC(ret)) {
@@ -2752,7 +2758,7 @@ int ObDASIvfPQScanIter::pre_compute_inner_prod_table(
     bool is_vectorized)
 {
   int ret = OB_SUCCESS;
-  int64_t ksub = 1L << nbits_;
+  int64_t ksub = 1ULL << nbits_;
   int64_t sub_dim = dim_ / m_;
   // write cache
   ObIvfCacheMgrGuard pq_center_guard;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "share/rc/ob_server_runtime.h"
@@ -481,8 +482,8 @@ int ObForkTableHelper::copy_stat_info_(const char *table_name,
   } else if (
       OB_FAIL(sql_string.assign_fmt(
           "REPLACE INTO %s (table_id, partition_id, %s) "
-          "SELECT %lu, %ld, %s FROM %s "
-          "WHERE table_id = %lu AND partition_id = %ld",
+          "SELECT %" PRIu64 ", %" PRId64 ", %s FROM %s "
+          "WHERE table_id = %" PRIu64 " AND partition_id = %" PRId64 "",
           table_name, table_schema, dst_table_id, dst_part_id, table_schema,
           table_name, src_table_id, src_part_id))) {
   } else if (OB_FAIL(

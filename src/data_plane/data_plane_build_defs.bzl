@@ -80,6 +80,7 @@ DATA_PLANE_API_INTERFACE_HEADERS = [
     "api/data_plane/vector/ob_vector_ip_similarity.h",
     "api/data_plane/vector/ob_vector_l1_distance.h",
     "api/data_plane/vector/ob_vector_l2_distance.h",
+    "api/data_plane/vector/ob_vector_l2_distance_reference.h",
     "api/data_plane/vector/ob_vector_l2_similarity.h",
     "api/data_plane/vector/ob_vector_metric.h",
     "api/data_plane/vector/ob_vector_norm.h",

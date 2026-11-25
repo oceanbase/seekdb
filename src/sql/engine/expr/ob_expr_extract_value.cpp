@@ -15,6 +15,7 @@
  */
 
 #include "ob_expr_extract_value.h"
+#include <inttypes.h>
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -199,7 +200,7 @@ int ObExprExtractValue::extract_mysql_xpath_result(ObMulModeMemCtx *xml_mem_ctx,
     }
   } else if (cal_count) {
     common::ObSqlString sql_string;
-    sql_string.assign_fmt("%ld", result_nodes.count());
+    sql_string.assign_fmt("%" PRId64 "", result_nodes.count());
     if (OB_FAIL(xml_res.append(sql_string.ptr(), sql_string.length()))) {
     }
   } else if (OB_FAIL(append_text_into_buffer(xml_mem_ctx->allocator_, result_nodes, xml_res))) {

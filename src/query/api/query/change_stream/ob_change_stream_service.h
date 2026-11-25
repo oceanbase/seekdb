@@ -21,9 +21,9 @@
 
 namespace oceanbase
 {
-namespace common
+namespace palf
 {
-class ObMySQLProxy;
+struct LSN;
 }
 namespace query
 {
@@ -33,8 +33,8 @@ class ObIChangeStreamService
 public:
   virtual ~ObIChangeStreamService() = default;
   virtual int wait_until_refreshed(
-      common::ObMySQLProxy &mysql_proxy,
-      int64_t timeout_us) = 0;
+      int64_t abs_timeout_us) = 0;
+  virtual int get_min_dep_lsn(palf::LSN &min_dep_lsn) = 0;
 };
 
 } // namespace query

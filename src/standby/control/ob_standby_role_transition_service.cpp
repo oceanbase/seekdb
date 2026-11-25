@@ -262,8 +262,8 @@ int prepare_to_standby(
     LOG_INFO("verified preparation for standby", K(server_info));
   } else {
     share::SCN cutover_scn;
-    share::SCN replay_scn;
     storage::ObLSService *ls_service = nullptr;
+    storage::ObLS *ls = nullptr;
     const int64_t deadline_us = operation_deadline(operation_timeout_us);
     share::set_server_write_enabled(false);
     if (OB_FAIL(get_ls_service(ls_service))) {
@@ -271,7 +271,8 @@ int prepare_to_standby(
       LOG_WARN("failed to drain primary write transactions", KR(ret));
     } else if (OB_FAIL(ls_service->fence_local_append(deadline_us))) {
       LOG_WARN("failed to fence primary log append", KR(ret));
-    } else if (OB_FAIL(ObStandbyLogSyncService::get_local_progress(cutover_scn, replay_scn))) {
+    } else if (OB_FAIL(ls_service->get_ls(ls))) {
+    } else if (OB_FAIL(ls->get_log_handler()->get_end_scn(cutover_scn))) {
       LOG_WARN("failed to capture primary cutover scn", KR(ret));
     } else if (!cutover_scn.is_valid()) {
       ret = OB_ERR_UNEXPECTED;

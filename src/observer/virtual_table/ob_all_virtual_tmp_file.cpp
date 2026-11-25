@@ -15,6 +15,7 @@
  */
 
 #include "share/ob_server_struct.h"
+#include <inttypes.h>
 #include "observer/virtual_table/ob_all_virtual_tmp_file.h"
 #include "observer/ob_server.h"
 #include "share/rc/ob_server_runtime.h"
@@ -160,7 +161,7 @@ int ObAllVirtualTmpFileInfo::fill_columns_(tmp_file::ObTmpFileInfo *tmp_file_inf
         case TMP_FILE_PTR:
           if (NULL != tmp_file_info->tmp_file_ptr_) {
             MEMSET(file_ptr_buffer_, '\0', 20);
-            snprintf(file_ptr_buffer_, 18, "0x%lx", (uint64_t)tmp_file_info->tmp_file_ptr_);
+            snprintf(file_ptr_buffer_, 18, "0x%" PRIx64, (uint64_t)tmp_file_info->tmp_file_ptr_);
             cur_row_.cells_[i].set_varchar(file_ptr_buffer_);
           } else {
             cur_row_.cells_[i].set_varchar(ObString::make_string("nullptr"));

@@ -24,7 +24,6 @@ load(
     _grouped_unity_cc_library = "grouped_unity_cc_library",
 )
 load("//bazel:final_link.bzl", _final_link = "final_link")
-load("//bazel:localized_partial_link.bzl", _localized_partial_link = "localized_partial_link")
 load("//bazel:version.bzl", _version_source = "version_source")
 
 C_COPTS = _C_COPTS
@@ -41,6 +40,5 @@ cc_library = _cc_library
 final_link = _final_link
 unity_cc_library = _unity_cc_library
 unity_source = _unity_source
-localized_partial_link = _localized_partial_link
 grouped_unity_cc_library = _grouped_unity_cc_library
 version_source = _version_source

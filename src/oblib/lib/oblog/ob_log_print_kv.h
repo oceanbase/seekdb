@@ -277,7 +277,7 @@ int logdata_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const T &o
 template<class T>
 int logdata_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const T &obj, TrueType)
 {
-  return logdata_printf(buf, buf_len, pos, "%ld", static_cast<int64_t>(obj));
+  return logdata_printf(buf, buf_len, pos, "%" PRId64 "", static_cast<int64_t>(obj));
 }
 // print object
 template<class T>
@@ -458,7 +458,7 @@ template<class T>
 int logdata_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
                           const bool with_comma, const T &obj, TrueType)
 {
-  return logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%ld"), key, static_cast<int64_t>(obj));
+  return logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%" PRId64 ""), key, static_cast<int64_t>(obj));
 }
 // print object
 template<class T>
@@ -500,12 +500,12 @@ int logdata_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const 
 inline int logdata_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
                                  const bool with_comma, const uint64_t obj)
 {
-  return logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%lu"), key, obj);
+  return logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%" PRIu64 ""), key, obj);
 }
 inline int logdata_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
                                  const bool with_comma, const int64_t obj)
 {
-  return logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%ld"), key, obj);
+  return logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%" PRId64 ""), key, obj);
 }
 inline int logdata_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
                                  const bool with_comma, const uint32_t obj)

@@ -34,7 +34,6 @@ _PARSER_C_SOURCES = [
 ]
 _PARSER_DRIVER_UNITY_MEMBERS = [
     "ob_sql_parser.cpp",
-    "parser_utility.cpp",
 ]
 _PARSER_CXX_STANDALONE_SOURCES = [
     source

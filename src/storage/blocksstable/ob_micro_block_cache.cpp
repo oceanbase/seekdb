@@ -356,7 +356,6 @@ ObIMicroBlockIOCallback::ObIMicroBlockIOCallback(const ObIOCallbackType type)
     cache_(nullptr),
     put_size_stat_(nullptr),
     allocator_(nullptr),
-    data_buffer_(nullptr),
     block_id_(),
     offset_(0),
     logic_micro_id_(),
@@ -365,15 +364,10 @@ ObIMicroBlockIOCallback::ObIMicroBlockIOCallback(const ObIOCallbackType type)
     use_block_cache_(true),
     table_read_info_(nullptr)
 {
-  static_assert(sizeof(*this) <= CALLBACK_BUF_SIZE, "IOCallback buf size not enough");
 }
 
 ObIMicroBlockIOCallback::~ObIMicroBlockIOCallback()
 {
-  if (OB_NOT_NULL(allocator_) && OB_NOT_NULL(data_buffer_)) {
-    allocator_->free(data_buffer_);
-    data_buffer_ = nullptr;
-  }
   allocator_ = nullptr;
   table_read_info_ = nullptr;
 }
@@ -385,28 +379,7 @@ void ObIMicroBlockIOCallback::set_micro_des_meta(const ObIndexBlockRowHeader *id
   block_des_meta_.row_store_type_ = idx_row_header->get_row_store_type();
 }
 
-int ObIMicroBlockIOCallback::alloc_data_buf(const char *io_data_buffer, const int64_t data_size)
-{
-  //UNUSED NOW
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(data_size <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    data_buffer_ = static_cast<char *>(allocator_->alloc(data_size));
-    for (int64_t i = 1; OB_ISNULL(data_buffer_) && i <= ALLOC_BUF_RETRY_TIMES; i++) {
-        ob_usleep(ALLOC_BUF_RETRY_INTERVAL * i);
-        data_buffer_ = static_cast<char *>(allocator_->alloc(data_size));
-    }
-    if (OB_ISNULL(data_buffer_)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      MEMCPY(data_buffer_, io_data_buffer, data_size);
-    }
-  }
-  return ret;
-}
+
 
 int ObIMicroBlockIOCallback::process_block(
     ObMacroBlockReader *reader,
@@ -517,7 +490,6 @@ ObAsyncSingleMicroBlockIOCallback::ObAsyncSingleMicroBlockIOCallback()
     micro_block_(nullptr),
     cache_handle_()
 {
-  STATIC_ASSERT(sizeof(*this) <= CALLBACK_BUF_SIZE, "IOCallback buf size not enough");
 }
 
 ObAsyncSingleMicroBlockIOCallback::~ObAsyncSingleMicroBlockIOCallback()
@@ -529,12 +501,9 @@ ObAsyncSingleMicroBlockIOCallback::~ObAsyncSingleMicroBlockIOCallback()
   }
 }
 
-int64_t ObAsyncSingleMicroBlockIOCallback::size() const
-{
-  return sizeof(*this);
-}
 
-int ObAsyncSingleMicroBlockIOCallback::inner_process(const char *data_buffer, const int64_t size)
+
+int ObAsyncSingleMicroBlockIOCallback::process(const char *data_buffer, const int64_t size)
 {
   return process(data_buffer, size, true/*use_tl_reader*/);
 }
@@ -572,7 +541,7 @@ int ObAsyncSingleMicroBlockIOCallback::process(
   return ret;
 }
 
-const char *ObAsyncSingleMicroBlockIOCallback::get_data()
+const char *ObAsyncSingleMicroBlockIOCallback::get_data() const
 {
   return reinterpret_cast<const char *>(micro_block_);
 }
@@ -583,7 +552,6 @@ ObMultiDataBlockIOCallback::ObMultiDataBlockIOCallback()
     io_ctx_(),
     io_result_()
 {
-  STATIC_ASSERT(sizeof(*this) <= CALLBACK_BUF_SIZE, "IOCallback buf size not enough");
 }
 
 ObMultiDataBlockIOCallback::~ObMultiDataBlockIOCallback()
@@ -598,12 +566,9 @@ ObMultiDataBlockIOCallback::~ObMultiDataBlockIOCallback()
   free_result();
 }
 
-int64_t ObMultiDataBlockIOCallback::size() const
-{
-  return sizeof(*this);
-}
 
-int ObMultiDataBlockIOCallback::inner_process(const char *data_buffer, const int64_t size)
+
+int ObMultiDataBlockIOCallback::process(const char *data_buffer, const int64_t size)
 {
   return process(data_buffer, size, true/*use_tl_reader*/);
 }
@@ -664,7 +629,7 @@ int ObMultiDataBlockIOCallback::process(
   return ret;
 }
 
-const char *ObMultiDataBlockIOCallback::get_data()
+const char *ObMultiDataBlockIOCallback::get_data() const
 {
   const char *data = nullptr;
   data = reinterpret_cast<const char*>(&io_result_);
@@ -765,12 +730,9 @@ ObSyncSingleMicroBLockIOCallback::~ObSyncSingleMicroBLockIOCallback()
 {
 }
 
-int64_t ObSyncSingleMicroBLockIOCallback::size() const
-{
-  return sizeof(*this);
-}
 
-int ObSyncSingleMicroBLockIOCallback::inner_process(const char *data_buffer, const int64_t size)
+
+int ObSyncSingleMicroBLockIOCallback::process(const char *data_buffer, const int64_t size)
 {
   int ret = OB_SUCCESS;
   bool is_compressed = false;
@@ -797,7 +759,7 @@ int ObSyncSingleMicroBLockIOCallback::inner_process(const char *data_buffer, con
   return ret;
 }
 
-const char *ObSyncSingleMicroBLockIOCallback::get_data()
+const char *ObSyncSingleMicroBLockIOCallback::get_data() const
 {
   return reinterpret_cast<char *>(block_data_);
 }
@@ -861,6 +823,8 @@ int ObIMicroBlockCache::prefetch(
     ObIMicroBlockIOCallback &callback)
 {
   int ret = OB_SUCCESS;
+  auto owner = storage_io::adopt_callback(&callback);
+  if (!owner) { return OB_ALLOCATE_MEMORY_FAILED; }
   const ObIndexBlockRowHeader *idx_row_header = idx_row.row_header_;
   if (OB_ISNULL(idx_row_header)) {
     ret = OB_INVALID_ARGUMENT;
@@ -877,20 +841,13 @@ int ObIMicroBlockCache::prefetch(
     ObStorageObjectReadInfo read_info;
     read_info.macro_block_id_ = macro_id;
     read_info.io_desc_.set_mode(ObIOMode::READ);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_desc_.set_sys_module_id(ObIOModule::MICRO_BLOCK_CACHE_IO);
-    read_info.io_callback_ = &callback;
     read_info.offset_ = idx_row.get_block_offset();
     read_info.size_ = idx_row.get_block_size();
     read_info.io_timeout_ms_ = max(THIS_WORKER.get_timeout_remain() / 1000, 0);
 
-    if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle))) {
+    if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle, std::move(owner)))) {
       STORAGE_LOG(WARN, "Fail to async read block, ", K(ret), K(read_info));
-      if (OB_NOT_NULL(callback.get_allocator())) { //Avoid double_free with io_handle
-        ObIAllocator *allocator = callback.get_allocator();
-        callback.~ObIMicroBlockIOCallback();
-        allocator->free(&callback);
-      }
     } else {
     }
   }
@@ -905,6 +862,8 @@ int ObIMicroBlockCache::prefetch(
     ObIMicroBlockIOCallback &callback)
 {
   int ret = OB_SUCCESS;
+  auto owner = storage_io::adopt_callback(&callback);
+  if (!owner) { return OB_ALLOCATE_MEMORY_FAILED; }
   int64_t offset = 0;
   int64_t size = 0;
   // fill callback
@@ -919,20 +878,13 @@ int ObIMicroBlockCache::prefetch(
   ObStorageObjectReadInfo read_info;
   read_info.macro_block_id_ = macro_id;
   read_info.io_desc_.set_mode(ObIOMode::READ);
-  read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_desc_.set_sys_module_id(ObIOModule::MICRO_BLOCK_CACHE_IO);
-  read_info.io_callback_ = &callback;
   read_info.offset_ = offset;
   read_info.size_ = size;
   read_info.io_timeout_ms_ = max(THIS_WORKER.get_timeout_remain() / 1000, 0);
 
-  if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle))) {
+  if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle, std::move(owner)))) {
     STORAGE_LOG(WARN, "Fail to async read block, ", K(ret), K(read_info));
-    if (OB_NOT_NULL(callback.get_allocator())) { //Avoid double_free with io_handle
-      ObIAllocator *allocator = callback.get_allocator();
-      callback.~ObIMicroBlockIOCallback();
-      allocator->free(&callback);
-    }
   } else {
   }
   return ret;
@@ -1083,20 +1035,16 @@ int ObDataMicroBlockCache::load_block(
 
       macro_read_info.macro_block_id_ = micro_block_id.macro_id_;
       macro_read_info.io_desc_.set_mode(ObIOMode::READ);
-      macro_read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
       macro_read_info.io_desc_.set_sys_module_id(ObIOModule::MICRO_BLOCK_CACHE_IO);
-      macro_read_info.io_callback_ = callback;
       macro_read_info.offset_ = micro_block_id.offset_;
       macro_read_info.size_ = micro_block_id.size_;
       macro_read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
 
 
-      if (OB_FAIL(ObObjectManager::async_read_object(macro_read_info, macro_handle))) {
+      auto owner = storage_io::adopt_callback(callback);
+      if (!owner) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else if (OB_FAIL(ObObjectManager::async_read_object(macro_read_info, macro_handle, std::move(owner)))) {
         LOG_WARN("Fail to async read block", K(ret), K(macro_read_info));
-        if (OB_NOT_NULL(callback->get_allocator())) { //Avoid double_free with io_handle
-          callback->~ObSyncSingleMicroBLockIOCallback();
-          allocator->free(callback);
-        }
       } else if (OB_FAIL(macro_handle.wait())) {
       } else {
         block_data.type_ = ObMicroBlockData::DATA_BLOCK;
@@ -1340,9 +1288,7 @@ int ObIndexMicroBlockCache::load_block(
 
       macro_read_info.macro_block_id_ = micro_block_id.macro_id_;
       macro_read_info.io_desc_.set_mode(ObIOMode::READ);
-      macro_read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
       macro_read_info.io_desc_.set_sys_module_id(ObIOModule::MICRO_BLOCK_CACHE_IO);
-      macro_read_info.io_callback_ = callback;
       macro_read_info.offset_ = micro_block_id.offset_;
       macro_read_info.size_ = micro_block_id.size_;
       macro_read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
@@ -1351,12 +1297,10 @@ int ObIndexMicroBlockCache::load_block(
       ObIndexBlockDataTransformer idx_transformer;
       char *transform_buf = nullptr;
       char *raw_idx_block_buf = nullptr;
-      if (OB_FAIL(ObObjectManager::async_read_object(macro_read_info, macro_handle))) {
+      auto owner = storage_io::adopt_callback(callback);
+      if (!owner) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else if (OB_FAIL(ObObjectManager::async_read_object(macro_read_info, macro_handle, std::move(owner)))) {
         LOG_WARN("Fail to async read block", K(ret), K(macro_read_info));
-        if (OB_NOT_NULL(callback->get_allocator())) { //Avoid double_free with io_handle
-          callback->~ObSyncSingleMicroBLockIOCallback();
-          allocator->free(callback);
-        }
       } else if (OB_FAIL(macro_handle.wait())) {
       }
       // the reason why block_data.get_buf() can be released by this allocator directly is that the

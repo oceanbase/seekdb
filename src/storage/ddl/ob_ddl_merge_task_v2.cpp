@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
@@ -170,7 +171,7 @@ void ObDDLMergePrepareTask::task_debug_info_to_string(char *buf, const int64_t b
   ObTabletID tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
   if (OB_SUCCESS == merge_param_.get_tablet_param(tablet_id, tablet_param)) {
-    BUF_PRINTF("DDL Merge Prepare Task: tablet_id=%ld, is_inited=%s",
+    BUF_PRINTF("DDL Merge Prepare Task: tablet_id=%" PRId64 ", is_inited=%s",
                tablet_id.id(), is_inited_ ? "true" : "false");
   } else {
     BUF_PRINTF("DDL Merge Prepare Task: is_inited=%s", is_inited_ ? "true" : "false");
@@ -224,10 +225,10 @@ void ObDDLMergeSliceTask::task_debug_info_to_string(char *buf, const int64_t buf
   ObTabletID tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
   if (OB_SUCCESS == merge_param_.get_tablet_param(tablet_id, tablet_param)) {
-    BUF_PRINTF("DDL Merge Slice Task: tablet_id=%ld, start_slice=%ld, end_slice=%ld",
+    BUF_PRINTF("DDL Merge Slice Task: tablet_id=%" PRId64 ", start_slice=%" PRId64 ", end_slice=%" PRId64 "",
                tablet_id.id(), start_slice_idx_, end_slice_idx_);
   } else {
-    BUF_PRINTF("DDL Merge Slice Task: start_slice=%ld, end_slice=%ld",
+    BUF_PRINTF("DDL Merge Slice Task: start_slice=%" PRId64 ", end_slice=%" PRId64 "",
                start_slice_idx_, end_slice_idx_);
   }
 }
@@ -279,7 +280,7 @@ void ObDDLMergeAssembleTask::task_debug_info_to_string(char *buf, const int64_t 
   ObTabletID tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
   if (OB_SUCCESS == merge_param_.get_tablet_param(tablet_id, tablet_param)) {
-    BUF_PRINTF("DDL Merge Assemble Task: tablet_id=%ld, is_inited=%s",
+    BUF_PRINTF("DDL Merge Assemble Task: tablet_id=%" PRId64 ", is_inited=%s",
                tablet_id.id(), is_inited_ ? "true" : "false");
   } else {
     BUF_PRINTF("DDL Merge Assemble Task: is_inited=%s", is_inited_ ? "true" : "false");

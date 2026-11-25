@@ -109,7 +109,7 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
 #define CALL_WITH_NEW_STACK(func, stack_addr, stack_size)                 \
   ({                                                                      \
     int ret = OB_SUCCESS;                                                 \
-    std::function<int()> f = [&]() {                                      \
+    auto f = [&]() {                                                      \
       int ret = func;                                                     \
       return ret;                                                         \
     };                                                                    \

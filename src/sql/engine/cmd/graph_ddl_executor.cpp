@@ -19,7 +19,7 @@
 #include "sql/resolver/ddl/graph_ddl_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "query/command/ob_root_command_service.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 namespace oceanbase
 {
 using namespace common;
@@ -31,11 +31,11 @@ int GraphDDLExecutor::execute(ObExecContext &ctx, GraphDDLStmt &stmt)
   ObString ddl;
   if (OB_FAIL(stmt.get_first_stmt(ddl))) {
   } else if (stmt.get_stmt_type() == stmt::T_CREATE_PROPERTY_GRAPH) {
-    ret = query::serialize_root_service_call([&] {
+    ret = share::local_ddl_serial_call([&] {
       return ctx.root_command_service().create_property_graph(stmt.graph_, ddl);
     });
   } else {
-    ret = query::serialize_root_service_call([&] {
+    ret = share::local_ddl_serial_call([&] {
       return ctx.root_command_service().drop_property_graph(
           stmt.graph_.get_database_id(), stmt.graph_.get_name(), stmt.if_exists_, ddl);
     });

@@ -59,20 +59,11 @@ private:
   bool is_inited_;
 };
 
-class ObILogReplayService
-{
-public:
-  virtual int is_replay_done(const palf::LSN &end_lsn, bool &is_done) = 0;
-  virtual int is_submit_task_clear(bool &is_clear) = 0;
-  virtual int enable_local_replay(const palf::LSN &begin_lsn,
-                                  const share::SCN &base_scn) = 0;
-  virtual int disable_local_replay() = 0;
-};
 /*
 TODO(yaoying.yyy): memory management of replayservice needs to be documented
 */
 
-class ObLogReplayService: public common::ObLinkQueueThreadPool, public ObILogReplayService
+class ObLogReplayService: public common::ObLinkQueueThreadPool
 {
 public:
   ObLogReplayService();
@@ -89,39 +80,25 @@ public:
 public:
   void handle(common::LinkTask *task);
   int create_status();
+  int get_replay_status(ObReplayStatusGuard &guard) const;
   int remove_status();
+  int finish(int64_t deadline_us);
   int enable(const palf::LSN &base_lsn,
              const share::SCN &base_scn);
-  int disable();
-  int is_enabled(bool &is_enabled);
   int block_submit_log();
   int unblock_submit_log();
-  int disable_local_replay();
-  int enable_local_replay(const palf::LSN &begin_lsn,
-                          const share::SCN &base_scn);
-  int is_replay_done(const palf::LSN &end_lsn,
-                     bool &is_done);
-  int is_submit_task_clear(bool &is_clear);
-  int get_max_replayed_scn(share::SCN &scn);
-  int get_min_unreplayed_scn(SCN &scn);
   int submit_task(ObReplayServiceTask *task);
   int update_replayable_point(const share::SCN &replayable_scn);
-  int get_replayable_point(share::SCN &replayable_scn);
-  int stat(LSReplayStat &replay_stat);
   int stat_replay_process(int64_t &submitted_log_size,
                           int64_t &unsubmitted_log_size,
                           int64_t &replayed_log_size,
                           int64_t &unreplayed_log_size);
-  int diagnose(ReplayDiagnoseInfo &diagnose_info);
-  void inc_pending_task_size(const int64_t log_size);
-  void dec_pending_task_size(const int64_t log_size);
   int64_t get_pending_task_size() const;
   void *alloc_replay_task(const int64_t size);
   void free_replay_task(ObLogReplayTask *task);
   void free_replay_task_log_buf(ObLogReplayTask *task);
-  int has_fatal_error(bool &bool_ret);
 private:
-  int get_replay_status_(ObReplayStatusGuard &guard);
+
   int pre_check_(ObReplayStatus &replay_status,
                  ObReplayServiceTask &task);
   void process_replay_ret_code_(const int ret_code,
@@ -143,7 +120,7 @@ private:
                              const palf::LSN &cur_lsn,
                              const share::SCN &cur_log_submit_scn,
                              const int64_t log_size);
-  bool is_tenant_out_of_memory_() const;
+  bool is_tenant_out_of_memory_(const ObReplayStatus &replay_status) const;
   int handle_submit_task_(ObReplayServiceSubmitTask *submit_task,
                           bool &is_timeslice_run_out);
   int handle_replay_task_(ObReplayServiceReplayTask *task_queue,
@@ -161,7 +138,6 @@ private:
   void on_replay_error_();
   void free_replay_log_buf_(ObLogReplayBuffer *&replay_buf);
 
-  share::SCN inner_get_replayable_point_() const;
 private:
   const int64_t MAX_REPLAY_TIME_PER_ROUND = 10 * 1000; //10ms
   const int64_t MAX_SUBMIT_TIME_PER_ROUND = 100 * 1000; //100ms
@@ -182,10 +158,8 @@ private:
   ObILogStorage *log_storage_;
   palf::PalfEnv *palf_env_;
   ObILogAllocator *allocator_;
-  share::SCN replayable_point_;
+  mutable common::ObSpinLock status_lock_;
   ObReplayStatus *replay_status_;
-  mutable common::ObQSyncLock lock_;
-  int64_t pending_replay_log_size_;
   ObMiniStat::ObStatItem wait_cost_stat_;
   ObMiniStat::ObStatItem replay_cost_stat_;
   DISALLOW_COPY_AND_ASSIGN(ObLogReplayService);

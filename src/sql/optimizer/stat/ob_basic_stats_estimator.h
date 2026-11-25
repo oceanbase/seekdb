@@ -113,10 +113,13 @@ public:
 
   static int get_async_gather_stats_tables(ObExecContext &ctx,
                                            const int64_t max_table_cnt,
+                                           const bool only_collectable,
                                            int64_t &last_table_id,
                                            int64_t &last_tablet_id,
                                            int64_t &total_part_cnt,
                                            ObIArray<AsyncStatTable> &stat_tables);
+
+  static int has_async_gather_stats_tables(ObExecContext &ctx, bool &has_pending);
 
   static int check_async_gather_need_sample(ObExecContext &ctx, ObTableStatParam &param);
 

@@ -18,6 +18,7 @@
 #define _OB_DIAG_H_
 
 #include "lib/string/ob_string.h"
+#include <inttypes.h>
 #include "lib/time/ob_time_utility.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -57,7 +58,7 @@ inline int ObDiag::refresh_passwd(common::ObString &passwd)
   if (fresh_timestamp_ + EXPIRED_TIME < current_ts) {
     int64_t pos = 0;
     if (OB_FAIL(common::databuff_printf(
-                    passwd_, sizeof (passwd_), pos, "%ld", current_ts))) {
+                    passwd_, sizeof (passwd_), pos, "%" PRId64 "", current_ts))) {
     }
   }
   fresh_timestamp_ = current_ts;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/dml/ob_select_resolver.h"
+#include <inttypes.h>
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
 #include "share/ob_time_utility2.h"
 #include "sql/resolver/dml/ob_aggr_expr_push_up_analyzer.h"
@@ -1304,12 +1305,6 @@ int ObSelectResolver::resolve_order_item(const ParseNode &sort_node, OrderItem &
   if (OB_SUCC(ret) && OB_NOT_NULL(order_item.expr_) && order_item.expr_->has_flag(CNT_ASSIGN_EXPR)) {
     LOG_USER_WARN(OB_ERR_DEPRECATED_SYNTAX, "Setting user variables within expressions",
       "SET variable=expression, ... or SELECT expression(s) INTO variables(s)");
-    if (OB_NOT_NULL(session_info_) && OB_NOT_NULL(session_info_->get_cur_exec_ctx()) &&
-        OB_NOT_NULL(session_info_->get_cur_exec_ctx()->get_sql_ctx())) {
-      const ObSqlCtx *sql_ctx = session_info_->get_cur_exec_ctx()->get_sql_ctx();
-      LOG_ERROR("Variable assignment in order by items will cause uncertain behavior",
-                K(ObString(sql_ctx->sql_id_)));
-    }
   }
   return ret;
 }
@@ -1723,7 +1718,7 @@ int ObSelectResolver::set_select_item(SelectItem &select_item, bool is_auto_gen)
       ObString col_name;
 #define AILAS_NAME_LEN 100
       char temp_str_buf[AILAS_NAME_LEN] = { 0 };
-      if (snprintf(temp_str_buf, sizeof(temp_str_buf), "Name_exp_%ld", auto_name_id_++) < 0) {
+      if (snprintf(temp_str_buf, sizeof(temp_str_buf), "Name_exp_%" PRIu64, auto_name_id_++) < 0) {
         ret = OB_SIZE_OVERFLOW;
         SQL_RESV_LOG(WARN, "failed to generate buffer for temp_str_buf", K(ret));
       }
@@ -2497,7 +2492,7 @@ int ObSelectResolver::resolve_group_by_sql_expr(const ParseNode *group_node,
     if (pos <= 0 || pos > select_stmt->get_select_item_size()) {
       ret = OB_ERR_BAD_FIELD_ERROR;
       char buff[OB_MAX_ERROR_MSG_LEN];
-      snprintf(buff, OB_MAX_ERROR_MSG_LEN, "%ld", pos);
+      snprintf(buff, OB_MAX_ERROR_MSG_LEN, "%" PRId64, pos);
       ObString scope_name = ObString::make_string(get_scope_name(current_scope_));
       LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, (int)strlen(buff), buff, scope_name.length(), scope_name.ptr());
     }
@@ -4295,7 +4290,7 @@ int ObSelectResolver::recursive_check_auto_gen_column_names(ObSelectStmt *select
     } else if (OB_FAIL(recursive_update_column_name(select_stmt, select_item->expr_))) {
     } else if (select_item->alias_name_.length() > static_cast<size_t>(OB_MAX_COLUMN_NAME_LENGTH)) {
       char temp_str_buf[OB_MAX_COLUMN_NAME_BUF_LENGTH] = { 0 };
-      if (snprintf(temp_str_buf, sizeof(temp_str_buf), SYNTHETIC_FIELD_NAME "%ld", auto_name_id_++) < 0) {
+      if (snprintf(temp_str_buf, sizeof(temp_str_buf), SYNTHETIC_FIELD_NAME "%" PRIu64, auto_name_id_++) < 0) {
         ret = OB_SIZE_OVERFLOW;
       } else {
         ObString tmp_col_name = ObString::make_string(temp_str_buf);

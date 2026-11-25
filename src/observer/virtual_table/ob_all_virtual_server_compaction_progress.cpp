@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_server_compaction_progress.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
 
@@ -151,7 +152,7 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
       }
       {
         int64_t pos = strlen(event_buf_);
-        databuff_printf(event_buf_, sizeof(event_buf_), pos, "is_inited:%d,real_finish_cnt:%ld",
+        databuff_printf(event_buf_, sizeof(event_buf_), pos, "is_inited:%d,real_finish_cnt:%" PRId64 "",
             progress_.is_inited_, progress_.real_finish_cnt_);
       }
       cells[i].set_varchar(event_buf_);

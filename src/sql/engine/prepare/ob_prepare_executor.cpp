@@ -19,6 +19,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "sql/resolver/prepare/ob_prepare_stmt.h"
 #include "sql/ob_sql.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 namespace oceanbase
 {
@@ -59,8 +60,10 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
     } else {
       ObString stmt_name;
       ObPsStmtId ps_id = OB_INVALID_ID;
-      ObString sql_string = result.get_string();
-      if (OB_FAIL(ob_simple_low_to_up(ctx.get_allocator(), stmt.get_prepare_name(), stmt_name))) {
+      ObString sql_string;
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+              ctx, &ctx.get_allocator(), result, sql_string))) {
+      } else if (OB_FAIL(ob_simple_low_to_up(ctx.get_allocator(), stmt.get_prepare_name(), stmt_name))) {
       } else if(OB_FAIL(ctx.get_my_session()->get_prepare_id(stmt_name, ps_id))) {
         if (OB_EER_UNKNOWN_STMT_HANDLER == ret) {
           ret = OB_SUCCESS;

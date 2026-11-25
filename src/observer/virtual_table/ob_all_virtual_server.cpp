@@ -67,8 +67,6 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
   share::ObServerResourceInfo resource_info;
   // server resource info are get in ObService::get_server_resource_info()
 
-  ObDeviceHealthStatus dhs = DEVICE_HEALTH_NORMAL;
-  int64_t data_disk_abnormal_time = 0;
 
   if (start_to_read_) {
     ret = OB_ITER_END;
@@ -79,13 +77,10 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "ob_service_ is NULL", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::observer::ObService>()));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::observer::ObService>()->get_server_resource_info(resource_info))) {
-  } else if (OB_FAIL(ObIOManager::get_instance().get_device_health_status(dhs,
-      data_disk_abnormal_time))) {
   } else {
     const int64_t col_count = output_column_ids_.count();
     const int64_t data_disk_allocated =
         OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-    const char *data_disk_health_status = device_health_status_to_str(dhs);
     const share::ObServerRole::Role active_role = share::server_role();
     share::ObServerInfo server_info;
     const share::IServerRoleStateProvider *role_state_provider =
@@ -145,10 +140,16 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
       logservice::ObLogService *log_service =
           share::server_service<logservice::ObLogService>();
       share::SCN replay_scn;
-      if (OB_ISNULL(log_service) || OB_ISNULL(log_service->get_log_replay_service())) {
+      if (OB_ISNULL(log_service)) {
         ret = OB_NOT_INIT;
-      } else if (OB_FAIL(log_service->get_log_replay_service()->get_max_replayed_scn(replay_scn))) {
       } else {
+        ret = log_service->get_max_replayed_scn(replay_scn);
+        if (OB_STATE_NOT_MATCH == ret && log_service->is_replay_handoff_complete()) {
+          // Promotion retires replay before committing the server role to PRIMARY.
+          ret = log_service->get_log_apply_service()->get_max_applied_scn(replay_scn);
+        }
+      }
+      if (OB_SUCC(ret)) {
         const share::SCN readable_scn = share::SCN::min(
             replay_scn, ls->get_ls_wrs_handler()->get_ls_weak_read_ts());
         sync_scn_val = replay_scn.get_val_for_inner_table_field();
@@ -212,13 +213,6 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           break;
         case DATA_DISK_ALLOCATED:
           cur_row_.cells_[i].set_int(data_disk_allocated);
-          break;
-        case DATA_DISK_HEALTH_STATUS:
-          cur_row_.cells_[i].set_varchar(data_disk_health_status);
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case DATA_DISK_ABNORMAL_TIME:
-          cur_row_.cells_[i].set_int(data_disk_abnormal_time);
           break;
         case LOG_DISK_CAPACITY:
           cur_row_.cells_[i].set_int(resource_info.log_disk_total_);

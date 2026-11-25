@@ -45,6 +45,10 @@ public:
   inline bool try_acquire_constructor() { return !ATOMIC_CAS(&is_acquired_, false, true); }
   inline bool try_release_constructor() { return ATOMIC_CAS(&is_acquired_, true, false); }
   int init();
+  // The constructor is placed into the execution arena by
+  // ObJoinFilterOpInput::init_shared_msgs(); the arena does not run
+  // destructors, so the last user releases the condition explicitly.
+  void destroy() { cond_.destroy(); }
   int reset_for_rescan();
   int wait_constructed(ObOperator *join_filter_op, ObRFBloomFilterMsg *bf_msg);
   int notify_constructed();

@@ -365,19 +365,6 @@ int ObSSTableCopyFinishTask::add_sstable(ObTableHandleV2 &table_handle)
   return ret;
 }
 
-int ObSSTableCopyFinishTask::add_sstable(ObTableHandleV2 &table_handle, const int64_t last_meta_macro_seq)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("sstable copy finish task do not init", K(ret));
-  } else if (OB_FAIL(tablet_copy_finish_task_->add_sstable(table_handle, last_meta_macro_seq))) {
-    LOG_WARN("failed to add sstable", K(ret), K(table_handle), K(last_meta_macro_seq));
-  }
-
-  return ret;
-}
-
 int ObSSTableCopyFinishTask::get_copy_macro_range_array(const common::ObArray<ObCopyMacroRangeInfo> *&macro_range_array) const
 {
   int ret = OB_SUCCESS;
@@ -500,7 +487,8 @@ int ObSSTableCopyFinishTask::prepare_data_store_desc_(
       && FALSE_IT(storage_schema = ObMdsSchemaHelper::get_instance().get_storage_schema())) {
   } else if (OB_FAIL(get_merge_type_(sstable_param, merge_type))) {
     LOG_WARN("failed to get merge type", K(ret), KPC(sstable_param));
-  } else if (OB_FAIL(ls_->get_tablet(tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ls_->get_tablet(tablet_id, tablet_handle,
+      ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   }
 

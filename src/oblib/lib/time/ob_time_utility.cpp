@@ -15,6 +15,7 @@
  */
 
 #include "lib/time/ob_time_utility.h"
+#include <inttypes.h>
 #include "lib/utility/ob_print_utils.h"
 #ifdef __APPLE__
 #include <mach/mach_time.h>
@@ -272,6 +273,6 @@ int64_t ObTimeUtility::current_time_coarse()
 int64_t ObMonotonicTs::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
-  databuff_printf(buf, buf_len, pos, "[mts=%ld]", mts_);
+  databuff_printf(buf, buf_len, pos, "[mts=%" PRId64 "]", mts_);
   return pos;
 }

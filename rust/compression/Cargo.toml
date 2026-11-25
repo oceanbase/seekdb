@@ -1,0 +1,11 @@
+[package]
+name = "compression"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "=1.0.202"
+zlib-rs = { version = "=0.6.8", default-features = false, features = ["std"] }
+zstd-safe = { version = "=8.2.0", default-features = false, features = ["std", "vendored"] }
+zstd-sys = { version = "=2.1.2", default-features = false, features = ["std", "vendored"] }

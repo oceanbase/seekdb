@@ -15,6 +15,7 @@
  */
 
 #include "lib/ob_errno.h"
+#include <inttypes.h>
 #include "share/cache/ob_kvcache_struct.h"
 #define USING_LOG_PREFIX COMMON
 
@@ -778,7 +779,7 @@ int ObKVCacheStore::print_memblock_info(ObDLink* head)
           if (OB_FAIL(hazptr_holder.protect(protect_success, handle))) {
           } else if (protect_success) {
             if (OB_FAIL(databuff_printf(buf, BUFLEN, ctx_pos, 
-                "[CACHE-SYNC-WASH] status=%8d | policy=%8d | kv_cnt=%8ld | get_cnt=%8ld | score=%8lf |\n",
+                "[CACHE-SYNC-WASH] status=%8d | policy=%8d | kv_cnt=%8" PRId64 " | get_cnt=%8" PRId64 " | score=%8lf |\n",
                 handle->get_status(),
                 handle->policy_,
                 handle->kv_cnt_,
@@ -792,7 +793,7 @@ int ObKVCacheStore::print_memblock_info(ObDLink* head)
       } // qclock guard
       if (OB_SUCC(ret)) {
         HazardDomain::get_instance().print_info();
-        _OB_LOG(WARN, "[CACHE-SYNC-WASH] len: %8ld sync wash failed, cache memblock info: \n%s", ctx_pos, buf);
+        _OB_LOG(WARN, "[CACHE-SYNC-WASH] len: %8" PRId64 " sync wash failed, cache memblock info: \n%s", ctx_pos, buf);
       }
     }
   }

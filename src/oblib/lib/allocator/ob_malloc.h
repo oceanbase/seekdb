@@ -34,7 +34,6 @@ namespace oceanbase
 namespace common
 {
 
-bool restore_allocator_after_fork();
 #if defined(__APPLE__) && defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
 bool configure_darwin_malloc_zone();
 #endif

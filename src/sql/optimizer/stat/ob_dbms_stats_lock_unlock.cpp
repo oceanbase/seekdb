@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
+#include <inttypes.h>
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -25,7 +26,7 @@ using namespace sql;
 namespace common {
 
 #define UPDATE_STAT_STATTYPE_LOCKED "UPDATE __all_table_stat set stattype_locked = stattype_locked %c %u \
-                                     where table_id = %lu %s%s;"
+                                     where table_id = %" PRIu64 " %s%s;"
 
 #define INSERT_TABLE_STAT_SQL "INSERT INTO __all_table_stat(table_id, \
                                                             partition_id, \
@@ -43,14 +44,14 @@ namespace common {
                                                             stattype_locked) VALUES"
 
 #define CHECK_TABLE_STAT_EXISTS "select partition_id from __all_table_stat where \
-                                 table_id = %lu;"
+                                 table_id = %" PRIu64 ";"
 
 #define GET_LOCKED_PARTITION_STAT "select partition_id, stattype_locked from __all_table_stat \
-                                  where %s and table_id = %lu;"
+                                  where %s and table_id = %" PRIu64 ";"
 
 // for index, should get the date table's locked partition
 #define GET_INDEX_LOCKED_PARTITION_STAT "select partition_id, stattype_locked from __all_table_stat \
-                                  where %s and table_id in (%lu, %lu);"
+                                  where %s and table_id in (%" PRIu64 ", %" PRIu64 ");"
 
 int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
                                                 const ObTableStatParam &param,
@@ -321,7 +322,7 @@ int ObDbmsStatsLockUnlock::gen_partition_list(const ObTableStatParam &param,
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); i++) {
       char prefix = (i == 0 ? '(' : ' ');
       char suffix = (i == partition_ids.count() - 1 ? ')' : ',');
-      if (OB_FAIL(partition_list.append_fmt("%c%ld%c", prefix, partition_ids.at(i), suffix))) {
+      if (OB_FAIL(partition_list.append_fmt("%c%" PRId64 "%c", prefix, partition_ids.at(i), suffix))) {
       } else {/*do nothing*/}
     }
   }
@@ -549,8 +550,8 @@ int ObDbmsStatsLockUnlock::get_insert_locked_type_sql(const ObTableStatParam &pa
         stat_level = PARTITION_LEVEL;
       }
       char suffix = (i == no_stats_partition_ids.count() - 1 ? ';' : ',');
-      if (OB_FAIL(insert_sql.append_fmt("(%ld, %ld, %d, %u, 0, -1, -1, 0, 0, -1,\
-                                        -1, 0, 0, %ld)%c",
+      if (OB_FAIL(insert_sql.append_fmt("(%" PRId64 ", %" PRId64 ", %d, %u, 0, -1, -1, 0, 0, -1,\
+                                        -1, 0, 0, %" PRId64 ")%c",
                                         pure_table_id,
                                         no_stats_partition_ids.at(i),
                                         param.is_index_stat_,

@@ -116,7 +116,8 @@ fn prepare_server(
 }
 
 fn first_init() -> bool {
-    fs::read_dir("store/sstable").map_or(true, |mut entries| !matches!(entries.next(), Some(Ok(_))))
+    file_io::read_dir("store/sstable")
+        .map_or(true, |mut entries| !matches!(entries.next(), Some(Ok(_))))
 }
 
 fn report_running() {

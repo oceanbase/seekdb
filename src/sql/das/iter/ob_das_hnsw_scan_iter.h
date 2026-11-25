@@ -298,6 +298,8 @@ public:
       distance_calc_(nullptr),
       is_primary_pre_with_rowkey_with_filter_(false),
       go_brute_force_(false),
+      empty_filter_fallback_(false),
+      empty_filter_fallback_ready_(false),
       extra_column_count_(0),
       simple_cmp_info_(),
       vec_index_type_(ObVecIndexType::VEC_INDEX_INVALID),
@@ -376,6 +378,9 @@ private:
   int process_adaptor_state_pre_filter_brute_force_bq(ObVectorQueryAdaptorResultContext *ada_ctx, ObPluginVectorIndexAdaptor* adaptor,
                                                     int64_t *&brute_vids, int& brute_cnt, bool& need_complete_data, 
                                                     bool check_need_complete_data = true);                                                  
+  int process_empty_filter_fallback(ObVectorQueryAdaptorResultContext *ada_ctx,
+                                    ObPluginVectorIndexAdaptor *adaptor,
+                                    bool &need_complete_data, bool check_need_complete_data);
   int set_rowkey_by_vid(ObNewRow *row);
   int set_func_lookup_rowkey(ObRowkey &rowkey);
   int filter_func_lookup_iter(bool is_vectorized, bool& filter_res);
@@ -581,6 +586,8 @@ private:
   ObExpr* distance_calc_;
   bool is_primary_pre_with_rowkey_with_filter_;
   bool go_brute_force_;
+  bool empty_filter_fallback_;
+  bool empty_filter_fallback_ready_;
   int64_t extra_column_count_;
   ObHnswSimpleCmpInfo simple_cmp_info_;
   // extra_info idx to rowkey idx, because of extra_info is sort by column id

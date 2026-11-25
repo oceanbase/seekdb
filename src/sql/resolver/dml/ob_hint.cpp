@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_hint.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_log_plan.h"
 
 namespace oceanbase
@@ -358,12 +359,12 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
     LOG_WARN("failed to print hint", K(ret), K(hint_str)); }    \
 
   #define PRINT_GLOBAL_HINT_NUM(hint_name, num)           \
-  if (OB_FAIL(BUF_PRINTF("%s%s(%ld)", outline_indent, hint_name, num))) { \
+  if (OB_FAIL(BUF_PRINTF("%s%s(%" PRId64 ")", outline_indent, hint_name, num))) { \
     LOG_WARN("failed to print hint", K(ret), K(hint_name)); }             \
 
   //TOPK
   if (OB_SUCC(ret) && (-1 < topk_precision_ || 0 < sharding_minimum_row_count_)) {
-    if (OB_FAIL(BUF_PRINTF("%sTOPK(%ld %ld)", outline_indent, topk_precision_,
+    if (OB_FAIL(BUF_PRINTF("%sTOPK(%" PRId64 " %" PRId64 ")", outline_indent, topk_precision_,
                                                 sharding_minimum_row_count_))) {
     }
   }
@@ -377,7 +378,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   //DOP
   if (OB_SUCC(ret) && !dops_.empty()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < dops_.count(); ++i) {
-      if (OB_FAIL(BUF_PRINTF("%sDOP(%lu, %lu)", outline_indent, dops_.at(i).dfo_, dops_.at(i).dop_))) {
+      if (OB_FAIL(BUF_PRINTF("%sDOP(%" PRIu64 ", %" PRIu64 ")", outline_indent, dops_.at(i).dfo_, dops_.at(i).dop_))) {
       }
     }
   }
@@ -525,30 +526,30 @@ int ObGlobalHint::print_alloc_op_hints(PlanText &plan_text) const
       }
     }
     if (OB_SUCC(ret) && !tracing_ids.empty()) {
-      if (OB_FAIL(BUF_PRINTF("%sTRACING(%lu", outline_indent, tracing_ids.at(0)))) {
+      if (OB_FAIL(BUF_PRINTF("%sTRACING(%" PRIu64 "", outline_indent, tracing_ids.at(0)))) {
       }
       for (int64_t i = 1; OB_SUCC(ret) && i < tracing_ids.count(); ++i) {
-        if (OB_FAIL(BUF_PRINTF(" %lu", tracing_ids.at(i)))) {
+        if (OB_FAIL(BUF_PRINTF(" %" PRIu64 "", tracing_ids.at(i)))) {
         } 
       }
       if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
       }
     }
     if (OB_SUCC(ret) && !stat_ids.empty()) {
-      if (OB_FAIL(BUF_PRINTF("%sSTAT(%lu", outline_indent, stat_ids.at(0)))) {
+      if (OB_FAIL(BUF_PRINTF("%sSTAT(%" PRIu64 "", outline_indent, stat_ids.at(0)))) {
       }
       for (int64_t i = 1; OB_SUCC(ret) && i < stat_ids.count(); ++i) {
-        if (OB_FAIL(BUF_PRINTF(" %lu", stat_ids.at(i)))) {
+        if (OB_FAIL(BUF_PRINTF(" %" PRIu64 "", stat_ids.at(i)))) {
         } 
       }
       if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
       }
     }
     if (OB_SUCC(ret) && !blocking_ids.empty()) {
-      if (OB_FAIL(BUF_PRINTF("%sBLOCKING(%lu", outline_indent, blocking_ids.at(0)))) {
+      if (OB_FAIL(BUF_PRINTF("%sBLOCKING(%" PRIu64 "", outline_indent, blocking_ids.at(0)))) {
       }
       for (int64_t i = 1; OB_SUCC(ret) && i < blocking_ids.count(); ++i) {
-        if (OB_FAIL(BUF_PRINTF(" %lu", blocking_ids.at(i)))) {
+        if (OB_FAIL(BUF_PRINTF(" %" PRIu64 "", blocking_ids.at(i)))) {
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
@@ -581,7 +582,7 @@ int ObOptParamHint::print_opt_param_hint(PlanText &plan_text) const
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(BUF_PRINTF("%sOPT_PARAM(\'%s\'", outline_indent, param_name))) {
       } else if (param_vals_.at(i).is_int() &&
-                 OB_FAIL(BUF_PRINTF(" %ld)", param_vals_.at(i).get_int()))) {
+                 OB_FAIL(BUF_PRINTF(" %" PRId64 ")", param_vals_.at(i).get_int()))) {
       } else if (param_vals_.at(i).is_varchar() &&
                  OB_FAIL(BUF_PRINTF(" \'%.*s\')", param_vals_.at(i).get_varchar().length(),
                                                   param_vals_.at(i).get_varchar().ptr()))) {
@@ -1883,7 +1884,7 @@ int ObTableParallelHint::print_hint_desc(PlanText &plan_text) const
   int64_t &buf_len = plan_text.buf_len_;
   int64_t &pos = plan_text.pos_;
   if (OB_FAIL(table_.print_table_in_hint(plan_text))) {
-  } else if (OB_FAIL(BUF_PRINTF(" %ld", parallel_))) {
+  } else if (OB_FAIL(BUF_PRINTF(" %" PRId64 "", parallel_))) {
   }
   return ret;
 }
@@ -1915,7 +1916,7 @@ int ObIndexHint::print_hint_desc(PlanText &plan_text) const
   } else if ((T_INDEX_HINT != hint_type_ && T_INDEX_ASC_HINT != hint_type_ && T_INDEX_DESC_HINT != hint_type_)
              || index_prefix_ < 0) {
     //do nothing
-  } else if (OB_FAIL(BUF_PRINTF(" %ld", index_prefix_))) {
+  } else if (OB_FAIL(BUF_PRINTF(" %" PRId64 "", index_prefix_))) {
   }
   return ret;
 }
@@ -2317,7 +2318,7 @@ int ObPQHint::print_hint_desc(PlanText &plan_text) const
   if (OB_ISNULL(str = ObPQHint::get_dist_method_str(dist_method_))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(BUF_PRINTF(" %s", str))) {
-  } else if (ObGlobalHint::UNSET_PARALLEL < parallel_ && OB_FAIL(BUF_PRINTF(" %ld", parallel_))) {
+  } else if (ObGlobalHint::UNSET_PARALLEL < parallel_ && OB_FAIL(BUF_PRINTF(" %" PRId64 "", parallel_))) {
   }
   return ret;
 }
@@ -2759,10 +2760,10 @@ int ObWindowDistHint::WinDistOption::print_win_dist_option(PlanText &plan_text) 
     ret = OB_ERR_UNEXPECTED;
   } else if (win_func_idxs_.empty()) {
     /* do nothing */
-  } else if (OB_FAIL(BUF_PRINTF(" (%ld", win_func_idxs_.at(0)))) {
+  } else if (OB_FAIL(BUF_PRINTF(" (%" PRId64 "", win_func_idxs_.at(0)))) {
   } else {
     for (int64_t i = 1; OB_SUCC(ret) && i < win_func_idxs_.count(); ++i) {
-      if (OB_FAIL(BUF_PRINTF(",%ld", win_func_idxs_.at(i)))) {
+      if (OB_FAIL(BUF_PRINTF(",%" PRId64 "", win_func_idxs_.at(i)))) {
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
@@ -2842,9 +2843,9 @@ int ObTableDynamicSamplingHint::print_hint_desc(PlanText &plan_text) const
   int64_t &buf_len = plan_text.buf_len_;
   int64_t &pos = plan_text.pos_;
   if (OB_FAIL(table_.print_table_in_hint(plan_text))) {
-  } else if (OB_FAIL(BUF_PRINTF(" %ld", dynamic_sampling_))) {
+  } else if (OB_FAIL(BUF_PRINTF(" %" PRId64 "", dynamic_sampling_))) {
   } else if (sample_block_cnt_ > 0 &&
-             OB_FAIL(BUF_PRINTF(" %ld", sample_block_cnt_))) {
+             OB_FAIL(BUF_PRINTF(" %" PRId64 "", sample_block_cnt_))) {
   }
   return ret;
 }

@@ -142,7 +142,7 @@ struct ObCSVGeneralFormat {
                   int64_t file_column_nums,
                   ObCollationType file_cs_type);
   int to_json_kv_string(char* buf, const int64_t buf_len, int64_t &pos, bool into_outfile = false) const;
-  int load_from_json_data(json::Pair *&node, common::ObIAllocator &allocator);
+  int load_from_json_data(::oceanbase::json::Pair *&node, common::ObIAllocator &allocator);
 
   TO_STRING_KV(K(cs_type_), K(file_column_nums_), K(line_start_str_), K(field_enclosed_char_),
                K(is_optional_), K(field_escaped_char_), K(field_term_str_), K(line_term_str_),
@@ -906,7 +906,7 @@ int ObCSVGeneralParser::scan_utf8_ex(const char *&str,
 struct ObOriginFileFormat
 {
   int to_json_kv_string(char *buf, const int64_t buf_len, int64_t &pos) const;
-  int load_from_json_data(json::Pair *&node, common::ObIAllocator &allocator);
+  int load_from_json_data(::oceanbase::json::Pair *&node, common::ObIAllocator &allocator);
   TO_STRING_KV(K(origin_line_term_str_), K(origin_field_term_str_), K(origin_field_escaped_str_),
                 K(origin_field_enclosed_str_), K(origin_null_if_str_));
 

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_all_virtual_all_tables.h"
+#include <inttypes.h>
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/ob_autoincrement_service.h"
@@ -59,7 +60,7 @@ namespace observer
                     "and b.database_name != '__recyclebin' " \
                     "and b.in_recyclebin = 0 " \
                     "and 0 = sys_privilege_check('table_acc', 1, b.database_name, a.table_name) " \
-                    "where a.table_id = %ld "
+                    "where a.table_id = %" PRId64 " "
 
 ObAllVirtualAllTables::ObAllVirtualAllTables()
     : ObVirtualTableIterator(),

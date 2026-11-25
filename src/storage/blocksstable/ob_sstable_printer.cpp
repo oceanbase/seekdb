@@ -15,6 +15,7 @@
  */
 
 #include "ob_sstable_printer.h"
+#include <inttypes.h>
 #include "storage/tx_table/ob_tx_table_iterator.h"
 #include "storage/blocksstable/ob_macro_block_meta.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
@@ -33,10 +34,10 @@ namespace blocksstable
 #define P_NAME_FMT(key) FPRINTF("%30s", (key))
 #define P_VALUE_STR_B(key) FPRINTF("[%s]", (key))
 #define P_VALUE_INT_B(key) FPRINTF("[%d]", (key))
-#define P_VALUE_BINT_B(key) FPRINTF("[%ld]", (key))
+#define P_VALUE_BINT_B(key) FPRINTF("[%" PRId64 "]", (key))
 #define P_VALUE_STR(key) FPRINTF("%s", (key))
 #define P_VALUE_INT(key) FPRINTF("%d", (key))
-#define P_VALUE_BINT(key) FPRINTF("%ld", (key))
+#define P_VALUE_BINT(key) FPRINTF("%" PRId64 "", (key))
 #define P_NAME_BRACE(key) FPRINTF("{%s}", (key))
 #define P_COLOR(color) FPRINTF(color)
 #define P_LB() FPRINTF("[")
@@ -49,7 +50,7 @@ namespace blocksstable
 #define P_LINE_NAME(key) FPRINTF("%30s", (key))
 #define P_LINE_VALUE(key, type) P_LINE_VALUE_##type((key))
 #define P_LINE_VALUE_INT(key) FPRINTF("%-30d", (key))
-#define P_LINE_VALUE_BINT(key) FPRINTF("%-30ld", (key))
+#define P_LINE_VALUE_BINT(key) FPRINTF("%-30" PRId64 "", (key))
 #define P_LINE_VALUE_STR(key) FPRINTF("%-30s", (key))
 #define P_END() FPRINTF("\n")
 
@@ -196,10 +197,10 @@ void ObSSTablePrinter::print_cols_info_line(const int32_t &v1, const common::ObO
     P_COLOR(LIGHT_GREEN);
     P_BAR();
     P_COLOR(NONE_COLOR);
-    FPRINTF("\t[%-15d %15s %15s %15ld %15ld]\n", v1, OB_OBJ_TYPE_NAMES[v2], v3_cstr, v4, v5);
+    FPRINTF("\t[%-15d %15s %15s %15" PRId64 " %15" PRId64 "]\n", v1, OB_OBJ_TYPE_NAMES[v2], v3_cstr, v4, v5);
   } else {
     P_BAR();
-    FPRINTF("\t[%-15d %15s %15s %15ld %15ld]\n", v1, OB_OBJ_TYPE_NAMES[v2], v3_cstr, v4, v5);
+    FPRINTF("\t[%-15d %15s %15s %15" PRId64 " %15" PRId64 "]\n", v1, OB_OBJ_TYPE_NAMES[v2], v3_cstr, v4, v5);
   }
 }
 
@@ -437,10 +438,10 @@ void ObSSTablePrinter::print_micro_header(const ObMicroBlockHeader *micro_block_
         P_COLOR(LIGHT_GREEN);
         P_BAR();
         P_COLOR(NONE_COLOR);
-        FPRINTF("column_chksum[%15ld]|%-30ld\n", i, micro_block_header->column_checksums_[i]);
+        FPRINTF("column_chksum[%15" PRId64 "]|%-30" PRId64 "\n", i, micro_block_header->column_checksums_[i]);
       } else {
         P_BAR();
-        FPRINTF("column_chksum[%15ld]|%-30ld\n", i, micro_block_header->column_checksums_[i]);
+        FPRINTF("column_chksum[%15" PRId64 "]|%-30" PRId64 "\n", i, micro_block_header->column_checksums_[i]);
       }
     }
   }

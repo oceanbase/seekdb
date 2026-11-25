@@ -176,8 +176,7 @@ public:
       orign_session_value_(NULL),
       cursor_session_value_(NULL),
       nested_session_value_(NULL),
-      out_params_(),
-      exec_params_str_() {
+      out_params_() {
       }
   ~ObSPIResultSet() { reset(); }
   int init(
@@ -210,7 +209,6 @@ public:
     cursor_session_value_ = NULL;
     nested_session_value_ = NULL;
     out_params_.reset();
-    exec_params_str_.reset();
     allocator_.reset();
     is_inited_ = false;
   }
@@ -220,7 +218,6 @@ public:
       result_set_->~ObResultSet();
     }
     sql_ctx_.reset();
-    exec_params_str_.reset();
     //allocator_.reset();
     mem_context_->get_arena_allocator().reset();
     OB_ASSERT_MSG(NULL != plan_cache_access_service_,
@@ -268,7 +265,6 @@ public:
   void end_cursor_stmt(pl::ObPLExecCtx *pl_ctx, int &result);
   int start_nested_stmt_if_need(pl::ObPLExecCtx *pl_ctx, const ObString &sql, stmt::StmtType stmt_type, bool for_update);
   void end_nested_stmt_if_need(pl::ObPLExecCtx *pl_ctx, int &result);
-  ObString *get_exec_params_str_ptr() { return &exec_params_str_; }
 private:
   bool is_inited_;
   EndStmtType need_end_nested_stmt_;
@@ -290,7 +286,6 @@ private:
   sql::ObSQLSessionInfo::StmtSavedValue *cursor_session_value_;
   sql::ObSQLSessionInfo::StmtSavedValue *nested_session_value_;
   ObSPIOutParams out_params_; // used to record the return value of the function
-  ObString exec_params_str_;
 };
 
 class ObSPIService
@@ -1151,7 +1146,6 @@ private:
                                      bool has_hidden_rowid,
                                      bool is_prepared_stmt_cursor = false,
                                      int64_t max_result_rows = INT64_MAX);
-  static int store_params_string(pl::ObPLExecCtx *ctx, ObSPIResultSet &spi_result, ParamStore *exec_params);
 
   static int setup_cursor_snapshot_verify_(pl::ObPLCursorInfo *cursor, ObSPIResultSet *spi_result);
   static int save_unstreaming_cursor_sql(pl::ObPLCursorInfo &cursor, const ObString &sql_text);

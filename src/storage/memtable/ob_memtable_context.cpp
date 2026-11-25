@@ -15,6 +15,7 @@
  */
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_memtable_context.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -157,17 +158,17 @@ int64_t ObMemtableCtx::to_string(char *buf, const int64_t buf_len) const
   common::databuff_printf(buf, buf_len, pos, "{");
   pos += ObIMvccCtx::to_string(buf + pos, buf_len - pos);
   common::databuff_printf(buf, buf_len, pos,
-                          " end_code=%d tx_status=%ld is_readonly=%s "
-                          "ref=%ld", end_code_, tx_status_, STR_BOOL(is_read_only_), ref_);
+                          " end_code=%d tx_status=%" PRId64 " is_readonly=%s "
+                          "ref=%" PRId64 "", end_code_, tx_status_, STR_BOOL(is_read_only_), ref_);
   common::databuff_printf(buf, buf_len, pos, " trans_id=");
   if (OB_ISNULL(ctx_)) {
     common::databuff_printf(buf, buf_len, pos, "");
   } else {
     common::databuff_printf(buf, buf_len, pos, ctx_->get_trans_id());
   }
-  common::databuff_printf(buf, buf_len, pos, " row_callback[alloc:%ld, free:%ld, unsubmit:%ld] "
-                          "redo[fill:%ld,sync_succ:%ld, sync_fail:%ld] "
-                          "main_list_len=%ld pending_log_size=%ld ",
+  common::databuff_printf(buf, buf_len, pos, " row_callback[alloc:%" PRId64 ", free:%" PRId64 ", unsubmit:%" PRId64 "] "
+                          "redo[fill:%" PRId64 ",sync_succ:%" PRId64 ", sync_fail:%" PRId64 "] "
+                          "main_list_len=%" PRId64 " pending_log_size=%" PRId64 " ",
                           callback_alloc_count_, callback_free_count_, unsubmitted_cnt_,
                           log_gen_.get_redo_filled_count(),
                           log_gen_.get_redo_sync_succ_count(),

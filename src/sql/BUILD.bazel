@@ -42,7 +42,6 @@ _SQL_RUNTIME_ONLY_SHARE_DEPS = [
     "//src/share:cluster_topology",
     "//src/share:compaction_runtime",
     "//src/share:config_value_support",
-    "//src/share:device_manager_interface",
     "//src/share:diagnostics",
     "//src/share:external_storage",
     "//src/share:geo_visitors",
@@ -149,6 +148,7 @@ cc_library(
         _SQL_SEMANTIC_HEADER_PREFIXES,
     ),
     deps = _SQL_INTERFACE_NON_SHARE_DEPS + _SQL_PUBLIC_CLOSURE_OBLIB_DEPS + _SQL_PUBLIC_CLOSURE_SHARE_DEPS + [
+        "//rust:compression_headers",
         "//rust:config_headers",
         "//src/sql/optimizer:optimizer_public_headers",
         "//src/sql/parser:parser_public_headers",
@@ -220,8 +220,13 @@ _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = singleton_unity_groups(
 )
 
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
+    "//rust:path_utils",
     "//rust:uuid_generator_headers",
+    "//rust:compression_headers",
     "//rust:config_headers",
+    "//rust:json",
+    "//src/share:local_ddl_serial_call",
+    "//src/share:math_compat",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
     ":sql_runtime_internal_headers",
@@ -250,7 +255,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_io_primitives",
         "//src/oblib:oblib_memory_primitives",
         "//src/oblib:oblib_mysql_protocol",
-        "//src/oblib:oblib_restore",
         "//src/oblib:oblib_rpc",
         "//src/oblib:oblib_vector",
     ] + [
@@ -269,7 +273,6 @@ grouped_unity_cc_library(
         "//src/share:ddl_coordination",
         "//src/share:ddl_protocol",
         "//src/share:debug_sync_interface",
-        "//src/share:device_manager_interface",
         "//src/share:diagnostics",
         "//src/share:error_codes",
         "//src/share:est_row_count_record",
@@ -281,7 +284,7 @@ grouped_unity_cc_library(
         "//src/share:geo_types",
         "//src/share:geo_visitors",
         "//src/share:interrupt_runtime",
-        "//src/share:io",
+        "//src/share:io_request",
         "//src/share:json_access",
         "//src/share:lob_runtime",
         "//src/share:memory_support",
@@ -321,8 +324,6 @@ grouped_unity_cc_library(
         "//src/share:vector",
         "//src/share:worker_runtime",
         "//bazel/third_party:boost_headers",
-        "//bazel/third_party:curl_headers",
-        "//bazel/third_party:fast_float_headers",
         "//rust:regex_engine_headers",
         "//bazel/third_party:openssl_headers",
     ],
@@ -344,7 +345,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_memory_primitives",
         "//src/oblib:oblib_mysql_protocol",
-        "//src/oblib:oblib_restore",
         "//src/oblib:oblib_rpc",
     ] + [
         "//src/share:autoincrement_runtime",

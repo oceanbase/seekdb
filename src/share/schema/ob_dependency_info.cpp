@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_dependency_info.h"
+#include <inttypes.h>
 #include "common/mysqlclient/ob_mysql_result.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/utility/ob_smart_call.h"  // SMART_CALL, previously hidden behind the exec_context include chain, make the dependency explicit
@@ -169,8 +170,8 @@ int ObDependencyInfo::delete_schema_object_dependency(common::ObISQLClient &tran
   if (OB_INVALID_ID == dep_obj_id
     || ObObjectType::MAX_TYPE == dep_obj_type) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (sql.assign_fmt("delete FROM %s WHERE dep_obj_id = %ld \
-                                                  AND dep_obj_type = %ld",
+  } else if (sql.assign_fmt("delete FROM %s WHERE dep_obj_id = %" PRId64 " \
+                                                  AND dep_obj_type = %" PRId64 "",
             OB_ALL_DEPENDENCY_TNAME,
             extract_obj_id(dep_obj_id),
             static_cast<uint64_t>(dep_obj_type))) {
@@ -408,7 +409,7 @@ int ObDependencyInfo::collect_ref_infos(uint64_t dep_obj_id,
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE dep_obj_id = %lu ORDER BY dep_order",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE dep_obj_id = %" PRIu64 " ORDER BY dep_order",
                                OB_ALL_DEPENDENCY_TNAME,
                                dep_obj_id))) {
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -445,7 +446,7 @@ int ObDependencyInfo::collect_dep_infos(uint64_t ref_obj_id,
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE ref_obj_id = %lu",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE ref_obj_id = %" PRIu64 "",
                                OB_ALL_DEPENDENCY_TNAME,
                                ref_obj_id))) {
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -490,7 +491,7 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t root_obj_id,
   {
     HEAP_VAR(common::ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM %s WHERE ref_obj_id = %lu",
+      if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM %s WHERE ref_obj_id = %" PRIu64 "",
                                         OB_ALL_DEPENDENCY_TNAME,
                                         ref_obj_id))) {
       } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -567,7 +568,7 @@ int ObDependencyInfo::collect_all_dep_objs(
       for (int64_t i = 0; OB_SUCC(ret) && i < ref_obj_infos.count(); i++) {
         uint64_t ref_obj_id = ref_obj_infos.at(i).first;
         int64_t ref_obj_type = ref_obj_infos.at(i).second;
-        if (OB_FAIL(sql.append_fmt("(%lu, %ld)", ref_obj_id, ref_obj_type))) {
+        if (OB_FAIL(sql.append_fmt("(%" PRIu64 ", %" PRId64 ")", ref_obj_id, ref_obj_type))) {
         } else if (OB_FAIL(sql.append_fmt(i < ref_obj_infos.count() - 1 ? ", " : ")"))) {
         }
       }

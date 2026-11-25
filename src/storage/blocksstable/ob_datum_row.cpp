@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_datum_row.h"
+#include <inttypes.h>
 #include "storage/ob_i_store.h"
 #include "data_plane/scheduler/ob_dag_scheduler.h"
 
@@ -389,9 +390,9 @@ DEF_TO_STRING(ObDatumRow)
       J_ARRAY_START();
       for (int64_t i = 0; i < count_; ++i) {
         if (0 == i) {
-          databuff_printf(buf, buf_len, pos, "col_id=%ld:", i);
+          databuff_printf(buf, buf_len, pos, "col_id=%" PRId64 ":", i);
         } else {
-          databuff_printf(buf, buf_len, pos, ", col_id=%ld:", i);
+          databuff_printf(buf, buf_len, pos, ", col_id=%" PRId64 ":", i);
         }
         pos += storage_datums_[i].storage_to_string(buf + pos, buf_len - pos);
       }

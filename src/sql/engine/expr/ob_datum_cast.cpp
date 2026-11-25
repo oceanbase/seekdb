@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL
 
+#include "common/json_type/json_builder.h"
+
 #ifdef _WIN32
 #include "lib/utility/alloc_assist.h"
 #define memmem ob_memmem
@@ -686,16 +688,27 @@ static OB_INLINE int common_uint_int(const ObExpr &expr,
                                      const ObObjType &out_type,
                                      uint64_t in_val,
                                      ObEvalCtx &ctx,
-                                     int64_t &out_val)
+                                     int64_t &out_val,
+                                     int &warning)
 {
   int ret = OB_SUCCESS;
-  int warning = OB_SUCCESS;
+  warning = OB_SUCCESS;
   out_val = static_cast<int64_t>(in_val);
   UNUSED(ctx);
   if (CM_NEED_RANGE_CHECK(expr.extra_) &&
       CAST_FAIL(int_upper_check(out_type, in_val, out_val))) {
   }
   return ret;
+}
+
+static OB_INLINE int common_uint_int(const ObExpr &expr,
+                                     const ObObjType &out_type,
+                                     uint64_t in_val,
+                                     ObEvalCtx &ctx,
+                                     int64_t &out_val)
+{
+  int warning = OB_SUCCESS;
+  return common_uint_int(expr, out_type, in_val, ctx, out_val, warning);
 }
 
 int ObDataTypeCastUtil::common_uint_int_wrap(
@@ -2525,6 +2538,28 @@ int cast_eval_arg_batch(const ObExpr &expr,
   return ret;
 }
 
+static OB_INLINE void log_integer_range_warning(const ObExpr &expr,
+                                                ObEvalCtx &ctx,
+                                                const int warning)
+{
+  const bool is_truncated = OB_UNLIKELY(OB_DATA_OUT_OF_RANGE == warning)
+                            && CM_IS_COLUMN_CONVERT(expr.extra_)
+                            && CM_IS_WARN_ON_FAIL(expr.extra_);
+  // Keep the diagnostic attached to the conversion result. The result may be
+  // cached and reused by later DML rows without executing this cast again.
+  expr.get_eval_info(ctx).integer_range_warning_ = is_truncated;
+  if (is_truncated) {
+    const ObUserLoggingCtx *logging_ctx = ctx.exec_ctx_.get_user_logging_ctx();
+    if (OB_NOT_NULL(logging_ctx) && !logging_ctx->skip_logging()) {
+      // The cast has clipped the value, so column accuracy checking can no
+      // longer recover this diagnostic. The DML owner supplies column and row.
+      const ObString *column_name = logging_ctx->get_column_name();
+      LOG_USER_WARN(OB_DATA_OUT_OF_RANGE, column_name->length(), column_name->ptr(),
+                    logging_ctx->get_row_num());
+    }
+  }
+}
+
 CAST_FUNC_NAME(int, int)
 {
   EVAL_ARG()
@@ -2534,6 +2569,7 @@ CAST_FUNC_NAME(int, int)
     if (in_type > out_type && CAST_FAIL(int_range_check(out_type, val_int, val_int))) {
     } else {
       res_datum.set_int(val_int);
+      log_integer_range_warning(expr, ctx, warning);
     }
   }
   return ret;
@@ -2552,6 +2588,7 @@ CAST_FUNC_NAME(int, uint)
           CAST_FAIL(uint_range_check(out_type, in_val, out_val))) {
       } else {
         res_datum.set_uint(out_val);
+        log_integer_range_warning(expr, ctx, warning);
       }
     }
   }
@@ -2701,21 +2738,13 @@ CAST_FUNC_NAME(int, json)
   {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    ObIJsonBase *j_base = NULL;
     int64_t in_val = child_res->get_int();
     ObObjType in_type = expr.args_[0]->datum_meta_.type_;
     bool bool_val = (in_val == 1) ? true : false;
-    ObJsonBoolean j_bool(bool_val);
-    ObJsonInt j_int(in_val);
-
-    if (expr.args_[0]->is_boolean_ == 1) {
-      j_base = &j_bool;
-    } else {
-      j_base = &j_int;
-    }
-
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    if (OB_FAIL((expr.args_[0]->is_boolean_ == 1
+        ? encode_json_boolean(temp_allocator, bool_val, raw_bin)
+        : encode_json_integer(temp_allocator, in_val, raw_bin)))) {
     } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
     }
   }
@@ -2792,9 +2821,11 @@ CAST_FUNC_NAME(uint, int)
   {
      uint64_t in_val = child_res->get_uint();
      int64_t out_val = 0;
-     if (OB_FAIL(common_uint_int(expr, expr.datum_meta_.type_, in_val, ctx, out_val))) {
+     int warning = OB_SUCCESS;
+     if (OB_FAIL(common_uint_int(expr, expr.datum_meta_.type_, in_val, ctx, out_val, warning))) {
      } else {
        res_datum.set_int(out_val);
+       log_integer_range_warning(expr, ctx, warning);
      }
   }
   return ret;
@@ -2810,6 +2841,7 @@ CAST_FUNC_NAME(uint, uint)
         CAST_FAIL(uint_upper_check(out_type, in_val))) {
     } else {
       res_datum.set_uint(in_val);
+      log_integer_range_warning(expr, ctx, warning);
     }
   }
   return ret;
@@ -2968,13 +3000,11 @@ CAST_FUNC_NAME(uint, json)
   {
     uint64_t in_val = child_res->get_uint();
     ObObjType in_type = expr.args_[0]->datum_meta_.type_;
-    ObJsonUint j_uint(in_val);
-    ObIJsonBase *j_base = &j_uint;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString raw_bin;
 
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    if (OB_FAIL(encode_json_unsigned(temp_allocator, in_val, raw_bin))) {
     } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
     }
   }
@@ -3257,21 +3287,16 @@ static int common_string_json(const ObExpr &expr,
       bool is_enumset_to_str = ((expr.args_[0]->type_ == T_FUN_SET_TO_STR)
                                 || (expr.args_[0]->type_ == T_FUN_ENUM_TO_STR)
                                 || ob_is_enum_or_set_type(expr.args_[0]->datum_meta_.type_));
-      ObIJsonBase *j_base = NULL;
-      ObJsonOpaque j_opaque(j_text, in_type);
-      ObJsonString j_string(j_text.ptr(), j_text.length());
-      ObJsonNull j_null;
-      ObJsonNode *j_tree = NULL;
+      enum class ScalarKind { Null, String, Opaque };
+      ScalarKind scalar_kind = ScalarKind::Null;
       bool is_null_res = false;
+      bool has_raw_bin = false;
+      ObString raw_bin;
       bool is_scalar = (j_text.length()
                         && ((j_text[0] == '\'' && j_text[j_text.length() - 1] == '\'')
                             || (j_text[0] == '\"' && j_text[j_text.length() - 1] == '\"')));
 
-      bool relaxed_json = false;
-      uint32_t parse_flag = ObJsonParser::JSN_STRICT_FLAG;
-
-      ADD_FLAG_IF_NEED(relaxed_json, parse_flag, ObJsonParser::JSN_RELAXED_FLAG);
-      ADD_FLAG_IF_NEED(false, parse_flag, ObJsonParser::JSN_UNIQUE_FLAG);
+      uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
 
       bool is_convert_jstr_type = (in_type == ObTinyTextType
                                  || in_type == ObTextType
@@ -3279,7 +3304,7 @@ static int common_string_json(const ObExpr &expr,
                                  || in_type == ObLongTextType);
 
       if (in_cs_type == CS_TYPE_BINARY) {
-        j_base = &j_opaque;
+        scalar_kind = ScalarKind::Opaque;
       } else if (is_enumset_to_str
                       || (CM_IS_SQL_AS_JSON_SCALAR(expr.extra_) && ob_is_string_type(in_type))
                       || (CM_IS_IMPLICIT_CAST(expr.extra_)
@@ -3287,16 +3312,16 @@ static int common_string_json(const ObExpr &expr,
                           && !CM_IS_JSON_VALUE(expr.extra_)
                           && is_convert_jstr_type)) {
         // consistent with mysql: TINYTEXT, TEXT, MEDIUMTEXT, and LONGTEXT. We want to treat them like strings
-        j_base = &j_string;
+        scalar_kind = ScalarKind::String;
         if ((CM_IS_SQL_AS_JSON_SCALAR(expr.extra_) && ob_is_string_type(in_type)) && j_text.compare("null") == 0) {
-          j_base = &j_null;
+          scalar_kind = ScalarKind::Null;
         }
-      } else if (OB_FAIL(ObJsonParser::get_tree(&temp_allocator, j_text, j_tree,
-                                                parse_flag,
-                                                ObJsonExprHelper::get_json_max_depth_config()))) {
+      } else if (OB_FAIL(ObJsonParser::get_binary(&temp_allocator, j_text.ptr(), j_text.length(), raw_bin,
+                                                  parse_flag,
+                                                  ObJsonExprHelper::get_json_max_depth_config()))) {
         if (CM_IS_IMPLICIT_CAST(expr.extra_) && !CM_IS_COLUMN_CONVERT(expr.extra_)) {
           ret = OB_SUCCESS;
-          j_base = &j_string;
+          scalar_kind = ScalarKind::String;
         } else {
           if (CM_IS_COLUMN_CONVERT(expr.extra_)) {
             ret = OB_ERR_INVALID_JSON_TEXT;
@@ -3307,12 +3332,13 @@ static int common_string_json(const ObExpr &expr,
           }
         }
       } else {
-        j_base = j_tree;
+        has_raw_bin = true;
       }
 
       if (OB_SUCC(ret) && !is_null_res) {
-        ObString raw_bin;
-        if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+        if (!has_raw_bin && OB_FAIL((scalar_kind == ScalarKind::Null ? encode_json_null(temp_allocator, raw_bin)
+          : scalar_kind == ScalarKind::String ? encode_json_text(temp_allocator, j_text, raw_bin)
+          : encode_json_opaque(temp_allocator, j_text, static_cast<uint16_t>(in_type), raw_bin)))) {
         } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
         }
       }
@@ -3907,14 +3933,12 @@ static int common_number_json(const number::ObNumber &nmb, const ObObjType in_ty
                               sql::ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObJsonDecimal j_dec(nmb, precision, scale);
-  ObIJsonBase *j_base = &j_dec;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   number::ObNumber tmp_num;
   common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
   ObString raw_bin;
   if (OB_FAIL(tmp_num.from(nmb, temp_allocator))) {
-  } else if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+  } else if (OB_FAIL(encode_json_decimal(temp_allocator, nmb, precision, scale, raw_bin))) {
   } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
   }
   return ret;
@@ -4162,13 +4186,11 @@ CAST_FUNC_NAME(float, json)
   {
     float in_val = child_res->get_float();
     ObObjType in_type = expr.args_[0]->datum_meta_.type_;
-    ObJsonDouble j_float(in_val);
-    ObIJsonBase *j_base = &j_float;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString raw_bin;
 
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    if (OB_FAIL(encode_json_real(temp_allocator, in_val, raw_bin))) {
     } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
     }
   }
@@ -4499,12 +4521,10 @@ CAST_FUNC_NAME(double, json)
   {
     double in_val = child_res->get_double();
     ObObjType in_type = expr.args_[0]->datum_meta_.type_;
-    ObJsonDouble j_double(in_val);
-    ObIJsonBase *j_base = &j_double;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    if (OB_FAIL(encode_json_real(temp_allocator, in_val, raw_bin))) {
     } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
     }
   }
@@ -5245,13 +5265,11 @@ CAST_FUNC_NAME(datetime, json)
           ObJsonNodeType node_type = (ObTimestampType == in_type)
                                       ? ObJsonNodeType::J_TIMESTAMP
                                       : ObJsonNodeType::J_DATETIME;
-          ObJsonDatetime j_datetime(node_type, ob_time);
-          ObIJsonBase *j_base = &j_datetime;
           ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
           common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
           ObString raw_bin;
 
-          if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+          if (OB_FAIL(encode_json_time(temp_allocator, node_type, ob_time, raw_bin))) {
           } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
           }
         }
@@ -5354,13 +5372,11 @@ CAST_FUNC_NAME(mdatetime, json)
       ObTime ob_time(DT_TYPE_MYSQL_DATETIME);
       if (OB_FAIL(ObTimeConverter::mdatetime_to_ob_time(in_val, ob_time))) {
       } else {
-        ObJsonDatetime j_mdatetime(ObJsonNodeType::J_MYSQL_DATETIME, ob_time);
-        ObIJsonBase *j_base = &j_mdatetime;
         ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
         common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
         ObString raw_bin;
 
-        if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+        if (OB_FAIL(encode_json_time(temp_allocator, ObJsonNodeType::J_MYSQL_DATETIME, ob_time, raw_bin))) {
         } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
         }
       }
@@ -5829,13 +5845,11 @@ CAST_FUNC_NAME(date, json)
     ObTime ob_time(DT_TYPE_DATE);
     if (OB_FAIL(ObTimeConverter::date_to_ob_time(in_val, ob_time))) {
     } else {
-      ObJsonDatetime j_date(ObJsonNodeType::J_DATE, ob_time);
-      ObIJsonBase *j_base = &j_date;
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString raw_bin;
 
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      if (OB_FAIL(encode_json_time(temp_allocator, ObJsonNodeType::J_DATE, ob_time, raw_bin))) {
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       }
     }
@@ -5914,13 +5928,11 @@ CAST_FUNC_NAME(mdate, json)
     ObTime ob_time(DT_TYPE_MYSQL_DATE);
     if (OB_FAIL(ObTimeConverter::mdate_to_ob_time(in_val, ob_time))) {
     } else {
-      ObJsonDatetime j_mdate(ObJsonNodeType::J_MYSQL_DATE, ob_time);
-      ObIJsonBase *j_base = &j_mdate;
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString raw_bin;
 
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      if (OB_FAIL(encode_json_time(temp_allocator, ObJsonNodeType::J_MYSQL_DATE, ob_time, raw_bin))) {
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       }
     }
@@ -6201,13 +6213,11 @@ CAST_FUNC_NAME(year, json)
     int64_t full_year = 0;
     if (OB_FAIL(ObTimeConverter::year_to_int(in_val, full_year))) {
     } else {
-      ObJsonInt j_year(full_year);
-      ObIJsonBase *j_base = &j_year;
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString raw_bin;
 
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      if (OB_FAIL(encode_json_integer(temp_allocator, full_year, raw_bin))) {
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       }
     }
@@ -6530,11 +6540,9 @@ CAST_FUNC_NAME(bit, json)
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       common::ObString j_value(pos, buf);
-      ObJsonOpaque j_opaque(j_value, ObBitType);
-      ObIJsonBase *j_base = &j_opaque;
       ObString raw_bin;
 
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      if (OB_FAIL(encode_json_opaque(temp_allocator, j_value, static_cast<uint16_t>(ObBitType), raw_bin))) {
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       }
     }
@@ -7308,13 +7316,11 @@ CAST_FUNC_NAME(time, json)
     ObTime ob_time(DT_TYPE_TIME);
     if (OB_FAIL(ObTimeConverter::time_to_ob_time(in_val, ob_time))) {
     } else {
-      ObJsonDatetime j_time(ObJsonNodeType::J_TIME, ob_time);
-      ObIJsonBase *j_base = &j_time;
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString raw_bin;
 
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      if (OB_FAIL(encode_json_time(temp_allocator, ObJsonNodeType::J_TIME, ob_time, raw_bin))) {
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       }
     }

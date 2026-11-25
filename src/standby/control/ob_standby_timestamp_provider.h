@@ -29,7 +29,6 @@ class ObStandbyTimestampProvider final
 public:
   static int enable();
   static int disable();
-  static int prepare_for_startup();
 
 private:
   static int get_timestamp_(int64_t &timestamp);

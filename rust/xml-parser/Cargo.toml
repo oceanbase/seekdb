@@ -1,0 +1,9 @@
+[package]
+name = "xml-parser"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "=1.0.202"
+quick-xml = "=0.41.0"

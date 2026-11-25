@@ -19,7 +19,7 @@
 #include "sql/engine/graph/graph_feedback_loop_op.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "share/ob_errno.h"
-#include "share/ob_json_access_utils.h"
+#include "common/json_type/json_builder.h"
 
 namespace oceanbase
 {
@@ -166,19 +166,15 @@ int GraphFeedbackRowMaterializer::materialize_path_payloads(
   const GraphFeedbackRowDesc &desc = spec.get_output_row_desc();
   for (int64_t column = 0; OB_SUCC(ret)
        && column < desc.payload_expr_count_; ++column) {
-    ObJsonArray array(&payload_allocator_);
+    JsonContainerBuilder array(false);
     // The root has no incoming edge. Walking root-to-leaf preserves order
     // and repeated edges; SQL's existing zero-hop wrapper handles [] output.
     for (int64_t hop = 1; OB_SUCC(ret) && hop < path.count(); ++hop) {
       const ObNewRow &row = path.at(hop).incoming_edge_payload_.values_;
-      ObIJsonBase *value = nullptr;
       if (OB_UNLIKELY(row.count_ != desc.payload_expr_count_
                       || row.cells_ == nullptr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(
-                     &payload_allocator_, row.cells_[column].get_string(),
-                     ObJsonInType::JSON_BIN, ObJsonInType::JSON_TREE, value))) {
-      } else if (OB_FAIL(array.array_append(value))) {
+      } else if (OB_FAIL(array.append(ObString(), row.cells_[column].get_string()))) {
       }
     }
     ObString binary;
@@ -187,10 +183,9 @@ int GraphFeedbackRowMaterializer::materialize_path_payloads(
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(output)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (ObJsonExprHelper::is_json_depth_exceed_limit(array.depth())) {
-        ret = OB_ERR_JSON_OUT_OF_DEPTH;
-      } else if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(
-                     &array, binary, &payload_allocator_))) {
+      } else if (OB_FAIL(array.finish(binary, false, true, true,
+                     std::max<uint32_t>(JSON_DOCUMENT_MAX_DEPTH,
+                         ObJsonExprHelper::get_json_max_depth_config())))) {
       } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(
                      *output, eval_ctx_, output->locate_datum_for_write(eval_ctx_),
                      binary))) {

@@ -21,7 +21,7 @@
 #include "share/geo/ob_geo_bin.h"
 #include "share/geo/ob_geo_ibin.h"
 #include "share/geo/ob_srs_info.h"
-#include "share/geo/ob_s2adapter.h"
+#include "share/geo/ob_spatial_covering.h"
 #include "share/geo/ob_wkt_parser.h"
 #include "lib/hash/ob_hashmap.h"
 #include "common/number/ob_number_v2.h"
@@ -221,7 +221,7 @@ public:
   static int get_cellid_mbr_from_geom(const ObString &wkb_str,
                                       const ObSrsItem *srs_item,
                                       const ObSrsBoundsItem *srs_bound,
-                                      ObS2Cellids &cellids,
+                                      ObSpatialCellIds &cellids,
                                       ObString &mbr_val);
   static int get_wkb_from_swkb(const ObString &swkb, ObString &wkb, uint32_t &offset);
   static int get_num_by_gtype(ObGeoType geo_type, uint64_t &num);

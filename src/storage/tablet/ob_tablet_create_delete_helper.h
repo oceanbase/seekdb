@@ -115,7 +115,6 @@ public:
       common::ObArenaAllocator &allocator,
       ObLS &ls,
       ObTabletHandle &handle);
-  static int prepare_create_msd_tablet();
   static int create_msd_tablet(
       const ObTabletMapKey &key,
       ObTabletHandle &handle);

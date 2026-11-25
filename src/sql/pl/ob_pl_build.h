@@ -94,6 +94,8 @@ public:
   static int compile_type_table(const ObPLUserTypeTable &ast_type_table, ObPLExecutableUnit &unit);
   static int check_dep_schema(ObSchemaGetterGuard &schema_guard,
                               const DependenyTableStore &dep_schema_objs);
+  static int init_anonymous_scalar_type(const ObObjParam &param, bool is_prepare_protocol,
+      ObPLDataType &type);
   static int init_anonymous_ast(ObPLFunctionAST &func_ast,
                                 common::ObIAllocator &allocator,
                                 sql::ObSQLSessionInfo &session_info,

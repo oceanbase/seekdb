@@ -1,6 +1,6 @@
 """Shared settings for the seekdb Bazel build."""
 
-VERSION = "1.4.0.0"
+VERSION = "1.4.1.0"
 
 X86_SIMD_COPTS = [
     "-mtune=core-avx2",
@@ -135,4 +135,11 @@ def logging_defines():
     return select({
         "//bazel:rpm_logging_enabled": ["DEFAULT_LOG_FILE_SIZE_MB=16", "DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN"],
         "//conditions:default": ["DEFAULT_LOG_FILE_SIZE_MB=256", "DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR"],
+    })
+
+def debug_info_copts():
+    """Keeps line tables for symbolication while dropping full DWARF/CodeView."""
+    return select({
+        "//bazel:line_tables_only_enabled": ["-gline-tables-only"],
+        "//conditions:default": [],
     })

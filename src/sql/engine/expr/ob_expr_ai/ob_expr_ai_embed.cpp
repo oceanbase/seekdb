@@ -104,8 +104,8 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
       res.set_null();
     }
     int64_t dim = 0;
-    ObJsonInt *dim_json = nullptr;
-    ObJsonObject *config = nullptr;
+    ObIJsonBase *dim_json = nullptr;
+    ObIJsonBase *config = nullptr;
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(arg_dim)) {
       dim = arg_dim->get_int();
@@ -115,7 +115,7 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
         res.set_null();
       } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(temp_allocator, config))) {
       } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(temp_allocator, dim, dim_json))) {
-      } else if (OB_FAIL(config->add("dimensions", dim_json))) {
+      } else if (OB_FAIL(ObAIFuncJsonUtils::object_set(temp_allocator, config, "dimensions", dim_json))) {
       }
     }
     if (OB_FAIL(ret)) {

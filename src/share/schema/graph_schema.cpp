@@ -20,7 +20,7 @@
 #include "share/schema/ob_column_schema.h"
 #include "share/schema/ob_schema_utils.h"
 #include "common/json_type/ob_json_parse.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/json_builder.h"
 
 namespace oceanbase
 {
@@ -34,39 +34,27 @@ namespace
 {
 constexpr uint64_t GRAPH_CATALOG_FORMAT_VERSION = 1;
 
-int add_graph_json_field(ObJsonObject &object, const char *key,
-                         const ObJsonNode &value, ObIAllocator &allocator)
+int add_graph_json_uint(JsonContainerBuilder &object, const char *key,
+                        uint64_t value, ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  // Clone scalar temporaries into the arena. Strings borrow schema storage,
-  // which remains valid until the complete document has been printed.
-  ObJsonNode *node = value.clone(&allocator);
-  if (node == nullptr) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    ret = object.add(ObString::make_string(key), node);
+  ObString binary;
+  if (OB_FAIL(encode_json_unsigned(allocator, value, binary))) {
+  } else if (OB_FAIL(object.append(ObString::make_string(key), binary))) {
   }
   return ret;
 }
 
-int add_graph_json_columns(ObJsonObject &object, const char *key,
+int add_graph_json_columns(JsonContainerBuilder &object, const char *key,
                            const uint64_t *columns, int64_t count,
                            ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  ObJsonArray *array = OB_NEWx(ObJsonArray, &allocator, &allocator);
-  if (array == nullptr) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  }
+  JsonContainerBuilder array(false);
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    ObJsonNode *node = ObJsonUint(columns[i]).clone(&allocator);
-    if (node == nullptr) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      ret = array->append(node);
-    }
+    ret = add_graph_json_uint(array, "", columns[i], allocator);
   }
-  if (OB_SUCC(ret)) { ret = object.add(ObString::make_string(key), array); }
+  if (OB_SUCC(ret)) { ret = object.append_container(ObString::make_string(key), array); }
   return ret;
 }
 
@@ -159,60 +147,58 @@ int GraphSchema::to_catalog_json(ObSqlString &json) const
 {
   int ret = OB_SUCCESS;
   json.reset();
-  // All nodes share one arena; only the final JSON text escapes this scope.
+  // Builders own their binary buffers; copy only the final catalog text out.
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-  ObJsonObject root(&allocator);
-  ObJsonArray elements(&allocator);
-  ObJsonArray properties(&allocator);
-  ObJsonBuffer buffer(&allocator);
+  JsonContainerBuilder root(true);
+  JsonContainerBuilder elements(false);
+  JsonContainerBuilder properties(false);
+  ObString binary;
+  ObString text;
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(add_graph_json_field(root, "format_version", ObJsonUint(GRAPH_CATALOG_FORMAT_VERSION), allocator))) {
-  } else if (OB_FAIL(add_graph_json_field(root, "graph_id", ObJsonUint(graph_id_), allocator))) {
-  } else if (OB_FAIL(add_graph_json_field(root, "database_id", ObJsonUint(database_id_), allocator))) {
-  } else if (OB_FAIL(add_graph_json_field(root, "define_user_id", ObJsonUint(define_user_id_), allocator))) {
-  } else if (OB_FAIL(add_graph_json_field(root, "schema_version", ObJsonInt(schema_version_), allocator))) {
-  } else if (OB_FAIL(add_graph_json_field(root, "name", ObJsonString(name_), allocator))) {
+  } else if (OB_FAIL(add_graph_json_uint(root, "format_version", GRAPH_CATALOG_FORMAT_VERSION, allocator))) {
+  } else if (OB_FAIL(add_graph_json_uint(root, "graph_id", graph_id_, allocator))) {
+  } else if (OB_FAIL(add_graph_json_uint(root, "database_id", database_id_, allocator))) {
+  } else if (OB_FAIL(add_graph_json_uint(root, "define_user_id", define_user_id_, allocator))) {
+  } else if (OB_FAIL(root.append_integer(ObString::make_string("schema_version"), schema_version_))) {
+  } else if (OB_FAIL(root.append_string(ObString::make_string("name"), name_))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < elements_.count(); ++i) {
     const GraphElement &e = elements_.at(i);
-    ObJsonObject *element = OB_NEWx(ObJsonObject, &allocator, &allocator);
-    if (element == nullptr) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(add_graph_json_field(*element, "kind",
-        ObJsonString(ObString::make_string(e.is_vertex() ? "vertex" : "edge")), allocator))) {
-    } else if (OB_FAIL(add_graph_json_field(*element, "id", ObJsonUint(e.id_), allocator))) {
-    } else if (OB_FAIL(add_graph_json_field(*element, "table_id", ObJsonUint(e.table_id_), allocator))) {
-    } else if (OB_FAIL(add_graph_json_field(*element, "label", ObJsonString(e.label_), allocator))) {
-    } else if (OB_FAIL(add_graph_json_columns(*element, "key_columns", e.key_columns_, e.key_count_, allocator))) {
+    JsonContainerBuilder element(true);
+    if (OB_FAIL(element.append_string(ObString::make_string("kind"),
+        ObString::make_string(e.is_vertex() ? "vertex" : "edge")))) {
+    } else if (OB_FAIL(add_graph_json_uint(element, "id", e.id_, allocator))) {
+    } else if (OB_FAIL(add_graph_json_uint(element, "table_id", e.table_id_, allocator))) {
+    } else if (OB_FAIL(element.append_string(ObString::make_string("label"), e.label_))) {
+    } else if (OB_FAIL(add_graph_json_columns(element, "key_columns", e.key_columns_, e.key_count_, allocator))) {
     }
     if (OB_SUCC(ret) && !e.is_vertex()) {
-      if (OB_FAIL(add_graph_json_field(*element, "source_id", ObJsonUint(e.source_id_), allocator))) {
-      } else if (OB_FAIL(add_graph_json_field(*element, "destination_id", ObJsonUint(e.destination_id_), allocator))) {
-      } else if (OB_FAIL(add_graph_json_columns(*element, "source_columns",
+      if (OB_FAIL(add_graph_json_uint(element, "source_id", e.source_id_, allocator))) {
+      } else if (OB_FAIL(add_graph_json_uint(element, "destination_id", e.destination_id_, allocator))) {
+      } else if (OB_FAIL(add_graph_json_columns(element, "source_columns",
                                               e.source_columns_, e.source_key_count_, allocator))) {
-      } else if (OB_FAIL(add_graph_json_columns(*element, "destination_columns",
+      } else if (OB_FAIL(add_graph_json_columns(element, "destination_columns",
                                               e.destination_columns_, e.destination_key_count_, allocator))) {
       }
     }
-    if (OB_SUCC(ret)) { ret = elements.append(element); }
+    if (OB_SUCC(ret)) { ret = elements.append_container(ObString(), element); }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < properties_.count(); ++i) {
     const GraphProperty &p = properties_.at(i);
-    ObJsonObject *property = OB_NEWx(ObJsonObject, &allocator, &allocator);
-    if (property == nullptr) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(add_graph_json_field(*property, "element_id", ObJsonUint(p.element_id_), allocator))) {
-    } else if (OB_FAIL(add_graph_json_field(*property, "column_id", ObJsonUint(p.column_id_), allocator))) {
-    } else if (OB_FAIL(add_graph_json_field(*property, "name", ObJsonString(p.name_), allocator))) {
-    } else if (OB_FAIL(properties.append(property))) {
+    JsonContainerBuilder property(true);
+    if (OB_FAIL(add_graph_json_uint(property, "element_id", p.element_id_, allocator))) {
+    } else if (OB_FAIL(add_graph_json_uint(property, "column_id", p.column_id_, allocator))) {
+    } else if (OB_FAIL(property.append_string(ObString::make_string("name"), p.name_))) {
+    } else if (OB_FAIL(properties.append_container(ObString(), property))) {
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(root.add(ObString::make_string("elements"), &elements))) {
-    } else if (OB_FAIL(root.add(ObString::make_string("properties"), &properties))) {
-    } else if (OB_FAIL(root.print(buffer, true))) {
-    } else if (OB_FAIL(json.append(buffer.ptr(), buffer.length()))) {
+    if (OB_FAIL(root.append_container(ObString::make_string("elements"), elements))) {
+    } else if (OB_FAIL(root.append_container(ObString::make_string("properties"), properties))) {
+    } else if (OB_FAIL(root.finish(binary))) {
+    } else if (OB_FAIL(root.format(text))) {
+    } else if (OB_FAIL(json.append(text.ptr(), text.length()))) {
     }
   }
   return ret;
@@ -226,7 +212,7 @@ int GraphSchema::from_catalog_definition(const ObString &definition)
     ret = OB_DESERIALIZE_ERROR;
   } else {
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-    ObJsonNode *root = nullptr;
+    ObIJsonBase *root = nullptr;
     ObIJsonBase *elements = nullptr;
     ObIJsonBase *properties = nullptr;
     uint64_t format_version = 0;
@@ -238,8 +224,8 @@ int GraphSchema::from_catalog_definition(const ObString &definition)
     // silently parsing a prefix.
     if (MEMCHR(definition.ptr(), '\0', definition.length()) != nullptr) {
       ret = OB_DESERIALIZE_ERROR;
-    } else if (OB_FAIL(ObJsonParser::get_tree(&allocator, definition, root,
-               ObJsonParser::JSN_STRICT_FLAG | ObJsonParser::JSN_UNIQUE_FLAG))) {
+    } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, definition,
+               ObJsonInType::JSON_TEXT, root, ObJsonParser::JSN_UNIQUE_FLAG))) {
     } else if (root == nullptr) {
       ret = OB_DESERIALIZE_ERROR;
     } else if (OB_FAIL(graph_json_uint_field(*root, "format_version", format_version))) {

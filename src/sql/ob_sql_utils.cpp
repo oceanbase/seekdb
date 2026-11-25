@@ -29,7 +29,8 @@
 #include "share/ob_timezone_mgr.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include <openssl/md5.h>
+#include "rust/crypto.h"
+#include "share/ob_encryption_util.h"
 #include "share/geo/ob_srs_provider.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 #include "query/ob_sql_name_service.h"
@@ -146,15 +147,10 @@ int ObSQLUtils::md5(const ObString &stmt, char *sql_id, int32_t len)
   char md5_sum_buf[MD5_LENGTH];
   ObString::obstr_size_t md5_sum_len = MD5_LENGTH;
   if (OB_SUCC(ret)) {
-    unsigned char *res = MD5(reinterpret_cast<const unsigned char *>(stmt.ptr()),
-                             stmt.length(),
-                             reinterpret_cast<unsigned char *>(md5_sum_buf));
-    if (OB_ISNULL(res)) {
-      // MD5() in openssl always return an pointer not NULL, so we need not check return value.
-      // see:
-      // http://www.openssl.org/docs/crypto/md5.html#DESCRIPTION
-      // http://www.openssl.org/docs/crypto/md5.html#RETURN_VALUES
-      // Even so, we HAVE TO check it here. You know it.
+    const auto result = crypto::digest_into(
+        static_cast<uint32_t>(share::OB_HASH_MD5), rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(stmt.ptr()), stmt.length()),
+        rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(md5_sum_buf), md5_sum_len));
+    if (crypto::Code::Ok != result.code) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(to_hex_cstr(md5_sum_buf, md5_sum_len, sql_id, len))) {
     } else { }//do nothing

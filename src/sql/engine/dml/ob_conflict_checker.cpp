@@ -491,9 +491,11 @@ int ObConflictChecker::delete_old_row(const ObChunkDatumStore::StoredRow *replac
 }
 // Insert new line into hash map
 int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_row,
-                                      ObNewRowSource from)
+                                      ObNewRowSource from,
+                                      bool is_from_insert)
 {
   int ret = OB_SUCCESS;
+  const bool row_from_insert = is_from_insert || (ObNewRowSource::FROM_INSERT == from);
   if (OB_FAIL(to_expr(new_row))) {
   } else {
     LOG_DEBUG("insert one row to hash_map", K(ret),
@@ -528,12 +530,14 @@ int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_ro
         // map hit, indicating that the base row was deleted, then a new row was inserted
         constraint_value->current_datum_row_ = new_row;
         constraint_value->new_row_source_ = from;
+        constraint_value->is_from_insert_ = row_from_insert;
       }
     } else {
       // Real insert new line to map
       ObConflictValue new_constraint_value;
       new_constraint_value.current_datum_row_ = new_row;
       new_constraint_value.new_row_source_ = from;
+      new_constraint_value.is_from_insert_ = row_from_insert;
       if (OB_FAIL(build_rowkey(insert_rowkey, rowkey_cst_ctdef))) {
       } else if (OB_ISNULL(insert_rowkey)) {
         ret = OB_ERR_UNEXPECTED;
@@ -546,11 +550,12 @@ int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_ro
 }
 
 int ObConflictChecker::update_row(const ObChunkDatumStore::StoredRow *new_row,
-                                  const ObChunkDatumStore::StoredRow *old_row)
+                                  const ObChunkDatumStore::StoredRow *old_row,
+                                  bool is_from_insert)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(delete_old_row(old_row, ObNewRowSource::FROM_INSERT))) {
-  } else if (OB_FAIL(insert_new_row(new_row, ObNewRowSource::FROM_UPDATE))) {
+  } else if (OB_FAIL(insert_new_row(new_row, ObNewRowSource::FROM_UPDATE, is_from_insert))) {
   }
   return ret;
 }

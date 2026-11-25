@@ -134,11 +134,12 @@ public:
     main_ctdef_(main_ctdef),
     srs_provider_(srs_provider),
     lob_read_options_(lob_read_options),
-    ft_doc_word_info_(nullptr)
+    ft_doc_word_info_(nullptr),
+    force_text_embedding_(false)
   {}
   ~ObDomainDMLParam() = default;
 
-  TO_STRING_KV(K_(mode), KPC_(row_projector), KPC_(das_ctdef), KPC_(main_ctdef), KPC_(ft_doc_word_info));
+  TO_STRING_KV(K_(mode), KPC_(row_projector), KPC_(das_ctdef), KPC_(main_ctdef), KPC_(ft_doc_word_info), K_(force_text_embedding));
 
 public:
   ObDomainDMLMode mode_;
@@ -150,6 +151,7 @@ public:
   common::ObISrsProvider *srs_provider_;
   const common::ObLobReadOptions *lob_read_options_;
   const ObFTDocWordInfo *ft_doc_word_info_;
+  bool force_text_embedding_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDomainDMLParam);

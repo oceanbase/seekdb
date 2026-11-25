@@ -1,0 +1,38 @@
+# SEEK-1408; product fix oceanbase/seekdb#2612.
+# Check query results, including empty sets, without plan/cost snapshots.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS seek1408_inventory, seek1408_strings;
+--enable_warnings
+CREATE TABLE seek1408_inventory(price DECIMAL(10,2), warehouse_id INT, sku VARCHAR(20));
+CREATE TABLE seek1408_strings(c_char VARCHAR(20));
+--echo Empty tables: original correlated aggregate with LIMIT
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(i.warehouse_id) FROM seek1408_strings s INNER JOIN (seek1408_inventory i LEFT JOIN seek1408_inventory j ON (18 XOR 50)) ON s.c_char=j.sku WHERE s.c_char=t.price LIMIT 160);
+--echo Empty tables: reduced correlated aggregate with LIMIT
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160);
+--echo Empty tables: controls without LIMIT
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(i.warehouse_id) FROM seek1408_strings s INNER JOIN (seek1408_inventory i LEFT JOIN seek1408_inventory j ON (18 XOR 50)) ON s.c_char=j.sku WHERE s.c_char=t.price);
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price);
+INSERT INTO seek1408_inventory VALUES (0,1,'0'),(1,2,'1'),(2,3,'2'),(3,4,'3'),(NULL,5,'n');
+INSERT INTO seek1408_strings VALUES ('1'),('2'),('2'),(NULL);
+--echo Populated and NULL rows: original and reduced queries
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(i.warehouse_id) FROM seek1408_strings s INNER JOIN (seek1408_inventory i LEFT JOIN seek1408_inventory j ON (18 XOR 50)) ON s.c_char=j.sku WHERE s.c_char=t.price LIMIT 160);
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160);
+--echo Populated and NULL rows: controls without LIMIT
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(i.warehouse_id) FROM seek1408_strings s INNER JOIN (seek1408_inventory i LEFT JOIN seek1408_inventory j ON (18 XOR 50)) ON s.c_char=j.sku WHERE s.c_char=t.price);
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price);
+--echo Scalar aggregate results
+SELECT t.price FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160) ORDER BY t.price;
+SELECT t.price FROM seek1408_inventory t WHERE t.price IN (SELECT SUM(1) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160) ORDER BY t.price;
+SELECT t.price FROM seek1408_inventory t WHERE t.price IN (SELECT MIN(1) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160) ORDER BY t.price;
+SELECT t.price FROM seek1408_inventory t WHERE t.price IN (SELECT MAX(1) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160) ORDER BY t.price;
+--echo ANY and ALL comparisons
+SELECT t.price FROM seek1408_inventory t WHERE t.price = ANY (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160) ORDER BY t.price;
+SELECT t.price FROM seek1408_inventory t WHERE t.price <> ALL (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160) ORDER BY t.price;
+--echo Multi-column row comparisons remain supported
+SELECT t.price FROM seek1408_inventory t WHERE (t.price,t.warehouse_id) IN (SELECT COUNT(*),COUNT(*)+1 FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160) ORDER BY t.price;
+SELECT t.price FROM seek1408_inventory t WHERE ROW(t.price,t.warehouse_id) IN (SELECT COUNT(*),COUNT(*)+1 FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160) ORDER BY t.price;
+--echo LIMIT and OFFSET producing no rows
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 0);
+SELECT 1 FROM seek1408_inventory t WHERE t.price IN (SELECT COUNT(*) FROM seek1408_strings s WHERE s.c_char=t.price LIMIT 160 OFFSET 1);
+DROP TABLE seek1408_inventory, seek1408_strings;

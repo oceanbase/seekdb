@@ -16,7 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_contains_path.h"
+#include <optional>
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
+#include "sql/engine/expr/ob_expr_json_native_path.h"
+#include "lib/utility/ob_defer.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -75,15 +78,55 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
                                                     ObEvalCtx &ctx,
                                                     ObDatum &res)
 {
-  // get json doc
   int ret = OB_SUCCESS;
-  ObIJsonBase *json_target = NULL;
   bool is_null_result = false;
+  ObString json_doc;
+  ObJsonInType input_type = ObJsonInType::JSON_TEXT;
+  ObIJsonBase *partial_document = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, json_target, is_null_result, false))) {
+  DEFER(if (partial_document != nullptr) { partial_document->reset(); });
+  ObDatum *doc_datum = NULL;
+  ObExpr *doc_arg = expr.args_[0];
+  ObObjType doc_type = doc_arg->datum_meta_.type_;
+  ObCollationType doc_cs_type = doc_arg->datum_meta_.cs_type_;
+  bool allow_partial_update = false;
+  if (OB_FAIL(temp_allocator.eval_arg(doc_arg, ctx, doc_datum))) {
+  } else if (doc_type == ObNullType || doc_datum->is_null()) {
+    is_null_result = true;
+  } else if (doc_type != ObJsonType && !ob_is_string_type(doc_type)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("input type error", K(doc_type));
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(doc_type, doc_cs_type))) {
+  } else if (ob_is_json(doc_type)
+      && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(
+             expr, ctx, doc_datum->get_string(), allow_partial_update))) {
+  } else if (allow_partial_update) {
+    if (OB_FAIL(ObJsonExprHelper::get_json_for_partial_update(
+            expr, *doc_arg, ctx, temp_allocator, *doc_datum, partial_document))) {
+    } else if (OB_FAIL(partial_document->get_raw_binary(json_doc, &temp_allocator))) {
+    } else {
+      input_type = ObJsonInType::JSON_BIN;
+    }
+  } else if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(
+                 doc_arg, ctx, temp_allocator, json_doc, is_null_result))) {
   } else {
+    input_type = ObJsonExprHelper::get_json_internal_type(doc_type);
+  }
+  std::optional<rust::Box<common::json::Query>> query;
+  if (OB_SUCC(ret) && !is_null_result) {
+    query.emplace(common::json::new_query(
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(json_doc.ptr()), json_doc.length()),
+        input_type != ObJsonInType::JSON_BIN,
+        ObJsonExprHelper::get_json_text_depth_limit(
+            ObJsonExprHelper::get_json_max_depth_config())));
+    if ((*query)->status() != common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to parse JSON for path query", K(ret), K((*query)->byte_offset()));
+    }
+  }
+  bool is_contains = false;
+  if (OB_SUCC(ret) && !is_null_result) {
     // get one_or_all flag
     bool one_flag;
     ObDatum *json_datum = NULL;
@@ -105,50 +148,51 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
       }
     }
 
-    bool is_contains = false;
     if ((OB_SUCC(ret)) && !is_null_result) {
-      ObJsonPathCache ctx_cache(&temp_allocator);
-      ObJsonPathCache* path_cache = ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
+      JsonPathCache ctx_cache;
+      JsonPathCache* path_cache = get_native_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
       path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
 
       for (int64_t i = 2; OB_SUCC(ret) && i < expr.arg_cnt_ && !is_null_result; i++) {
-        ObJsonSeekResult hit;
         ObDatum *path_data = NULL;
         if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, path_data))) {
         } else if (expr.args_[i]->datum_meta_.type_ == ObNullType || path_data->is_null()) {
           is_null_result = true;
         } else {
           ObString path_val = path_data->get_string();
-          ObJsonPath *json_path;
+          const common::json::Path *json_path = NULL;
           if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(expr.args_[i], ctx, temp_allocator, path_val, is_null_result))) {
-          } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, json_path, path_val, i, true))) {
-          } else if (OB_FAIL(json_target->seek(*json_path, json_path->path_node_cnt(),
-                                               true, false, hit))) {
+          } else if (OB_FAIL(find_and_add_native_path_cache(path_cache, json_path, path_val, i, true))) {
           }
-          
-          if (hit.size() == 0) {
-            if (!one_flag) {
-              is_contains = false;
-              break;
-            }
-          } else {
-            is_contains = true;
-            if (one_flag) {
-              break; 
+
+          if (OB_SUCC(ret)) {
+            common::json::PathQueryResult matches = (*query)->query(*json_path, true, true);
+            if (matches.status != common::json::Status::Ok) {
+              ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+            } else if (matches.match_count == 0) {
+              if (!one_flag) {
+                is_contains = false;
+                break;
+              }
+            } else {
+              is_contains = true;
+              if (one_flag) {
+                break;
+              }
             }
           }
         }
       }
     }
 
-    // set result
-    if (OB_FAIL(ret)) {
-    } else if (is_null_result) {
-      res.set_null();
-    } else {
-      res.set_int(static_cast<int64_t>(is_contains));
-    }
+  }
 
+  // set result
+  if (OB_FAIL(ret)) {
+  } else if (is_null_result) {
+    res.set_null();
+  } else {
+    res.set_int(static_cast<int64_t>(is_contains));
   }
 
   return ret;

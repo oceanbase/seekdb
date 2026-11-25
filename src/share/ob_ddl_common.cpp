@@ -1173,7 +1173,7 @@ int ObDDLUtil::get_temp_store_compress_type(const share::schema::ObTableSchema *
   } else {
     ObCompressorType schema_compr_type = table_schema->get_compressor_type();
     if (NONE_COMPRESSOR == schema_compr_type && table_schema->get_row_store_type() != FLAT_ROW_STORE) { // encoding without compress
-      schema_compr_type = ZSTD_1_3_8_COMPRESSOR;
+      schema_compr_type = ZSTD_COMPRESSOR;
     }
     ret = get_temp_store_compress_type(schema_compr_type, parallel, compr_type);
   }
@@ -1192,7 +1192,7 @@ int ObDDLUtil::get_temp_store_compress_type(const ObCompressorType schema_compr_
     if (0 == config_text.case_compare("NONE")) {
       compr_type = NONE_COMPRESSOR;
     } else if (0 == config_text.case_compare("ZSTD")) {
-      compr_type = ZSTD_1_3_8_COMPRESSOR;
+      compr_type = ZSTD_COMPRESSOR;
     } else if (0 == config_text.case_compare("AUTO")) {
       UNUSED(parallel);
       if (schema_compr_type > INVALID_COMPRESSOR && schema_compr_type < MAX_COMPRESSOR) {
@@ -1310,7 +1310,7 @@ int ObDDLTaskStatInfo::init(const char *&ddl_type_str, const uint64_t table_id)
   MEMSET(op_name_, 0, common::MAX_LONG_OPS_NAME_LENGTH);
   MEMSET(target_, 0, common::MAX_LONG_OPS_TARGET_LENGTH);
   if (OB_FAIL(databuff_printf(op_name_, common::MAX_LONG_OPS_NAME_LENGTH, "%s", ddl_type_str))) {
-  } else if (OB_FAIL(databuff_printf(target_, common::MAX_LONG_OPS_TARGET_LENGTH, "%lu", table_id))) {
+  } else if (OB_FAIL(databuff_printf(target_, common::MAX_LONG_OPS_TARGET_LENGTH, "%" PRIu64 "", table_id))) {
   } else {
     start_time_ = ObTimeUtility::current_time();
   }

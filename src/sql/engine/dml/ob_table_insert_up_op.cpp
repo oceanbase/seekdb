@@ -147,7 +147,8 @@ int ObTableInsertUpOp::inner_open()
   } else if (OB_FAIL(insert_up_row_store_.init(UINT64_MAX,
                                                ObCtxIds::DEFAULT_CTX_ID,
                                                "insert_up_row_store",
-                                               false/*enable_dump*/))) {
+                                               false/*enable_dump*/,
+                                               sizeof(int64_t)/*input row number*/))) {
   } else if (OB_FAIL(inner_open_with_das())) {
   } else {
     const ObInsertUpCtDef *insert_up_ctdef = MY_SPEC.insert_up_ctdefs_.at(0);
@@ -352,6 +353,9 @@ int ObTableInsertUpOp::do_insert_up_cache()
     int64_t update_rows = 0;
     int64_t found_rows = 0;
     constraint_values.reuse();
+    if (OB_NOT_NULL(insert_row)) {
+      upd_rtdef.cur_row_num_ = insert_row->extra_payload<int64_t>();
+    }
     if (OB_ISNULL(insert_row)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(insert_row->to_expr(MY_SPEC.all_saved_exprs_, eval_ctx_))) {
@@ -419,7 +423,11 @@ int ObTableInsertUpOp::do_insert_up_cache()
         update_rows++;
         modify_row.old_row_ = const_cast<ObChunkDatumStore::StoredRow *>(upd_old_row);
         modify_row.new_row_ = upd_new_row;
-        if (OB_FAIL(conflict_checker_.update_row(upd_new_row, upd_old_row))) {
+        // Preserve whether the conflicting row originated from an earlier INSERT
+        // in this statement (unencoded semantic index text) while keeping
+        // FROM_UPDATE so final task dispatch uses upd_ctdef.
+        const bool is_from_insert = constraint_values.at(0).is_from_insert_;
+        if (OB_FAIL(conflict_checker_.update_row(upd_new_row, upd_old_row, is_from_insert))) {
         } else if (need_after_row_process(upd_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
         }
       } else {
@@ -598,7 +606,7 @@ int ObTableInsertUpOp::lock_one_row_to_das(const ObUpdCtDef &upd_ctdef,
   return ret;
 }
 
-int ObTableInsertUpOp::insert_upd_new_row_to_das()
+int ObTableInsertUpOp::insert_upd_new_row_to_das(bool force_text_embedding)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.insert_up_ctdefs_.count(); ++i) {
@@ -610,7 +618,7 @@ int ObTableInsertUpOp::insert_upd_new_row_to_das()
     // must do update
     // do insert update new_row
     OZ(resolve_upd_new_row_tablet_access(*upd_ctdef, upd_rtdef, tablet_access));
-    OZ(insert_one_upd_new_row_das(*upd_ctdef, upd_rtdef, tablet_access));
+    OZ(insert_one_upd_new_row_das(*upd_ctdef, upd_rtdef, tablet_access, force_text_embedding));
   }
   return ret;
 }
@@ -688,7 +696,8 @@ int ObTableInsertUpOp::delete_one_upd_old_row_das(const ObUpdCtDef &upd_ctdef,
 
 int ObTableInsertUpOp::insert_one_upd_new_row_das(const ObUpdCtDef &upd_ctdef,
                                                   ObUpdRtDef &upd_rtdef,
-                                                  const DASRuntimeTabletAccess *tablet_access)
+                                                  const DASRuntimeTabletAccess *tablet_access,
+                                                  bool force_text_embedding)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(upd_ctdef.dins_ctdef_)) {
@@ -715,7 +724,8 @@ int ObTableInsertUpOp::insert_one_upd_new_row_das(const ObUpdCtDef &upd_ctdef,
                                               tablet_access,
                                               upd_rtctx_,
                                               upd_ctdef.new_row_,
-                                              stored_row))) {
+                                              stored_row,
+                                              force_text_embedding))) {
   } else {
     LOG_DEBUG("ins upd new_row", KPC(tablet_access), "upd new_row",
               ROWEXPR2STR(eval_ctx_, upd_ctdef.new_row_));
@@ -912,6 +922,7 @@ int ObTableInsertUpOp::load_batch_insert_up_rows(bool &is_iter_end,
 
   while (OB_SUCC(ret) && !reach_mem_limit) {
     bool is_skipped = false;
+    ObChunkDatumStore::StoredRow *stored_row = nullptr;
     if (OB_FAIL(get_next_row_from_child())) {
       if (OB_ITER_END != ret) {
       } else {
@@ -920,8 +931,14 @@ int ObTableInsertUpOp::load_batch_insert_up_rows(bool &is_iter_end,
     } else if (OB_FAIL(try_insert_row(is_skipped))) {
     } else if (is_first_insert_row && OB_FAIL(record_session_last_insert_id())) {
     } else if (!is_skipped &&
-          OB_FAIL(insert_up_row_store_.add_row(MY_SPEC.all_saved_exprs_, &eval_ctx_))) {
+          OB_FAIL(insert_up_row_store_.add_row(MY_SPEC.all_saved_exprs_, &eval_ctx_, &stored_row))) {
+    } else if (!is_skipped && OB_ISNULL(stored_row)) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
+      if (!is_skipped) {
+        // Preserve the original ordinal across batching and skipped input rows.
+        stored_row->extra_payload<int64_t>() = insert_up_rtdefs_.at(0).ins_rtdef_.cur_row_num_;
+      }
       insert_rows++;
       is_first_insert_row = false;
       row_count++;
@@ -1149,12 +1166,12 @@ int ObTableInsertUpOp::do_update(const ObConflictValue &constraint_value)
       OZ(constraint_value.baseline_datum_row_->to_expr(get_primary_table_upd_old_row(), eval_ctx_));
       OZ(delete_upd_old_row_to_das());
       OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_upd_new_row(), eval_ctx_));
-      OZ(insert_upd_new_row_to_das());
+      OZ(insert_upd_new_row_to_das(constraint_value.is_from_insert_));
     } else if (NULL == constraint_value.baseline_datum_row_ &&
                NULL != constraint_value.current_datum_row_) {
       // base_line does not exist but curr_row exists, which means curr_row is updated from other rows
       OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_upd_new_row(), eval_ctx_));
-      OZ(insert_upd_new_row_to_das());
+      OZ(insert_upd_new_row_to_das(constraint_value.is_from_insert_));
     } else {
       ret = OB_ERR_UNEXPECTED;
     }

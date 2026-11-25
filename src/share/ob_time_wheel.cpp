@@ -15,6 +15,7 @@
  */
 
 #include "share/ob_time_wheel.h"
+#include <inttypes.h>
 #include "lib/thread/ob_thread_name.h"
 
 namespace oceanbase
@@ -85,7 +86,7 @@ int64_t ObTimeWheelTask::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
   databuff_printf(buf, buf_len, pos,
       "[prev=%p, next=%p]"
-      "[magic_number=%ld, bucket_idx=%ld, run_ticket=%ld, scan_ticket=%ld, is_scheduled=%d]",
+      "[magic_number=%" PRId64 ", bucket_idx=%" PRId64 ", run_ticket=%" PRId64 ", scan_ticket=%" PRId64 ", is_scheduled=%d]",
       prev_, next_, magic_number_, bucket_idx_, run_ticket_, scan_ticket_, is_scheduled_);
   return pos;
 }

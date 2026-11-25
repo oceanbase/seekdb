@@ -12,75 +12,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build and expose the native artifacts from seekdb-jemalloc-sys."""
+"""Expose the prebuilt jemalloc archive and headers on supported platforms."""
 
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("@rules_rust//rust:rust_common.bzl", "BuildInfo")
 
-def _jemalloc_build_impl(ctx):
-    archive = ctx.actions.declare_file("jemalloc/lib/libjemalloc_pic.a")
-    public_header = ctx.actions.declare_file("jemalloc/include/jemalloc/jemalloc.h")
-    output = ctx.attr.build_script[BuildInfo].out_dir
-    ctx.actions.run_shell(
-        inputs = [output],
-        outputs = [archive, public_header],
-        arguments = [output.path, archive.path, public_header.path],
-        command = 'cp "$1/jemalloc-build/lib/libjemalloc_pic.a" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"',
-        mnemonic = "JemallocArtifacts",
-    )
-    return [
-        DefaultInfo(files = depset([archive, public_header])),
-        OutputGroupInfo(
-            jemalloc_archive = depset([archive]),
-            jemalloc_header = depset([public_header]),
-        ),
-    ]
-
-_jemalloc_build = rule(
-    implementation = _jemalloc_build_impl,
-    attrs = {
-        "build_script": attr.label(default = "@external_crates//:jemalloc_build", providers = [BuildInfo]),
-    },
-)
+_SUPPORTED_PLATFORMS = select({
+    "@platforms//os:linux": [],
+    "@platforms//os:macos": [],
+    "@platforms//os:android": [],
+    "@platforms//os:windows": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
 
 def jemalloc(name):
-    """Expose the native outputs of the rules_rust build script to C++."""
-    build_target = "_%s_build" % name
-    public_header_target = "%s_public_header" % name
-
-    _jemalloc_build(
-        name = build_target,
-        target_compatible_with = select({
-            "@platforms//os:linux": [],
-            "@platforms//os:macos": [],
-            "@platforms//os:ios": [],
-            "//conditions:default": ["@platforms//:incompatible"],
-        }),
-    )
+    """Expose the platform's prebuilt jemalloc to C++ targets."""
 
     native.filegroup(
         name = "%s_archive" % name,
-        srcs = [":" + build_target],
-        output_group = "jemalloc_archive",
+        srcs = select({
+            "@platforms//os:linux": ["@third_party_native//:lib/libjemalloc_pic.a"],
+            "@platforms//os:macos": ["@third_party_native//:lib/libjemalloc_pic.a"],
+            "@platforms//os:android": ["@third_party_android//:lib/libjemalloc_pic.a"],
+            "@platforms//os:windows": ["@third_party_native//:lib/jemalloc.lib"],
+            "//conditions:default": [],
+        }),
+        target_compatible_with = _SUPPORTED_PLATFORMS,
         visibility = ["//src/observer:__pkg__"],
-    )
-
-    native.filegroup(
-        name = public_header_target,
-        srcs = [":" + build_target],
-        output_group = "jemalloc_header",
     )
 
     cc_library(
         name = "%s_headers" % name,
-        hdrs = [":" + public_header_target],
-        strip_include_prefix = "jemalloc/include",
+        deps = select({
+            "@platforms//os:linux": ["@third_party_native//:jemalloc_headers"],
+            "@platforms//os:macos": ["@third_party_native//:jemalloc_headers"],
+            "@platforms//os:android": ["@third_party_android//:jemalloc_headers"],
+            "@platforms//os:windows": ["@third_party_native//:jemalloc_headers"],
+            "//conditions:default": [],
+        }),
+        target_compatible_with = _SUPPORTED_PLATFORMS,
         visibility = ["//src/oblib:__pkg__", "//src/observer:__pkg__"],
     )
 
     cc_import(
         name = "%s_library" % name,
         static_library = ":%s_archive" % name,
-        visibility = ["//src/oblib:__pkg__"],
+        target_compatible_with = _SUPPORTED_PLATFORMS,
+        visibility = ["//src/oblib:__pkg__", "//unittest/oblib:__pkg__"],
     )

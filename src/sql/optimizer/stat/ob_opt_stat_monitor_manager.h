@@ -19,8 +19,10 @@
 
 #include "share/ob_define.h"
 #include "lib/task/ob_timer.h"
+#include "lib/lock/ob_mutex.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
+#include <atomic>
 namespace oceanbase
 {
 namespace common
@@ -71,7 +73,6 @@ public:
   ObOptStatMonitorCheckTask() : optstat_monitor_mgr_(NULL) {}
   virtual ~ObOptStatMonitorCheckTask() {}
   virtual void runTimerTask() override;
-  const static int64_t CHECK_INTERVAL = 900L * 1000L * 1000L; // 15min
   ObOptStatMonitorManager *optstat_monitor_mgr_;
 };
 
@@ -109,7 +110,12 @@ public:
   ObOptStatMonitorManager()
     : inited_(false),
       destroyed_(false),
-      mysql_proxy_(NULL)
+      mysql_proxy_(NULL),
+      monitor_modified_epoch_(0),
+      completed_gather_epoch_(INVALID_GATHER_EPOCH),
+      async_gather_scheduled_(false),
+      async_gather_running_(false),
+      maintenance_lock_(common::ObLatchIds::DEFAULT_MUTEX)
       {}
   virtual ~ObOptStatMonitorManager() { if (inited_) { destroy(); }  }
   void destroy();
@@ -121,7 +127,14 @@ public:
   static int flush_database_monitoring_info(sql::ObExecContext &ctx,
                                             const bool is_flush_col_usage = true,
                                             const bool is_flush_dml_stat = true,
-                                            const bool ignore_failed = true);
+                                            const bool ignore_failed = true,
+                                            int64_t *flushed_dml_epoch = NULL);
+  int maintain_opt_stat_monitoring_info(int64_t *flushed_dml_epoch = NULL);
+  int reconcile_persisted_dml_stat_info();
+  int run_periodic_maintenance_once();
+  bool try_begin_async_gather_stats();
+  void finish_async_gather_stats(const int64_t target_epoch, const bool completed);
+  bool has_pending_async_gather_stats() const;
   int update_opt_stat_monitoring_info(const obcall::ObFlushOptStatArg &arg);
   int update_local_cache(common::ObIArray<ColumnUsageArg> &args);
   int update_local_cache(ObOptDmlStat &dml_stat);
@@ -150,7 +163,8 @@ public:
   int get_col_usage_info(const bool with_check,
                          ObIArray<StatKey> &col_stat_keys,
                          ObIArray<int64_t> &col_flags);
-  int get_dml_stats(ObIArray<ObOptDmlStat> &dml_stats);
+  int get_dml_stats(ObIArray<ObOptDmlStat> &dml_stats,
+                    int64_t *captured_epoch = NULL);
   ObOptStatMonitorFlushAllTask &get_flush_all_task() { return flush_all_task_; }
   ObOptStatMonitorCheckTask &get_check_task() { return check_task_; }
   int init();
@@ -204,13 +218,28 @@ public:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObOptStatMonitorManager);
+  int update_column_usage_info_();
+  int update_dml_stat_info_(int64_t *flushed_dml_epoch);
+  int restore_column_usage_info_(const ObIArray<StatKey> &col_stat_keys,
+                                 const ObIArray<int64_t> &col_flags,
+                                 const int64_t begin_idx);
+  int restore_dml_stat_info_(ObIArray<ObOptDmlStat> &dml_stats,
+                             const int64_t begin_idx);
+  int schedule_async_gather_stats_();
+  int run_timer_driven_async_gather_stats_();
   const static int64_t UPDATE_OPT_STAT_BATCH_CNT = 200;
   const static int64_t info_count = 8;
   const static int64_t MAX_PROCESS_BATCH_TABLET_CNT = 1000;
+  const static int64_t INVALID_GATHER_EPOCH = -1;
   bool inited_;
   
   bool destroyed_;
   ObMySQLProxy *mysql_proxy_;
+  std::atomic<int64_t> monitor_modified_epoch_;
+  std::atomic<int64_t> completed_gather_epoch_;
+  std::atomic<bool> async_gather_scheduled_;
+  std::atomic<bool> async_gather_running_;
+  lib::ObMutex maintenance_lock_;
   ColumnUsageMap column_usage_map_;
   DmlStatMap dml_stat_map_;
   common::SpinRWLock lock_;

@@ -22,6 +22,7 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
+#include "lib/utility/ob_smart_call.h"
 
 
 using namespace oceanbase::common;
@@ -32,6 +33,38 @@ namespace oceanbase
 {
 namespace sql
 {
+
+int ObExprArrayMapCommon::collect_lambda_recompute_exprs(
+    ObExpr &expr, ObIArray<ObExpr *> &recompute_exprs)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr != expr.eval_func_ || T_OP_ROW == expr.type_) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+      if (OB_ISNULL(expr.args_[i])) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(SMART_CALL(collect_lambda_recompute_exprs(
+                     *expr.args_[i], recompute_exprs)))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = recompute_exprs.push_back(&expr);
+    }
+  }
+  return ret;
+}
+
+int ObExprArrayMapCommon::eval_lambda_expr(const ObExpr &expr, ObEvalCtx &ctx,
+                                         const ObIArray<ObExpr *> &recompute_exprs, ObDatum *&datum)
+{
+  // Preserve shared results that the operator has already projected.
+  for (int64_t i = 0; i < recompute_exprs.count(); ++i) {
+    ObExpr &recompute_expr = *recompute_exprs.at(i);
+    if (!recompute_expr.get_eval_info(ctx).projected_) {
+      recompute_expr.clear_evaluated_flag(ctx);
+    }
+  }
+  return expr.eval(ctx, datum);
+}
 
 OB_DEF_SERIALIZE(ObExprArrayMapInfo)
 {
@@ -154,15 +187,17 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
   uint16_t subschema_id  = info->lambda_subschema_id_;
   ObDatum *datum = NULL;
   ObIArrayType *elem_arr = NULL;
+  ObSEArray<ObExpr *, 16> recompute_exprs;
 
-  if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id , lambda_arr, false))) {
+  if (info->param_num_ > 0 && OB_ISNULL(info->param_exprs_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id , lambda_arr, false))) {
+  } else if (arr_dim > 0 && OB_FAIL(collect_lambda_recompute_exprs(*lambda_expr, recompute_exprs))) {
   }
   // fill the lambda array
   for (uint32_t i = 0; i < arr_dim && OB_SUCC(ret); i++) {
-    bool is_set_lambda_para  = false;
-    if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, arr_obj, arr_obj_size, i, is_set_lambda_para))) {
-    } else if (is_set_lambda_para && OB_FALSE_IT(ObSQLUtils::clear_expr_eval_flags(*lambda_expr, ctx))) {
-    } else if (OB_FAIL(lambda_expr->eval(ctx, datum))) {
+    if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, arr_obj, arr_obj_size, i))) {
+    } else if (OB_FAIL(eval_lambda_expr(*lambda_expr, ctx, recompute_exprs, datum))) {
     } else if (lambda_arr->get_format() == Nested_Array) {
       ObArrayNested *nested_arr = dynamic_cast<ObArrayNested *>(lambda_arr);
       uint16_t elem_subid = lambda_expr->obj_meta_.get_subschema_id();
@@ -191,11 +226,9 @@ int ObExprArrayMapCommon::set_lambda_para(ObIAllocator &alloc,
                                           ObExprArrayMapInfo *info,
                                           ObIArrayType **arr_obj,
                                           uint32_t arr_obj_size,
-                                          uint32_t idx,
-                                          bool &is_set)
+                                          uint32_t idx)
 {
   int ret = OB_SUCCESS;
-  is_set = false;
   for (uint32_t j = 0; j < info->param_num_ && OB_SUCC(ret); j++) {
     ObExpr *lambda_para = info->param_exprs_[j];
     uint32_t para_idx = info->param_idx_[j];
@@ -205,7 +238,6 @@ int ObExprArrayMapCommon::set_lambda_para(ObIAllocator &alloc,
       ret = OB_ERR_UNEXPECTED;
     } else if (idx >= arr_obj[para_idx]->size()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FALSE_IT(is_set = true)) {
     } else if (arr_obj[para_idx]->get_format() != ArrayFormat::Vector && arr_obj[para_idx]->is_null(idx)) {
       lambda_para->locate_datum_for_write(ctx).set_null();
     } else {

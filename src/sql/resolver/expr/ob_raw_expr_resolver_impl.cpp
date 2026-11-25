@@ -19,6 +19,7 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
+#include "rust/json.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 
 namespace oceanbase
@@ -31,22 +32,11 @@ namespace {
 static int change_json_expr_res_type_if_need(common::ObIAllocator &allocator, ObString &str, ParseNode &ret_node, int8_t json_expr_flag)
 {
   INIT_SUCC(ret);
-  bool has_fun = false;
-  char* res_str = nullptr;
-  uint64_t name_len = 0;
-  if (OB_FAIL(ObJsonPath::get_path_item_method_str(allocator, str, res_str, name_len, has_fun))) {
-  } else if (has_fun) {
-    ObJsonPathFuncNode* func_node = static_cast<ObJsonPathFuncNode*> (allocator.alloc(sizeof(ObJsonPathFuncNode)));
-    if (OB_ISNULL(func_node)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      func_node = new (func_node) ObJsonPathFuncNode(&allocator);
-      if ((OB_FAIL(func_node->init(res_str, name_len)))) {
-        // should not set error only pass set return type
-        ret = OB_SUCCESS;
-        allocator.free(func_node);
-      } else {
-        switch (func_node->get_node_type()) {
+  const common::json::PathMetadataResult metadata = common::json::inspect_path(
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(str.ptr()), str.length()), false);
+  if (metadata.status == common::json::Status::Ok
+      && metadata.last_node > JPN_BEGIN_FUNC_FLAG && metadata.last_node < JPN_END_FUNC_FLAG) {
+        switch (static_cast<ObJsonPathNodeType>(metadata.last_node)) {
           case JPN_BOOLEAN :
           case JPN_BOOL_ONLY : {
             if (json_expr_flag == OPT_JSON_QUERY && ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] == T_JSON) { // do nothing
@@ -152,8 +142,6 @@ static int change_json_expr_res_type_if_need(common::ObIAllocator &allocator, Ob
             break;
           }
         }
-      }
-    }
   }
   return ret;
 }

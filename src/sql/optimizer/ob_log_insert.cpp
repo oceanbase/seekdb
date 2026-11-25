@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_log_insert.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_log_table_scan.h"
 
 using namespace oceanbase;
@@ -124,7 +125,7 @@ int ObLogInsert::get_plan_item_info(PlanText &plan_text,
     } else { /* Do nothing */ }
 
     if (OB_SUCC(ret) && get_das_dop() > 0) {
-      ret = BUF_PRINTF(", das_dop=%ld", this->get_das_dop());
+      ret = BUF_PRINTF(", das_dop=%" PRId64 "", this->get_das_dop());
     }
     END_BUF_PRINT(plan_item.special_predicates_,
                   plan_item.special_predicates_len_);

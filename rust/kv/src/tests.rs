@@ -574,6 +574,8 @@ fn limits_abort_the_whole_transaction_and_release_unpublished_pages() {
         Options {
             max_transaction_pages: 4,
         },
+        file_io::DirectoryDurability::Required,
+        &mut file_io::DirectorySyncSummary::default(),
     )
     .unwrap();
     write(&store, b"existing", b"old");
@@ -848,5 +850,122 @@ fn interrupted_commit_recovers_all_or_none_in_a_new_process() {
             "after-root-write" => assert!(left == vec![1; 65_537] || left == vec![2; 65_537]),
             _ => assert_eq!(left, vec![1; 65_537]),
         }
+    }
+}
+
+#[test]
+fn each_directory_sync_site_preserves_failure_stage_and_path() {
+    use crate::file::{SyncFault, SYNC_FAULT};
+    use file_io::DirectorySyncError;
+    for site in 0..4 {
+        for stage in 0..4 {
+            let directory = Directory::new();
+            let source = std::io::Error::from_raw_os_error(13);
+            let failure = match stage {
+                0 => DirectorySyncError::Open(source),
+                1 => DirectorySyncError::Flush {
+                    source,
+                    close_error: None,
+                },
+                2 => DirectorySyncError::Flush {
+                    source,
+                    close_error: Some(std::io::Error::from_raw_os_error(5)),
+                },
+                _ => DirectorySyncError::Close(source),
+            };
+            SYNC_FAULT.with(|slot| {
+                *slot.borrow_mut() = SyncFault {
+                    fail_at: Some(site),
+                    failure: Some(failure),
+                    calls: 0,
+                }
+            });
+            let mut summary = file_io::DirectorySyncSummary::default();
+            let error = Store::open_with_options(
+                &directory.0,
+                Options::default(),
+                file_io::DirectoryDurability::Required,
+                &mut summary,
+            )
+            .err()
+            .unwrap();
+            let Error::DirectorySync { path, source } = error else {
+                panic!("sync failure lost");
+            };
+            let parent = directory.0.parent().unwrap();
+            assert_eq!(
+                path,
+                match site {
+                    0 => parent.parent().unwrap(),
+                    1 => parent,
+                    _ => &directory.0,
+                }
+            );
+            assert_eq!(source.primary().raw_os_error(), Some(13));
+            match stage {
+                0 => assert!(matches!(source, DirectorySyncError::Open(_))),
+                1 => assert!(matches!(
+                    source,
+                    DirectorySyncError::Flush {
+                        close_error: None,
+                        ..
+                    }
+                )),
+                2 => assert!(
+                    matches!(source, DirectorySyncError::Flush { close_error: Some(e), .. } if e.raw_os_error() == Some(5))
+                ),
+                _ => assert!(matches!(source, DirectorySyncError::Close(_))),
+            }
+            assert_eq!(summary.count(), 0);
+            SYNC_FAULT.with(|slot| assert_eq!(slot.borrow().calls, site + 1));
+        }
+    }
+}
+
+#[test]
+fn failed_publication_sync_keeps_data_and_reopen_retries_sync() {
+    use crate::file::{SyncFault, SYNC_FAULT};
+    let directory = Directory::new();
+    SYNC_FAULT.with(|slot| {
+        *slot.borrow_mut() = SyncFault {
+            fail_at: Some(2),
+            failure: Some(file_io::DirectorySyncError::Flush {
+                source: std::io::Error::from_raw_os_error(5),
+                close_error: None,
+            }),
+            calls: 0,
+        }
+    });
+    assert!(matches!(
+        Store::open(&directory.0),
+        Err(Error::DirectorySync { .. })
+    ));
+    let before = fs::read(directory.0.join("data")).unwrap();
+    SYNC_FAULT.with(|slot| *slot.borrow_mut() = SyncFault::default());
+    drop(Store::open(&directory.0).unwrap());
+    SYNC_FAULT.with(|slot| assert_eq!(slot.borrow().calls, 2));
+    assert_eq!(fs::read(directory.0.join("data")).unwrap(), before);
+}
+
+#[cfg(windows)]
+#[test]
+fn compatibility_summary_remains_available_after_later_corruption() {
+    let directory = Directory::new();
+    fs::create_dir_all(&directory.0).unwrap();
+    fs::write(directory.0.join("data"), [0_u8; PAGE_SIZE * 3]).unwrap();
+    let mut summary = file_io::DirectorySyncSummary::default();
+    let result = Store::open_with_options(
+        &directory.0,
+        Options::default(),
+        file_io::DirectoryDurability::WindowsCompatible,
+        &mut summary,
+    );
+    assert!(matches!(result, Err(Error::Corrupt(_))));
+    eprintln!("Windows failed-open directory observations: {summary:?}");
+    assert_eq!(summary.first().is_none(), summary.count() == 0);
+    if let Some(first) = summary.first() {
+        assert!(summary.count() >= 1);
+        assert!(first.source.raw_os_error().is_some());
+        assert!(!first.path.as_os_str().is_empty());
     }
 }

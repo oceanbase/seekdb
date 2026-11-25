@@ -18,6 +18,7 @@
 #define OCEANBASE_HASH_OB_ARRAY_INDEX_HASH_SET_
 
 #include "lib/ob_define.h"
+#include <inttypes.h>
 #include "lib/utility/ob_template_utils.h"
 #include "lib/container/ob_bit_set.h"
 #include "lib/hash_func/murmur_hash.h"
@@ -76,7 +77,7 @@ public:
           break;
         } else if (OB_LIKELY((*array_)[ARRAY_INDEX(pos)] == item)) {
           if (OB_UNLIKELY(idx != ARRAY_INDEX(pos))) {
-            _OB_LOG(WARN, "idx %ld, exist idx %lu", idx,
+            _OB_LOG(WARN, "idx %" PRId64 ", exist idx %" PRIu64 "", idx,
                     static_cast<uint64_t>(ARRAY_INDEX(pos)));
             ret = OB_ENTRY_EXIST;
           }
@@ -89,7 +90,7 @@ public:
 
       if (OB_UNLIKELY(N == i)) {
         ret = OB_HASH_FULL;
-        _OB_LOG(ERROR, "hash bucket are full, N %lu, ret %d", N, ret);
+        _OB_LOG(ERROR, "hash bucket are full, N %" PRIu64 ", ret %d", N, ret);
       }
     }
     return ret;

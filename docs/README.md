@@ -3,7 +3,7 @@
 seekdb documentation is maintained in two places:
 
 - The [seekdb documentation site](https://docs.seekdb.ai/) contains product overviews, deployment and configuration guides, API references, tutorials, and integration documentation. Its source is maintained in the [seekdb-doc repository](https://github.com/oceanbase/seekdb-doc).
-- The developer guide in this repository documents how to build, test, debug, and contribute to the seekdb source code. Start with the [English](developer-guide/en/README.md) or [Chinese](developer-guide/zh/README.md) guide.
+- The developer guide in this repository documents how to build, test, and contribute to the seekdb source code. Start with the [developer guide](developer-guide/en/README.md).
 
 ## Build the developer guide
 

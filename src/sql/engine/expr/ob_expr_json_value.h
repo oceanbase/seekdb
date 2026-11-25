@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_OB_EXPR_JSON_VALUE_H_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "common/json_type/ob_json_tree.h"
 #include "common/json_type/ob_json_base.h"
 #include "ob_json_param_type.h"
 #include "ob_expr_json_utils.h"
@@ -129,11 +128,6 @@ private:
                                 ObDatum &res, int &ret,
                                 ObJsonExprParam* json_param,
                                 uint8_t &is_type_mismatch);
-  static int doc_do_seek(ObJsonSeekResult &hits, bool &is_null_result, ObJsonExprParam* json_param,
-                         ObIJsonBase *j_base, const ObExpr &expr, ObEvalCtx &ctx, bool &is_cover_by_error,
-                         ObDatum *&return_val, 
-                         uint8_t &is_type_mismatch);
-
   // new sql engine
   static inline void set_val(ObDatum &res, ObDatum *val)
   { res.set_datum(*val); }
@@ -187,7 +181,7 @@ public:
                         ObDatum &res,
                         ObDatum *return_val,
                         ObIAllocator *allocator,
-                        ObJsonSeekResult &hits);
+                        ObIJsonBase *hit);
 
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprJsonValue);

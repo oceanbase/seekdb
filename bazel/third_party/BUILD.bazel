@@ -1,7 +1,18 @@
+load(":archives.bzl", "sdk_archives")
 load(":targets.bzl", "sdk_aliases")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["repositories.bzl", "targets.bzl", "patch_windows_dirent.py"])
+exports_files(["repositories.bzl", "targets.bzl"])
 
 sdk_aliases()
+
+sdk_archives(
+    name = "prebuilt_sdk",
+    target_compatible_with = select({
+        "@platforms//os:ios": [],
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [":roaring", ":vsag_sdk"],
+)

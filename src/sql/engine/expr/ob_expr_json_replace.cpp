@@ -63,75 +63,7 @@ int ObExprJsonReplace::calc_result_typeN(ObExprResType& type,
 
 int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
-  int ret = OB_SUCCESS;
-  ObIJsonBase *json_doc = NULL;
-  bool is_null_result = false;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
-    ret = OB_ERR_INVALID_JSON_CHARSET;
-  } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
-                                                    json_doc, is_null_result))) {
-  }
-
-  ObJsonPathCache ctx_cache(&temp_allocator);
-  ObJsonPathCache* path_cache = NULL;
-  if (OB_SUCC(ret)) {
-    path_cache = ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
-    path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
-  }
-  
-  for (int64_t i = 1; OB_SUCC(ret) && !is_null_result && i < expr.arg_cnt_; i+=2) {
-    ObJsonSeekResult hit;
-    ObDatum *path_data = NULL;
-    if (expr.args_[i]->datum_meta_.type_ == ObNullType) {
-      is_null_result = true;
-      break;
-    } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, path_data))) {
-    } else {
-      ObString path_val = path_data->get_string();
-      ObJsonPath *json_path;
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *path_data,
-                  expr.args_[i]->datum_meta_, expr.args_[i]->obj_meta_.has_lob_header(), path_val))) {
-      } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, json_path, path_val, i, false))) {
-        ret = OB_ERR_INVALID_JSON_PATH;
-        LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
-      } else if (OB_FAIL(json_doc->seek(*json_path, json_path->path_node_cnt(),
-                                        true, false, hit))) {
-      }
-    }
-
-    if (OB_SUCC(ret) && !is_null_result) {
-      ObIJsonBase *json_val = NULL;
-      if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator,
-                                                 i+1, json_val))) {
-      }
-
-      // replace 
-      int32_t hits = hit.size();
-      if(OB_FAIL(ret)) {
-      } else if (hits == 0) {
-        // do nothing
-      } else if (hits != 1) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        if (OB_FAIL(ObJsonExprHelper::json_base_replace(hit[0], json_val, json_doc))) {
-        }
-      }
-    }
-  }
-
-  // set result
-  if (OB_UNLIKELY(OB_FAIL(ret))) {
-  } else if (is_null_result) {
-    res.set_null();
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr, ctx, temp_allocator, json_doc, res))) {
-  }
-  if (OB_NOT_NULL(json_doc)) {
-    json_doc->reset();
-  }
-  return ret;
+  return ObJsonExprHelper::eval_json_mutation(expr, ctx, res, JsonMutation::Replace);
 }
 
 int ObExprJsonReplace::cg_expr(ObExprCGCtx &expr_cg_ctx,

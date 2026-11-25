@@ -58,7 +58,7 @@
 //errno of c1 is equal to errno of c0. you should use it like below
 //DEFINE_OTHER_MSG_FMT(C1, C0, M4, UNUSED)
 //
-//DEFINE_OTHER_MSG_FMT(OB_ERR_DATA_TOO_LONG_MSG_FMT_V2, OB_ERR_DATA_TOO_LONG, "Data too long for column '%.*s' at row %ld", "")
+//DEFINE_OTHER_MSG_FMT(OB_ERR_DATA_TOO_LONG_MSG_FMT_V2, OB_ERR_DATA_TOO_LONG, "Data too long for column '%.*s' at row %" PRId64 "", "")
 //
 ////////////////////////////////////////////////////////////////
 
@@ -79,7 +79,7 @@ DEFINE_ERROR_DEP(OB_ITER_END, -4008, -1, "HY000", "End of iteration");
 DEFINE_ERROR_DEP(OB_IO_ERROR, -4009, -1, "58030", "IO error");
 DEFINE_ERROR_DEP(OB_ERROR_FUNC_VERSION, -4010, -1, "HY000", "Wrong RPC command version");
 DEFINE_ERROR(OB_PACKET_NOT_SENT, -4011, -1, "HY000", "Can not send packet");
-DEFINE_ERROR_EXT_DEP(OB_TIMEOUT, -4012, -1, "HY000", "Timeout", "Timeout, query has reached the maximum query timeout: %ld(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.");
+DEFINE_ERROR_EXT_DEP(OB_TIMEOUT, -4012, -1, "HY000", "Timeout", "Timeout, query has reached the maximum query timeout: %" PRId64 "(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.");
 DEFINE_ERROR_DEP(OB_ALLOCATE_MEMORY_FAILED, -4013, -1, "HY001", "No memory or server runtime memory limit reached");
 DEFINE_ERROR_DEP(OB_INNER_STAT_ERROR, -4014, -1, "HY000", "Inner state error");
 DEFINE_ERROR_DEP(OB_ERR_SYS, -4015, -1, "HY000", "System error");
@@ -211,7 +211,7 @@ DEFINE_ERROR_EXT_DEP(OB_LOG_LEVEL_INVALID, -4170, -1, "HY000", "Invalid level", 
 DEFINE_ERROR_EXT_DEP(OB_LOG_PARSER_SYNTAX_ERR, -4171, -1, "HY000", "Syntax to set log_level error", "Syntax to set log_level error. Invalid setting:'%.*s'. Syntax:parMod.subMod:level, parMod.subMod:level");
 DEFINE_ERROR_DEP(OB_INDEX_OUT_OF_RANGE, -4172, -1, "HY000", "Index out of range");
 DEFINE_ERROR(OB_INT_UNDERFLOW, -4173, -1, "HY000", "Int underflow");
-DEFINE_ERROR_EXT_DEP(OB_UNKNOWN_CONNECTION, -4174, ER_NO_SUCH_THREAD, "HY000", "Unknown thread id", "Unknown thread id: %lu");
+DEFINE_ERROR_EXT_DEP(OB_UNKNOWN_CONNECTION, -4174, ER_NO_SUCH_THREAD, "HY000", "Unknown thread id", "Unknown thread id: %" PRIu64 "");
 DEFINE_ERROR_DEP(OB_ERROR_OUT_OF_RANGE, -4175, -1, "42000", "Out of range");
 DEFINE_ERROR(OB_CACHE_SHRINK_FAILED, -4176, -1, "HY001", "shrink cache failed, no available cache");
 DEFINE_ERROR(OB_OLD_SCHEMA_VERSION, -4177, -1, "42000", "Schema version too old");
@@ -247,19 +247,19 @@ DEFINE_ERROR_DEP(OB_CURL_ERROR, -4216, -1, "HY000", "curl error");
 DEFINE_ERROR_EXT(OB_MAJOR_FREEZE_NOT_ALLOW, -4217, -1, "HY000", "Major freeze not allowed now", "%s");
 DEFINE_ERROR(OB_PREPARE_FREEZE_FAILED, -4218, -1, "HY000", "prepare freeze failed");
 DEFINE_ERROR_EXT_DEP(OB_INVALID_DATE_VALUE, -4219, ER_TRUNCATED_WRONG_VALUE, "22007", "Incorrect value", "Incorrect datetime value: '%.*s' for column '%s'");
-DEFINE_OTHER_MSG_FMT(OB_ERR_INVALID_DATE_MSG_FMT_V2, OB_INVALID_DATE_VALUE, "Incorrect datetime value for column '%.*s' at row %ld", "Incorrect datetime value for column '%.*s' at row %ld")
+DEFINE_OTHER_MSG_FMT(OB_ERR_INVALID_DATE_MSG_FMT_V2, OB_INVALID_DATE_VALUE, "Incorrect datetime value for column '%.*s' at row %" PRId64 "", "Incorrect datetime value for column '%.*s' at row %" PRId64 "")
 DEFINE_ERROR_DEP(OB_INACTIVE_SQL_CLIENT, -4220, -1, "HY000", "Inactive sql client, only read allowed");
 DEFINE_ERROR_DEP(OB_INACTIVE_RPC_PROXY, -4221, -1, "HY000", "Inactive rpc proxy, can not send RPC request");
 DEFINE_ERROR_DEP(OB_INTERVAL_WITH_MONTH, -4222, -1, "42000", "Interval with year or month can not be converted to microseconds");
 DEFINE_ERROR_DEP(OB_TOO_MANY_DATETIME_PARTS, -4223, -1, "42000", "Interval has too many datetime parts");
-DEFINE_ERROR_EXT_DEP(OB_DATA_OUT_OF_RANGE, -4224, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Out of range value for column", "Out of range value for column '%.*s' at row %ld");
+DEFINE_ERROR_EXT_DEP(OB_DATA_OUT_OF_RANGE, -4224, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Out of range value for column", "Out of range value for column '%.*s' at row %" PRId64 "");
 DEFINE_ERROR(OB_PARTITION_NOT_EXIST, -4225, -1, "HY000", "Partition entry not exists");
-DEFINE_ERROR_EXT_DEP(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, -4226, ER_TRUNCATED_WRONG_VALUE_FOR_FIELD, "HY000", "Incorrect integer value", "Incorrect %.*s value for column '%.*s' at row %ld");
+DEFINE_ERROR_EXT_DEP(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, -4226, ER_TRUNCATED_WRONG_VALUE_FOR_FIELD, "HY000", "Incorrect integer value", "Incorrect %.*s value for column '%.*s' at row %" PRId64 "");
 DEFINE_ERROR_EXT(OB_ERR_NO_DEFAULT_FOR_FIELD, -4227, ER_NO_DEFAULT_FOR_FIELD, "HY000", "Field doesn\'t have a default value", "Field \'%s\' doesn't have a default value");
 DEFINE_ERROR_EXT(OB_ERR_FIELD_SPECIFIED_TWICE, -4228, ER_FIELD_SPECIFIED_TWICE, "42000", "Column specified twice", "Column \'%s\' specified twice");
-DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_TABLE_COMMENT, -4229, ER_TOO_LONG_TABLE_COMMENT, "HY000", "Comment for table is too long", "Comment for table is too long (max = %ld)");
-DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_FIELD_COMMENT, -4230, ER_TOO_LONG_FIELD_COMMENT, "HY000", "Comment for field is too long", "Comment for field is too long (max = %ld)");
-DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_INDEX_COMMENT, -4231, ER_TOO_LONG_INDEX_COMMENT, "HY000", "Comment for index is too long", "Comment for index is too long (max = %ld)");
+DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_TABLE_COMMENT, -4229, ER_TOO_LONG_TABLE_COMMENT, "HY000", "Comment for table is too long", "Comment for table is too long (max = %" PRId64 ")");
+DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_FIELD_COMMENT, -4230, ER_TOO_LONG_FIELD_COMMENT, "HY000", "Comment for field is too long", "Comment for field is too long (max = %" PRId64 ")");
+DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_INDEX_COMMENT, -4231, ER_TOO_LONG_INDEX_COMMENT, "HY000", "Comment for index is too long", "Comment for index is too long (max = %" PRId64 ")");
 DEFINE_ERROR(OB_NOT_FOLLOWER, -4232, -1, "HY000", "The seekdb or zone is not a follower");
 DEFINE_ERROR_DEP(OB_ERR_OUT_OF_LOWER_BOUND, -4233, -1, "HY000", "smaller than container lower bound");
 DEFINE_ERROR_DEP(OB_ERR_OUT_OF_UPPER_BOUND, -4234, -1, "HY000", "bigger than container upper bound");
@@ -275,7 +275,7 @@ DEFINE_ERROR(OB_TIMER_TASK_HAS_NOT_SCHEDULED, -4245, -1, "HY000", "Timer task ha
 DEFINE_ERROR(OB_PARSE_DEBUG_SYNC_ERROR, -4246, -1, "HY000", "parse debug sync string error");
 DEFINE_ERROR(OB_UNKNOWN_DEBUG_SYNC_POINT, -4247, -1, "HY000", "unknown debug sync point");
 DEFINE_ERROR(OB_ERR_INTERRUPTED, -4248, -1, "HY000", "task is interrupted while running");
-DEFINE_ERROR_EXT_DEP(OB_ERR_DATA_TRUNCATED, -4249, WARN_DATA_TRUNCATED, "01000", "Data truncated for argument", "Data truncated for column '%.*s' at row %ld");
+DEFINE_ERROR_EXT_DEP(OB_ERR_DATA_TRUNCATED, -4249, WARN_DATA_TRUNCATED, "01000", "Data truncated for argument", "Data truncated for column '%.*s' at row %" PRId64 "");
 // used by modules in partition service only, and not returned to client
 DEFINE_ERROR_DEP(OB_NOT_RUNNING, -4250, -1, "HY000", "module is not running");
 DEFINE_ERROR(OB_INVALID_PARTITION, -4251, -1, "HY000", "partition not valid");
@@ -284,7 +284,7 @@ DEFINE_ERROR(OB_ERR_NET_PACKET_TOO_LARGE, -4254, ER_NET_PACKET_TOO_LARGE, "08S01
 DEFINE_ERROR(OB_TRACE_DESC_NOT_EXIST, -4255, -1, "HY000", "trace log title or key not exist describe");
 DEFINE_ERROR_EXT(OB_ERR_NO_DEFAULT, -4256, ER_NO_DEFAULT, "42000", "Variable doesn't have a default value", "Variable '%.*s' doesn't have a default value");
 DEFINE_ERROR_DEP(OB_ERR_COMPRESS_DECOMPRESS_DATA, -4257, -1, "HY000", "compress data or decompress data failed");
-DEFINE_ERROR_EXT_DEP(OB_ERR_INCORRECT_STRING_VALUE, -4258, ER_TRUNCATED_WRONG_VALUE_FOR_FIELD, "HY000", "Incorrect string value", "Incorrect string value for column '%.*s' at row %ld");
+DEFINE_ERROR_EXT_DEP(OB_ERR_INCORRECT_STRING_VALUE, -4258, ER_TRUNCATED_WRONG_VALUE_FOR_FIELD, "HY000", "Incorrect string value", "Incorrect string value for column '%.*s' at row %" PRId64 "");
 DEFINE_ERROR(OB_IS_CHANGING_LEADER, -4260, -1, "HY000", "the partition is changing leader");
 DEFINE_ERROR_DEP(OB_DATETIME_FUNCTION_OVERFLOW, -4261, ER_DATETIME_FUNCTION_OVERFLOW, "22008", "Datetime overflow");
 DEFINE_ERROR_EXT_DEP(OB_ERR_DOUBLE_TRUNCATED, -4262, ER_TRUNCATED_WRONG_VALUE, "01000", "Truncated incorrect DOUBLE value", "Truncated incorrect DOUBLE value: '%.*s'");
@@ -508,7 +508,7 @@ DEFINE_ERROR(OB_ERR_WRONG_PASSWORD, -5038, ER_PASSWORD_NO_MATCH, "42000", "Incor
 DEFINE_ERROR(OB_ERR_USER_IS_LOCKED, -5039, ER_ACCOUNT_HAS_BEEN_LOCKED, "HY000", "User locked");
 DEFINE_ERROR(OB_ERR_UPDATE_ROWKEY_COLUMN, -5040, -1, "42000", "Can not update rowkey column");
 DEFINE_ERROR(OB_ERR_UPDATE_JOIN_COLUMN, -5041, -1, "42000", "Can not update join column");
-DEFINE_ERROR_EXT(OB_ERR_INVALID_COLUMN_NUM, -5042, ER_OPERAND_COLUMNS, "21000", "Invalid column number", "Operand should contain %ld column(s)");
+DEFINE_ERROR_EXT(OB_ERR_INVALID_COLUMN_NUM, -5042, ER_OPERAND_COLUMNS, "21000", "Invalid column number", "Operand should contain %" PRId64 " column(s)");
 DEFINE_ERROR_EXT(OB_ERR_PREPARE_STMT_NOT_FOUND, -5043, ER_UNKNOWN_STMT_HANDLER, "HY007", "Unknown prepared statement", "statement not prepared, stmt_id=%u");
 DEFINE_ERROR_EXT_DEP(OB_ERR_SYS_VARIABLE_UNKNOWN, -5044, ER_UNKNOWN_SYSTEM_VARIABLE, "HY000", "Unknown system variable", "Unknown system variable '%.*s'");
 DEFINE_ERROR(OB_ERR_OLDER_PRIVILEGE_VERSION, -5046, -1, "HY000", "Older privilege version");
@@ -516,7 +516,7 @@ DEFINE_ERROR_EXT(OB_ERR_LACK_OF_ROWKEY_COL, -5047, ER_REQUIRES_PRIMARY_KEY, "420
 DEFINE_ERROR(OB_ERR_USER_EXIST, -5050, -1, "42710", "User exists");
 DEFINE_ERROR(OB_ERR_PASSWORD_EMPTY, -5051, -1, "HY000", "Empty password");
 DEFINE_ERROR(OB_ERR_GRANT_PRIVILEGES_TO_CREATE_TABLE, -5052, -1, "42000", "Failed to grant privelege");
-DEFINE_ERROR_EXT(OB_ERR_WRONG_DYNAMIC_PARAM, -5053, -1, "HY093", "Wrong dynamic parameters", "Incorrect arguments number to EXECUTE, need %ld arguments but give %ld");
+DEFINE_ERROR_EXT(OB_ERR_WRONG_DYNAMIC_PARAM, -5053, -1, "HY093", "Wrong dynamic parameters", "Incorrect arguments number to EXECUTE, need %" PRId64 " arguments but give %" PRId64 "");
 DEFINE_ERROR_EXT(OB_ERR_PARAM_SIZE, -5054, ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT, "42000", "Incorrect parameter count", "Incorrect parameter count in the call to native function '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_FUNCTION_UNKNOWN, -5055, ER_SP_DOES_NOT_EXIST, "42000", "FUNCTION does not exist", "%s %.*s does not exist");
 DEFINE_ERROR(OB_ERR_CREAT_MODIFY_TIME_COLUMN, -5056, -1, "23000", "CreateTime or ModifyTime column cannot be modified");
@@ -543,15 +543,15 @@ DEFINE_ERROR(OB_ERR_CAST_VARCHAR_TO_BOOL, -5084, -1, "22000", "Can not cast varc
 DEFINE_ERROR(OB_ERR_CAST_VARCHAR_TO_NUMBER, -5085, -1, "22000", "Not a number Can not cast varchar value to number type");
 DEFINE_ERROR(OB_ERR_CAST_VARCHAR_TO_TIME, -5086, -1, "22000", "Not timestamp Can not cast varchar value to timestamp type");
 DEFINE_ERROR(OB_ERR_CAST_NUMBER_OVERFLOW, -5087, -1, "22000", "Result value was out of range when cast to number");
-DEFINE_ERROR_EXT_DEP(OB_INTEGER_PRECISION_OVERFLOW, -5088, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Result value was out of range when casting varchar to number", "value larger than specified precision(%ld,%ld) allowed for this column");
-DEFINE_ERROR_EXT_DEP(OB_DECIMAL_PRECISION_OVERFLOW, -5089, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Result value was out of range when casting varchar to number", "value(%s) larger than specified precision(%ld,%ld) allowed for this column");
+DEFINE_ERROR_EXT_DEP(OB_INTEGER_PRECISION_OVERFLOW, -5088, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Result value was out of range when casting varchar to number", "value larger than specified precision(%" PRId64 ",%" PRId64 ") allowed for this column");
+DEFINE_ERROR_EXT_DEP(OB_DECIMAL_PRECISION_OVERFLOW, -5089, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Result value was out of range when casting varchar to number", "value(%s) larger than specified precision(%" PRId64 ",%" PRId64 ") allowed for this column");
 DEFINE_ERROR(OB_SCHEMA_NUMBER_PRECISION_OVERFLOW, -5090, -1, "22000", "Precision was out of range");
 DEFINE_ERROR(OB_SCHEMA_NUMBER_SCALE_OVERFLOW, -5091, -1, "22000", "Scale value was out of range");
 DEFINE_ERROR(OB_ERR_INDEX_UNKNOWN, -5092, -1, "42000", "Unknown index");
 DEFINE_ERROR_DEP(OB_NUMERIC_OVERFLOW, -5093, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Result value was out of range when casting varchar to number");
 DEFINE_ERROR(OB_ERR_TOO_MANY_JOIN_TABLES, -5094, -1, "HY000", "too many joined tables");
 DEFINE_ERROR(OB_ERR_MISSING_KEYWORD, -5096, -1, "HY000", "missing keyword");
-DEFINE_ERROR_EXT(OB_ERR_VARCHAR_TOO_LONG, -5098, -1, "22001", "Varchar value is too long for the column", "Data too long(%d>%ld) for column '%s'");
+DEFINE_ERROR_EXT(OB_ERR_VARCHAR_TOO_LONG, -5098, -1, "22001", "Varchar value is too long for the column", "Data too long(%d>%" PRId64 ") for column '%s'");
 DEFINE_ERROR_DEP(OB_ERR_SYS_CONFIG_UNKNOWN, -5099, -1, "42000", "System config unknown");
 DEFINE_ERROR_EXT(OB_ERR_LOCAL_VARIABLE, -5100, ER_LOCAL_VARIABLE, "HY000", "Local variable", "Variable \'%.*s\' is a SESSION variable and can't be used with SET GLOBAL");
 DEFINE_ERROR_EXT(OB_ERR_GLOBAL_VARIABLE, -5101, ER_GLOBAL_VARIABLE, "HY000", "Global variable", "Variable \'%.*s\' is a GLOBAL variable and should be set with SET GLOBAL");
@@ -605,8 +605,8 @@ DEFINE_ERROR_EXT(OB_WRONG_TABLE_NAME, -5163, ER_WRONG_TABLE_NAME, "42000", "Inco
 DEFINE_ERROR_EXT(OB_WRONG_COLUMN_NAME, -5164, ER_WRONG_COLUMN_NAME, "42000", "Incorrect column name", "Incorrect column name '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_COLUMN_SPEC, -5165, ER_WRONG_FIELD_SPEC, "42000", "Incorrect column specifier", "Incorrect column specifier for column '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_DB_DROP_EXISTS, -5166, ER_DB_DROP_EXISTS, "HY000", "Can't drop database;database doesn't exist", "Can't drop database '%.*s'; database doesn't exist");
-DEFINE_ERROR_EXT_DEP(OB_ERR_DATA_TOO_LONG, -5167, ER_DATA_TOO_LONG, "22001", "Data too long for column", "Data too long for column '%.*s' at row %ld");
-DEFINE_OTHER_MSG_FMT(OB_ERR_DATA_TOO_LONG_MSG_FMT_V2, OB_ERR_DATA_TOO_LONG, "Data too long for column '%.*s' at row %ld", "value too large for column %.*s (actual: %ld, maximum: %ld)")
+DEFINE_ERROR_EXT_DEP(OB_ERR_DATA_TOO_LONG, -5167, ER_DATA_TOO_LONG, "22001", "Data too long for column", "Data too long for column '%.*s' at row %" PRId64 "");
+DEFINE_OTHER_MSG_FMT(OB_ERR_DATA_TOO_LONG_MSG_FMT_V2, OB_ERR_DATA_TOO_LONG, "Data too long for column '%.*s' at row %" PRId64 "", "value too large for column %.*s (actual: %" PRId64 ", maximum: %" PRId64 ")")
 DEFINE_ERROR_EXT_DEP(OB_ERR_WRONG_VALUE_COUNT_ON_ROW, -5168, ER_WRONG_VALUE_COUNT_ON_ROW, "21S01", "column count does not match value count", "column count does not match value count at row '%d'");
 DEFINE_ERROR(OB_ERR_CREATE_USER_WITH_GRANT, -5169, ER_CANT_CREATE_USER_WITH_GRANT, "42000", "You are not allowed to create a user with GRANT");
 DEFINE_ERROR_EXT(OB_ERR_NO_DB_PRIVILEGE, -5170, ER_DBACCESS_DENIED_ERROR, "42000", "Access denied for user to database", "Access denied for user '%.*s'@'%.*s' to database '%.*s'");
@@ -614,7 +614,7 @@ DEFINE_ERROR_EXT(OB_ERR_NO_TABLE_PRIVILEGE, -5171, ER_TABLEACCESS_DENIED_ERROR, 
 DEFINE_ERROR_EXT(OB_INVALID_ON_UPDATE, -5172, ER_INVALID_ON_UPDATE, "HY000", "Invalid ON UPDATE clause", "Invalid ON UPDATE clause for \'%s\' column");
 DEFINE_ERROR_EXT(OB_INVALID_DEFAULT, -5173, ER_INVALID_DEFAULT, "42000", "Invalid default value", "Invalid default value for \'%.*s\'");
 DEFINE_ERROR_EXT(OB_ERR_UPDATE_TABLE_USED, -5174, ER_UPDATE_TABLE_USED, "HY000", "Update table used", "You can\'t specify target table \'%s\' for update in FROM clause");
-DEFINE_ERROR_EXT(OB_ERR_COULUMN_VALUE_NOT_MATCH, -5175, ER_WRONG_VALUE_COUNT_ON_ROW, "21S01", "Column count doesn\'t match value count", "Column count doesn\'t match value count at row %ld");
+DEFINE_ERROR_EXT(OB_ERR_COULUMN_VALUE_NOT_MATCH, -5175, ER_WRONG_VALUE_COUNT_ON_ROW, "21S01", "Column count doesn\'t match value count", "Column count doesn\'t match value count at row %" PRId64 "");
 DEFINE_ERROR(OB_ERR_INVALID_GROUP_FUNC_USE, -5176, ER_INVALID_GROUP_FUNC_USE, "HY000", "Invalid use of group function");
 DEFINE_ERROR_EXT_DEP(OB_CANT_AGGREGATE_2COLLATIONS, -5177, ER_CANT_AGGREGATE_2COLLATIONS, "HY000", "Illegal mix of collations","Illegal mix of collations (%s,%s), (%s,%s)");
 DEFINE_ERROR_EXT(OB_ERR_FIELD_TYPE_NOT_ALLOWED_AS_PARTITION_FIELD, -5178, ER_FIELD_TYPE_NOT_ALLOWED_AS_PARTITION_FIELD, "HY000", "Field is of a not allowed type for this type of partitioning", "Field \'%.*s\' is of a not allowed type for this type of partitioning");
@@ -632,18 +632,18 @@ DEFINE_ERROR(OB_WRONG_SUB_KEY, -5190, ER_WRONG_SUB_KEY, "HY000", "Incorrect pref
 DEFINE_ERROR_EXT(OB_KEY_PART_0, -5191, ER_KEY_PART_0, "HY000", "Key part length cannot be 0", "Key part \'%.*s\' length cannot be 0");
 DEFINE_ERROR_EXT_DEP(OB_ERR_UNKNOWN_TIME_ZONE, -5192, ER_UNKNOWN_TIME_ZONE, "HY000", "Unknown or incorrect time zone", "Unknown or incorrect time zone: \'%.*s\'");
 DEFINE_ERROR(OB_ERR_WRONG_AUTO_KEY, -5193, ER_WRONG_AUTO_KEY, "42000", "Incorrect table definition; there can be only one auto column");
-DEFINE_ERROR_EXT(OB_ERR_TOO_MANY_KEYS, -5194, ER_TOO_MANY_KEYS, "42000","Too many keys specified", "Too many keys specified; max %ld keys allowed");
-DEFINE_ERROR_EXT(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, -5195, ER_TOO_MANY_KEY_PARTS, "42000","Too many key parts specified", "Too many key parts specified; max %ld parts allowed");
-DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_KEY_LENGTH, -5196, ER_TOO_LONG_KEY, "42000", "Specified key was too long", "Specified key was too long; max key length is %ld bytes");
+DEFINE_ERROR_EXT(OB_ERR_TOO_MANY_KEYS, -5194, ER_TOO_MANY_KEYS, "42000","Too many keys specified", "Too many keys specified; max %" PRId64 " keys allowed");
+DEFINE_ERROR_EXT(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, -5195, ER_TOO_MANY_KEY_PARTS, "42000","Too many key parts specified", "Too many key parts specified; max %" PRId64 " parts allowed");
+DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_KEY_LENGTH, -5196, ER_TOO_LONG_KEY, "42000", "Specified key was too long", "Specified key was too long; max key length is %" PRId64 " bytes");
 DEFINE_ERROR(OB_ERR_TOO_MANY_COLUMNS, -5197, ER_TOO_MANY_FIELDS, "42000", "Too many columns");
 DEFINE_ERROR_EXT_DEP(OB_ERR_TOO_LONG_COLUMN_LENGTH, -5198, ER_TOO_BIG_FIELDLENGTH, "42000", "Column length too big", "Column length too big for column '%s' (max = %d)");
 DEFINE_ERROR(OB_ERR_TOO_BIG_ROWSIZE, -5199, ER_TOO_BIG_ROWSIZE, "42000", "Row size too large");
 DEFINE_ERROR_EXT(OB_ERR_UNKNOWN_TABLE, -5200, ER_UNKNOWN_TABLE, "42S02", "Unknown table", "Unknown table '%.*s' in %.*s");
 DEFINE_ERROR_EXT(OB_ERR_BAD_TABLE, -5201, ER_BAD_TABLE_ERROR, "42S02", "Unknown table", "Unknown table '%.*s'");
-DEFINE_ERROR_EXT(OB_ERR_TOO_BIG_SCALE, -5202, ER_TOO_BIG_SCALE, "42000", "Too big scale specified for column", "Too big scale %d specified for column '%s'. Maximum is %ld.");
-DEFINE_ERROR_EXT_DEP(OB_ERR_TOO_BIG_PRECISION, -5203, ER_TOO_BIG_PRECISION, "42000", "Too big precision specified for column", "Too big precision %d specified for column '%s'. Maximum is %ld.");
+DEFINE_ERROR_EXT(OB_ERR_TOO_BIG_SCALE, -5202, ER_TOO_BIG_SCALE, "42000", "Too big scale specified for column", "Too big scale %d specified for column '%s'. Maximum is %" PRId64 ".");
+DEFINE_ERROR_EXT_DEP(OB_ERR_TOO_BIG_PRECISION, -5203, ER_TOO_BIG_PRECISION, "42000", "Too big precision specified for column", "Too big precision %d specified for column '%s'. Maximum is %" PRId64 ".");
 DEFINE_ERROR_EXT_DEP(OB_ERR_M_BIGGER_THAN_D, -5204, ER_M_BIGGER_THAN_D, "42000", "precision must be >= scale", "For float(M,D), double(M,D) or decimal(M,D), M must be >= D (column '%s').");
-DEFINE_ERROR_EXT(OB_ERR_TOO_BIG_DISPLAYWIDTH, -5205, ER_TOO_BIG_DISPLAYWIDTH, "42000", "Display width out of range for column", "Display width out of range for column '%s' (max = %ld)");
+DEFINE_ERROR_EXT(OB_ERR_TOO_BIG_DISPLAYWIDTH, -5205, ER_TOO_BIG_DISPLAYWIDTH, "42000", "Display width out of range for column", "Display width out of range for column '%s' (max = %" PRId64 ")");
 DEFINE_ERROR_EXT(OB_WRONG_GROUP_FIELD, -5206, ER_WRONG_GROUP_FIELD, "42000", "Can't group on column", "Can't group on '%.*s'");
 DEFINE_ERROR_EXT(OB_NON_UNIQ_ERROR, -5207, ER_NON_UNIQ_ERROR, "23000", "Column is ambiguous", "Column '%.*s' in %.*s is ambiguous");
 DEFINE_ERROR_EXT(OB_ERR_NONUNIQ_TABLE, -5208, ER_NONUNIQ_TABLE, "42000", "Not unique table/alias", "Not unique table/alias: \'%.*s\'");
@@ -666,7 +666,7 @@ DEFINE_ERROR_EXT(OB_ILLEGAL_REFERENCE, -5225, ER_ILLEGAL_REFERENCE, "42S22", "Re
 DEFINE_ERROR(OB_REACH_MEMORY_LIMIT, -5226, -1, "42000", "plan cache memory used reach the high water mark.");
 DEFINE_ERROR(OB_ERR_PASSWORD_FORMAT, -5227, ER_PASSWORD_FORMAT, "42000", "The password hash doesn't have the expected format. Check if the correct password algorithm is being used with the PASSWORD() function.");
 DEFINE_ERROR_EXT(OB_ERR_NON_UPDATABLE_TABLE, -5228, ER_NON_UPDATABLE_TABLE, "HY000", "The target table is not updatable", "The target table %.*s of the %.*s is not updatable");
-DEFINE_ERROR_EXT(OB_ERR_WARN_DATA_OUT_OF_RANGE, -5229, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Out of range value for column", "Out of range value for column '%.*s' at row %ld")
+DEFINE_ERROR_EXT(OB_ERR_WARN_DATA_OUT_OF_RANGE, -5229, ER_WARN_DATA_OUT_OF_RANGE, "22003", "Out of range value for column", "Out of range value for column '%.*s' at row %" PRId64 "")
 DEFINE_ERROR(OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR, -5230, ER_WRONG_EXPR_IN_PARTITION_FUNC_ERROR, "HY000", "Constant or random or timezone-dependent expressions in (sub)partitioning function are not allowed");
 DEFINE_ERROR_EXT(OB_ERR_VIEW_INVALID, -5231, ER_VIEW_INVALID, "42S22", "view invalid", "View \'%.*s.%.*s\' references invalid table(s) or column(s) or function(s) or definer/invoker of view lack rights to use them");
 DEFINE_ERROR(OB_ERR_OPTION_PREVENTS_STATEMENT, -5233, ER_OPTION_PREVENTS_STATEMENT, "HY000", "The MySQL server is running with the --read-only option so it cannot execute this statement");
@@ -687,10 +687,10 @@ DEFINE_ERROR_EXT(OB_ERR_REMOVED_SPACES, -5247, ER_REMOVED_SPACES, "HY000", "Lead
 DEFINE_ERROR_EXT(OB_WARN_ADD_AUTOINCREMENT_COLUMN, -5248, -1, "HY000", "Alter table add auto_increment column is dangerous", "Alter table add auto_increment column is dangerous, table_name=\'%.*s\', column_name=\'%s\'");
 DEFINE_ERROR_EXT(OB_WARN_CHAMGE_NULL_ATTRIBUTE, -5249, -1, "HY000", "Alter table change nullable column to not nullable is dangerous", "Alter table change nullable column to not nullable is dangerous, table_name=\'%.*s\', column_name=\'%.*s\'");
 DEFINE_ERROR_EXT(OB_ERR_INVALID_CHARACTER_STRING, -5250, ER_INVALID_CHARACTER_STRING, "HY000", "Invalid character string", "Invalid %.*s character string: \'%.*s\'");
-DEFINE_ERROR_EXT(OB_ERR_KILL_DENIED, -5251, ER_KILL_DENIED_ERROR, "HY000", "You are not owner of thread", "You are not owner of thread %lu");
+DEFINE_ERROR_EXT(OB_ERR_KILL_DENIED, -5251, ER_KILL_DENIED_ERROR, "HY000", "You are not owner of thread", "You are not owner of thread %" PRIu64 "");
 DEFINE_ERROR_EXT(OB_ERR_COLUMN_DEFINITION_AMBIGUOUS, -5252, -1, "HY000", "Column definition is ambiguous. Column has both NULL and NOT NULL attributes", "Column \'%.*s\' definition is ambiguous. Column has both NULL and NOT NULL attributes");
 DEFINE_ERROR(OB_ERR_EMPTY_QUERY, -5253, ER_EMPTY_QUERY, "42000", "Query was empty");
-DEFINE_ERROR_EXT(OB_ERR_CUT_VALUE_GROUP_CONCAT, -5254, ER_CUT_VALUE_GROUP_CONCAT, "42000", "Row was cut by GROUP_CONCAT()", "Row %ld was cut by GROUP_CONCAT()");
+DEFINE_ERROR_EXT(OB_ERR_CUT_VALUE_GROUP_CONCAT, -5254, ER_CUT_VALUE_GROUP_CONCAT, "42000", "Row was cut by GROUP_CONCAT()", "Row %" PRId64 " was cut by GROUP_CONCAT()");
 DEFINE_ERROR(OB_ERR_FIELD_NOT_FOUND_PART, -5255, ER_FIELD_NOT_FOUND_PART_ERROR, "HY000", "Field in list of fields for partition function not found in table");
 DEFINE_ERROR(OB_ERR_PRIMARY_CANT_HAVE_NULL, -5256, ER_PRIMARY_CANT_HAVE_NULL, "42000", "All parts of a PRIMARY KEY must be NOT NULL; if you need NULL in a key, use UNIQUE instead");
 DEFINE_ERROR(OB_ERR_PARTITION_FUNC_NOT_ALLOWED_ERROR, -5257, ER_PARTITION_FUNC_NOT_ALLOWED_ERROR, "HY000", "The PARTITION function returns the wrong type");
@@ -737,7 +737,7 @@ DEFINE_ERROR_EXT(OB_ERR_DROP_PARTITION_NON_EXISTENT, -5303, ER_DROP_PARTITION_NO
 DEFINE_ERROR(OB_ERR_PARTITION_MGMT_ON_TWOPART_TABLE, -5304, -1, "HY000", "Partition management on a two-part table is not possible");
 DEFINE_ERROR_EXT(OB_ERR_ONLY_ON_RANGE_LIST_PARTITION, -5305, ER_ONLY_ON_RANGE_LIST_PARTITION, "HY000", "can only be used on RANGE/LIST partitions", "%s PARTITION can only be used on RANGE/LIST partitions");
 DEFINE_ERROR(OB_ERR_DROP_LAST_PARTITION, -5306, ER_DROP_LAST_PARTITION, "HY000", "Cannot remove all partitions, use DROP TABLE instead");
-DEFINE_ERROR_EXT(OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH, -5307, -1, "HY000", "Not enough thread resource to execute the query. Maybe parallel_servers_target was set too low.", "Not enough thread resource to execute the query. Require setting parallel_servers_target to a value no less than %ld for this query");
+DEFINE_ERROR_EXT(OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH, -5307, -1, "HY000", "Not enough thread resource to execute the query. Maybe parallel_servers_target was set too low.", "Not enough thread resource to execute the query. Require setting parallel_servers_target to a value no less than %" PRId64 " for this query");
 DEFINE_ERROR(OB_ERR_IGNORE_USER_HOST_NAME, -5308, -1, "HY000", "Ignore the host name");
 DEFINE_ERROR(OB_ERR_TEMPORARY_TABLE_WITH_PARTITION, -5310, ER_PARTITION_NO_TEMPORARY, "HY000", "Cannot create temporary table with partitions");
 DEFINE_ERROR_EXT(OB_ERR_INVALID_COLUMN_ID, -5311, -1, "HY000", "Invalid column id", "Invalid column id for %.*s");
@@ -818,7 +818,7 @@ DEFINE_ERROR(OB_DDL_SCHEMA_VERSION_NOT_MATCH, -5403, -1, "HY000", "ddl schema ve
 DEFINE_ERROR_EXT(OB_ERR_RESERVED_SYNTAX, -5405, ER_RESERVED_SYNTAX, "HY000", "The \'%.*s\' syntax is reserved for purposes internal to the OceanBase Server", "The \'%.*s\' syntax is reserved for purposes internal to the OceanBase Server");
 DEFINE_ERROR_EXT(OB_ERR_INVALID_PARAM_TO_PROCEDURE, -5406, ER_WRONG_PARAMETERS_TO_PROCEDURE, "HY000", "Incorrect parameters to procedure \'%.*s\'", "Incorrect parameters to procedure \'%.*s\'");
 DEFINE_ERROR_EXT(OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT, -5407, ER_WRONG_PARAMETERS_TO_NATIVE_FCT, "42000", "Incorrect parameters in the call to native function", "Incorrect parameters in the call to native function '%.*s'");
-DEFINE_ERROR_EXT(OB_ERR_CTE_MAX_RECURSION_DEPTH, -5408, ER_CTE_MAX_RECURSION_DEPTH, "HY000", "Recursive query aborted after multiple iterations. Try increasing @@cte_max_recursion_depth to a larger value.", "Recursive query aborted after %lu iterations. Try increasing @@cte_max_recursion_depth to a larger value.");
+DEFINE_ERROR_EXT(OB_ERR_CTE_MAX_RECURSION_DEPTH, -5408, ER_CTE_MAX_RECURSION_DEPTH, "HY000", "Recursive query aborted after multiple iterations. Try increasing @@cte_max_recursion_depth to a larger value.", "Recursive query aborted after %" PRIu64 " iterations. Try increasing @@cte_max_recursion_depth to a larger value.");
 DEFINE_ERROR(OB_DUPLICATE_OBJECT_NAME_EXIST, -5409, -1, "HY000", "Duplicate object name exists, schema refreshing may be hung");
 DEFINE_ERROR(OB_ERR_REFRESH_SCHEMA_TOO_LONG, -5410, -1, "HY000", "Refresh schema failed continuously, ddl may be hung");
 
@@ -976,7 +976,7 @@ DEFINE_ERROR_EXT(OB_ERR_CONSTRAINT_DUPLICATE, -5562, -1, "HY000", "Duplicate con
 DEFINE_ERROR(OB_ERR_CONTRAINT_NOT_FOUND, -5563, -1, "HY000", "Constraint not found");
 DEFINE_ERROR_EXT(OB_ERR_ALTER_TABLE_ALTER_DUPLICATED_INDEX, -5564, -1, "HY000", "Duplicate alter index operations", "Duplicate alter index operations on column \'%.*s\'");
 DEFINE_ERROR(OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM, -5565, ER_INVALID_ARGUMENT_FOR_LOGARITHM, "2201E", "Invalid argument for logarithm");
-DEFINE_ERROR_EXT(OB_ER_SP_RECURSION_LIMIT, -5567, ER_SP_RECURSION_LIMIT, "HY000", "Recursive limit was exceeded", "Recursive limit %ld (as set by the max_sp_recursion_depth variable) was exceeded for routine");
+DEFINE_ERROR_EXT(OB_ER_SP_RECURSION_LIMIT, -5567, ER_SP_RECURSION_LIMIT, "HY000", "Recursive limit was exceeded", "Recursive limit %" PRId64 " (as set by the max_sp_recursion_depth variable) was exceeded for routine");
 DEFINE_ERROR(OB_ER_UNSUPPORTED_PS, -5568, ER_UNSUPPORTED_PS, "HY000", "This command is not supported in the prepared statement protocol yet");
 DEFINE_ERROR_EXT(OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG, -5569, ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG, "0A000", "stmt is not allowed in stored function or trigger", "%s is not allowed in stored function or trigger");
 DEFINE_ERROR(OB_ER_SP_NO_RECURSION, -5570, ER_SP_NO_RECURSION, "HY000", "Recursive stored functions are not allowed.");
@@ -1011,8 +1011,8 @@ DEFINE_ERROR(OB_ERR_DATETIME_INTERVAL_PRECISION_OUT_OF_RANGE, -5605, -1, "HY000"
 DEFINE_ERROR(OB_ERR_CMD_NOT_PROPERLY_ENDED, -5607, -1, "HY000", "SQL command not properly ended");
 DEFINE_ERROR(OB_WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED, -5609, ER_WRONG_FIELD_TERMINATORS, "HY000", "Non-ASCII separator arguments are not fully supported");
 DEFINE_ERROR(OB_WARN_AMBIGUOUS_FIELD_TERM, -5610, ER_WRONG_FIELD_TERMINATORS, "HY000", "First character of the FIELDS TERMINATED string is ambiguous; please use non-optional and non-empty FIELDS ENCLOSED BY");
-DEFINE_ERROR_EXT(OB_WARN_TOO_FEW_RECORDS, -5611, ER_WARN_TOO_FEW_RECORDS, "01000", "Row doesn't contain data for all columns", "Row %ld doesn't contain data for all columns");
-DEFINE_ERROR_EXT(OB_WARN_TOO_MANY_RECORDS, -5612, ER_WARN_TOO_MANY_RECORDS, "01000", "Row was truncated; it contained more data than there were input columns", "Row %ld was truncated; it contained more data than there were input columns");
+DEFINE_ERROR_EXT(OB_WARN_TOO_FEW_RECORDS, -5611, ER_WARN_TOO_FEW_RECORDS, "01000", "Row doesn't contain data for all columns", "Row %" PRId64 " doesn't contain data for all columns");
+DEFINE_ERROR_EXT(OB_WARN_TOO_MANY_RECORDS, -5612, ER_WARN_TOO_MANY_RECORDS, "01000", "Row was truncated; it contained more data than there were input columns", "Row %" PRId64 " was truncated; it contained more data than there were input columns");
 DEFINE_ERROR(OB_ERR_TOO_MANY_VALUES, -5613, -1, "HY000", "too many values");
 DEFINE_ERROR(OB_ERR_NOT_ENOUGH_VALUES, -5614, -1, "HY000", "not enough values");
 DEFINE_ERROR(OB_ERR_MORE_THAN_ONE_ROW, -5615, -1, "HY000", "single-row subquery returns more than one row");
@@ -1072,7 +1072,7 @@ DEFINE_ERROR(OB_ERR_NOT_SELECTED_EXPR, -5668, -1, "HY000", "not a SELECTed expre
 DEFINE_ERROR(OB_ERR_UK_PK_DUPLICATE, -5671, -1, "HY000", "such unique or primary key already exists in the table");
 DEFINE_ERROR(OB_ERR_COLUMN_LIST_ALREADY_INDEXED, -5672, -1, "HY000", "such column list already indexed");
 DEFINE_ERROR(OB_ERR_BUSHY_TREE_NOT_SUPPORTED, -5673, -1, "HY000", "PX does not support processing a bushy tree");
-DEFINE_ERROR_EXT_DEP(OB_ERR_ARGUMENT_OUT_OF_RANGE, -5674, -1, "HY000", "argument is out of range", "argument '%ld' is out of range");
+DEFINE_ERROR_EXT_DEP(OB_ERR_ARGUMENT_OUT_OF_RANGE, -5674, -1, "HY000", "argument is out of range", "argument '%" PRId64 "' is out of range");
 DEFINE_ERROR(OB_ERR_ORDER_BY_ITEM_NOT_IN_SELECT_LIST, -5675, -1, "HY000", "ORDER BY item must be the number of a SELECT-list expression");
 DEFINE_ERROR_DEP(OB_ERR_INTERVAL_INVALID, -5676, -1, "HY000", "the interval is invalid");
 DEFINE_ERROR_EXT(OB_ERR_NUMERIC_OR_VALUE_ERROR, -5677, -1, "HY000", "PL/SQL: numeric or value error", "PL/SQL: numeric or value error: %.*s");
@@ -1247,7 +1247,7 @@ DEFINE_ERROR_EXT(OB_ERR_SAME_NAME_SUBPARTITION, -5867, -1, "HY000", "Duplicate p
 DEFINE_ERROR(OB_ERR_UPDATE_ORDER_BY, -5868, -1, "HY000", "Incorrect usage of UPDATE and ORDER BY");
 DEFINE_ERROR(OB_ERR_UPDATE_LIMIT, -5869, -1, "HY000", "Incorrect usage of UPDATE and LIMIT");
 DEFINE_ERROR_EXT(OB_ROWID_TYPE_MISMATCH, -5870, -1, "HY000", "rowid type mismatch", "rowid type mismatch, expect %.*s, got %.*s");
-DEFINE_ERROR_EXT(OB_ROWID_NUM_MISMATCH, -5871, -1, "HY000", "rowid num mismatch", "rowid num mismatch, expect %ld, actual %ld");
+DEFINE_ERROR_EXT(OB_ROWID_NUM_MISMATCH, -5871, -1, "HY000", "rowid num mismatch", "rowid num mismatch, expect %" PRId64 ", actual %" PRId64 "");
 DEFINE_ERROR_EXT(OB_NO_COLUMN_ALIAS, -5872, -1, "HY000", "must name this expression with a column alias", "must name %.*s with a column alias");
 DEFINE_ERROR_DEP(OB_ERR_NUMERIC_NOT_MATCH_FORMAT_LENGTH, -5873, -1, "HY000", "the numeric value does not match the length of the format item");
 DEFINE_ERROR(OB_ERR_INVALID_DATATYPE, -5874, -1, "HY000", "invalid datatype");
@@ -1322,7 +1322,7 @@ DEFINE_ERROR(OB_ERR_INVALID_SIZE_SPECIFIED, -5959, -1, "HY000", "invalid SIZE sp
 DEFINE_ERROR_EXT(OB_ERR_DUP_COMPILE_PARAM, -5964, -1, "HY000", "duplicate setting for PL/SQL compiler parameter string", "duplicate setting for PL/SQL compiler parameter %.*s");
 DEFINE_ERROR(OB_ERR_DATA_NOT_WELL_FORMAT, -5965, -1, "HY000", "OCIAnyData is not well-formed");
 DEFINE_ERROR_EXT(OB_ERR_MUST_COMPOSIT_TYPE, -5966, -1, "HY000", "tc [string] must be that of object/varray/nested table", "tc [%s] must be that of object/varray/nested table");
-DEFINE_ERROR_EXT(OB_ERR_USER_EXCEED_RESOURCE, -5967, 1226, "42000", "User has exceeded the resource", "User '%.*s' has exceeded the '%s' resource (current value: %lu)");
+DEFINE_ERROR_EXT(OB_ERR_USER_EXCEED_RESOURCE, -5967, 1226, "42000", "User has exceeded the resource", "User '%.*s' has exceeded the '%s' resource (current value: %" PRIu64 ")");
 
 DEFINE_ERROR_EXT(OB_ERR_CHECK_OPTION_VIOLATED, -5971, ER_VIEW_CHECK_FAILED, "HY000", "CHECK OPTION failed", "CHECK OPTION failed '%.*s.%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_CHECK_OPTION_ON_NONUPDATABLE_VIEW, -5972, ER_VIEW_NONUPD_CHECK, "HY000", "CHECK OPTION on non-updatable view", "CHECK OPTION on non-updatable view '%.*s.%.*s'");
@@ -1527,7 +1527,7 @@ DEFINE_ERROR_EXT_DEP(OB_ERR_BOOST_GEOMETRY_UNKNOWN_EXCEPTION, -7211, ER_BOOST_GE
 DEFINE_ERROR_EXT_DEP(OB_ERR_GIS_DATA_WRONG_ENDIANESS, -7212, ER_GIS_DATA_WRONG_ENDIANESS, "HY000", "Geometry byte string must be little endian.", "Geometry byte string must be little endian.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_ALTER_OPERATION_NOT_SUPPORTED_REASON_GIS, -7213, ER_ALTER_OPERATION_NOT_SUPPORTED_REASON_GIS, "HY000", "Do not support online operation on table with GIS index", "Do not support online operation on table with GIS index");
 DEFINE_ERROR_EXT_DEP(OB_ERR_BOOST_GEOMETRY_INCONSISTENT_TURNS_EXCEPTION, -7214, ER_BOOST_GEOMETRY_INCONSISTENT_TURNS_EXCEPTION, "HY000", "Inconsistent intersection points.", "Inconsistent intersection points.");
-DEFINE_ERROR_EXT_DEP(OB_ERR_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED, -7215, ER_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED, "HY000", "Parameter exceeds the maximum number of points in a geometryin function.", "Parameter %s exceeds the maximum number of points in a geometry (%lu) in function %s.");
+DEFINE_ERROR_EXT_DEP(OB_ERR_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED, -7215, ER_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED, "HY000", "Parameter exceeds the maximum number of points in a geometryin function.", "Parameter %s exceeds the maximum number of points in a geometry (%" PRIu64 ") in function %s.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, -7216, ER_UNEXPECTED_GEOMETRY_TYPE, "22S01", "value is a geometry of unexpected type", "%.64s value is a geometry of unexpected type %.64s in %.64s.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_SRS_PARSE_ERROR, -7217, ER_SRS_PARSE_ERROR, "SR002", "Can\'t parse the spatial reference system definition of SRID.", "Can\'t parse the spatial reference system definition of SRID %u.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_SRS_PROJ_PARAMETER_MISSING, -7218, ER_SRS_PROJ_PARAMETER_MISSING, "SR003", "The spatial reference system definition for SRID does not specify the mandatory (EPSG) projection parameter.", "The spatial reference system definition for SRID %u does not specify the mandatory %s (EPSG %u) projection parameter.");
@@ -1537,7 +1537,7 @@ DEFINE_ERROR_EXT_DEP(OB_ERR_SRS_NOT_CARTESIAN_UNDEFINED, -7221, ER_SRS_NOT_CARTE
 DEFINE_ERROR_EXT_DEP(OB_ERR_SRS_NOT_FOUND, -7222, ER_SRS_NOT_FOUND, "SR001", "There\'s no spatial reference system with SRID.", "There\'s no spatial reference system with SRID %u.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_WARN_SRS_NOT_FOUND_AXIS_ORDER, -7223, ER_WARN_SRS_NOT_FOUND_AXIS_ORDER, "01000", "There\'s no spatial reference system with SRID. The axis order is unknown.", "There\'s no spatial reference system with SRID %u. The axis order is unknown.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS, -7224, ER_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS, "22S00", "It has not been implemented for geographic spatial reference systems.", "%.192s(%.80s) has not been implemented for geographic spatial reference systems.");
-DEFINE_ERROR_EXT_DEP(OB_ERR_WRONG_SRID_FOR_COLUMN, -7225, ER_WRONG_SRID_FOR_COLUMN, "HY000", "The SRID of the geometry does not match the SRID of the column.", "The SRID of the geometry does not match the SRID of the column. The SRID of the geometry is %lu, but the SRID of the column is %lu. Consider changing the SRID of the geometry or the SRID property of the column.");
+DEFINE_ERROR_EXT_DEP(OB_ERR_WRONG_SRID_FOR_COLUMN, -7225, ER_WRONG_SRID_FOR_COLUMN, "HY000", "The SRID of the geometry does not match the SRID of the column.", "The SRID of the geometry does not match the SRID of the column. The SRID of the geometry is %" PRIu64 ", but the SRID of the column is %" PRIu64 ". Consider changing the SRID of the geometry or the SRID property of the column.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_CANNOT_ALTER_SRID_DUE_TO_INDEX, -7226, ER_CANNOT_ALTER_SRID_DUE_TO_INDEX, "HY000", "The SRID specification on the column cannot be changed because there is a spatial index on the column.", "The SRID specification on the column \'%.64s\' cannot be changed because there is a spatial index on the column. Please remove the spatial index before altering the SRID specification.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_WARN_USELESS_SPATIAL_INDEX, -7227, ER_WARN_USELESS_SPATIAL_INDEX, "HY000", "The spatial index on column will not be used by the query optimizer since the column does not have an SRID attribute.", "The spatial index on column \'%.64s\' will not be used by the query optimizer since the column does not have an SRID attribute. Consider adding an SRID attribute to the column.");
 DEFINE_ERROR_EXT_DEP(OB_ERR_ONLY_IMPLEMENTED_FOR_SRID_0_AND_4326, -7228, ER_ONLY_IMPLEMENTED_FOR_SRID_0_AND_4326, "22S00", "Function is only defined for SRID 0 and SRID 4326.", "Function %.192s is only defined for SRID 0 and SRID 4326.");
@@ -1820,7 +1820,7 @@ DEFINE_ERROR(OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR, -9781, ER_NO_PARTITIO
 DEFINE_ERROR_EXT(OB_ERR_CURSOR_ATTR_APPLY, -9784, -1, "HY000", "cursor attribute may not be applied to non-cursor", "cursor attribute may not be applied to non-cursor %.*s");
 DEFINE_ERROR(OB_DTL_WAIT_EAGAIN, -9799, -1, "HY000", "Px wait for dtl message again");
 DEFINE_ERROR_EXT(OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE, -9800, -1, "HY000", "Throw this warning means that the user has handled some MySQL exceptions which may cause performance problems.", "To be compatible with MySQL, if an exception occurs when compiling an OB PL object (such as the object does not exist or a parameter mismatch), the relevant statement will be converted to a statement that throws an exception, and compiled object will be evicted by any schema change which may cause performance problems. User should create or redefine the pl object of the problem indicated in the warning. Problem object name: '%.*s'");
-DEFINE_ERROR_EXT(OB_ELEMENT_AT_GIVEN_INDEX_NOT_EXIST, -9801, -1, "HY000", "collection element at the given index does not exist.", "element at index [%ld] does not exist");
+DEFINE_ERROR_EXT(OB_ELEMENT_AT_GIVEN_INDEX_NOT_EXIST, -9801, -1, "HY000", "collection element at the given index does not exist.", "element at index [%" PRId64 "] does not exist");
 DEFINE_ERROR(OB_ERR_MVIEW_INVALID_TABLE_TYPE, -9808, -1, "HY000", "Table type is not valid, the definition of materialized view can only reference user tables or other materialized views");
 DEFINE_ERROR(OB_ERR_MVIEW_BASE_TABLE_ALTERED, -9809, -1, "HY000", "Base tables are altered during the creation or complete refresh of materialized views, please try again when base tables have no ongoing DDL operations");
 DEFINE_ERROR(OB_ERR_MVIEW_MISSING_DEPENDENCE, -9810, -1, "HY000", "Materialized view %s.%s has invalid dependency info, please perform a complete refresh to recover.");
@@ -1856,7 +1856,7 @@ DEFINE_ERROR(OB_ERR_VALUES_CLAUSE_NEED_HAVE_COLUMN, -11000, ER_VALUES_CLAUSE_NEE
 DEFINE_ERROR(OB_ERR_VALUES_CLAUSE_CANNOT_USE_DEFAULT_VALUES, -11001, ER_VALUES_CLAUSE_CANNOT_USE_DEFAULT_VALUES, "HY000", "A VALUES clause cannot use DEFAULT values, unless used as a source in an INSERT statement.");
 DEFINE_ERROR_EXT(OB_WRONG_PARTITION_NAME, -11002, ER_WRONG_PARTITION_NAME, "HY000", "Incorrect partition name", "Incorrect partition name '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_PLUGIN_IS_NOT_LOADED, -11003, ER_PLUGIN_IS_NOT_LOADED, "HY000", "Plugin is not loaded", "Plugin '%.*s' is not loaded");
-DEFINE_ERROR_EXT(OB_EST_DEVIA_TOO_LARGE, -11004, -1, "HY000", "Optimizer estimate deviation is too large", "Optimizer estimate deviation is too large 'Operator: %d.%.*s EST:%.ld -> REAL:%ld'");
+DEFINE_ERROR_EXT(OB_EST_DEVIA_TOO_LARGE, -11004, -1, "HY000", "Optimizer estimate deviation is too large", "Optimizer estimate deviation is too large 'Operator: %d.%.*s EST:%.ld -> REAL:%" PRId64 "'");
 DEFINE_ERROR(OB_ERR_HAS_TYPE_OR_TABLE_DEPENDENT, -11005, -1, "HY000", "cannot drop or replace a type with type or table dependents");
 DEFINE_ERROR(OB_ERR_REPLACE_TYPE_WITH_TABLE_DEPENDENT, -11006, -1, "HY000", "cannot replace a type with table dependents");
 DEFINE_ERROR_EXT(OB_ERR_UNKNOWN_AUTHID, -11007, ER_UNKNOWN_AUTHID, "HY000", "Unknown authorization ID", "Unknown authorization ID `%.*s`@`%.*s`");
@@ -1874,10 +1874,10 @@ DEFINE_ERROR(OB_ERR_PS_NO_RECURSION, -11016, ER_PS_NO_RECURSION, "HY000", "The p
 DEFINE_ERROR_EXT(OB_ERR_PARTITION_EXCHANGE_PART_TABLE, -11017, ER_PARTITION_EXCHANGE_PART_TABLE, "HY000", "Table to exchange with partition is partitioned", "Table to exchange with partition is partitioned: \'%.*s\'");
 
 DEFINE_ERROR(OB_DDL_RESOURCE_NOT_ENOUGH, -11048, -1, "HY000", "The server DDL resource is not enough, please retry");
-DEFINE_ERROR_EXT(OB_EXCEED_QUERY_MEM_LIMIT, -11049, -1, "HY000", "Exceed query memory limit", "Exceed query memory limit (mem_limit=%ld, mem_hold=%ld),  please check whether the query_memory_limit_percentage configuration item is reasonable.");
+DEFINE_ERROR_EXT(OB_EXCEED_QUERY_MEM_LIMIT, -11049, -1, "HY000", "Exceed query memory limit", "Exceed query memory limit (mem_limit=%" PRId64 ", mem_hold=%" PRId64 "),  please check whether the query_memory_limit_percentage configuration item is reasonable.");
 DEFINE_ERROR_EXT(OB_ERR_INCORRECT_STRING_VALUE_FOR_INET, -11062, ER_WRONG_VALUE_FOR_TYPE, "HY000", "Incorrect string value for function inet", "Incorrect string value for function %s")
 DEFINE_ERROR(OB_SKIP_PARSE_HEADER_CONFLICT, -11081, -1, "HY000", "skip_header and parse_header cannot be used at the same time");
-DEFINE_ERROR_EXT(OB_REACH_DIAGNOSIS_ERROR_LIMIT, -11088, -1, "HY000", "reject limit reached", "reject limit %ld reached");
+DEFINE_ERROR_EXT(OB_REACH_DIAGNOSIS_ERROR_LIMIT, -11088, -1, "HY000", "reject limit reached", "reject limit %" PRId64 " reached");
 DEFINE_ERROR_EXT(OB_AI_FUNC_ENDPOINT_NOT_FOUND, -11112, -1, "HY000", "This AI model endpoint is not found", "This AI model endpoint \'%.*s\' was not found");
 DEFINE_ERROR_EXT(OB_AI_FUNC_ENDPOINT_EXISTS, -11113, -1, "HY000", "This ai model endpoint is already exists", "This ai model endpoint \'%.*s\' is already exists");
 DEFINE_ERROR_EXT(OB_AI_FUNC_PARAM_EMPTY, -11114, -1, "HY000", "The param is empty or null", "The param \'%.*s\' is empty or null");

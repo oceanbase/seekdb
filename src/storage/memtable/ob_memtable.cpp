@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_memtable.h"
+#include <inttypes.h>
 #include "query/optimizer/stat/ob_optimizer_stat_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
@@ -606,12 +607,14 @@ int ObMemtable::get(
   ObMemtableKey returned_mtk;
   ObMvccValueIterator value_iter;
   const ObITableReadInfo *read_info = nullptr;
+  ObStoreRowkey adapted_key;
+  const ObStoreRowkey *store_key = &rowkey.get_store_rowkey();
   if (IS_NOT_INIT) {
     TRANS_LOG(WARN, "not init", K(*this));
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!param.is_valid())
              || OB_UNLIKELY(!context.is_valid())
-             || OB_UNLIKELY(!rowkey.is_memtable_valid())) {
+             || OB_UNLIKELY(!rowkey.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid param, ", K(param), K(context), K(rowkey));
   } else if (OB_ISNULL(read_info = param.get_read_info(context.use_fuse_row_cache_))) {
@@ -621,7 +624,16 @@ int ObMemtable::get(
     const ObColDescIArray &out_cols = read_info->get_columns_desc();
     ObStoreRowLockState lock_state;
     bool is_snapshot_opt = context.query_flag_.is_snapshot_opt();
-    if (OB_FAIL(parameter_mtk.encode(out_cols, &rowkey.get_store_rowkey()))) {
+    // Local index-back can arrive as datums only. Materialize the legacy
+    // MemTable key here, so SSTable-only reads never construct ObObj cells.
+    if (!store_key->is_valid()) {
+      if (OB_FAIL(rowkey.to_store_rowkey(out_cols, *context.get_range_allocator(), adapted_key))) {
+      } else {
+        store_key = &adapted_key;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(parameter_mtk.encode(out_cols, store_key))) {
     } else if (OB_FAIL(mvcc_engine_.get(context.store_ctx_->mvcc_acc_ctx_,
                                         context.query_flag_,
                                         &parameter_mtk,
@@ -1896,7 +1908,7 @@ int ObMemtable::dump2text(const char *fname)
   if (OB_ISNULL(fname)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "fanme is NULL");
-  } else if (snprintf(real_fname, sizeof(real_fname), "%s.%ld", fname,
+  } else if (snprintf(real_fname, sizeof(real_fname), "%s.%" PRId64, fname,
                       ::oceanbase::common::ObTimeUtility::current_time()) >= (int64_t)sizeof(real_fname)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "fname too long", K(fname));
@@ -1909,7 +1921,7 @@ int ObMemtable::dump2text(const char *fname)
     if (OB_FAIL(helper.convert(key_, key_ptr))) {
     } else {
       fprintf(fd, "memtable: key=%s\n", key_ptr);
-      fprintf(fd, "btree_item_count=%ld, btree_alloc_size=%ld\n",
+      fprintf(fd, "btree_item_count=%" PRId64 ", btree_alloc_size=%" PRId64 "\n",
               get_btree_item_count(), get_btree_alloc_memory());
       query_engine_.dump2text(fd);
     }

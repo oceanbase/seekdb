@@ -1,0 +1,10 @@
+[package]
+name = "path-utils"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "1"
+globset = "=0.4.18"
+walkdir = "=2.5.0"

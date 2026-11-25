@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/expr/ob_expr_md5.h"
-#include <openssl/md5.h>
+#include "rust/crypto.h"
+#include "share/ob_encryption_util.h"
 
 namespace oceanbase
 {
@@ -85,12 +86,11 @@ int ObExprMd5::calc_md5(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
       LOG_ERROR("alloc memory failed",
             K(ret), K(md5_raw_res_buf), K(md5_hex_res_buf), K(md5_raw_res_len), K(md5_hex_res_len));
     } else {
-      unsigned char *res = MD5(reinterpret_cast<const unsigned char *>(raw_str.ptr()),
-                              raw_str.length(),
-                              reinterpret_cast<unsigned char *>(md5_raw_res_buf));
-      if (OB_ISNULL(res)) {
-        // MD5() in openssl always return an pointer not NULL, so we need not check return value.
-        // Even so, we HAVE TO check it here. You know it.
+      const auto result = crypto::digest_into(
+          static_cast<uint32_t>(share::OB_HASH_MD5),
+          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(raw_str.ptr()), raw_str.length()),
+          rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(md5_raw_res_buf), md5_raw_res_len));
+      if (crypto::Code::Ok != result.code) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(to_hex_cstr(md5_raw_res_buf, md5_raw_res_len,
                                     md5_hex_res_buf, md5_hex_res_len))) {

@@ -16,7 +16,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "share/ob_server_struct.h"
 #include "sql/engine/cmd/ob_database_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/resolver/ddl/ob_create_database_stmt.h"
@@ -62,7 +62,7 @@ int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &
     SQL_ENG_LOG(WARN, "local_management_service_ not initialized");
   } else {
     // sync_call: direct business call, bypasses entire RPC stack
-    if (OB_FAIL(oceanbase::query::serialize_root_service_call([&]{ return ctx.root_command_service().create_database(create_database_arg, database_id); }))) {
+    if (OB_FAIL(oceanbase::share::local_ddl_serial_call([&]{ return ctx.root_command_service().create_database(create_database_arg, database_id); }))) {
     } else {
       ctx.get_physical_plan_ctx()->set_affected_rows(1);
     }
@@ -130,7 +130,7 @@ int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
-  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().alter_database(alter_database_arg); }))) {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().alter_database(alter_database_arg); }))) {
   } else if (! stmt.get_alter_option_set().has_member(obcall::ObAlterDatabaseArg::COLLATION_TYPE)) {
     // do nothing
   } else if (0 == stmt.get_database_name().compare(session->get_database_name())) {
@@ -181,7 +181,7 @@ int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt
   } else {
     obcall::UInt64 affected_row(0);
     obcall::ObDropDatabaseRes drop_database_res;
-    if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().drop_database(drop_database_arg, drop_database_res); }))) {
+    if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().drop_database(drop_database_arg, drop_database_res); }))) {
     } else if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
@@ -230,7 +230,7 @@ int ObRecyclebinRestoreDatabaseExecutor::execute(ObExecContext &ctx, ObRecyclebi
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
-  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().restore_database(restore_database_arg); }))) {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().restore_database(restore_database_arg); }))) {
   }
 
   SERVER_EVENT_ADD("ddl", "restore database execute finish",
@@ -258,7 +258,7 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
-  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().purge_database(purge_database_arg); }))) {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().purge_database(purge_database_arg); }))) {
   }
 
   SERVER_EVENT_ADD("ddl", "purge database execute finish",
@@ -293,7 +293,7 @@ int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       SQL_ENG_LOG(WARN, "get task executor context failed");
-    } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().fork_database(fork_database_arg, res); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().fork_database(fork_database_arg, res); }))) {
     } else {
       SQL_ENG_LOG(INFO, "fork database executor finished", K(fork_database_arg), K(res));
     }

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_value.h"
+#include <optional>
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
@@ -167,11 +168,10 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
-  ObJsonBin st_json(&temp_allocator);
-  ObIJsonBase *j_base = &st_json;
-  ObJsonSeekResult hits;
-  ObJsonBin res_json(&temp_allocator);
-  hits.res_point_ = &res_json;
+  std::optional<rust::Box<common::json::Query>> document;
+  std::optional<common::json::PathValueResult> query_result;
+  std::optional<ObJsonBin> result_json;
+  const common::json::Path *native_path = NULL;
   ObJsonParamCacheCtx ctx_cache(&temp_allocator);
   ObJsonParamCacheCtx* param_ctx = NULL;
   /**
@@ -187,13 +187,10 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   } else if (param_ctx->is_first_exec_ 
               && OB_FAIL(ObExprJsonValue::get_clause_param_value(expr, ctx, &param_ctx->json_param_,
                                           is_cover_by_error))) { // get param value & check param valid
-  } else if (OB_FAIL(ObJsonUtil::get_json_doc(expr.args_[JSN_VAL_DOC], ctx,
-                    temp_allocator, j_base, is_null_result, 
-                    is_cover_by_error))) {
-  } else if (OB_ISNULL(param_ctx->json_param_.json_path_)
-             && OB_FAIL(ObJsonUtil::get_json_path(expr.args_[JSN_VAL_PATH], 
-                            ctx, is_null_result, param_ctx, temp_allocator, 
-                            is_cover_by_error))) { // parse json path
+  } else if (OB_FAIL(get_native_json_query(expr, ctx, temp_allocator, JSN_VAL_DOC,
+                                           document, is_null_result, &is_cover_by_error))) {
+  } else if (OB_FAIL(get_native_json_path(expr, ctx, temp_allocator, param_ctx, JSN_VAL_PATH,
+                                          native_path, is_null_result, is_cover_by_error))) {
   }
   // parse empty error default value
   if ((OB_SUCC(ret) && !is_null_result) || is_cover_by_error) {
@@ -203,10 +200,21 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
       ret = temp_ret;
     }
   } 
-  if (OB_SUCC(ret) && !is_null_result && OB_FAIL(doc_do_seek(hits,
-                                  is_null_result, &param_ctx->json_param_, j_base,
-                                  expr, ctx, is_cover_by_error,
-                                  return_val, is_type_mismatch))) { // do seek
+  if (OB_SUCC(ret) && !is_null_result) {
+    query_result.emplace((*document)->query_value(*native_path, false));
+    if (query_result->status != common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to query JSON value", K(ret), K(query_result->byte_offset));
+    } else if (query_result->match_count == 0) {
+      ret = get_empty_option(return_val, is_cover_by_error, param_ctx->json_param_.empty_type_,
+                             param_ctx->json_param_.empty_val_, is_null_result);
+    } else if (query_result->match_count > 1) {
+      ret = OB_ERR_MULTIPLE_JSON_VALUES;
+      LOG_USER_ERROR(OB_ERR_MULTIPLE_JSON_VALUES, "json_value");
+      LOG_WARN("json value seek result more than one.", K(query_result->match_count));
+    } else if (query_result->value_type == static_cast<uint8_t>(ObJsonNodeType::J_NULL)) {
+      is_null_result = true;
+    }
   }
 
   // fill output and deal error case
@@ -214,8 +222,21 @@ int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     if (is_cover_by_error && !try_set_error_val(expr, ctx, res, ret, &param_ctx->json_param_, is_type_mismatch)) {
     }
   } else {
-    ret = set_result(expr, &param_ctx->json_param_, ctx, is_null_result, is_cover_by_error, is_type_mismatch,
-                    res, return_val, &temp_allocator, hits);
+    ObIJsonBase *hit = NULL;
+    if (!is_null_result && OB_ISNULL(return_val) && query_result.has_value()
+        && query_result->match_count == 1) {
+      const char *data = reinterpret_cast<const char *>(query_result->binary.data());
+      result_json.emplace(data, query_result->binary.size(), &temp_allocator);
+      if (OB_FAIL(result_json->reset_iter())) {
+        LOG_WARN("fail to initialize JSON_VALUE result", K(ret));
+      } else {
+        hit = &result_json.value();
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = set_result(expr, &param_ctx->json_param_, ctx, is_null_result, is_cover_by_error,
+                       is_type_mismatch, res, return_val, &temp_allocator, hit);
+    }
   }
   if (OB_SUCC(ret)) {
     param_ctx->is_first_exec_ = false;
@@ -344,7 +365,7 @@ int ObExprJsonValue::set_result(const ObExpr &expr,
                                 ObDatum &res,
                                 ObDatum *return_val,
                                 ObIAllocator *allocator,
-                                ObJsonSeekResult &hits)
+                                ObIJsonBase *hit)
 {
   INIT_SUCC(ret);
   if (is_null_result) {
@@ -357,7 +378,7 @@ int ObExprJsonValue::set_result(const ObExpr &expr,
       ObCollationType dst_coll_type = expr.datum_meta_.cs_type_;
       ObJsonCastParam cast_param(json_param->dst_type_, in_coll_type, dst_coll_type, json_param->ascii_type_);
       cast_param.rt_expr_ = &expr;
-      ret = ObJsonUtil::cast_to_res(allocator, ctx, hits[0],
+      ret = ObJsonUtil::cast_to_res(allocator, ctx, hit,
           json_param->accuracy_, cast_param, res, is_type_mismatch);
       if (OB_FAIL(ret)) {
         try_set_error_val(expr, ctx, res, ret, json_param, is_type_mismatch);
@@ -517,41 +538,6 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
       break;
   }
 
-  return ret;
-}
-
-int ObExprJsonValue::doc_do_seek(ObJsonSeekResult &hits, bool &is_null_result, ObJsonExprParam* json_param,
-                                ObIJsonBase *j_base, const ObExpr &expr, ObEvalCtx &ctx, bool &is_cover_by_error,
-                                ObDatum *&return_val, 
-                                uint8_t &is_type_mismatch)
-{
-  INIT_SUCC(ret);
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-  if (OB_SUCC(ret) && !is_null_result) {
-    if (OB_FAIL(j_base->seek(*json_param->json_path_, json_param->json_path_->path_node_cnt(), true, false, hits))) {
-      if (ret == OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR) {
-        is_cover_by_error = false;
-      } else if (ret == OB_ERR_DOUBLE_TRUNCATED) {
-        is_type_mismatch = true;
-        ret = OB_INVALID_NUMERIC;
-      }
-    } else if (hits.size() == 0) {
-      // get empty clause
-      if (OB_FAIL(get_empty_option(return_val, is_cover_by_error, 
-                                    json_param->empty_type_, 
-                                    json_param->empty_val_, 
-                                    is_null_result))) {
-      }
-    } else if (hits.size() > 1) {
-      // return val decide by error option
-      ret = OB_ERR_MULTIPLE_JSON_VALUES;
-      LOG_USER_ERROR(OB_ERR_MULTIPLE_JSON_VALUES, "json_value");
-      LOG_WARN("json value seek result more than one.", K(hits.size()));
-    } else if (hits[0]->json_type() == ObJsonNodeType::J_NULL) {
-      is_null_result = true;
-    } 
-  }
   return ret;
 }
 

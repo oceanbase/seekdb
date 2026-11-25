@@ -17,6 +17,7 @@
 #ifndef _OB_PARSER_UTILS_H
 #define _OB_PARSER_UTILS_H 1
 #include "lib/utility/ob_print_utils.h"
+#include <inttypes.h>
 #include "sql/parser/parse_node.h"
 #include "lib/ob_name_def.h"
 #include "lib/utility/ob_smart_call.h"
@@ -83,14 +84,14 @@ inline void databuff_simple_print_obj(char *buf, const int64_t buf_len, const in
   if (NULL != obj) {
     common::databuff_printf(buf,
                             buf_len, pos,
-                            "|--[%ld],[%s], str_value_=[%.*s], value=[%ld]\n",
+                            "|--[%" PRId64 "],[%s], str_value_=[%.*s], value=[%" PRId64 "]\n",
                             index,
                             get_type_name(obj->type_),
                             int32_t(obj->str_len_),
                             obj->str_value_,
                             obj->value_);
   } else {
-    common::databuff_printf(buf, buf_len, pos, "|--[%ld]\n", index);
+    common::databuff_printf(buf, buf_len, pos, "|--[%" PRId64 "]\n", index);
   }
   for (int64_t i = 0; i < obj->num_child_; ++i) {
     if (NULL != obj->children_[i]) {

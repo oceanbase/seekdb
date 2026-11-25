@@ -30,7 +30,6 @@ ObObjectWriteInfo::ObObjectWriteInfo()
     offset_(0),
     size_(0),
     io_desc_(),
-    io_callback_(nullptr),
     write_callback_(nullptr)
 {
 }
@@ -46,7 +45,6 @@ void ObObjectWriteInfo::reset()
   offset_ = 0;
   size_ = 0;
   io_desc_.reset();
-  io_callback_ = nullptr;
   write_callback_ = nullptr;
 }
 
@@ -57,7 +55,6 @@ ObObjectWriteInfo& ObObjectWriteInfo::operator=(const ObObjectWriteInfo &other)
     offset_ = other.offset_;
     size_ = other.size_;
     io_desc_ = other.io_desc_;
-    io_callback_ = other.io_callback_;
     write_callback_ = other.write_callback_;
   }
   return *this;
@@ -253,17 +250,7 @@ bool ObObjectWriteHandle::is_valid() const
 }
 
 
-ObObjectReadHandle::ObObjectReadHandle()
-  : allocator_(nullptr),
-    object_handle_()
-{
-}
-
-ObObjectReadHandle::ObObjectReadHandle(ObIAllocator &allocator)
-  : allocator_(&allocator),
-    object_handle_()
-{
-}
+ObObjectReadHandle::ObObjectReadHandle() = default;
 
 ObObjectReadHandle::~ObObjectReadHandle()
 {
@@ -272,7 +259,6 @@ ObObjectReadHandle::~ObObjectReadHandle()
 
 void ObObjectReadHandle::reset()
 {
-  allocator_ = nullptr;
   object_handle_.reset();
 }
 
@@ -294,7 +280,6 @@ ObObjectReadHandle &ObObjectReadHandle::operator=(const ObObjectReadHandle &othe
 {
   if (&other != this) {
     object_handle_ = other.object_handle_;
-    allocator_ = other.allocator_;
   }
   return *this;
 }
@@ -305,17 +290,6 @@ int ObObjectReadHandle::wait()
   if (OB_UNLIKELY(!object_handle_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(object_handle_.wait())) {
-  }
-  return ret;
-}
-
-int ObObjectReadHandle::alloc_io_buf(char *&buf, const int64_t &buf_size)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(buf = reinterpret_cast<char*>(allocator_->alloc(buf_size)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   }
   return ret;
 }
@@ -338,8 +312,6 @@ int ObObjectReadHandle::get_data(ObIAllocator &allocator, char *&buf, int64_t &b
     }
 
     if (OB_FAIL(ret)) {
-    } else if (allocator_ == &allocator) { // allocator is same, use shallow copy
-      buf = const_cast<char *>(data_buf) + header_size;
     } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
@@ -503,7 +475,7 @@ int ObObjectLinkIter::reuse()
 int ObObjectLinkIter::get_next_block(ObIAllocator &allocator, char *&buf, int64_t &buf_len)
 {
   int ret = OB_SUCCESS;
-  ObObjectReadHandle block_handle(allocator);
+  ObObjectReadHandle block_handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (cur_.is_none()) {
@@ -518,7 +490,7 @@ int ObObjectLinkIter::get_next_macro_id(MacroBlockId &macro_id)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("share_block");
-  ObObjectReadHandle block_handle(allocator);
+  ObObjectReadHandle block_handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (cur_.is_none()) {
@@ -537,7 +509,6 @@ int ObObjectLinkIter::read_next_block(ObObjectReadHandle &object_io_handle)
   ObObjectReadInfo read_info;
   ObObjectHeader header;
   read_info.addr_ = cur_;
-  read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, object_io_handle))) {
   } else if (OB_FAIL(object_io_handle.wait())) {
   } else {
@@ -562,13 +533,9 @@ ObObjectIOCallback::~ObObjectIOCallback()
   data_buf_ = nullptr;
 }
 
-int ObObjectIOCallback::alloc_data_buf(const char *io_data_buffer, const int64_t data_size)
-{
-  int ret = alloc_and_copy_data(io_data_buffer, data_size, io_allocator_, data_buf_);
-  return ret;
-}
 
-int ObObjectIOCallback::inner_process(const char *data_buffer, const int64_t size)
+
+int ObObjectIOCallback::process(const char *data_buffer, const int64_t size)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(size <= 0 || data_buffer == nullptr)) {
@@ -603,7 +570,7 @@ int ObObjectIOCallback::inner_process(const char *data_buffer, const int64_t siz
   return ret;
 }
 
-const char *ObObjectIOCallback::get_data()
+const char *ObObjectIOCallback::get_data() const
 {
   return data_buf_;
 }
@@ -898,8 +865,6 @@ int ObObjectReaderWriter::switch_object(ObObjectWriteSession &write_session,
     // Only the aligned tail is not covered by serialized headers and payloads.
     MEMSET(write_session.data_.data() + offset_, 0,
            align_offset_ + write_info.size_ - offset_);
-    write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
-    write_info.io_desc_.set_sealed();
 
 
     // do not use object_handle_ to write, since it will be reset if failed
@@ -1018,8 +983,6 @@ int ObObjectReaderWriter::inner_write_block(
       object_info.offset_ = align_offset_;
       object_info.size_ = align_store_size;
 
-      object_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
-      object_info.io_desc_.set_unsealed();
       object_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
 
       if (OB_FAIL(ret)) {
@@ -1113,15 +1076,14 @@ int ObObjectReaderWriter::write_block(
 
 int ObObjectReaderWriter::async_read(
     const ObObjectReadInfo &read_info,
-    ObObjectReadHandle &object_io_handle)
+    ObObjectReadHandle &object_io_handle,
+    std::unique_ptr<storage_io::CallbackAdapter> callback)
 {
   int ret = OB_SUCCESS;
   ObStorageObjectHandle object_handle;
   ObStorageObjectReadInfo object_read_info;
-  object_read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   object_read_info.io_timeout_ms_ = read_info.io_timeout_ms_;
   object_read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
-  object_read_info.io_callback_ = read_info.io_callback_;
 
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -1129,9 +1091,7 @@ int ObObjectReaderWriter::async_read(
       object_read_info.macro_block_id_,
       object_read_info.offset_,
       object_read_info.size_))) {
-  } else if (nullptr == read_info.io_callback_
-      && OB_FAIL(object_io_handle.alloc_io_buf(object_read_info.buf_, object_read_info.size_))) {
-  } else if (OB_FAIL(object_handle.async_read(object_read_info))) {
+  } else if (OB_FAIL(object_handle.async_read(object_read_info, std::move(callback)))) {
   } else if (OB_FAIL(object_io_handle.set_addr_and_object_handle(read_info.addr_, object_handle))) {
   }
   return ret;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "share/rc/ob_server_runtime.h"
+#include <inttypes.h>
 #include "rust/config.h"
 #include <algorithm>
 #include "rootserver/ob_dependency_ddl_helper.h"
@@ -330,7 +331,7 @@ int ObDDLService::check_create_with_db_id(ObDatabaseSchema &schema)
     } else if (!is_inner_db(db_id)) {
       ret = OB_OP_NOT_ALLOW;
       (void)snprintf(err_msg, sizeof(err_msg),
-               "%s %lu", "create inner db with invalid database_id: ", db_id);
+               "%s %" PRIu64 "", "create inner db with invalid database_id: ", db_id);
     } else {
       schema.set_database_id(db_id);
     }
@@ -359,7 +360,7 @@ int ObDDLService::replace_table_schema_type(ObTableSchema &schema)
       } else if (!is_inner_table(table_id)) { // Cannot specify table_id to create non-internal table
         ret = OB_OP_NOT_ALLOW;
         (void)snprintf(err_msg, sizeof(err_msg),
-                 "%s %lu", "create inner table with invalid table_id: ", table_id);
+                 "%s %" PRIu64 "", "create inner table with invalid table_id: ", table_id);
       } else if (schema.is_user_table() && is_sys_view(table_id)) { // table_id of table cannot fall into the system view id range
         ret = OB_OP_NOT_ALLOW;
         (void)snprintf(err_msg, sizeof(err_msg),
@@ -6275,8 +6276,6 @@ int ObDDLService::fill_column_collation(
                 sql_mode))) {
     } else if (OB_FAIL(ObDDLResolver::calc_enum_or_set_data_length(column_schema))) {
     }
-  } else if (ObGeometryTC == col_tc && !column_schema.is_nullable()) {
-    ret = OB_ER_INVALID_USE_OF_NULL;
   } else if (ObCollectionSQLTC == col_tc && !column_schema.is_nullable()) {
     ret = OB_ER_INVALID_USE_OF_NULL;
   }
@@ -7753,6 +7752,9 @@ int ObDDLService::add_new_column_to_table_schema(
   }
   // fill column collation
   if (OB_FAIL(ret)) {
+  } else if (ObGeometryTC == alter_column_schema.get_data_type_class()
+             && !alter_column_schema.is_nullable()) {
+    ret = OB_ER_INVALID_USE_OF_NULL;
   } else if (OB_FAIL(fill_column_collation(sql_mode,
                                            new_table_schema,
                                            allocator,
@@ -13417,9 +13419,9 @@ int ObDDLService::gen_hidden_obj_name(const uint64_t obj_id,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", "__hidden_"))) {
   } else if (FK_SCHEMA == schema_type
-    && OB_FAIL(databuff_printf(buf, buf_len, pos, "%ld_", origin_fk_id))) {
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%ld", obj_id))) {
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "_%ld", table_id))) {
+    && OB_FAIL(databuff_printf(buf, buf_len, pos, "%" PRId64 "_", origin_fk_id))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%" PRId64 "", obj_id))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "_%" PRId64 "", table_id))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", schema_type_str(schema_type)))) {
   } else {
     hidden_obj_name.assign_ptr(buf, pos);
@@ -13440,7 +13442,7 @@ int ObDDLService::is_foreign_key_name_prefix_match(const ObForeignKeyInfo &origi
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", "__hidden_"))) {
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%ld_", origin_fk_info.foreign_key_id_))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%" PRId64 "_", origin_fk_info.foreign_key_id_))) {
   } else {
     ObString prefix_hidden_fk_name;
     prefix_hidden_fk_name.assign_ptr(buf, pos);
@@ -15836,9 +15838,9 @@ int ObDDLService::check_db_and_table_is_exist(const obcall::ObTruncateTableArg &
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(sql.assign_fmt("SELECT session_id, a.database_id, table_id, database_name, table_name "
                               "FROM %s a JOIN (SELECT session_id, database_id, table_id, table_name FROM %s "
-                              "UNION ALL SELECT session_id, database_id, table_id, table_name FROM %s WHERE 0 = %ld %% 1) c "
+                              "UNION ALL SELECT session_id, database_id, table_id, table_name FROM %s WHERE 0 = %" PRId64 " %% 1) c "
                               "ON a.database_id = c.database_id WHERE a.database_name = '%s' AND table_name = '%s' "
-                              "AND (session_id = 0 or session_id = %lu) order by session_id desc",
+                              "AND (session_id = 0 or session_id = %" PRIu64 ") order by session_id desc",
                               OB_ALL_DATABASE_TNAME, OB_ALL_TABLE_TNAME,
                               OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, uint64_t(1),
                               tmp_database_name, tmp_table_name, session_id))) {
@@ -17324,7 +17326,7 @@ int ObDDLService::check_object_name_matches_db_name(const ObString &origin_table
 
     if (OB_FAIL(sql.append_fmt(
         "SELECT 1 FROM __all_recyclebin WHERE OBJECT_NAME = '%.*s' \
-        AND DATABASE_ID = %lu",
+        AND DATABASE_ID = %" PRIu64 "",
         static_cast<int>(origin_table_name.length()), origin_table_name.ptr(),
         database_id))) {
     } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
@@ -17361,11 +17363,11 @@ int ObDDLService::get_object_name_with_origin_name_in_recyclebin(const ObString 
         && ObRecycleObject::INDEX != recycle_type) {
       ret = OB_ERR_UNEXPECTED;
     } else if (ObRecycleObject::TABLE == recycle_type
-               && OB_FAIL(sql.append_fmt("select database_id, object_name from oceanbase.__all_recyclebin where (type = %lu or type = %lu) and database_id = %lu and original_name = '%.*s' ",
+               && OB_FAIL(sql.append_fmt("select database_id, object_name from oceanbase.__all_recyclebin where (type = %" PRIu64 " or type = %" PRIu64 ") and database_id = %" PRIu64 " and original_name = '%.*s' ",
                   static_cast<uint64_t>(ObRecycleObject::TABLE), static_cast<uint64_t>(ObRecycleObject::VIEW), database_id,
                   static_cast<int>(origin_table_name.length()), origin_table_name.ptr()))) {
     } else if (ObRecycleObject::INDEX == recycle_type
-               && OB_FAIL(sql.append_fmt("select database_id, object_name from oceanbase.__all_recyclebin where type = %lu and database_id = %lu and substr(original_name, 7 + instr(substr(original_name, 7), '_')) = '%.*s' ",
+               && OB_FAIL(sql.append_fmt("select database_id, object_name from oceanbase.__all_recyclebin where type = %" PRIu64 " and database_id = %" PRIu64 " and substr(original_name, 7 + instr(substr(original_name, 7), '_')) = '%.*s' ",
                static_cast<uint64_t>(ObRecycleObject::INDEX), database_id,
                static_cast<int>(origin_table_name.length()), origin_table_name.ptr()))) {
     } else if (OB_FAIL(sql.append_fmt("order by gmt_create %s limit 1", is_newest ? "desc" : "asc"))) {
@@ -21151,7 +21153,7 @@ int ObDDLService::revoke_table_and_column_mysql(const obcall::ObRevokeTableArg& 
           const ObUserInfo *user_info = NULL;
           if (OB_FAIL(schema_guard.get_user_info(arg.user_id_, user_info))) {
           } else if (OB_ISNULL(user_info)) {
-            ret = OB_ERR_UNEXPECTED;
+            ret = OB_USER_NOT_EXIST;
           } else if (OB_FAIL(grant_or_revoke_column_priv_mysql( arg.obj_id_, arg.user_id_,
                                                               user_info->get_user_name_str(),
                                                               user_info->get_host_name_str(),
@@ -22541,7 +22543,7 @@ int ObDDLService::drop_column_online(
     new_column_schema->drop_not_null_cst(); // change column to null.
     new_column_schema->set_nullable(true);
     if (OB_FAIL(databuff_printf(new_col_name, OB_MAX_COLUMN_NAME_BUF_LENGTH,
-      "SYS_C%05lu_%02d%02d%02d%02d:%02d:%02d$", orig_column_schema->get_column_id(),
+      "SYS_C%05" PRIu64 "_%02d%02d%02d%02d:%02d:%02d$", orig_column_schema->get_column_id(),
       (tm.tm_year + 1900) % 100, (tm.tm_mon + 1), tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec))) {
     } else if (OB_UNLIKELY(nullptr != new_table_schema.get_column_schema(new_col_name))) {
       ret = OB_ERR_COLUMN_DUPLICATE;

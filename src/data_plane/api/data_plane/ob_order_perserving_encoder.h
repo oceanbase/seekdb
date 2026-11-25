@@ -15,7 +15,6 @@
  */
 
 #include "lib/ob_define.h"
-#include <openssl/evp.h>
 #include "lib/container/ob_se_array.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_sql_string.h"

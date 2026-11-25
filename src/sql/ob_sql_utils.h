@@ -23,7 +23,7 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_vector.h"
 #include "lib/container/ob_2d_array.h"
-#include "share/geo/ob_s2adapter.h"
+#include "share/geo/ob_spatial_mbr.h"
 #include "query/engine/expr/ob_sql_expression.h" // ObISqlExpression, ObExprCtx
 #include "share/schema/ob_multi_version_schema_service.h"     // ObMultiVersionSchemaService
 #include "share/ob_simple_batch.h"

@@ -15,6 +15,7 @@
  */
 
 #include "lib/alloc/alloc_struct.h"
+#include <inttypes.h>
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
 
@@ -70,7 +71,7 @@ int64_t ObMemAttr::to_string(char* buf, const int64_t buf_len) const
   int64_t pos = 0;
   (void)common::logdata_printf(
       buf, buf_len, pos,
-      "label=%s, ctx_id=%ld, prio=%d",
+      "label=%s, ctx_id=%" PRId64 ", prio=%d",
       (const char *)label_, ctx_id_, prio_);
   return pos;
 }

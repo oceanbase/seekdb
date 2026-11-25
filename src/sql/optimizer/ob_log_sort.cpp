@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_log_sort.h"
+#include <inttypes.h>
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/optimizer/ob_log_table_scan.h"
@@ -156,7 +157,7 @@ int ObLogSort::get_plan_item_info(PlanText &plan_text,
   }
   ObRawExpr *limit = topk_limit_expr_;
   if (OB_SUCC(ret) && NULL != limit) {
-    if (OB_FAIL(BUF_PRINTF(", minimum_row_count:%ld top_precision:%ld ",
+    if (OB_FAIL(BUF_PRINTF(", minimum_row_count:%" PRId64 " top_precision:%" PRId64 " ",
                             minimum_row_count_, topk_precision_))) {
     } else {
       ObRawExpr *offset = topk_offset_expr_;
@@ -169,7 +170,7 @@ int ObLogSort::get_plan_item_info(PlanText &plan_text,
 
   if (OB_SUCC(ret) && prefix_pos_> 0) {
     BUF_PRINTF(", prefix_pos(");
-    if (OB_FAIL(BUF_PRINTF("%ld)", prefix_pos_))) {
+    if (OB_FAIL(BUF_PRINTF("%" PRId64 ")", prefix_pos_))) {
     }
   }
   if (OB_SUCC(ret) && is_local_merge_sort_) {

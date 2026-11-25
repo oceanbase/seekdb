@@ -148,7 +148,7 @@ protected:
 
   int delete_upd_old_row_to_das();
 
-  int insert_upd_new_row_to_das();
+  int insert_upd_new_row_to_das(bool force_text_embedding = false);
 
   int delete_one_upd_old_row_das(const ObUpdCtDef &upd_ctdef,
                                  ObUpdRtDef &upd_rtdef,
@@ -156,7 +156,8 @@ protected:
 
   int insert_one_upd_new_row_das(const ObUpdCtDef &upd_ctdef,
                                  ObUpdRtDef &upd_rtdef,
-                                 const DASRuntimeTabletAccess *tablet_access);
+                                 const DASRuntimeTabletAccess *tablet_access,
+                                 bool force_text_embedding = false);
 
   int insert_row_to_das(const ObInsCtDef &ins_ctdef,
                         ObInsRtDef &ins_rtdef,

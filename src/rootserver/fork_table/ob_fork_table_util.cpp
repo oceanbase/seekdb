@@ -153,7 +153,6 @@ int ObForkTableUtil::collect_tablet_ids_from_table(
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
-  tablet_ids.reset();
 
   if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
@@ -170,7 +169,6 @@ int ObForkTableUtil::collect_tablet_ids_from_table(
     common::ObIArray<common::ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  tablet_ids.reset();
 
   {
     // 1. Get main table tablet IDs
@@ -387,11 +385,13 @@ int ObForkTableUtil::obtain_snapshot(
     common::ObMySQLTransaction &trans,
     schema::ObSchemaGetterGuard &schema_guard,
     const common::ObIArray<const ObTableSchema*> &data_table_schemas,
-    int64_t &new_fetched_snapshot)
+    int64_t &new_fetched_snapshot,
+    int64_t &source_schema_version)
 {
   int ret = OB_SUCCESS;
   rootserver::ObDDLService &ddl_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service();
   new_fetched_snapshot = 0;
+  source_schema_version = 0;
   ObSEArray<ObTabletID, 16> tablet_ids;
   SCN snapshot_scn;
   int64_t max_schema_version = 0;
@@ -445,6 +445,7 @@ int ObForkTableUtil::obtain_snapshot(
       break;
     }
     if (OB_SUCC(ret)) {
+      source_schema_version = max_schema_version;
       LOG_INFO("hold snapshot finished for multiple tables", K(snapshot_scn), K(max_schema_version),
                "table_cnt", data_table_schemas.count(), "tablet_cnt", tablet_ids.count());
     }

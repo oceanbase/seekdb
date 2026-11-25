@@ -18,8 +18,9 @@
 #define OB_COMPRESSOR_UTIL_H_
 #include "lib/ob_define.h"
 #include "lib/utility/ob_template_utils.h"
-#include "lib/allocator/ob_allocator.h"
-#include <zlib.h>
+#include "lib/ob_errno.h"
+#include "lib/string/ob_string.h"
+#include "rust/compression.h"
 
 namespace oceanbase
 {
@@ -29,7 +30,7 @@ enum ObCompressorType : uint8_t
 {
   INVALID_COMPRESSOR             = 0,
   NONE_COMPRESSOR                = 1,
-  ZSTD_1_3_8_COMPRESSOR          = 2,
+  ZSTD_COMPRESSOR          = 2,
   ZLIB_COMPRESSOR                = 3,
 
   MAX_COMPRESSOR
@@ -39,7 +40,7 @@ const char *const all_compressor_name[] =
 {
   "",
   "none",
-  "zstd_1.3.8",
+  "zstd",
   "zlib_1.0",
 };
 
@@ -49,12 +50,12 @@ const char *const compress_funcs[] =
 {
   "none",
   "zlib_1.0",
-  "zstd_1.3.8",
+  "zstd",
 };
 
 const char *const perf_compress_funcs[] =
 {
-  "zstd_1.3.8",
+  "zstd",
 };
 
 const char *const sql_temp_store_compress_funcs[] =
@@ -63,44 +64,53 @@ const char *const sql_temp_store_compress_funcs[] =
   "zstd",
 };
 
-} /* namespace common */
-} /* namespace oceanbase */
-
-using oceanbase::common::ObIAllocator;
-static void *ob_zstd_malloc(void *opaque, size_t size)
+inline int get_compressor_type(const ObString &compressor_name,
+                               ObCompressorType &compressor_type)
 {
-  void *buf = NULL;
-  if (NULL != opaque) {
-    ObIAllocator *allocator = reinterpret_cast<ObIAllocator*> (opaque);
-    buf = allocator->alloc(size);
-  }
-  return buf;
-}
-
-static void ob_zstd_free(void *opaque, void *address)
-{
-  if (NULL != opaque) {
-    ObIAllocator *allocator = reinterpret_cast<ObIAllocator*> (opaque);
-    allocator->free(address);
-  }
-}
-
-static void *ob_zlib_alloc(void *opaque, unsigned int items, unsigned int size)
-{
-  void *ret = NULL;
-  ObIAllocator *allocator = static_cast<ObIAllocator *>(opaque);
-  if (OB_NOT_NULL(allocator)) {
-    ret = allocator->alloc(items * size);
+  int ret = OB_SUCCESS;
+  if (compressor_name.ptr() == nullptr || compressor_name.length() == 0) {
+    compressor_type = NONE_COMPRESSOR;
+  } else if (compressor_name.case_compare("none") == 0) {
+    compressor_type = NONE_COMPRESSOR;
+  } else if (compressor_name.case_compare("zstd") == 0) {
+    compressor_type = ZSTD_COMPRESSOR;
+  } else if (compressor_name.case_compare("zlib_1.0") == 0) {
+    compressor_type = ZLIB_COMPRESSOR;
+  } else {
+    ret = OB_NOT_SUPPORTED;
   }
   return ret;
 }
 
-static void ob_zlib_free(void *opaque, void *address)
+inline int get_compressor_type(const char *compressor_name,
+                               ObCompressorType &compressor_type)
 {
-  ObIAllocator *allocator = static_cast<ObIAllocator *>(opaque);
-  if (OB_NOT_NULL(allocator)) {
-    allocator->free(address);
+  if (compressor_name == nullptr) {
+    return OB_INVALID_ARGUMENT;
+  } else if (compressor_name[0] == '\0') {
+    return OB_NOT_SUPPORTED;
+  }
+  return get_compressor_type(ObString::make_string(compressor_name), compressor_type);
+}
+
+inline int compression_error_code(compression::Code code)
+{
+  switch (code) {
+    case compression::Code::Ok: return OB_SUCCESS;
+    case compression::Code::InvalidArgument: return OB_INVALID_ARGUMENT;
+    case compression::Code::OutputTooSmall: return OB_BUF_NOT_ENOUGH;
+    case compression::Code::InvalidData: return OB_ERR_COMPRESS_DECOMPRESS_DATA;
+    case compression::Code::OutOfMemory:
+    case compression::Code::AllocationFailed: return OB_ALLOCATE_MEMORY_FAILED;
+    case compression::Code::InvalidState: return OB_STATE_NOT_MATCH;
+    case compression::Code::ResourceLimit: return OB_EXCEED_MEM_LIMIT;
+    case compression::Code::Unsupported: return OB_NOT_SUPPORTED;
+    case compression::Code::SizeOverflow: return OB_SIZE_OVERFLOW;
+    default: return OB_ERR_UNEXPECTED;
   }
 }
+
+} /* namespace common */
+} /* namespace oceanbase */
 
 #endif /* OB_COMPRESSOR_UTIL_H_ */

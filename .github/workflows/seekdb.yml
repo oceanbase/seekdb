@@ -1,5 +1,3 @@
-# SeekDB CI - 执行下沉版（Native）
-# setup 单次 checkout 并准备源码与 seekdb → 4 个并行 mysqltest job（各独立容器）→ collect 合并结果
 name: SeekDB CI
 
 on:
@@ -8,13 +6,6 @@ on:
   pull_request:
     branches: [master, develop]
     types: [opened, reopened, synchronize, ready_for_review]
-    paths-ignore:
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/pull_request_template.md'
-      - 'README.md'
-      - 'README_CN.md'
-      - 'CONTRIBUTING.md'
   schedule:
     - cron: '30 9 * * *'
 
@@ -22,15 +13,50 @@ permissions:
   contents: read
 
 env:
-  MYSQLTEST_SLICES: "4"
   SEEKDB_BINARY_PATH: build/bin/src/observer/seekdb
   SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
   SEEKDB_CACHE_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb/_cache
 
 jobs:
+  # 路径过滤下沉到 job 级：Markdown-only PR 也会创建 skipped check run，
+  # 避免 branch protection 的 required check 永远 pending。
+  changes:
+    name: changes
+    if: ${{ github.repository_owner == 'oceanbase' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ci: ${{ steps.decide.outputs.ci }}
+    steps:
+      - name: Decide whether to run code CI
+        id: decide
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.setOutput('ci', 'true');
+              return;
+            }
+            const ignored = (path) =>
+              path.endsWith('.md') ||
+              path.startsWith('docs/') ||
+              path.startsWith('.github/ISSUE_TEMPLATE/');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            // PR files API 最多返回 3000 个文件；超出时保守执行完整 CI。
+            const runCi = files.length >= 3000 || files.some((f) => !ignored(f.filename));
+            core.info(`Changed files: ${files.length}; run code CI: ${runCi}`);
+            core.setOutput('ci', String(runCi));
   seekdb-setup:
-    name: setup
-    if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    name: build-and-test
+    needs: changes
+    if: ${{ github.repository_owner == 'oceanbase' && needs.changes.outputs.ci == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: arc-runner-k8s-ci-org-25c100g
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
@@ -71,24 +97,6 @@ jobs:
           git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" clean -ffdx
 
-      - name: Test local development tools
-        shell: bash
-        run: python3 -m unittest discover -s tools/deploy/tests -v
-
-      # Source 与 run_attempt 无关：下游 job 重跑时直接复用同一提交的快照。
-      - name: Persist source snapshot to NFS
-        shell: bash
-        run: |
-          set -euo pipefail
-          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
-          DEST_DIR="$RUN_ROOT/setup"
-          SOURCE_ARCHIVE="${RUNNER_TEMP:-/tmp}/seekdb-ci-source.tar.zst"
-          tar -C "$GITHUB_WORKSPACE" --exclude='./.git' -cf - . \
-            | zstd -f -q -T0 -o "$SOURCE_ARCHIVE"
-          mkdir -p "$DEST_DIR"
-          cp -f "$SOURCE_ARCHIVE" "$DEST_DIR/seekdb-ci-source.tar.zst"
-          echo "source snapshot saved to $DEST_DIR/seekdb-ci-source.tar.zst"
-
       - name: Configure shared cache paths
         shell: bash
         run: |
@@ -115,172 +123,24 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
 
-      - name: Prepare mysqltest runtime
+      - name: Test
         shell: bash
         run: |
           set -euo pipefail
-          SEEKDB_BINARY="${SEEKDB_BINARY_PATH:?}"
-          if [[ ! -x "$SEEKDB_BINARY" ]]; then
-            echo "seekdb missing or not executable: $SEEKDB_BINARY"
-            exit 1
-          fi
-          CLIENT_ROOT="deps/3rd/u01/obclient"
-          if [[ ! -x "$CLIENT_ROOT/bin/obclient" || ! -x "$CLIENT_ROOT/bin/mysqltest" ]]; then
-            echo "obclient or mysqltest missing under $CLIENT_ROOT/bin"
-            exit 1
-          fi
-          RUNTIME_DIR="${RUNNER_TEMP:-/tmp}/seekdb-mysqltest-runtime-${GITHUB_RUN_ID}"
-          mkdir -p "$RUNTIME_DIR/obclient"
-          cp -L -f "$SEEKDB_BINARY" "$RUNTIME_DIR/seekdb"
-          cp -a "$CLIENT_ROOT/." "$RUNTIME_DIR/obclient/"
-          tar -C "$RUNTIME_DIR" -cf - seekdb obclient | zstd -f -q -T0 -o seekdb-mysqltest-runtime.tar.zst
-          echo "runtime size: $(stat -c%s seekdb-mysqltest-runtime.tar.zst 2>/dev/null || stat -f%z seekdb-mysqltest-runtime.tar.zst 2>/dev/null) bytes"
-      # Re-running failed jobs can skip setup, so the runtime path excludes run_attempt.
-      - name: Persist mysqltest runtime to NFS
-        shell: bash
-        run: |
-          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
-          DEST_DIR="$RUN_ROOT/setup"
+          RUN_DIR=$(mktemp -d "${RUNNER_TEMP:?}/sqltest.XXXXXX")
+          DEST_DIR="$SEEKDB_RESULT_NFS_ROOT/$GITHUB_RUN_ID/attempt-$GITHUB_RUN_ATTEMPT/sqltest"
           mkdir -p "$DEST_DIR"
-          cp -f seekdb-mysqltest-runtime.tar.zst "$DEST_DIR/"
-          echo "mysqltest runtime saved to $DEST_DIR/seekdb-mysqltest-runtime.tar.zst"
-  seekdb-mysqltest:
-    name: mysqltest-slice-${{ matrix.slice }}
-    needs: seekdb-setup
-    runs-on: arc-runner-k8s-ci-org-4c8g
-    container:
-      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
-    strategy:
-      fail-fast: false
-      matrix:
-        slice: [0, 1, 2, 3]
-    steps:
-      - name: Restore source snapshot (from NFS)
-        shell: bash
-        run: |
-          set -euo pipefail
-          SOURCE_ARCHIVE="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/setup/seekdb-ci-source.tar.zst"
-          if [[ ! -f "$SOURCE_ARCHIVE" ]]; then
-            echo "source snapshot not found: $SOURCE_ARCHIVE"
-            exit 1
+          TEST_ROOT="$GITHUB_WORKSPACE/tests/mysqltest"
+          RESULT=0
+          "$GITHUB_WORKSPACE/tools/sqltest/bin/linux-amd64/sqltest" --seekdb "$GITHUB_WORKSPACE/$SEEKDB_BINARY_PATH" \
+            --test-root "$TEST_ROOT" --run-dir "$RUN_DIR" -j 24 --case-timeout 1h \
+            2>&1 | tee "$DEST_DIR/sqltest.log" || RESULT=$?
+          echo "SQL regression log saved to $DEST_DIR/sqltest.log" >> "$GITHUB_STEP_SUMMARY"
+          if [[ -d "$TEST_ROOT/rejects" ]]; then
+            cp -a "$TEST_ROOT/rejects" "$DEST_DIR/"
           fi
-          mkdir -p "$GITHUB_WORKSPACE"
-          zstd -d -q -c "$SOURCE_ARCHIVE" | tar -xf - -C "$GITHUB_WORKSPACE"
-
-      - name: Place mysqltest runtime (from NFS)
-        shell: bash
-        run: |
-          set -eo pipefail
-          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
-          RUNTIME_ARCHIVE="$RUN_ROOT/setup/seekdb-mysqltest-runtime.tar.zst"
-          if [[ ! -f "$RUNTIME_ARCHIVE" ]]; then
-            echo "mysqltest runtime not found: $RUNTIME_ARCHIVE"
-            exit 1
+          if [[ "$RESULT" -ne 0 ]]; then
+            cd "$RUN_DIR"
+            find . -type f -name console.log -exec cp --parents -t "$DEST_DIR" {} +
           fi
-          mkdir -p .seekdb_runtime
-          zstd -d -q -c "$RUNTIME_ARCHIVE" | tar -xf - -C .seekdb_runtime
-          test -x .seekdb_runtime/seekdb
-          test -x .seekdb_runtime/obclient/bin/obclient
-          test -x .seekdb_runtime/obclient/bin/mysqltest
-      - name: Run mysqltest slice
-        shell: bash
-        run: |
-          chmod +x .github/script/seekdb/mysqltest_slice.sh
-          export GITHUB_RUN_ID="${{ github.run_id }}"
-          export SEEKDB_TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
-          export SLICE_IDX=${{ matrix.slice }} SLICES="${{ env.MYSQLTEST_SLICES }}"
-          export SEEKDB_RUNTIME_DIR="$GITHUB_WORKSPACE/.seekdb_runtime"
-          export SEEKDB_BINARY="$SEEKDB_RUNTIME_DIR/seekdb"
-          mkdir -p "$SEEKDB_TASK_DIR"
-          .github/script/seekdb/mysqltest_slice.sh
-
-      - name: Persist slice result to NFS
-        if: always()
-        shell: bash
-        run: |
-          TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
-          DEST_DIR="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}"
-          mkdir -p "$DEST_DIR"
-          if [[ -f "$TASK_DIR/seekdb_result.json" ]]; then
-            cp -f "$TASK_DIR/seekdb_result.json" "$DEST_DIR/"
-          else
-            echo "skip copying slice result: seekdb_result.json not found"
-          fi
-          if [[ -d "$TASK_DIR/failures" ]]; then
-            mkdir -p "$DEST_DIR/failures"
-            cp -a "$TASK_DIR/failures/." "$DEST_DIR/failures/"
-          fi
-        continue-on-error: true
-
-      - name: Job summary (logs hint)
-        if: always()
-        shell: bash
-        run: |
-          TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
-          if [[ -d "$TASK_DIR/failures" ]]; then
-            echo "### Slice ${{ matrix.slice }} failure diagnostics saved" >> "$GITHUB_STEP_SUMMARY"
-            echo "Saved under \`${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}/failures/\`." >> "$GITHUB_STEP_SUMMARY"
-          fi
-  seekdb-collect:
-    # 仅在 4 个 mysqltest slice 都跑完（成功或失败）时执行；若 mysqltest 被 skip 则不跑
-    if: ${{ always() && needs.seekdb-mysqltest.result != 'skipped' }}
-    name: collect
-    needs: seekdb-mysqltest
-    runs-on: arc-runner-k8s-ci-org-4c8g
-    container:
-      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
-    steps:
-      - name: Restore source snapshot (from NFS)
-        shell: bash
-        run: |
-          set -euo pipefail
-          SOURCE_ARCHIVE="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/setup/seekdb-ci-source.tar.zst"
-          if [[ ! -f "$SOURCE_ARCHIVE" ]]; then
-            echo "source snapshot not found: $SOURCE_ARCHIVE"
-            exit 1
-          fi
-          mkdir -p "$GITHUB_WORKSPACE"
-          zstd -d -q -c "$SOURCE_ARCHIVE" | tar -xf - -C "$GITHUB_WORKSPACE"
-
-      - name: Collect slice results from NFS
-        shell: bash
-        run: |
-          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
-          ATT="${{ github.run_attempt }}"
-          SLICES="${{ env.MYSQLTEST_SLICES }}"
-          mkdir -p slice_results
-          for (( slice=0; slice<SLICES; slice++ )); do
-            SOURCE_RESULT=""
-            SOURCE_ATTEMPT=""
-            for (( attempt=ATT; attempt>=1; attempt-- )); do
-              CANDIDATE="$RUN_ROOT/attempt-$attempt/slices/slice_$slice/seekdb_result.json"
-              if [[ -f "$CANDIDATE" ]]; then
-                SOURCE_RESULT="$CANDIDATE"
-                SOURCE_ATTEMPT="$attempt"
-                break
-              fi
-            done
-            if [[ -n "$SOURCE_RESULT" ]]; then
-              mkdir -p "slice_results/slice_$slice"
-              cp -f "$SOURCE_RESULT" "slice_results/slice_$slice/seekdb_result.json"
-              echo "slice $slice result loaded from attempt-$SOURCE_ATTEMPT"
-            else
-              echo "slice $slice result not found under $RUN_ROOT/attempt-*"
-            fi
-          done
-      - name: Merge results and persist
-        shell: bash
-        run: |
-          set +e
-          python3 tools/deploy/mysqltest.py merge \
-            --results-dir slice_results \
-            --slice-count "${{ env.MYSQLTEST_SLICES }}" \
-            --run-id "${{ github.run_id }}" \
-            --output seekdb_result.json
-          MERGE_RET=$?
-          set -e
-          DEST_DIR="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/collect"
-          mkdir -p "$DEST_DIR"
-          cp -f seekdb_result.json "$DEST_DIR/"
-          echo "seekdb_result.json saved to $DEST_DIR/seekdb_result.json"
-          exit "$MERGE_RET"
+          exit "$RESULT"

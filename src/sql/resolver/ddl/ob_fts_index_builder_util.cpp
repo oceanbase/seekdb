@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_FTS
 #include "ob_fts_index_builder_util.h"
+#include <inttypes.h>
 #include "ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -1399,7 +1400,7 @@ int ObFtsIndexBuilderUtil::construct_doc_id_col_name(
                                 buf_len,
                                 name_pos,
                                 OB_DOC_ID_COLUMN_NAME))) {
-    } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -1427,7 +1428,7 @@ int ObFtsIndexBuilderUtil::construct_word_segment_col_name(
                                 name_pos,
                                 OB_WORD_SEGMENT_COLUMN_NAME_PREFIX))) {
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu_%ld", col_id, ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "_%" PRId64 "", col_id, ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -1455,7 +1456,7 @@ int ObFtsIndexBuilderUtil::construct_word_count_col_name(
                                 name_pos,
                                 OB_WORD_COUNT_COLUMN_NAME_PREFIX))) {
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu_%ld", col_id, ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "_%" PRId64 "", col_id, ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -1483,7 +1484,7 @@ int ObFtsIndexBuilderUtil::construct_doc_length_col_name(
                                 name_pos,
                                 OB_DOC_LENGTH_COLUMN_NAME_PREFIX))) {
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu_%ld", col_id, ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "_%" PRId64 "", col_id, ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -2679,7 +2680,7 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
         if (OB_FAIL(ret)) {
           //do nothing
         } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH, pos,
-                                           "SYS_NC_mvi_%ld", /*internal generated column name*/
+                                           "SYS_NC_mvi_%" PRId64 "", /*internal generated column name*/
                                            multival_col.get_column_id()))) {
         } else if (OB_FAIL(multival_col.set_column_name(col_name_buf))) {
         } else if (OB_FAIL(multival_col.set_orig_default_value(default_value))) {
@@ -2712,7 +2713,7 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
           multival_arr_col.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]);
 
           if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH, pos,
-                                            "SYS_NC_mvi_arr_%ld", /*internal generated column name*/
+                                            "SYS_NC_mvi_arr_%" PRId64 "", /*internal generated column name*/
                                             multival_arr_col.get_column_id()))) {
           } else if (OB_FAIL(multival_arr_col.set_column_name(col_name_buf))) {
           } else if (OB_FAIL(multival_arr_col.set_orig_default_value(default_value))) {

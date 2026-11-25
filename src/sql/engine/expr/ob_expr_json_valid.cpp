@@ -92,8 +92,7 @@ int ObExprJsonValid::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta,
       }
     } else if (type == ObJsonType) { // json bin
       ObIJsonBase *j_bin = NULL;
-      if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_BIN,
-                                                   ObJsonInType::JSON_BIN, j_bin, 0, 
+      if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_BIN, j_bin, 0,
                                                    ObJsonExprHelper::get_json_max_depth_config()))) {
       }
     } else { // json tree

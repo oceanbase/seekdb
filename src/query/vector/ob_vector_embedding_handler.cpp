@@ -22,15 +22,13 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/json/ob_json.h"
 #include "common/json_type/ob_json_parse.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 #include "share/ob_server_struct.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/encode/ob_base64_encode.h"
-
-#include <curl/curl.h>
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -244,11 +242,7 @@ ObEmbeddingTask::ObEmbeddingTask() : local_allocator_("EmbeddingTask", OB_MALLOC
                                     http_send_time_us_(0),
                                     http_response_data_size_(0),
                                     http_response_data_(nullptr),
-                                    curl_multi_handle_(nullptr),
-                                    curl_easy_handle_(nullptr),
-                                    curl_request_in_progress_(false),
-                                    curl_response_data_(nullptr),
-                                    curl_headers_(nullptr),
+                                    http_request_in_progress_(false),
                                     http_retry_count_(0),
                                     http_total_retry_count_(0),
                                     http_retry_start_time_us_(0),
@@ -292,11 +286,7 @@ ObEmbeddingTask::ObEmbeddingTask(ObArenaAllocator &allocator) : local_allocator_
                                      http_send_time_us_(0),
                                      http_response_data_size_(0),
                                      http_response_data_(nullptr),
-                                     curl_multi_handle_(nullptr),
-                                     curl_easy_handle_(nullptr),
-                                     curl_request_in_progress_(false),
-                                     curl_response_data_(nullptr),
-                                     curl_headers_(nullptr),
+                                     http_request_in_progress_(false),
                                      http_retry_count_(0),
                                      http_total_retry_count_(0),
                                      http_retry_start_time_us_(0),
@@ -331,7 +321,7 @@ int ObEmbeddingTask::init(const ObString &model_url,
   } else if (http_timeout_us <= 0 || http_max_retries <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(input_chunks_.assign(input_chunks))) {
-  } else if (OB_FAIL(init_curl_handler(model_url, user_key, http_timeout_us))) {
+  } else if (OB_FAIL(init_http_client(model_url, user_key, http_timeout_us))) {
   } else if (OB_FAIL(task_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
   } else if (OB_FAIL(ob_write_string(allocator_, model_url, model_url_))) {
   } else if (OB_FAIL(ob_write_string(allocator_, model_name, model_name_))) {
@@ -388,7 +378,7 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
 {
   int ret = OB_SUCCESS;
   ObJsonReaderHelper json_reader(allocator_);
-  ObJsonNode *root = nullptr;
+  ObIJsonBase *root = nullptr;
 
   if (OB_ISNULL(response_data) || response_size == 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -707,7 +697,7 @@ int ObEmbeddingTask::send_http_request_async(const char *json_data, int64_t json
     if (OB_FAIL(set_phase(OB_EMBEDDING_TASK_HTTP_SENT))) {
     } else {
       http_send_time_us_ = ObTimeUtility::current_time();
-      curl_request_in_progress_ = true;
+      http_request_in_progress_ = true;
     }
   }
   
@@ -720,19 +710,18 @@ int ObEmbeddingTask::init_http_request(const char *json_data, int64_t json_len)
   return OB_NOT_SUPPORTED;
 #else
   int ret = OB_SUCCESS;
-  
-  if (OB_ISNULL(curl_multi_handle_) || OB_ISNULL(curl_easy_handle_)) {
+  if (!http_client_.has_value()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    curl_multi_remove_handle(curl_multi_handle_, curl_easy_handle_);
-    CURLMcode multi_res = curl_multi_add_handle(curl_multi_handle_, curl_easy_handle_);
-    if (multi_res != CURLM_OK) {
+    http_batch_.emplace(oceanbase::http::new_http_batch(*http_client_.value()));
+    const auto result = oceanbase::http::http_batch_add(
+        *http_batch_.value(), rust::Slice<const uint8_t>(
+            reinterpret_cast<const uint8_t *>(json_data), json_len));
+    if (oceanbase::http::Code::Ok != result.code) {
       ret = OB_CURL_ERROR;
     } else {
       http_response_data_ = nullptr;
       http_response_data_size_ = 0;
-      curl_easy_setopt(curl_easy_handle_, CURLOPT_POSTFIELDS, json_data);
-      curl_easy_setopt(curl_easy_handle_, CURLOPT_POSTFIELDSIZE, json_len);
     }
   }
   return ret;
@@ -745,97 +734,79 @@ int ObEmbeddingTask::check_http_progress()
   return OB_NOT_SUPPORTED;
 #else
   int ret = OB_SUCCESS;
-  if (need_retry_flag_ && !curl_request_in_progress_ && http_response_data_ == nullptr) {
+  if (need_retry_flag_ && !http_request_in_progress_ && http_response_data_ == nullptr) {
     ret = OB_NEED_RETRY;
-  } else if (!curl_request_in_progress_ || OB_ISNULL(curl_multi_handle_) || OB_ISNULL(curl_easy_handle_)) {
+  } else if (!http_request_in_progress_ || !http_batch_.has_value()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    int running_handles = 0;
-    CURLMcode multi_res = curl_multi_perform(curl_multi_handle_, &running_handles);
-    
-    
-    if (multi_res != CURLM_OK) {
+    const auto progress = oceanbase::http::http_batch_perform(*http_batch_.value());
+    if (oceanbase::http::Code::Ok != progress.code) {
       ret = OB_CURL_ERROR;
-    } else if (running_handles == 0) {
-      curl_request_in_progress_ = false;
+    } else if (progress.running == 0) {
+      http_request_in_progress_ = false;
       need_retry_flag_ = false;
-      CURLMsg *msg = nullptr;
-      int msgs_in_queue = 0;
-      while (OB_SUCC(ret) && (msg = curl_multi_info_read(curl_multi_handle_, &msgs_in_queue))) {
-        if (OB_ISNULL(msg)) {
+      const auto result = oceanbase::http::http_batch_result(*http_batch_.value(), 0);
+      const auto body = oceanbase::http::http_batch_body(*http_batch_.value(), 0);
+      if (oceanbase::http::Code::Ok == result.code && result.http_status == 200) {
+        if (body.size() == 0) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (msg->msg == CURLMSG_DONE) {
-          CURL *easy_handle = msg->easy_handle;
-          CURLcode res = msg->data.result;
-          
-          if (res == CURLE_OK) {
-            long response_code;
-            curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
-            if (response_code == 200 /* HTTP OK */) {
-              if (OB_NOT_NULL(curl_response_data_) && OB_NOT_NULL(curl_response_data_->data)) {
-                http_response_data_size_ = curl_response_data_->size;
-                http_response_data_ = (char*)allocator_.alloc(http_response_data_size_ + 1);
-                if (OB_ISNULL(http_response_data_)) {
-                  ret = OB_ALLOCATE_MEMORY_FAILED;
-                } else {
-                  memcpy(http_response_data_, curl_response_data_->data, http_response_data_size_);
-                  http_response_data_[http_response_data_size_] = '\0';
-                }
-              } else {
-                ret = OB_ERR_UNEXPECTED;
-              }
-            } else {
-              {
-                ObThreadCondGuard guard(task_cond_);
-                if (OB_NOT_NULL(curl_response_data_) && OB_NOT_NULL(curl_response_data_->data)) {
-                  http_error_message_ = ObString(curl_response_data_->size, curl_response_data_->data);
-                }
-                http_error_code_ = response_code;
-                need_retry_flag_ = should_retry_http_request(response_code);
-                // Check if we should retry this http request
-                if (need_retry_flag_) {
-                  http_retry_count_++;
-                  http_total_retry_count_++;
-                  
-                  // Check if we need to adjust batch size for retry
-                  if (is_batch_size_related_error(response_code) && OB_FAIL(adjust_batch_size_for_retry())) {
-                  } else {
-                    // Set retry flag to indicate we should retry
-                    ret = OB_NEED_RETRY;
-                  }
-                } else {
-                  // Map HTTP error to internal error code
-                  internal_error_code_ = map_http_error_to_internal_error(response_code);
-                  internal_error_message_ = ObString("HTTP request failed");
-                  ret = internal_error_code_;
-                  LOG_WARN("HTTP request failed, no retry", K(response_code), K_(internal_error_code), K_(http_error_message), K(*this));
-                }
-              }
-
-              if (need_retry_flag_) {
-                if (http_retry_count_ == 1) {
-                  http_retry_start_time_us_ = ObTimeUtility::current_time();
-                }
-                http_last_retry_time_us_ = ObTimeUtility::current_time();
-              }
-            }
-          } else if (res == CURLE_OPERATION_TIMEDOUT) { // curl timeout
-            if (++http_retry_count_ < http_max_retry_count_) {
-              need_retry_flag_ = true;
-              http_total_retry_count_++;
-              http_last_retry_time_us_ = ObTimeUtility::current_time();
-              ret = OB_NEED_RETRY;
-            } else {
-              ret = OB_TIMEOUT;
-            }
+        } else {
+          http_response_data_size_ = body.size();
+          http_response_data_ = static_cast<char *>(allocator_.alloc(http_response_data_size_ + 1));
+          if (OB_ISNULL(http_response_data_)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
           } else {
-            ret = OB_CURL_ERROR;
+            memcpy(http_response_data_, body.data(), http_response_data_size_);
+            http_response_data_[http_response_data_size_] = '\0';
           }
         }
-      }
-
-      if (OB_NOT_NULL(curl_response_data_)) {
-        curl_response_data_->reset();
+      } else if (oceanbase::http::Code::Ok == result.code) {
+        ObThreadCondGuard guard(task_cond_);
+        if (body.size() > 0) {
+          char *message = static_cast<char *>(allocator_.alloc(body.size()));
+          if (OB_ISNULL(message)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            memcpy(message, body.data(), body.size());
+            http_error_message_.assign_ptr(message, static_cast<int64_t>(body.size()));
+          }
+        }
+        if (OB_SUCC(ret)) {
+          http_error_code_ = result.http_status;
+          need_retry_flag_ = should_retry_http_request(result.http_status);
+          if (need_retry_flag_) {
+            http_retry_count_++;
+            http_total_retry_count_++;
+            if (is_batch_size_related_error(result.http_status)
+                && OB_FAIL(adjust_batch_size_for_retry())) {
+            } else {
+              ret = OB_NEED_RETRY;
+            }
+          } else {
+            internal_error_code_ = map_http_error_to_internal_error(result.http_status);
+            internal_error_message_ = ObString("HTTP request failed");
+            ret = internal_error_code_;
+            LOG_WARN("HTTP request failed, no retry", K(result.http_status),
+                     K_(internal_error_code), K_(http_error_message), K(*this));
+          }
+          if (need_retry_flag_) {
+            if (http_retry_count_ == 1) {
+              http_retry_start_time_us_ = ObTimeUtility::current_time();
+            }
+            http_last_retry_time_us_ = ObTimeUtility::current_time();
+          }
+        }
+      } else if (oceanbase::http::Code::Timeout == result.code) {
+        if (++http_retry_count_ < http_max_retry_count_) {
+          need_retry_flag_ = true;
+          http_total_retry_count_++;
+          http_last_retry_time_us_ = ObTimeUtility::current_time();
+          ret = OB_NEED_RETRY;
+        } else {
+          ret = OB_TIMEOUT;
+        }
+      } else {
+        ret = OB_CURL_ERROR;
       }
     }
   }
@@ -847,33 +818,13 @@ int ObEmbeddingTask::check_http_progress()
 void ObEmbeddingTask::cleanup_async_http()
 {
 #ifndef __EMSCRIPTEN__
-  if (OB_UNLIKELY(curl_request_in_progress_)) {
-    FLOG_INFO("cleanup_async_http while curl_request_in_progress_ is true", K(*this));
+  if (OB_UNLIKELY(http_request_in_progress_)) {
+    FLOG_INFO("cleanup_async_http while HTTP request is in progress", K(*this));
   }
-
-  if (OB_NOT_NULL(curl_easy_handle_)) {
-    if (OB_NOT_NULL(curl_multi_handle_)) {
-      curl_multi_remove_handle(curl_multi_handle_, curl_easy_handle_);
-    }
-    curl_easy_cleanup(curl_easy_handle_);
-    curl_easy_handle_ = nullptr;
-  }
-
-  if (OB_NOT_NULL(curl_multi_handle_)) {
-    curl_multi_cleanup(curl_multi_handle_);
-    curl_multi_handle_ = nullptr;
-  }
-  
-  if (OB_NOT_NULL(curl_headers_)) {
-    curl_slist_free_all(curl_headers_);
-    curl_headers_ = nullptr;
-  }
+  http_batch_.reset();
+  http_client_.reset();
 #endif
-
-  if (OB_NOT_NULL(curl_response_data_)) {
-    OB_DELETEx(HttpResponseData, &allocator_, curl_response_data_);
-    curl_response_data_ = nullptr;
-  }
+  http_request_in_progress_ = false;
 }
 
 void ObEmbeddingTask::log_phase_transition(ObEmbeddingTaskPhase from_phase, ObEmbeddingTaskPhase to_phase)
@@ -1565,56 +1516,39 @@ int ObEmbeddingTask::maybe_callback()
   return ret;
 }
 
-int ObEmbeddingTask::init_curl_handler(const ObString &model_url, const ObString &user_key, const int64_t http_timeout_us)
+int ObEmbeddingTask::init_http_client(const ObString &model_url, const ObString &user_key, const int64_t http_timeout_us)
 {
 #ifdef __EMSCRIPTEN__
-  // No native HTTP jobs are accepted in the browser build. The surrounding
-  // task initialization propagates this failure before publishing the task.
   return OB_NOT_SUPPORTED;
 #else
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(curl_multi_handle_ || curl_easy_handle_)) {
+  if (OB_UNLIKELY(http_client_.has_value() || http_batch_.has_value())) {
     ret = OB_INIT_TWICE;
   } else if (http_timeout_us <=0 ) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(curl_multi_handle_ = curl_multi_init())) {
-    ret = OB_CURL_ERROR;
-  } else if (OB_ISNULL(curl_easy_handle_ = curl_easy_init())) {
-    ret = OB_CURL_ERROR;
   } else {
+    oceanbase::http::ClientConfig config;
+    config.timeout_ms = http_timeout_us / 1000;
+    config.connect_timeout_ms = http_timeout_us / 1000;
+    config.https_only = false;
+    config.follow_redirects = false;
+    config.max_redirects = 0;
+    config.verify_peer = true;
+    config.verify_host = true;
+    config.discard_body = false;
+    config.accept_gzip = false;
+    http_client_.emplace(oceanbase::http::new_http_client(
+        rust::Str(model_url.ptr(), model_url.length()), config));
     char auth_header[512];
-    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %.*s", 
+    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %.*s",
              user_key.length(), user_key.ptr());
-
-    curl_headers_ = nullptr;
-    curl_headers_ = curl_slist_append(curl_headers_, "Content-Type: application/json");
-    curl_headers_ = curl_slist_append(curl_headers_, auth_header);
-    char *model_url_cstr = nullptr;
-    if (OB_FAIL(ob_dup_cstring(allocator_, model_url, model_url_cstr))) {
-    } else if (OB_ISNULL(model_url_cstr)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      curl_easy_setopt(curl_easy_handle_, CURLOPT_URL, model_url_cstr);
-      curl_easy_setopt(curl_easy_handle_, CURLOPT_HTTPHEADER, curl_headers_);
-      curl_easy_setopt(curl_easy_handle_, CURLOPT_WRITEFUNCTION, ObEmbeddingTask::WriteMemoryCallback);
-      
-      curl_response_data_ = OB_NEWx(HttpResponseData, &allocator_, allocator_);
-      if (OB_ISNULL(curl_response_data_)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {      
-        curl_easy_setopt(curl_easy_handle_, CURLOPT_WRITEDATA, (void *)curl_response_data_);
-        
-        curl_easy_setopt(curl_easy_handle_, CURLOPT_TIMEOUT_MS, http_timeout_us / 1000);
-        curl_easy_setopt(curl_easy_handle_, CURLOPT_CONNECTTIMEOUT_MS, http_timeout_us / 1000);
-        
-        CURLMcode multi_res = curl_multi_add_handle(curl_multi_handle_, curl_easy_handle_);
-        if (multi_res != CURLM_OK) {
-          ret = OB_CURL_ERROR;
-        }
-      }
-    }   
+    if (oceanbase::http::Code::Ok != oceanbase::http::http_client_add_header(
+            *http_client_.value(), rust::Str("Content-Type: application/json"))
+        || oceanbase::http::Code::Ok != oceanbase::http::http_client_add_header(
+            *http_client_.value(), rust::Str(auth_header))) {
+      ret = OB_INVALID_ARGUMENT;
+    }
   }
-
   return ret;
 #endif
 }

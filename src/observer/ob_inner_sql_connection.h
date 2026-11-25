@@ -182,7 +182,6 @@ public:
   {
     return self_weak_guard_.upgrade();
   }
-  void dump_conn_bt_info();
 public:
   int64_t get_send_timestamp() const { return get_session().get_query_start_time(); }
   int64_t get_receive_timestamp() const { return get_session().get_query_start_time(); }
@@ -253,11 +252,9 @@ public:
                                const bool is_extern_session,
                                const bool is_ddl);
 
-  int64_t get_init_timestamp() const { return init_timestamp_; }
 public:
   static const int64_t LOCK_RETRY_TIME = 1L * 1000 * 1000;
   static const uint32_t INNER_SQL_SESS_ID = 1;
-  static const int64_t MAX_BT_SIZE = 20;
 private:
   int init_session(sql::ObSQLSessionInfo* session_info = NULL, const bool is_ddl = false);
   int init_result(ObInnerSQLResult &res,
@@ -317,10 +314,6 @@ private:
   ObVTIterCreator *vt_iter_creator_;
   ObInnerSQLReadContext *ref_ctx_;
   ObRestoreSQLModifier *sql_modifier_;
-  int64_t init_timestamp_;
-  int64_t tid_;
-  int bt_size_;
-  void *bt_addrs_[MAX_BT_SIZE];
   int64_t execute_start_timestamp_;
   int64_t execute_end_timestamp_;
 

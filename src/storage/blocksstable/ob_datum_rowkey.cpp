@@ -15,6 +15,7 @@
  */
 
 #include "ob_datum_rowkey.h"
+#include <inttypes.h>
 #include "storage/access/ob_table_param.h"
 #include "storage/blocksstable/ob_datum_rowkey_vector.h"
 
@@ -192,7 +193,7 @@ DEF_TO_STRING(ObDatumRowkey)
         if (i > 0) {
           databuff_printf(buf, buf_len, pos, ", ");
         }
-        databuff_printf(buf, buf_len, pos, "idx=%ld:", i);
+        databuff_printf(buf, buf_len, pos, "idx=%" PRId64 ":", i);
         pos += datums_[i].storage_to_string(buf + pos, buf_len - pos);
       }
     } else {

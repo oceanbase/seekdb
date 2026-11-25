@@ -45,7 +45,10 @@ public:
 class ObXAFlag
 {
 public:
-  enum
+  // XA flags are int64_t wire values (the empty-table flag uses bit 32).
+  // MSVC gives an unscoped enum without a fixed underlying type an int base
+  // (unless /Zc:enumTypes is enabled), silently truncating 0x100000000 to 0.
+  enum : int64_t
   {
     OBTMNOFLAGS = 0,
     OBTMREADONLY = 0x100,
@@ -59,6 +62,8 @@ public:
     OBTMONEPHASE = 0x40000000,
     OBTEMPTABLE = 0x100000000,
   };
+  static_assert(OBTEMPTABLE == 0x100000000LL,
+                "XA empty-table flag lives at bit 32 and must keep its 64-bit value");
 
   static bool is_valid(const int64_t flag, const int64_t xa_req_type);
   static bool contain_tmreadonly(const int64_t flag) { return flag & OBTMREADONLY; }

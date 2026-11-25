@@ -25,8 +25,7 @@ memory-transport = []
 
 [dependencies]
 cxx = "1"
-# flate2 = zlib for the compressed MySQL protocol.
-flate2 = "1"
+compression = { path = "../compression" }
 # Direct-indexed storage for the reactor's mio Token -> connection hot table.
 slab = "0.4"
 # TLS for the MySQL channel. default-features=false drops the aws-lc-rs

@@ -27,7 +27,6 @@
 #include "ob_sql_session_info.h"
 #include "share/object/ob_obj_cast.h"
 #include "share/ob_rpc_struct.h"
-#include "query/command/ob_root_service_serialization.h"
 #include "sql/pl/ob_pl_package.h"
 #include "sql/pl/ob_pl_server_cursor.h"
 #include "share/ob_server_struct.h"

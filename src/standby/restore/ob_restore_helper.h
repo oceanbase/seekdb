@@ -32,6 +32,10 @@ namespace standby
 {
 struct StandbyConfig;
 }
+namespace storage
+{
+class ObLSMeta;
+}
 namespace restore
 {
 class ObStandbyRestoreHelper
@@ -51,7 +55,7 @@ public:
   int check_restore_precondition();
   int init_for_ls_view();
   int fetch_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info);
-  int fetch_ls_meta(ObLSMeta &ls_meta, share::SCN &physical_checkpoint_scn);
+  int fetch_ls_meta(storage::ObLSMeta &ls_meta, share::SCN &physical_checkpoint_scn);
   int init_for_build_tablets_sstable_info(const common::ObIArray<ObTabletHandle> &tablet_handle_array);
   int fetch_next_tablet_sstable_header(obcall::ObCopyTabletSSTableHeader &copy_header);
   int fetch_next_sstable_meta(obcall::ObCopyTabletSSTableInfo &sstable_info);

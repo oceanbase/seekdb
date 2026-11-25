@@ -18,6 +18,7 @@
 
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_basic_session_info.h"
 #include "share/config/ob_config_helper.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
@@ -3152,7 +3153,7 @@ int ObBasicSessionInfo::set_enable_role_ids(const ObIArray<uint64_t>& role_ids)
     if (i != 0) {
       OZ (serialized_data.append(","));  
     }
-    OZ (serialized_data.append_fmt("%lu", role_ids.at(i)));
+    OZ (serialized_data.append_fmt("%" PRIu64 "", role_ids.at(i)));
   }
   OZ (update_sys_variable(SYS_VAR__OB_ENABLE_ROLE_IDS, serialized_data.string()));
   return ret;
@@ -4359,7 +4360,7 @@ int ObBasicSessionInfo::is_timeout(bool &is_timeout)
       } else {
         char time_buf_1[OB_MAX_TIME_STR_LENGTH] = {'\0'};
         char time_buf_2[OB_MAX_TIME_STR_LENGTH] = {'\0'};
-        _LOG_INFO("sessionkey %u: %.*s from %s timeout: last active time=%s, cur=%s, timeout=%lds",
+        _LOG_INFO("sessionkey %u: %.*s from %s timeout: last active time=%s, cur=%s, timeout=%" PRId64 "s",
                   sessid_, user_name.length(), user_name.ptr(), addr_buf,
                   time2str(thread_data_.last_active_time_, time_buf_1, sizeof(time_buf_1)),
                   time2str(cur_time, time_buf_2, sizeof(time_buf_2)), timeout);

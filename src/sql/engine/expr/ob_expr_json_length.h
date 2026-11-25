@@ -27,6 +27,7 @@ namespace oceanbase
 {
 namespace sql
 {
+class JsonPathCache;
 class ObExprJsonLength : public ObFuncExprOperator
 {
 public:
@@ -40,7 +41,7 @@ public:
   static int calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta meta1, bool has_lob_header1,
                   const ObDatum *data2, ObDatumMeta meta2, bool has_lob_header2,
                   MultimodeAlloctor *allocator, ObDatum &res,
-                  ObJsonPathCache* path_cache);
+                  JsonPathCache* path_cache);
   static int eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

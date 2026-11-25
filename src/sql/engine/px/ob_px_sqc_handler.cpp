@@ -282,6 +282,9 @@ int ObPxSqcHandler::destroy_sqc(int &report_ret)
   // Issue. Compared to the error codes of the transaction, the error codes at the end have a lower priority.
   end_ret = end_ret_;
 
+  // All worker references are gone; release shared GI handles before reporting to QC.
+  get_sqc_ctx().destroy_gi_task_rebalancers();
+
   // clean up ddl context if needed
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = sub_coord_->end_ddl(false))) { //for ddl px, don't call close() again in close_direct_load()

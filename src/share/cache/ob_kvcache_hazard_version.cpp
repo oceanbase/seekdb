@@ -15,6 +15,7 @@
  */
 
 #include "ob_kvcache_hazard_version.h"
+#include <inttypes.h>
 
 
 namespace oceanbase{
@@ -307,12 +308,12 @@ int ObKVCacheHazardStation::print_current_status() const
           total_nodes_num += waiting_nodes_count;
           if (waiting_nodes_count == 0 && acquired_version == UINT64_MAX) {
           } else if (OB_FAIL(ret = databuff_printf(buf, BUFLEN, ctxpos,
-                  "[KVCACHE-HAZARD] i=%8ld | acquire_version=%12lu | waiting_nodes_count=%8ld | last_retire_version=%8lu |\n",
+                  "[KVCACHE-HAZARD] i=%8" PRId64 " | acquire_version=%12" PRIu64 " | waiting_nodes_count=%8" PRId64 " | last_retire_version=%8" PRIu64 " |\n",
                   i, acquired_version, waiting_nodes_count, slot.get_last_retire_version()))) {
           }
         }
         if (OB_SUCC(ret)) {
-          _OB_LOG(INFO, "[KVCACHE-HAZARD-VERSION] hazard version status info: current_version: %8ld | min_version=%8ld | total_nodes_count: %8ld |\n%s",
+          _OB_LOG(INFO, "[KVCACHE-HAZARD-VERSION] hazard version status info: current_version: %8" PRId64 " | min_version=%8" PRId64 " | total_nodes_count: %8" PRId64 " |\n%s",
               version_, get_min_version(), total_nodes_num, buf);
         }
       }

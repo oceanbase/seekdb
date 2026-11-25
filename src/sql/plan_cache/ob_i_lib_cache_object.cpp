@@ -74,7 +74,7 @@ void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true 
 int ObILibCacheObject::before_cache_evicted()
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("before_cache_evicted", K(this), KPC(this));
+  LOG_DEBUG("before_cache_evicted", K(this), KPC(this));
   return ret;
 }
 

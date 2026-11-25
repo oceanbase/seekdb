@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "sql/engine/cmd/ob_vector_index_refresh.h"
 #include "sql/ob_sql_utils.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
@@ -113,7 +114,7 @@ int ObVectorIndexRefresher::get_table_row_count(const ObString &db_name,
       } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
                      allocator, table_name, escaped_table_name))) {
       } else if (OB_FAIL(sql.assign_fmt(
-              "SELECT COUNT(*) AS CNT FROM `%.*s`.`%.*s` AS OF SNAPSHOT %ld",
+              "SELECT COUNT(*) AS CNT FROM `%.*s`.`%.*s` AS OF SNAPSHOT %" PRId64 "",
               static_cast<int>(escaped_db_name.length()), escaped_db_name.ptr(),
               static_cast<int>(escaped_table_name.length()), escaped_table_name.ptr(),
               scn.get_val_for_tx()))) {
@@ -337,7 +338,7 @@ int ObVectorIndexRefresher::do_refresh() {
                                                       index_id_tb_col_names))) {
         } else if (OB_FAIL(insert_sel_sql.append_fmt(
                 "INSERT INTO `%.*s`.`%.*s` (%.*s) SELECT ora_rowscn, %.*s FROM "
-                "`%.*s`.`%.*s` WHERE ora_rowscn <= %lu",
+                "`%.*s`.`%.*s` WHERE ora_rowscn <= %" PRIu64 "",
                 static_cast<int>(escaped_db_name.length()),
                 escaped_db_name.ptr(),
                 static_cast<int>(escaped_index_id_table_name.length()),
@@ -363,7 +364,7 @@ int ObVectorIndexRefresher::do_refresh() {
         common::sqlclient::ObMySQLResult *result = nullptr;
         ObSqlString delete_sql;
         if (OB_FAIL(delete_sql.append_fmt(
-                "DELETE FROM `%.*s`.`%.*s` WHERE ora_rowscn <= %lu",
+                "DELETE FROM `%.*s`.`%.*s` WHERE ora_rowscn <= %" PRIu64 "",
                 static_cast<int>(escaped_db_name.length()),
                 escaped_db_name.ptr(),
                 static_cast<int>(escaped_domain_table_name.length()),
@@ -381,7 +382,7 @@ int ObVectorIndexRefresher::do_refresh() {
         common::sqlclient::ObMySQLResult *result = nullptr;
         ObSqlString select_sql;
         if (OB_FAIL(select_sql.append_fmt(
-                "select tablet_id from oceanbase.%s where table_id = %lu",
+                "select tablet_id from oceanbase.%s where table_id = %" PRIu64 "",
                 OB_ALL_TABLET_TO_TABLE_TNAME,
                 domain_table_schema->get_table_id()))) {
         } else if (OB_FAIL(refresh_ctx_->trans_->read(
@@ -417,7 +418,7 @@ int ObVectorIndexRefresher::do_refresh() {
           common::sqlclient::ObMySQLResult *result = nullptr;
           ObSqlString freeze_sql;
           if (OB_FAIL(freeze_sql.append_fmt(
-                "alter system major freeze tablet_id = %lu", tablet_id))) {
+                "alter system major freeze tablet_id = %" PRIu64 "", tablet_id))) {
           } else if (OB_FAIL(refresh_ctx_->trans_->write(freeze_sql.ptr(), affected_rows))) {
             ret = OB_SUCCESS;
             LOG_ERROR("fail to execute major freeze sql, continue other tablet id", K(tablet_id),

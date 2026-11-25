@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_common_id.h"
+#include <inttypes.h>
 
 
 namespace oceanbase
@@ -62,7 +63,7 @@ int ObCommonID::parse_from_display_str(const common::ObString &str)
 {
   int ret = OB_SUCCESS;
   errno = 0;
-  if (OB_UNLIKELY(1 != sscanf(str.ptr(), "%ld", &id_))) {
+  if (OB_UNLIKELY(1 != sscanf(str.ptr(), "%" PRId64 "", &id_))) {
     ret = OB_INVALID_ARGUMENT;
   }
   return ret;
@@ -73,7 +74,7 @@ int ObCommonID::to_display_str(char *buf, const int64_t len, int64_t &pos) const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0 || pos < 0 || pos >= len || !is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(databuff_printf(buf, len, pos, "%ld", id_))) {
+  } else if (OB_FAIL(databuff_printf(buf, len, pos, "%" PRId64 "", id_))) {
   }
   return ret;
 }

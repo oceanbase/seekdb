@@ -244,7 +244,6 @@ public:
 
   virtual int push_buffer_batch_info() = 0;
 protected:
-  common::ObThreadCond cond_;
   int64_t pins_;
   uint64_t id_;
   bool done_;

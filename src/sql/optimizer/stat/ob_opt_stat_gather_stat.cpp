@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
+#include <inttypes.h>
 #include "sql/session/ob_sql_session_mgr.h"
 
 using namespace oceanbase::common;
@@ -100,8 +101,7 @@ ObOptStatGatherStat::ObOptStatGatherStat(ObOptStatTaskInfo &task_info) :
   stat_refresh_failed_list_(),
   properties_(),
   table_gather_progress_(),
-  consecutive_failed_count_(0),
-  gather_audit_()
+  consecutive_failed_count_(0)
 {
 }
 
@@ -123,7 +123,6 @@ int ObOptStatGatherStat::assign(const ObOptStatGatherStat &other)
   stat_refresh_failed_list_ = other.stat_refresh_failed_list_;
   properties_ = other.properties_;
   table_gather_progress_ = other.table_gather_progress_;
-  gather_audit_ = other.gather_audit_;
   return ret;
 }
 
@@ -136,7 +135,6 @@ int64_t ObOptStatGatherStat::size() const
   base_size += stat_refresh_failed_list_.length();
   base_size += properties_.length();
   base_size += table_gather_progress_.length();
-  base_size += gather_audit_.length();
   return base_size;
 }
 
@@ -183,10 +181,6 @@ int ObOptStatGatherStat::deep_copy(common::ObIAllocator &allocator, ObOptStatGat
       MEMCPY(buf + pos, table_gather_progress_.ptr(), table_gather_progress_.length());
       new_stat->set_table_gather_progress(buf + pos, table_gather_progress_.length());
       pos += table_gather_progress_.length();
-      //set gather audit
-      MEMCPY(buf + pos, gather_audit_.ptr(), gather_audit_.length());
-      new_stat->set_gather_audit(buf + pos, gather_audit_.length());
-      pos += gather_audit_.length();
       if (OB_UNLIKELY(pos != buf_len)) {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -212,7 +206,7 @@ int ObOptStatRunningMonitor::add_table_info(const common::ObTableStatParam &tabl
     opt_stat_gather_stat_.set_table_id(table_param.table_id_);
     ObSqlString properties_sql_str;
     char *buf = NULL;
-    if (OB_FAIL(properties_sql_str.append_fmt("GRANULARITY:%.*s;METHOD_OPT:%.*s;DEGREE:%ld;ESTIMATE_PERCENT:%lf;BLOCK_SAMPLE:%d;STALE_PERCENT:%lf;HIST_EST_PERCENT:%lf",
+    if (OB_FAIL(properties_sql_str.append_fmt("GRANULARITY:%.*s;METHOD_OPT:%.*s;DEGREE:%" PRId64 ";ESTIMATE_PERCENT:%lf;BLOCK_SAMPLE:%d;STALE_PERCENT:%lf;HIST_EST_PERCENT:%lf",
                                               table_param.granularity_.length(),
                                               table_param.granularity_.ptr(),
                                               table_param.method_opt_.length(),
@@ -271,15 +265,10 @@ int ObOptStatRunningMonitor::flush_gather_audit()
   int ret = OB_SUCCESS;
   const static int64_t buf_len = 4096;
   SMART_VAR(char[buf_len], audit_str) {
-    ObString gather_audit;
-    int64_t pos = 0;
-    pos += audit_.to_string(audit_str, buf_len);
-    if (OB_FAIL(ob_write_string(allocator_, ObString(pos, audit_str), gather_audit))) {
-    } else {
-      ObOptStatGatherStatList::instance().update_gather_stat_audit(gather_audit, opt_stat_gather_stat_);
-      if (pos >= buf_len - 1) {
-        LOG_INFO("gather stats audit", K(gather_audit));
-      }
+    const int64_t pos = audit_.to_string(audit_str, buf_len);
+    if (pos >= buf_len - 1) {
+      const ObString gather_audit(pos, audit_str);
+      LOG_INFO("gather stats audit", K(gather_audit));
     }
   }
   return ret;
@@ -343,13 +332,6 @@ void ObOptStatGatherStatList::update_gather_stat_refresh_failed_list(ObString &f
 {
   ObSpinLockGuard guard(lock_);
   stat_value.set_stat_refresh_failed_list(failed_list.ptr(), failed_list.length());
-}
-
-void ObOptStatGatherStatList::update_gather_stat_audit(const ObString &audit,
-                                                       ObOptStatGatherStat &stat_value)
-{
-  ObSpinLockGuard guard(lock_);
-  stat_value.set_gather_audit(audit.ptr(), audit.length());
 }
 
 int ObOptStatGatherStatList::list_to_array(common::ObIAllocator &allocator,

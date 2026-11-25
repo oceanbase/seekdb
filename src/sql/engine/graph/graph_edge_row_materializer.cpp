@@ -18,7 +18,6 @@
 #include "sql/engine/graph/graph_edge_row_materializer.h"
 #include "sql/engine/graph/graph_das_access_utils.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
-#include "share/ob_json_access_utils.h"
 #include "lib/utility/ob_smart_call.h"
 
 namespace oceanbase
@@ -189,20 +188,17 @@ int GraphEdgeRowMaterializer::materialize_payload(
       new(cells) ObObj[count];
       payload.values_.assign(cells, count);
       for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-        // JSON trees and serialization buffers are temporary for one value.
+        // JSON conversion buffers are temporary for one value.
         // Only its final bytes belong to the edge page, which survives lookup.
         scratch_allocator_.reuse();
         ObExpr *append_expr = desc->payload_exprs_.at(i);
-        ObIJsonBase *value = nullptr;
         ObString binary;
         if (OB_ISNULL(append_expr) || append_expr->arg_cnt_ != 3
             || OB_ISNULL(append_expr->args_[2])) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(clear_payload_eval_flags(*append_expr->args_[2], eval_ctx_))) {
-        } else if (OB_FAIL(ObJsonExprHelper::get_json_val(
-                       *append_expr, eval_ctx_, &json_allocator, 2, value))) {
-        } else if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(
-                       value, binary, &scratch_allocator_))) {
+        } else if (OB_FAIL(ObJsonExprHelper::get_json_binary(
+                       *append_expr, eval_ctx_, json_allocator, 2, binary))) {
         } else if (OB_FAIL(ob_write_string(allocator_, binary, binary))) {
         } else {
           // This is one encoded JSON value, including SQL NULL as JSON null.

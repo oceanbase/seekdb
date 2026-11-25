@@ -15,6 +15,7 @@
  */
 
 #include "storage/memtable/mvcc/ob_query_engine.h"
+#include <inttypes.h>
 #include "storage/ob_iter_cache.h"
 #include "lib/allocator/ob_malloc.h"
 #include "common/ob_store_range.h"
@@ -95,17 +96,17 @@ void ObQueryEngine::dump2text(FILE* fd)
       for (int64_t row_idx = 0; OB_SUCC(ret) && OB_SUCC(iter.next_internal()); row_idx++) {
         const ObMemtableKey *key = iter.get_key();
         ObMvccRow *row = iter.get_value();
-        fprintf(fd, "row_idx=%ld %s %s\n", row_idx, helper.convert(*key), helper.convert(*row));
+        fprintf(fd, "row_idx=%" PRId64 " %s %s\n", row_idx, helper.convert(*key), helper.convert(*row));
         for (ObMvccTransNode *node = row->get_list_head(); OB_SUCC(ret) && OB_NOT_NULL(node); node = node->prev_) {
           const ObMemtableDataHeader *mtd = reinterpret_cast<const ObMemtableDataHeader *>(node->buf_);
           helper.reset();
-          fprintf(fd, "\t%s dml=%d size=%ld\n", helper.convert(*node), mtd->dml_flag_, mtd->buf_len_);
+          fprintf(fd, "\t%s dml=%d size=%" PRId64 "\n", helper.convert(*node), mtd->dml_flag_, mtd->buf_len_);
           if (OB_FAIL(row_reader.read_row(mtd->buf_, mtd->buf_len_, nullptr, datum_row))) {
           } else {
             for (int64_t i = 0; OB_SUCC(ret) && i < datum_row.get_column_count(); i++) {
               blocksstable::ObStorageDatum &datum = datum_row.storage_datums_[i];
               helper.reset();
-              fprintf(fd, "\tcidx=%ld val=%s\n", i, helper.convert(datum));
+              fprintf(fd, "\tcidx=%" PRId64 " val=%s\n", i, helper.convert(datum));
             }
           }
         }

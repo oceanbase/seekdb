@@ -135,7 +135,6 @@ private:
   common::ObObj objs_[common::OB_MAX_ROWKEY_COLUMN_NUMBER];
   int64_t block_idx_;
   void *iter_buf_;
-  char *io_buf_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTabletSSTableMacroInfo);
 };

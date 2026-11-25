@@ -223,9 +223,9 @@ int ObPxSubCoord::setup_gi_op_input(ObExecContext &ctx,
               }
             }
             if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(gi_input->init_task_rebalancer(&ctx, parallelism, split_gi_task_cost,
-                                                              initial_task_count,
-                                                              gi_op->get_id()))) {
+            } else if (OB_FAIL(sqc_ctx.create_gi_task_rebalancer(ctx, parallelism, split_gi_task_cost,
+                                                               initial_task_count, gi_op->get_id(),
+                                                               gi_input->task_balancer_))) {
             }
           }
         }

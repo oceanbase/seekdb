@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_stats_estimator.h"
+#include <inttypes.h>
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
@@ -158,7 +159,7 @@ int ObStatsEstimator::fill_specify_scn_info(common::ObIAllocator &alloc,
 {
   int ret = OB_SUCCESS;
   if (sepcify_scn > 0) {
-    const char* fmt_str = "as of snapshot %lu";
+    const char* fmt_str = "as of snapshot %" PRIu64 "";
     char *buf = NULL;
     int64_t buf_len = strlen(fmt_str) + 30;//uint64_t:0 ~ 18446744073709551615,length no more than 20
     int64_t real_len = -1;
@@ -187,7 +188,7 @@ int ObStatsEstimator::fill_parallel_info(common::ObIAllocator &alloc,
     if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      real_len = sprintf(buf, "USE_PX, PARALLEL(%ld)", degree);
+      real_len = sprintf(buf, "USE_PX, PARALLEL(%" PRId64 ")", degree);
       if (OB_UNLIKELY(real_len < 0)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -213,7 +214,7 @@ int ObStatsEstimator::fill_query_timeout_info(common::ObIAllocator &alloc,
     if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      real_len = sprintf(buf, "QUERY_TIMEOUT(%ld)", query_timeout);
+      real_len = sprintf(buf, "QUERY_TIMEOUT(%" PRId64 ")", query_timeout);
       if (OB_UNLIKELY(real_len < 0)) {
         ret = OB_ERR_UNEXPECTED;
       } else {

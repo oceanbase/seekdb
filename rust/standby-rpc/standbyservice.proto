@@ -1,0 +1,147 @@
+// Copyright (c) 2026 OceanBase.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+syntax = "proto3";
+package standbyservice;
+
+service StandbyService {
+  // Server streaming RPC: fetch ls view stream (ls meta first, then tablet infos)
+  rpc fetch_ls_view(FetchLSViewReq) returns (stream FetchLSViewRes);
+  // Server streaming RPC: fetch tablet info stream
+  rpc fetch_tablet_info(FetchTabletInfoReq) returns (stream FetchTabletInfoRes);
+  // Server streaming RPC: fetch tablet sstable info stream (header + N sstable metas)
+  rpc fetch_tablet_sstable_info(FetchTabletSSTableInfoReq) returns (stream FetchTabletSSTableInfoRes);
+  // Server streaming RPC: fetch sstable macro range info stream (header + N macro range infos)
+  rpc fetch_sstable_macro_info(FetchSSTableMacroInfoReq) returns (stream FetchSSTableMacroInfoRes);
+  // Server streaming RPC: fetch macro block stream (header + payload data)
+  rpc fetch_macro_block(FetchMacroBlockReq) returns (stream FetchMacroBlockRes);
+  // Get source LS tablet count for sizing ls view stream timeout
+  rpc get_ls_view_tablet_count(GetLSViewTabletCountReq) returns (GetLSViewTabletCountRes);
+  // Check restore precondition (disk size and cluster version)
+  rpc check_restore_precondition(CheckRestorePreconditionReq) returns (CheckRestorePreconditionRes);
+  // Locate source palf base info for standby replay after copied SSTable baseline
+  rpc fetch_standby_palf_base_info(FetchStandbyPalfBaseInfoReq) returns (FetchStandbyPalfBaseInfoRes);
+  // Stream serialized PALF group entries starting after the requested SCN.
+  rpc fetch_log(FetchLogReq) returns (stream FetchLogRes);
+  // Return the durable cutover boundary of a fenced primary.
+  rpc get_promotion_boundary(GetPromotionBoundaryReq) returns (GetPromotionBoundaryRes);
+}
+
+enum FetchLSViewEntryType {
+  // First message in stream: serialized ObLSMetaPackage
+  LS_META_PACKAGE = 0;
+  // Following messages: serialized ObCopyTabletInfo
+  TABLET_INFO = 1;
+}
+
+message FetchLSViewReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchLSViewRes {
+  FetchLSViewEntryType entry_type = 1;
+  bytes buf = 2;
+  uint64 size = 3;
+}
+
+message FetchTabletInfoReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchTabletInfoRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchTabletSSTableInfoReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchTabletSSTableInfoRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchSSTableMacroInfoReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchSSTableMacroInfoRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchMacroBlockReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchMacroBlockRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+message GetLSViewTabletCountReq {}
+message GetLSViewTabletCountRes {
+  int64 tablet_count = 1;
+}
+message CheckRestorePreconditionReq {}
+message CheckRestorePreconditionRes {
+  int64 required_disk_size = 1;
+  int64 total_tablet_size = 2;
+  uint64 data_version = 3;
+}
+
+message FetchStandbyPalfBaseInfoReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchStandbyPalfBaseInfoRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchLogReq {
+  uint64 start_lsn = 1;
+  uint64 max_bytes = 2;
+}
+
+message FetchLogRes {
+  bytes buf = 1;
+  uint64 size = 2;
+  uint64 source_lsn = 3;
+  uint64 end_scn = 4;
+}
+
+message NodeAddress {
+  string ip = 1;
+  uint32 port = 2;
+}
+message SourceHop {
+  NodeAddress relay = 1;
+  NodeAddress source = 2;
+}
+message GetPromotionBoundaryReq {
+  repeated NodeAddress visited = 1;
+}
+message GetPromotionBoundaryRes {
+  NodeAddress origin = 1;
+  uint64 cutover_scn = 2;
+  repeated SourceHop source_chain = 3;
+}

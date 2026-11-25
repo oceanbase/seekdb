@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_utils.h"
+#include <inttypes.h>
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -613,7 +614,7 @@ int ObSchemaUtils::check_sys_table_exist_by_sql(
       common::sqlclient::ObMySQLResult *res = NULL;
       // in __all_table, runtime id was a primary key and it's value is 0
       if (OB_FAIL(sql.append_fmt(
-          "SELECT count(*) = 1 AS exist FROM %s WHERE table_id = %lu",
+          "SELECT count(*) = 1 AS exist FROM %s WHERE table_id = %" PRIu64 "",
           OB_ALL_TABLE_TNAME, table_id))) {
       } else if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
       } else if (OB_ISNULL(res = result.get_result())) {
@@ -751,7 +752,7 @@ int ObSchemaUtils::check_whether_column_exist(common::ObISQLClient &sql_client,
       common::sqlclient::ObMySQLResult *res = NULL;
       // in __all_column, sys tenant is primary key and it's value is 0
       if (OB_FAIL(sql.append_fmt(
-          "SELECT count(*) = 1 AS exist FROM %s WHERE table_id = %lu and column_name = '%.*s'",
+          "SELECT count(*) = 1 AS exist FROM %s WHERE table_id = %" PRIu64 " and column_name = '%.*s'",
           OB_ALL_COLUMN_TNAME, table_id, column_name.length(), column_name.ptr()))) {
       } else if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
       } else if (OB_ISNULL(res = result.get_result())) {

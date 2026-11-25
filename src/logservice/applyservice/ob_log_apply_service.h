@@ -163,7 +163,7 @@ public:
   int try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue, bool &is_timeslice_run_out);
   int is_apply_done(bool &is_done,
                     palf::LSN &end_lsn);
-  int start_local_append();
+  int start_local_append(const share::SCN &recovered_scn);
   int stop_local_append();
   //palf related
   int update_palf_committed_end_lsn(const palf::LSN &end_lsn, const share::SCN &end_scn);
@@ -255,7 +255,7 @@ public:
   void handle_drop(common::LinkTask *task) override;
   int is_apply_done(bool &is_done,
                     palf::LSN &end_lsn);
-  int start_local_append();
+  int start_local_append(const share::SCN &recovered_scn);
   int stop_local_append();
   int get_max_applied_scn(share::SCN &scn);
   int get_palf_committed_end_scn(share::SCN &scn);

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_int_div.h"
+#include <inttypes.h>
 #include "sql/engine/expr/ob_expr_div.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -104,11 +105,11 @@ int ObExprIntDiv::intdiv_int(ObObj &res, const ObObj &left, const ObObj &right, 
       } else if (OB_UNLIKELY(INT64_MIN == left_i && (-1) == right_i)) {
         //INT64_MIN / -1 is undefined behavior in C language.
         //report an error no matter in dml or ddl stmt to be compatible with mysql
-        REPORT_OUT_OF_RANGE_ERROR("'(%ld div %ld)'", "BIGINT", left_i, right_i);
+        REPORT_OUT_OF_RANGE_ERROR("'(%" PRId64 " div %" PRId64 ")'", "BIGINT", left_i, right_i);
       } else {
         int64_t res_i = left_i / right_i;
         if (OB_UNLIKELY(is_int_int_out_of_range(left_i, right_i, res_i))) {
-          REPORT_OUT_OF_RANGE_ERROR("'(%ld div %ld)'", "BIGINT", left_i, right_i);
+          REPORT_OUT_OF_RANGE_ERROR("'(%" PRId64 " div %" PRId64 ")'", "BIGINT", left_i, right_i);
         } else {
           res.set_int(res_i);
         }
@@ -121,7 +122,7 @@ int ObExprIntDiv::intdiv_int(ObObj &res, const ObObj &left, const ObObj &right, 
       } else {
         uint64_t res_ui = left_ui / right_ui;
         if (OB_UNLIKELY(left_i < 0 && res_ui > 0)){
-          REPORT_OUT_OF_RANGE_ERROR("'(%ld div %lu)'", "BIGINT UNSIGNED", left_i, right_ui);
+          REPORT_OUT_OF_RANGE_ERROR("'(%" PRId64 " div %" PRIu64 ")'", "BIGINT UNSIGNED", left_i, right_ui);
         } else  {
           res.set_uint64(res_ui);
         }
@@ -163,7 +164,7 @@ int ObExprIntDiv::intdiv_uint(ObObj &res, const ObObj &left, const ObObj &right,
       } else {
         uint64_t res_ui = left_ui / right_ui;
         if (OB_UNLIKELY(right_i < 0 && res_ui > 0)) { // eg: 7 div -6
-          REPORT_OUT_OF_RANGE_ERROR("'(%lu div %ld)'", "BIGINT UNSIGNED", left_ui, right_i);
+          REPORT_OUT_OF_RANGE_ERROR("'(%" PRIu64 " div %" PRId64 ")'", "BIGINT UNSIGNED", left_ui, right_i);
         } else  {
           res.set_uint64(res_ui);
         }
@@ -211,11 +212,11 @@ int ObExprIntDiv::div_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum
     if (OB_UNLIKELY(INT64_MIN == left_i && (-1) == right_i)) {
       //INT64_MIN / -1 is undefined behavior in C language.
       //report an error no matter in dml or ddl stmt to be compatible with mysql
-      REPORT_OUT_OF_RANGE_ERROR("'(%ld div %ld)'", "BIGINT", left_i, right_i);
+      REPORT_OUT_OF_RANGE_ERROR("'(%" PRId64 " div %" PRId64 ")'", "BIGINT", left_i, right_i);
     } else {
       int64_t res_i = left_i / right_i;
       if (OB_UNLIKELY(is_int_int_out_of_range(left_i, right_i, res_i))) {
-        REPORT_OUT_OF_RANGE_ERROR("'(%ld div %ld)'", "BIGINT", left_i, right_i);
+        REPORT_OUT_OF_RANGE_ERROR("'(%" PRId64 " div %" PRId64 ")'", "BIGINT", left_i, right_i);
       } else {
         datum.set_int(res_i);
       }
@@ -248,7 +249,7 @@ int ObExprIntDiv::div_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datu
     if (OB_UNLIKELY(left_i < 0 && res_ui > 0)){
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;
-      REPORT_OUT_OF_RANGE_ERROR("'(%ld div %lu)'", "BIGINT UNSIGNED", left_i, right_ui);
+      REPORT_OUT_OF_RANGE_ERROR("'(%" PRId64 " div %" PRIu64 ")'", "BIGINT UNSIGNED", left_i, right_ui);
     } else  {
       datum.set_uint(res_ui);
     }
@@ -304,7 +305,7 @@ int ObExprIntDiv::div_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datu
     if (OB_UNLIKELY(right_i < 0 && res_ui > 0)) { // eg: 7 div -6
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;
-      REPORT_OUT_OF_RANGE_ERROR("'(%lu div %ld)'", "BIGINT UNSIGNED", left_ui, right_i);
+      REPORT_OUT_OF_RANGE_ERROR("'(%" PRIu64 " div %" PRId64 ")'", "BIGINT UNSIGNED", left_ui, right_i);
     } else  {
       datum.set_uint(res_ui);
     }

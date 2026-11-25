@@ -17,6 +17,7 @@
 #ifndef _OB_JOIN_ORDER_H
 #define _OB_JOIN_ORDER_H 1
 #include "lib/container/ob_int_flags.h"
+#include <inttypes.h>
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -144,7 +145,6 @@ namespace sql
     BaseTableOptInfo ()
     : optimization_method_(OptimizationMethod::MAX_METHOD),
       heuristic_rule_(HeuristicRule::MAX_RULE),
-      available_index_id_(),
       available_index_name_(),
       pruned_index_name_(),
       unstable_index_name_()
@@ -153,7 +153,6 @@ namespace sql
     // this following variables are tracked to remember how base table access path are generated
     OptimizationMethod optimization_method_;
     HeuristicRule heuristic_rule_;
-    common::ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> available_index_id_;
     common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> available_index_name_;
     common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> pruned_index_name_;
     common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> unstable_index_name_;
@@ -652,7 +651,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -1114,7 +1113,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@sub_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", subquery_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", subquery_id_))) {
       }
       return ret;
     }
@@ -1140,7 +1139,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@function_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -1166,7 +1165,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@json_table_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -1196,7 +1195,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@temp_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return  ret;
     }
@@ -1223,7 +1222,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@cte_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -1249,7 +1248,7 @@ class Path
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(BUF_PRINTF("@values_"))) {
-      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", table_id_))) {
       }
       return ret;
     }
@@ -2493,8 +2492,7 @@ struct NullAwareAntiJoinInfo {
                             ObIArray<uint64_t> &valid_index_id);
     int get_valid_index_ids_with_no_index_hint(ObSqlSchemaGuard &schema_guard,
                                                const uint64_t ref_table_id,
-                                               uint64_t *tids,
-                                               const int64_t index_count,
+                                               const ObIArray<uint64_t> &index_ids,
                                                const ObIArray<uint64_t> &ignore_index_ids,
                                                ObIArray<uint64_t> &valid_index_ids);
     // table heuristics
@@ -2714,7 +2712,7 @@ struct NullAwareAntiJoinInfo {
                                 ObQueryRangeProvider *query_range,
                                 int64_t &query_range_row_count,
                                 double &selectivity);
-    int add_valid_fts_index_ids(PathHelper &helper, uint64_t *index_tid_array, int64_t &size);
+    int add_valid_fts_index_ids(PathHelper &helper, ObIArray<uint64_t> &index_ids);
     int add_valid_fts_index_ids_for_dml(const PathHelper &helper, 
                                         const uint64_t table_id,
                                         ObIArray<uint64_t> &valid_index_ids);
@@ -2726,8 +2724,7 @@ struct NullAwareAntiJoinInfo {
                                 const uint64_t table_id,
                                 const uint64_t ref_table_id,
                                 const bool has_aggr,
-                                uint64_t *index_tid_array, 
-                                int64_t &size,
+                                ObIArray<uint64_t> &index_ids,
                                 PathHelper &helper);
     int add_valid_vec_index_ids(const ObDMLStmt &stmt,
                                 ObSqlSchemaGuard *schema_guard,

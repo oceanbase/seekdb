@@ -1,4 +1,5 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -52,8 +53,8 @@ void add_ddl_event(const ObComplementDataParam *param, const ObString &stmt)
   if (OB_NOT_NULL(param)) {
     char table_id_buffer[256];
     char tablet_id_buffer[256];
-    snprintf(table_id_buffer, sizeof(table_id_buffer), "source_table_id:%ld, dest_table_id:%ld", param->orig_table_id_, param->dest_table_id_);
-    snprintf(tablet_id_buffer, sizeof(tablet_id_buffer), "source_id:%lu, dest_id:%lu", param->orig_tablet_id_.id(), param->dest_tablet_id_.id());
+    snprintf(table_id_buffer, sizeof(table_id_buffer), "source_table_id:%" PRIu64 ", dest_table_id:%" PRIu64, param->orig_table_id_, param->dest_table_id_);
+    snprintf(tablet_id_buffer, sizeof(tablet_id_buffer), "source_id:%" PRId64 ", dest_id:%" PRId64, param->orig_tablet_id_.id(), param->dest_tablet_id_.id());
 
     SERVER_EVENT_ADD("ddl", stmt.ptr(),
       "ret", ret,
@@ -651,7 +652,7 @@ int ObComplementDataDag::fill_dag_key(char *buf, const int64_t buf_len) const
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, "source_tablet_id=%ld dest_tablet_id=%ld",
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, "source_tablet_id=%" PRId64 " dest_tablet_id=%" PRId64 "",
                               param_.orig_tablet_id_.id(), param_.dest_tablet_id_.id()))) {
   }
   return ret;

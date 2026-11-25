@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/cmd/ob_merge_table_executor.h"
+#include <inttypes.h>
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -81,7 +82,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
     if (OB_SUCC(ret) && conflict_cnt > 0) {
       char err_msg[256] = "";
       snprintf(err_msg, sizeof(err_msg),
-          "MERGE TABLE: %ld conflict(s) detected. "
+          "MERGE TABLE: %" PRId64 " conflict(s) detected. "
           "Use THEIRS or OURS strategy to resolve. FAIL strategy is",
           conflict_cnt);
       ret = OB_OP_NOT_ALLOW;

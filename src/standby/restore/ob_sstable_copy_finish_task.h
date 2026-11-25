@@ -161,7 +161,6 @@ public:
   int get_tablet_finish_task(ObTabletCopyFinishTask *&finish_task);
 
   int add_sstable(ObTableHandleV2 &table_handle);
-  int add_sstable(ObTableHandleV2 &table_handle, const int64_t last_meta_macro_seq);
   int get_copy_macro_range_array(const common::ObArray<ObCopyMacroRangeInfo> *&macro_range_array) const;
   int64_t get_next_copy_task_id();
   int64_t get_max_next_copy_task_id();

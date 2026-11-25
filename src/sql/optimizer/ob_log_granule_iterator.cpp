@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "rust/config.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_log_granule_iterator.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_join.h"
@@ -98,7 +99,7 @@ int ObLogGranuleIterator::get_plan_item_info(PlanText &plan_text,
       get_join_filter_info().is_inited_ &&
       OB_INVALID_ID != get_join_filter_info().filter_id_) {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF(":RF%04ld", get_join_filter_info().filter_id_))) {
+    if (OB_FAIL(BUF_PRINTF(":RF%04" PRId64 "", get_join_filter_info().filter_id_))) {
     }
     END_BUF_PRINT(plan_item.object_alias_, 
                   plan_item.object_alias_len_);

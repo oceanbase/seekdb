@@ -17,6 +17,7 @@
 #ifndef OB_SSTABLE_MACRO_BLOCK_HEADER_H_
 #define OB_SSTABLE_MACRO_BLOCK_HEADER_H_
 
+#include <stddef.h>
 #include "lib/utility/ob_print_utils.h"
 #include "lib/compress/ob_compress_util.h"
 #include "storage/blocksstable/ob_macro_block_common_header.h"
@@ -66,8 +67,11 @@ private:
     int32_t meta_block_offset_;
     int32_t meta_block_size_;
     int64_t data_checksum_;
-    ObCompressorType compressor_type_;
+    uint64_t compressor_type_;
   };
+  static_assert(sizeof(FixedHeader) == 96, "V2 fixed header size changed");
+  static_assert(offsetof(FixedHeader, compressor_type_) + sizeof(FixedHeader::compressor_type_) == sizeof(FixedHeader),
+                "V2 fixed header must end with the compressor type");
 public:
   ObSSTableMacroBlockHeader();
   ~ObSSTableMacroBlockHeader();
@@ -79,6 +83,10 @@ public:
       int64_t *col_checksum);
   int serialize(char *buf, const int64_t buf_len, int64_t& pos) const;
   int deserialize(const char *buf, const int64_t data_len, int64_t& pos);
+  ObCompressorType get_compressor_type() const
+  {
+    return static_cast<ObCompressorType>(fixed_header_.compressor_type_);
+  }
   int64_t get_serialize_size() const;
   static int64_t get_fixed_header_size();
   void reset();

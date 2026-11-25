@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tablet_merge_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_partition_merger.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -338,7 +339,7 @@ int ObTabletMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_param,
 int ObTabletMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_id=%ld", tablet_id_.id()))) {
+  if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_id=%" PRId64 "", tablet_id_.id()))) {
   }
   return ret;
 }

@@ -18,6 +18,7 @@
 #define  OCEANBASE_LIB_HASH_OB_HASHUTILS_
 
 #include <stdlib.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
@@ -1058,7 +1059,7 @@ class BigArrayTemp
       } else if (0 == array_size || NULL == allocer) {
         ret = -1;
       } else if (NULL == (array_ = (T *)allocer->alloc(array_size * sizeof(T)))) {
-        HASH_WRITE_LOG(HASH_WARNING, "alloc fail size=%ld array_size=%ld", array_size * sizeof(T),
+        HASH_WRITE_LOG(HASH_WARNING, "alloc fail size=%" PRId64 " array_size=%" PRId64 "", array_size * sizeof(T),
                        array_size);
         ret = -1;
       } else {
@@ -1117,7 +1118,7 @@ public:
     if (0 >= total_size || 0 >= array_size) {
       ret = -1;
     } else if (!is_2exp(array_size)) {
-      HASH_WRITE_LOG(HASH_WARNING, "array_size=%ld invalid,  must be 2exp", array_size);
+      HASH_WRITE_LOG(HASH_WARNING, "array_size=%" PRId64 " invalid,  must be 2exp", array_size);
       ret = -1;
     } else {
       if (INT32_MAX == array_size) {
@@ -1128,7 +1129,7 @@ public:
         array_size_ = array_size;
       }
       if (NULL == (blocks_ = (Block *)allocer_.alloc(blocks_num_ * sizeof(Block)))) {
-        HASH_WRITE_LOG(HASH_WARNING, "alloc blocks fail blocks_num=%ld array_size=%ld", blocks_num_,
+        HASH_WRITE_LOG(HASH_WARNING, "alloc blocks fail blocks_num=%" PRId64 " array_size=%" PRId64 "", blocks_num_,
                        array_size_);
         ret = -1;
       } else {
@@ -1268,7 +1269,7 @@ int do_create(Array &array, const int64_t total_size, const int64_t array_size, 
     ret = OB_ERR_UNEXPECTED;
   } else if (NULL == (array = (Array)alloc.alloc(total_size * item_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    _OB_LOG(WARN, "alloc memory failed,size:%ld", total_size * item_size);
+    _OB_LOG(WARN, "alloc memory failed,size:%" PRId64 "", total_size * item_size);
   } else {
     typedef typename std::remove_pointer<Array>::type ItemType;
     for (int64_t i = 0; i < total_size; ++i) {

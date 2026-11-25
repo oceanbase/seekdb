@@ -24,6 +24,7 @@ namespace oceanbase
 namespace common
 {
 class ObISQLClient;
+class ObString;
 }
 namespace dbms_scheduler
 {
@@ -44,6 +45,7 @@ public:
       common::ObISQLClient &sql_client,
       int64_t job_id,
       const dbms_scheduler::ObDBMSSchedJobInfo &job_info) = 0;
+  virtual int run_timer_driven_job(const common::ObString &job_name) = 0;
   virtual void notify_scheduler() = 0;
 };
 

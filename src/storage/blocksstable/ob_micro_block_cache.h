@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_MICRO_BLOCK_CACHE_H_
 #define OCEANBASE_STORAGE_BLOCKSSTABLE_MICRO_BLOCK_CACHE_H_
-#include "share/io/ob_io_manager.h"
+#include "share/io_request.h"
 #include "share/cache/ob_kv_storecache.h"
 #include "ob_block_sstable_struct.h"
 #include "ob_macro_block_reader.h"
@@ -255,7 +255,6 @@ class ObIMicroBlockIOCallback : public common::ObIOCallback
 public:
   ObIMicroBlockIOCallback(const common::ObIOCallbackType type);
   virtual ~ObIMicroBlockIOCallback();
-  virtual int alloc_data_buf(const char *io_data_buffer, const int64_t data_size);
   virtual ObIAllocator *get_allocator() { return allocator_; }
   void set_micro_des_meta(const ObIndexBlockRowHeader *idx_row_header);
   OB_INLINE void set_logic_micro_id_and_checksum(const ObLogicMicroBlockId &logic_micro_id, const int64_t data_checksum)
@@ -289,13 +288,10 @@ private:
       ObMicroBlockData &block_data,
       const ObMicroBlockCacheValue *&micro_block,
       common::ObKVCacheHandle &handle);
-  static const int64_t ALLOC_BUF_RETRY_INTERVAL = 100 * 1000;
-  static const int64_t ALLOC_BUF_RETRY_TIMES = 3;
 protected:
   ObIMicroBlockCache *cache_;
   ObIPutSizeStat *put_size_stat_;
   common::ObIAllocator *allocator_;
-  char *data_buffer_;
   MacroBlockId block_id_;
   int64_t offset_;
   ObLogicMicroBlockId logic_micro_id_;
@@ -311,10 +307,8 @@ class ObAsyncSingleMicroBlockIOCallback : public ObIMicroBlockIOCallback
 public:
   ObAsyncSingleMicroBlockIOCallback();
   virtual ~ObAsyncSingleMicroBlockIOCallback();
-  virtual int64_t size() const;
-  virtual int inner_process(const char *data_buffer, const int64_t size) override;
-  virtual const char *get_data() override;
-  virtual const char *get_cb_name() const override { return "SingleMicroBlockIOCB"; }
+  virtual int process(const char *data_buffer, const int64_t size) override;
+  virtual const char *get_data() const override;
   int process_without_tl_reader(const char *data_buffer, const int64_t size);
   TO_STRING_KV("callback_type:", "ObAsyncSingleMicroBlockIOCallback", KP_(micro_block), K_(cache_handle), K_(offset), K_(block_des_meta));
 private:
@@ -332,10 +326,8 @@ class ObMultiDataBlockIOCallback : public ObIMicroBlockIOCallback
 public:
   ObMultiDataBlockIOCallback();
   virtual ~ObMultiDataBlockIOCallback();
-  virtual int64_t size() const;
-  virtual int inner_process(const char *data_buffer, const int64_t size) override;
-  virtual const char *get_data() override;
-  virtual const char *get_cb_name() const override { return "MultiDataBlockIOCB"; }
+  virtual int process(const char *data_buffer, const int64_t size) override;
+  virtual const char *get_data() const override;
   int process_without_tl_reader(const char *data_buffer, const int64_t size);
   TO_STRING_KV("callback_type:", "ObMultiDataBlockIOCallback", K_(io_ctx), K_(offset));
 private:
@@ -355,10 +347,8 @@ class ObSyncSingleMicroBLockIOCallback : public ObIMicroBlockIOCallback
 public:
   ObSyncSingleMicroBLockIOCallback();
   virtual ~ObSyncSingleMicroBLockIOCallback();
-  virtual int64_t size() const;
-  virtual int inner_process(const char *data_buffer, const int64_t size) override;
-  virtual const char *get_data() override;
-  const char *get_cb_name() const override { return "SyncSingleMicroBLockIOCallback"; }
+  virtual int process(const char *data_buffer, const int64_t size) override;
+  virtual const char *get_data() const override;
   TO_STRING_KV("callback_type:", "ObSyncSingleMicroBLockIOCallback", KP_(macro_reader), KP_(block_data), K_(is_data_block));
   DISALLOW_COPY_AND_ASSIGN(ObSyncSingleMicroBLockIOCallback);
 protected:

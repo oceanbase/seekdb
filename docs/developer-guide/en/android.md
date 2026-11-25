@@ -6,7 +6,7 @@ Cross-compile seekdb for Android arm64-v8a on macOS, then deploy it to an emulat
 
 - macOS host
 - Android NDK 27.x, with `ANDROID_NDK_HOME` set to its installation directory
-- An arm64-v8a device or emulator running API 28 or later
+- An arm64-v8a device or emulator running API 26 (Android 8.0) or later
 - `adb` and a MySQL-compatible client on `PATH`
 
 ## Build
@@ -20,7 +20,7 @@ python3 build.py build --config=android seekdb
 ```
 
 `init --android` prepares host tools in `deps/3rd` and Android dependencies in
-`deps/android`, and installs the Android target for the pinned Rust toolchain.
+`deps/prebuilt/android`, and installs the Android target for the pinned Rust toolchain.
 Native and Android builds can share one checkout.
 
 The binary is generated at:
@@ -29,7 +29,24 @@ The binary is generated at:
 build/bin/src/observer/seekdb
 ```
 
-This configuration produces an API 28 ARM64 PIE with 16 KiB page alignment and a statically linked C++ runtime. Validate affected unit tests on a supported Linux host by following [Write and run unit tests](unittest.md).
+This configuration targets API 26, matching the `android-arm64-v8a-api26`
+profile in [seekdb-deps](https://github.com/oceanbase/seekdb-deps/pull/12).
+The NDK compiler target controls both compilation and linking, and unguarded
+use of newer Android APIs is a compilation error. The output is an ARM64 PIE
+with 16 KiB page alignment and a statically linked C++ runtime. Rebuild any
+precompiled dependency that needs a newer API level before distributing it
+with this target. Validate affected unit tests on a supported Linux host by
+following [Write and run unit tests](unittest.md).
+
+## Allocator
+
+Android builds use the bundled, statically linked jemalloc through SeekDB's
+explicit allocator interfaces. The build sets jemalloc's page size to 16 KiB
+and disables initial-exec TLS so the allocator can also be used in a loaded
+library. Host libc allocations keep their own allocation and release APIs.
+Server startup configures decay through `je_mallctl` for new arenas and arena 0,
+then enables background workers before the logger starts its workers. Bootstrap
+allocations use jemalloc's original defaults.
 
 ## Strip and deploy
 
@@ -59,7 +76,9 @@ adb shell "/data/local/tmp/seekdb --nodaemon \
   --log-level INFO"
 ```
 
-Forward the SQL port and connect:
+Install the MySQL client on your host machine. See [Install the MySQL client](build-and-run.md#install-the-mysql-client).
+
+Forward the SQL port and connect.
 
 ```bash
 adb forward tcp:2881 tcp:2881

@@ -18,7 +18,7 @@
 #define OCEANBASE_LIB_GEO_OB_GEO_TO_JSON_BIN_VISITOR_
 #include "share/geo/ob_geo_visitor.h"
 #include "share/geo/ob_geo_utils.h"
-#include "common/json_type/ob_json_bin.h"
+#include "common/json_type/ob_json_common.h"
 
 namespace oceanbase
 {
@@ -55,25 +55,21 @@ public:
   int to_jsonbin(ObGeometry *geo, ObString &geojsonbin);
 
 private:
-  // for Point
-  int appendCoordinatePoint(double x, double y, ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx);
+  int appendCoordinatePoint(double x, double y);
   template<typename T_IBIN>
   int appendPointObj(T_IBIN *geo, const ObString &type_name);
-  // for LineString
   template<typename T_BIN>
-  int appendLine(const T_BIN *line, ObJsonBin &bin, uint64_t &start_pos, uint64_t &val_idx);
+  int appendLine(const T_BIN *line);
   template<typename T_IBIN, typename T_BIN>
   int appendLineObj(T_IBIN *geo, const ObString &type_name);
   template<typename T_IBIN, typename T_BIN, typename T_BIN_LINE>
   int appendMultiLineObj(T_IBIN *geo, const ObString &type_name);
-  // for Polygon
   template<typename T_BIN, typename T_BIN_RING, typename T_BIN_INNER_RING>
-  int appendPolygon(const T_BIN *poly, ObJsonBin &bin, uint64_t &start_pos, uint64_t &val_idx);
+  int appendPolygon(const T_BIN *poly);
   template<typename T_IBIN, typename T_BIN, typename T_BIN_RING, typename T_BIN_INNER_RING>
   int appendPolygonObj(T_IBIN *geo, const ObString &type_name);
   template<typename T_IBIN, typename T_BIN, typename T_BIN_POLY, typename T_BIN_RING, typename T_BIN_INNER_RING>
   int appendMultiPolygonObj(T_IBIN *geo, const ObString &type_name);
-  // for Collection
   template<
       typename T_IPOINT,
       typename T_IMULTIPOINT,
@@ -91,51 +87,23 @@ private:
       typename T_INNERRING,
       typename T_MULTIPOLY,
       typename T_COLLC>
-  int appendCollectionSub(
-      typename T_COLLC::const_pointer sub_ptr,
-      const T_COLLC *collection,
-      ObJsonBin &bin,
-      uint64_t &start_pos,
-      uint64_t &val_idx);
-
-  int appendCollectionSubWrapper(
-      ObWkbGeogCollection::const_pointer sub_ptr,
-      const ObWkbGeogCollection *collection,
-      ObJsonBin &bin,
-      uint64_t &start_pos,
-      uint64_t &val_idx);
-  int appendCollectionSubWrapper(
-      ObWkbGeomCollection::const_pointer sub_ptr,
-      const ObWkbGeomCollection *collection,
-      ObJsonBin &bin,
-      uint64_t &start_pos,
-      uint64_t &val_idx);
+  int appendCollectionSub(typename T_COLLC::const_pointer sub_ptr, const T_COLLC *collection);
+  int appendCollectionSubWrapper(ObWkbGeogCollection::const_pointer sub_ptr, const ObWkbGeogCollection *collection);
+  int appendCollectionSubWrapper(ObWkbGeomCollection::const_pointer sub_ptr, const ObWkbGeomCollection *collection);
   template<typename T_IBIN, typename T_BIN>
   int appendCollectionObj(T_IBIN *geo, const ObString &type_name);
-  // common
-  int appendJsonCommon(
-      const ObString type_name,
-      ObGeometry *geo,
-      ObJsonBin &bin,
-      uint64_t &start_pos,
-      uint64_t &val_idx);
-  int appendMeta(ObJsonBin &bin, uint64_t &start_pos, int type_flag, uint64_t element_count, uint64_t size_size = 3);
-  int appendObjKey(const ObString key_str, ObJsonBin &bin, uint64_t &start_pos, int &key_idx);
-  int fillHeaderSize(ObJsonBin &bin, uint64_t start_pos);
-  int appendCrs(ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx);
-  int appendCrsProp(ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx);
-  int appendBbox(ObGeometry *geo, ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx);
-  int appendString(const ObString &str, ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx);
-  int appendDouble(double value, ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx);
-  int appendArrayHeader(
-      ObJsonBin &bin,
-      uint64_t start_pos,
-      uint64_t val_idx,
-      uint64_t size,
-      ObJsonBin &array_bin,
-      uint64_t &array_start_pos);
+  int appendJsonCommon(const ObString type_name, ObGeometry *geo, uint64_t &object);
+  int beginContainer(uint64_t &handle, int type_flag, uint64_t count, uint8_t width = 3);
+  int appendObjKey(const ObString key);
+  int endContainer(uint64_t handle);
+  int appendCrs();
+  int appendCrsProp();
+  int appendBbox(ObGeometry *geo);
+  int appendString(const ObString &value);
+  int appendDouble(double value);
 
-  ObJsonBuffer json_buf_;
+  struct WriterState;
+  WriterState *writer_;
   uint8_t flag_;
   ObGeoSrid srid_;
   ObIAllocator *allocator_;

@@ -247,7 +247,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         hdrs = [],
         deps = [
             ":core_types",
-            ":io",
+            "//src/share:io_request",
             ":schema_access",
             ":task_control",
             "//src/oblib:oblib_foundation",
@@ -268,6 +268,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     "geo_algorithms": struct(
         hdrs = [
             "geo/geo_math.h",
+            "geo/ob_geo_area_geographic.h",
             "geo/ob_geo_dispatcher.h",
             "geo/ob_geo_func_area.h",
             "geo/ob_geo_func_box.h",
@@ -307,14 +308,13 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "geo/ob_geo_3d.h",
             "geo/ob_geo_mvt.h",
             "geo/ob_srs_wkt_parser.h",
-            "geo/ob_vector_tile.pb-c.h",
         ],
         deps = [
             ":geo_cast_interface",
             ":geo_types",
             ":geo_visitors",
             "//src/oblib:oblib_foundation",
-            "//bazel/third_party:protobuf_c_headers",
+            "//rust:cxx_headers",
         ],
     ),
     "geo_visitors": struct(
@@ -368,29 +368,13 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "//src/oblib:oblib_foundation",
         ],
     ),
-    "io_bench_controller_interface": struct(
-        hdrs = ["io/ob_i_io_bench_controller.h"],
-        deps = [],
-    ),
-    "local_device_space_interface": struct(
-        hdrs = ["ob_i_local_device_space_provider.h"],
-        deps = [],
+    "math_compat": struct(
+        hdrs = ["ob_math_compat.h"],
+        deps = ["//rust:math_headers"],
     ),
     "memory_support": struct(
         hdrs = ["allocator/ob_reserve_arena.h"],
         deps = ["//src/oblib:oblib_foundation"],
-    ),
-    "redo_log_storage": struct(
-        hdrs = [
-            "ob_local_device.h",
-        ],
-        deps = [
-            ":local_io_config",
-            ":io_device_interface",
-            ":local_device_space_interface",
-            "//src/oblib:oblib_foundation",
-            "//bazel/third_party:libaio_headers",
-        ],
     ),
     "rpc_dispatch": struct(
         hdrs = [
@@ -418,7 +402,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             ":est_row_count_record",
             ":external_storage",
             ":inner_table_schema_io",
-            ":io",
+            "//src/share:io_request",
             ":lib_cache_namespace",
             ":log_protocol",
             ":resource_limit_calculator",
@@ -658,7 +642,6 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         deps = [
             ":core_types",
             "//src/oblib:oblib_foundation",
-            "//bazel/third_party:rapidjson_headers",
         ],
     ),
     "worker_runtime": struct(

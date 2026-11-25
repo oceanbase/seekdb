@@ -10,7 +10,7 @@ typedef struct ucontext_t { int dummy; } ucontext_t;
 #else
 // Unix/Linux/macOS: use native ucontext
 #ifndef _XOPEN_SOURCE
-#define _XOPEN_SOURCE
+#define _XOPEN_SOURCE 700
 #endif
 #include <ucontext.h>
 #endif

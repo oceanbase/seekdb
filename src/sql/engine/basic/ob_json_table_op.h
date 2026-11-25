@@ -19,7 +19,6 @@
 
 #include "sql/engine/ob_operator.h"
 #include "lib/charset/ob_charset.h"
-#include "common/json_type/ob_json_tree.h"
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_path.h"
 #include "common/json_type/ob_json_bin.h"
@@ -43,6 +42,8 @@ class ObRegCol;
 class ScanNode;
 class UnionNode;
 class ObMultiModeTableNode;
+class JsonTableInput;
+class JsonTableColumn;
 
 enum table_type : int8_t {
   OB_INVALID_TABLE = 0,
@@ -153,7 +154,8 @@ struct JtScanCtx {
     JtScanCtx()
       : row_alloc_(),
         op_exec_alloc_(nullptr),
-        table_func_(nullptr) {}
+        table_func_(nullptr),
+        json_input_(nullptr) {}
   
   bool is_json_table_func() {
     return spec_ptr_->table_type_ == OB_ORA_JSON_TABLE_TYPE;
@@ -170,6 +172,7 @@ struct JtScanCtx {
   ObIAllocator *op_exec_alloc_;
   ObJsonTableOp* jt_op_;
   MulModeTableFunc *table_func_;
+  JsonTableInput *json_input_;
 
   bool is_evaled_;
   bool is_cover_error_;
@@ -195,9 +198,9 @@ public:
       is_evaled_(false),
       root_(nullptr),
       input_(nullptr),
-      j_null_(),
-      j_arr_(allocator_),
-      j_obj_(allocator_)
+      j_null_(nullptr),
+      j_arr_(nullptr),
+      j_obj_(nullptr)
   {
     const ObJsonTableSpec* spec_ptr = reinterpret_cast<const ObJsonTableSpec*>(&spec);
     col_count_ = spec_ptr->column_exprs_.count();
@@ -210,9 +213,9 @@ public:
   //virtual int inner_get_next_batch(int64_t max_row_cnt) override;
   virtual int inner_close() override;
   virtual void destroy() override;
-  ObJsonNull* get_js_null() { return &j_null_; }
-  ObJsonArray* get_js_array() { return &j_arr_; }
-  ObJsonObject* get_js_object() { return &j_obj_; }
+  ObIJsonBase* get_js_null() { return j_null_; }
+  ObIJsonBase* get_js_array() { return j_arr_; }
+  ObIJsonBase* get_js_object() { return j_obj_; }
   void* get_root_param() { return input_; }
   JoinNode* get_root_entry() { return root_; }
   TO_STRING_KV(K_(is_inited),
@@ -243,9 +246,9 @@ public:
   void reset_columns();
 
 private:
-  ObJsonNull j_null_;
-  ObJsonArray j_arr_;
-  ObJsonObject j_obj_;
+  ObIJsonBase *j_null_;
+  ObIJsonBase *j_arr_;
+  ObIJsonBase *j_obj_;
 };
 
 class MulModeTableFunc {
@@ -255,7 +258,6 @@ public:
 
   virtual int init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx) { return 0; } // init variable before seek value
   virtual int eval_default_value(JtScanCtx*& ctx, ObExpr*& default_expr, void*& res, bool need_datum) { return 0; }  // eval default value in inner open
-  virtual int container_at(void* in, void *&out, int32_t pos) { return 0; }
   virtual int eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx) { return 0; }  // get root input
   virtual int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value) { return 0; }
   virtual int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value) { return 0; };
@@ -277,7 +279,6 @@ public:
 
   int init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
   int eval_default_value(JtScanCtx*& ctx, ObExpr*& default_expr, void*& res, bool need_datum);
-  int container_at(void* in, void *&out, int32_t pos);
   int eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx);
   int reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value);
   int get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value);
@@ -289,7 +290,7 @@ public:
   int set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret);
   int cast_to_result(ObRegCol& col_node, JtScanCtx* ctx, bool enable_error = false, bool is_pack_result = true);
   int set_expr_exec_param(ObRegCol& col_node, JtScanCtx* ctx);
-  int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx) { return OB_SUCCESS; }  // reset variable if variable is not const
+  int reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx);
 private:
   const static uint8_t OB_JSON_FALSE_ON_ERROR = 0;
   const static uint8_t OB_JSON_TRUE_ON_ERROR  = 1;
@@ -318,6 +319,7 @@ class ObMultiModeTableNode {
 public:
   ObMultiModeTableNode()
     : in_(nullptr),
+      input_identity_(0),
       is_evaled_(false),
       is_null_result_(false) {
       node_type_ = REG_TYPE;
@@ -336,9 +338,12 @@ public:
     return ObMultiModeTableNode::reset(ctx);
   }
   virtual void* get_curr_iter_value() { return nullptr; }
+  bool same_input(void *in, JtScanCtx *ctx) const;
+  void remember_input(void *in, JtScanCtx *ctx);
 
   JtNodeType node_type_;
   void* in_;
+  uint64_t input_identity_;
   bool is_evaled_;  // Node has been evaluated
   bool is_null_result_;  // Node returns null value
 
@@ -363,6 +368,7 @@ public:
       emp_val_(nullptr),
       err_val_(nullptr),
       res_flag_(NOT_DATUM),
+      json_column_(nullptr),
       expr_param_() {
       new (&col_info_) ObJtColInfo(col_info);
       node_type_ = REG_TYPE;
@@ -395,6 +401,7 @@ public:
   ResultType res_flag_; 
   MulModeTableType tab_type_; // distinct xml path or json path , due to not common root
   JtNodeType node_type_;  // distinct regcol in scan node or regcol
+  JsonTableColumn *json_column_;
   ObJsonExprParam expr_param_;
   TO_STRING_KV(K_(node_type),
                K_(cur_pos),
@@ -491,7 +498,6 @@ class JoinNode : public UnionNode
 
 class RegularCol final{
 public:
-  static int eval_query_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_expr, bool& is_null);
   static int eval_value_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_expr, bool& is_null);
   static int eval_exist_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_expr, bool& is_null);
   static int eval_unnest_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, ObExpr* col_expr);
@@ -503,7 +509,7 @@ public:
                                 const ObObjType expect_type,
                                 const ObCollationType expect_cs_type,
                                 const bool is_explicit_cast);
-  static int check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx);
+  static int check_json_column_type(ObRegCol &col_node, JtScanCtx* ctx);
   static int check_default_value_inner_mysql(JtScanCtx* ctx,
                                              ObRegCol &col_node,
                                              ObExpr* default_expr,

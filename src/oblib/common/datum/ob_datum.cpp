@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_datum.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -144,7 +145,7 @@ DEF_TO_STRING(ObDatum)
       } else {
         // maybe ObIntTC
         if (sizeof(int64_t) == len_) {
-          BUF_PRINTF(", int: %ld", *int_);
+          BUF_PRINTF(", int: %" PRId64 "", *int_);
           // maybe number with one digit
           if (1 == num_->desc_.len_) {
             BUF_PRINTF(", num_digit0: %u", num_->digits_[0]);

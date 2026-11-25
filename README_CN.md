@@ -70,7 +70,7 @@ MySQL 兼容 · 嵌入式 / 服务器双模式 · 向量 + 全文混合搜索 ·
   <img src="images/benchmark.svg" alt="seekdb 基准测试：QPS 是 Milvus 的 10.7 倍，Elasticsearch 的 3.2 倍" width="720" />
 </div>
 
-> 📖 [阅读发布博客 →](docs/blog/launch_blog_zh.md) · 🔁 [复现基准测试 →](https://github.com/oceanbase/vdb-streambench)
+> 📖 [阅读发布博客 →](docs/blog/launch_blog_en.md) · 🔁 [复现基准测试 →](https://github.com/oceanbase/vdb-streambench)
 
 ---
 
@@ -128,7 +128,7 @@ MERGE TABLE agent_sandbox_42.memory INTO agent_state.memory STRATEGY THEIRS;
 DROP DATABASE agent_sandbox_42;
 ```
 
-<sub>源码: [`tools/deploy/mysql_test/test_suite/fork_table/`](tools/deploy/mysql_test/test_suite/fork_table/)</sub>
+<sub>源码: [`tests/mysqltest/cases/fork_table/`](tests/mysqltest/cases/fork_table/)</sub>
 
 ### 🔍 一条 SQL 完成混合搜索
 
@@ -508,7 +508,7 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 ## 🌐 下一步与社区
 
 - 📖 **[阅读文档 →](https://docs.seekdb.ai/)** — 快速开始、API 参考、集成指南
-- 📝 **[发布博客 →](docs/blog/launch_blog_zh.md)** — Milvus 10.7 倍 QPS 背后的架构
+- 📝 **[发布博客 →](docs/blog/launch_blog_en.md)** — Milvus 10.7 倍 QPS 背后的架构
 - 🐛 **[提交 Issue →](https://github.com/oceanbase/seekdb/issues)** — 报告 Bug、请求功能
 - 🤝 **[参与贡献 →](CONTRIBUTING.md)** — 共建 Agent 时代的状态存储
 
@@ -536,7 +536,7 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 
 ### 从源码构建
 
-构建之前，请先根据操作系统安装所需的工具链和依赖。详见[安装工具链](docs/developer-guide/zh/toolchain.md)。
+构建之前，请先根据操作系统安装所需的工具链和依赖。详见[安装工具链](docs/developer-guide/en/toolchain.md)。
 
 ```bash
 # 克隆仓库
@@ -550,7 +550,7 @@ cd ~/seekdb
 ./bin/seekdb
 ```
 
-本例中工作目录为 $HOME/seekdb，请使用一个全新的空目录进行测试。详细说明请参见[开发者指南](docs/developer-guide/zh/README.md)。
+本例中工作目录为 $HOME/seekdb，请使用一个全新的空目录进行测试。详细说明请参见[开发者指南](docs/developer-guide/en/README.md)。
 
 ### 贡献
 

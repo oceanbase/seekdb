@@ -791,7 +791,7 @@ int ObDiagnoseInfoParam<int_size, str_size>::fill_comment(char *buf, const int64
       ADD_COMPACTION_INFO_PARAM(buf, buf_len,
                                 OB_DIAGNOSE_INFO_PARAMS[struct_type_].info_type[type].info_str_fmt[i], param_int_[i]);
     }
-    if (OB_DIAGNOSE_INFO_PARAMS[struct_type_].info_type[type].with_comment) {
+    if (str_size > 0 && OB_DIAGNOSE_INFO_PARAMS[struct_type_].info_type[type].with_comment) {
       ObIDiagnoseInfoMgr::add_compaction_info_param(buf, buf_len, comment_);
     }
   }

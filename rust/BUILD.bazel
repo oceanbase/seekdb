@@ -21,3 +21,13 @@ rust_modules(
     modules = MODULES,
     generated_headers = ["//rust/config:config_checkers.h"],
 )
+
+filegroup(
+    name = "generated_sources",
+    srcs = [
+        ":generated_headers",
+        "//rust/mvt:generated/vector_tile.rs",
+        "//rust/standby-rpc:generated/standbyservice.rs",
+    ],
+    visibility = ["//visibility:public"],
+)

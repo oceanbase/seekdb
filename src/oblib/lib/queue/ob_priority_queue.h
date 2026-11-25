@@ -18,6 +18,7 @@
 #define OCEANBASE_QUEUE_OB_PRIORITY_QUEUE_
 
 #include "lib/queue/ob_link_queue.h"
+#include <inttypes.h>
 #include "lib/lock/ob_scond.h"
 
 namespace oceanbase
@@ -181,9 +182,9 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;
-    common::databuff_printf(buf, buf_len, pos, "total_size=%ld ", size());
+    common::databuff_printf(buf, buf_len, pos, "total_size=%" PRId64 " ", size());
     for(int j = 0; j < PRIO_CNT; j++) {
-      common::databuff_printf(buf, buf_len, pos, "queue[0][%d]=%ld ", j, queue_.q[j].size());
+      common::databuff_printf(buf, buf_len, pos, "queue[0][%d]=%" PRId64 " ", j, queue_.q[j].size());
     }
     return pos;
   }

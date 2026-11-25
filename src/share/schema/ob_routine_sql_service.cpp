@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_routine_sql_service.h"
+#include <inttypes.h>
 namespace oceanbase
 {
 using namespace common;
@@ -251,7 +252,7 @@ int ObRoutineSqlService::del_package(ObISQLClient &sql_client,
 
   if (OB_SUCCESS == ret) {
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(package_id, schema_version, is_deleted)"
-        " VALUES(%lu,%ld,%d)",
+        " VALUES(%" PRIu64 ",%" PRId64 ",%d)",
         OB_ALL_PACKAGE_HISTORY_TNAME,
         ObSchemaUtils::get_extract_schema_id(package_id),
         new_schema_version, 1))) {
@@ -287,7 +288,7 @@ int ObRoutineSqlService::del_routine(ObISQLClient &sql_client,
     ObSqlString sql;
     int64_t affected_rows = 0;
     // insert into __all_routine_history
-    if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(routine_id, schema_version, is_deleted) VALUES(%lu,%lu,%d)",
+    if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(routine_id, schema_version, is_deleted) VALUES(%" PRIu64 ",%" PRIu64 ",%d)",
         OB_ALL_ROUTINE_HISTORY_TNAME,
         ObSchemaUtils::get_extract_schema_id(routine_id),
         new_schema_version, 1))) {
@@ -337,7 +338,7 @@ int ObRoutineSqlService::del_routine_params(ObISQLClient &sql_client,
       const ObRoutineParam *routine_param = NULL;
       if (OB_ISNULL(routine_param = routine_params.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(sql.append_fmt("%s(%lu, %lu, %lu, %d)", (0 == i) ? "" : ",",
+      } else if (OB_FAIL(sql.append_fmt("%s(%" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %d)", (0 == i) ? "" : ",",
           ObSchemaUtils::get_extract_schema_id(routine_param->get_routine_id()),
           routine_param->get_sequence(),
           new_schema_version, 1))) {

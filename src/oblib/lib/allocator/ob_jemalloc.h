@@ -18,10 +18,10 @@
 #define OCEANBASE_COMMON_OB_JEMALLOC_H_
 
 #include <cstddef>
+#include <cerrno>
 
 #if defined(OB_HAVE_BUNDLED_JEMALLOC)
 extern "C" {
-extern const char *je_malloc_conf;
 void *je_malloc(size_t size) noexcept;
 void je_free(void *ptr) noexcept;
 void *je_realloc(void *ptr, size_t size) noexcept;
@@ -45,6 +45,7 @@ void *jemalloc_sanity_realloc(void *ptr, size_t size) noexcept;
 void *jemalloc_sanity_memalign(size_t alignment, size_t size) noexcept;
 size_t jemalloc_sanity_usable_size(void *ptr) noexcept;
 bool jemalloc_sanity_enable_background_threads() noexcept;
+int jemalloc_sanity_configure_runtime() noexcept;
 #endif
 
 inline void *jemalloc_malloc(const size_t size)
@@ -88,7 +89,7 @@ inline void *jemalloc_memalign(const size_t alignment, const size_t size)
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_memalign(alignment, size);
 #elif defined(OB_HAVE_BUNDLED_JEMALLOC)
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
   void *ptr = nullptr;
   return 0 == je_posix_memalign(&ptr, alignment, size) ? ptr : nullptr;
 #else
@@ -113,16 +114,78 @@ inline size_t jemalloc_usable_size(void *ptr)
 #endif
 }
 
+#if defined(OB_HAVE_BUNDLED_JEMALLOC)
+namespace jemalloc_detail
+{
+inline int enable_background_threads()
+{
+  bool enabled = true;
+  int ret = je_mallctl("background_thread", nullptr, nullptr,
+                      &enabled, sizeof(enabled));
+  if (0 != ret) {
+    return ret;
+  }
+  enabled = false;
+  size_t size = sizeof(enabled);
+  ret = je_mallctl("background_thread", &enabled, &size, nullptr, 0);
+  return 0 != ret ? ret : (enabled ? 0 : EFAULT);
+}
+
+inline int configure_decay()
+{
+  std::ptrdiff_t dirty_ms = 1000;
+  std::ptrdiff_t muzzy_ms = 0;
+  int ret = je_mallctl("arenas.dirty_decay_ms", nullptr, nullptr,
+                      &dirty_ms, sizeof(dirty_ms));
+  if (0 != ret) {
+    return ret;
+  }
+  ret = je_mallctl("arenas.muzzy_decay_ms", nullptr, nullptr,
+                   &muzzy_ms, sizeof(muzzy_ms));
+  if (0 != ret) {
+    return ret;
+  }
+
+  ret = je_mallctl("arena.0.dirty_decay_ms", nullptr, nullptr,
+                   &dirty_ms, sizeof(dirty_ms));
+  if (0 == ret) {
+    ret = je_mallctl("arena.0.muzzy_decay_ms", nullptr, nullptr,
+                     &muzzy_ms, sizeof(muzzy_ms));
+  }
+  return ret;
+}
+} // namespace jemalloc_detail
+#endif
+
 inline bool jemalloc_enable_background_threads()
 {
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_enable_background_threads();
 #elif defined(OB_HAVE_BUNDLED_JEMALLOC)
-  bool enabled = true;
-  return 0 == je_mallctl("background_thread", nullptr, nullptr,
-                         &enabled, sizeof(enabled));
+  return 0 == jemalloc_detail::enable_background_threads();
 #else
   return true;
+#endif
+}
+
+// Set defaults and arena 0 during startup, before server workers begin.
+// Bootstrap allocations use jemalloc's original defaults.
+inline int jemalloc_configure_runtime()
+{
+#if defined(OB_USE_ASAN)
+  return 0;
+#elif defined(ENABLE_SANITY)
+  return jemalloc_sanity_configure_runtime();
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
+  int ret = jemalloc_detail::configure_decay();
+#if !defined(__APPLE__) && !defined(_WIN32)
+  if (0 == ret) {
+    ret = jemalloc_detail::enable_background_threads();
+  }
+#endif
+  return ret;
+#else
+  return 0;
 #endif
 }
 

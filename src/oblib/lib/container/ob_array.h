@@ -750,7 +750,7 @@ int64_t ObSEArrayImpl<T, LOCAL_ARRAY_SIZE, BlockAllocatorT, auto_free>::to_strin
                                    ? OB_ASYNC_LOG_KEEP_SIZE
                                    : OB_LOG_KEEP_SIZE);
     //delete now.If needed, must add satisfy json and run passed observer pretest
-    //common::databuff_printf(buf, buf_len, pos, "%ld:", count_);
+    //common::databuff_printf(buf, buf_len, pos, "%lld:", count_);
     for (int64_t index = 0; (index < need_print_count - 1) && (pos < buf_len - 1); ++index) {
       if (pos + log_keep_size >= buf_len - 1) {
         BUF_PRINTF(OB_LOG_ELLIPSIS);

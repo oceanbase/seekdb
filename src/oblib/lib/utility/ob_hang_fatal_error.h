@@ -25,8 +25,6 @@ namespace oceanbase
 namespace common
 {
 extern void right_to_die_or_duty_to_live();
-int64_t get_fatal_error_thread_id();
-void set_fatal_error_thread_id(int64_t thread_id);
 
 struct OB_BASE_EXCEPTION : public std::exception
 {

@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_merge_patch.h"
+#include "rust/json.h"
+#include <optional>
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "share/ob_json_access_utils.h"
 
@@ -67,64 +69,7 @@ int ObExprJsonMergePatch::calc_result_typeN(ObExprResType& type,
 
 int ObExprJsonMergePatch::eval_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
-  INIT_SUCC(ret);
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
-  ObIJsonBase *j_base = NULL;
-  ObIJsonBase *j_patch_node = NULL;
-  bool has_null = false;
-  ObJsonNull j_null;
-  if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
-    ret = OB_ERR_INVALID_JSON_CHARSET;
-  } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, j_base, has_null))) {
-  } else if (has_null) {
-    j_base = &j_null;
-  }
-
-  for (int32 i = 1; OB_SUCC(ret) && i < expr.arg_cnt_; i ++) {
-    bool is_null = false;
-    if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, i, j_patch_node, is_null))) {
-    } else if (is_null) {
-      has_null= true;
-    } else if (j_patch_node->json_type() != ObJsonNodeType::J_OBJECT) {
-      j_base = j_patch_node;
-      has_null = false;
-    } else if (has_null) {
-      // do nothing
-    } else {
-      ObJsonObject *j_obj = NULL;
-      if (j_base->json_type() == ObJsonNodeType::J_OBJECT) {
-        j_obj = static_cast<ObJsonObject *>(j_base);
-      } else {
-        void *buf = temp_allocator.alloc(sizeof(ObJsonObject));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          j_obj = new (buf) ObJsonObject(&temp_allocator);
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(j_obj->merge_patch(&temp_allocator, static_cast<ObJsonObject*>(j_patch_node)))) {
-        } else {
-          j_base = j_obj;
-          has_null = false; 
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObString raw_bin;
-    if (has_null) {
-      res.set_null();
-    } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
-    } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
-    }
-  }
-  return ret;
+  return ObJsonExprHelper::eval_json_merge(expr, ctx, res, true);
 }
 
 #define SET_COVER_ERROR(error) \
@@ -186,52 +131,36 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
     ret = OB_ERR_NON_TEXT_RET_NOTSUPPORT;
   }
 
-  ObIJsonBase *j_base = NULL;
-  bool has_null = false;
-  ObJsonNull j_null;
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, j_base, has_null))) {
-    SET_COVER_ERROR(ret);
-  } else if (has_null) {
-    j_base = &j_null;
+  rust::Box<BinaryMerge> merger = common::json::new_merge_accumulator(2);
+  bool argument_null = false;
+  bool target_failed = false;
+  if (OB_SUCC(ret)) {
+    ret = ObJsonExprHelper::push_json_merge_argument(expr, ctx, temp_allocator, 0, *merger, argument_null);
+    target_failed = ret != OB_SUCCESS;
+    if (target_failed) { SET_COVER_ERROR(ret); }
   }
-
-  ObIJsonBase *j_patch_node = NULL;
-  int tmp_ret = OB_SUCCESS;
-  if ((!is_cover_error && OB_FAIL(ret)) || has_null) {
-    // do nothing
-  } else if ((tmp_ret = ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 1, j_patch_node, has_null, true, false)) != OB_SUCCESS) {
-    ret = tmp_ret;
-    is_cover_error = false;
-    if (tmp_ret == OB_ERR_JSON_SYNTAX_ERROR) {
-      ret = OB_ERR_JSON_PATCH_INVALID;
-    }
-  } else if (has_null) {
-    ret = OB_ERR_JSON_PATCH_INVALID;
-    LOG_USER_ERROR(OB_ERR_JSON_PATCH_INVALID);
-  } else if (j_patch_node->json_type() != ObJsonNodeType::J_OBJECT) {
-    j_base = j_patch_node;
-  } else if (OB_FAIL(ret)) {
+  if ((!is_cover_error && OB_FAIL(ret)) || (!target_failed && !merger->merge_needs_input())) {
   } else {
-    ObJsonObject *j_obj = NULL;
-    if (j_base->json_type() == ObJsonNodeType::J_OBJECT) {
-      j_obj = static_cast<ObJsonObject *>(j_base);
+    bool patch_null = false;
+    bool input_error = true;
+    int patch_status = OB_SUCCESS;
+    if (target_failed) {
+      rust::Box<BinaryMerge> patch_probe = common::json::new_merge_accumulator(0);
+      patch_status = ObJsonExprHelper::push_json_merge_argument(
+          expr, ctx, temp_allocator, 1, *patch_probe, patch_null, &input_error);
     } else {
-      void *buf = temp_allocator.alloc(sizeof(ObJsonObject));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        SET_COVER_ERROR(ret);
-      } else {
-        j_obj = new (buf) ObJsonObject(&temp_allocator);
-      }
+      patch_status = ObJsonExprHelper::push_json_merge_argument(
+          expr, ctx, temp_allocator, 1, *merger, patch_null, &input_error);
     }
-
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(j_obj->merge_patch(&temp_allocator, static_cast<ObJsonObject*>(j_patch_node)))) {
-        SET_COVER_ERROR(ret);
-      } else {
-        j_base = j_obj;
-      }
+    if (patch_status != OB_SUCCESS) {
+      ret = patch_status;
+      if (input_error) { is_cover_error = false; }
+      else { SET_COVER_ERROR(ret); }
+      if (ret == OB_ERR_JSON_SYNTAX_ERROR) { ret = OB_ERR_JSON_PATCH_INVALID; }
+    } else if (patch_null) {
+      ret = OB_ERR_JSON_PATCH_INVALID;
+      is_cover_error = false;
+      LOG_USER_ERROR(OB_ERR_JSON_PATCH_INVALID);
     }
   }
 
@@ -241,28 +170,34 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
       ret = OB_SUCCESS;
     }
   } else if (OB_SUCC(ret)) {
-    if (has_null) {
+    common::json::MergeOutput merged = common::json::finish_merge(std::move(merger));
+    if (merged.status != 0) {
+      ret = merged.status == 1 ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
+    } else if (merged.is_null) {
       res.set_null();
     } else {
-      ObJsonBuffer* jbuf = nullptr; 
+      std::optional<common::json::FormatResult> formatted;
       ObString res_string;
       bool is_res_blob = expr.datum_meta_.cs_type_ == CS_TYPE_BINARY && dst_type == ObLongTextType;
 
-      if (OB_ISNULL( jbuf = OB_NEWx(ObJsonBuffer, &temp_allocator, &temp_allocator))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (dst_type == ObJsonType) {
-        if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, res_string, &temp_allocator))) {
-        }
+      const rust::Slice<const uint8_t> binary(merged.binary.data(), merged.binary.size());
+      if (dst_type == ObJsonType) {
+        res_string.assign_ptr(reinterpret_cast<const char *>(merged.binary.data()),
+                              static_cast<ObString::obstr_size_t>(merged.binary.size()));
       } else {
         ObString tmp_val;
         ObString result_str;
-        bool is_quote = j_base->json_type() == ObJsonNodeType::J_STRING;
-
-        if (OB_FAIL(j_base->print(*jbuf, is_quote, 0, is_pretty > 0))) {
-        } else if (jbuf->empty()) {
+        const common::json::BinaryMetadataResult metadata = common::json::inspect_binary(binary, false);
+        const bool is_quote = metadata.value_type == static_cast<uint8_t>(ObJsonNodeType::J_STRING);
+        formatted.emplace(common::json::format_binary(binary, is_quote, is_pretty > 0, 0));
+        if (formatted->platform_error != 0) {
+          ret = formatted->platform_error;
+        } else if (metadata.status != common::json::Status::Ok
+            || formatted->status != common::json::Status::Ok || formatted->text.empty()) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          tmp_val = jbuf->string();
+          tmp_val.assign_ptr(reinterpret_cast<char *>(formatted->text.data()),
+                             static_cast<ObString::obstr_size_t>(formatted->text.size()));
           ObCollationType in_cs_type = CS_TYPE_UTF8MB4_BIN;
           ObCollationType dst_cs_type = expr.obj_meta_.get_collation_type();
           result_str = tmp_val;

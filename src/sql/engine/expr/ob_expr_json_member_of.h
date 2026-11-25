@@ -35,9 +35,6 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 ObExprTypeCtx &type_ctx) const override;
-  static int check_json_member_of_array(const ObIJsonBase *json_a,
-                                      const ObIJsonBase *json_b,
-                                      bool &is_member_of);
   static int eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

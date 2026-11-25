@@ -1,0 +1,13 @@
+[package]
+name = "standby-rpc"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[dependencies]
+cxx = "1"
+tonic = { version = "=0.14.6", default-features = false, features = ["transport", "codegen"] }
+tonic-prost = "=0.14.6"
+prost = "=0.14.3"
+tokio = { version = "=1.52.3", features = ["rt", "sync"] }
+tokio-stream = "=0.1.18"
+rpc = { path = "../rpc" }

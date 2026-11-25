@@ -194,66 +194,6 @@ public:
 
 };
 
-typedef common::ObIArray<common::ObNewRowIterator*> RowIterIArray;
-
-class ObIterExprCtx
-{
-public:
-  ObIterExprCtx(ObExecContext &ctx, common::ObIAllocator &allocator)
-    : iter_expr_ctxs_(allocator),
-      index_scan_iters_(NULL),
-      ctx_(ctx),
-      allocator_(allocator),
-      cur_row_(NULL)
-    {}
-
-  int init(uint64_t expr_size, RowIterIArray *iters)
-  {
-    index_scan_iters_ = iters;
-    return iter_expr_ctxs_.prepare_allocate(expr_size);
-  }
-
-  RowIterIArray *get_index_scan_iters() { return index_scan_iters_; }
-
-  template <typename T>
-  int create_expr_op_ctx(uint64_t expr_id, T *&op_ctx)
-  {
-    int ret = common::OB_SUCCESS;
-    if (expr_id >= iter_expr_ctxs_.count()) {
-      ret = common::OB_INVALID_ARGUMENT;
-      SQL_ENG_LOG(WARN, "invalid expr id", K(expr_id), K(iter_expr_ctxs_.count()));
-    } else {
-      void *ptr = allocator_.alloc(sizeof(T));
-      if (NULL == ptr) {
-        ret = common::OB_ALLOCATE_MEMORY_FAILED;
-        SQL_ENG_LOG(WARN, "allocate memory for expr op ctx failed");
-      } else {
-        op_ctx = new(ptr) T();
-        iter_expr_ctxs_.at(expr_id) = op_ctx;
-      }
-    }
-    return ret;
-  }
-  template <typename T>
-  T *get_expr_op_ctx(uint64_t expr_id)
-  {
-    T *ret = NULL;
-    if (expr_id < iter_expr_ctxs_.count()) {
-      ret = static_cast<T*>(iter_expr_ctxs_.at(expr_id));
-    }
-    return ret;
-  }
-  ObExecContext &get_exec_context() { return ctx_; }
-  void set_cur_row(common::ObNewRow *cur_row) { cur_row_ = cur_row; }
-  common::ObNewRow *get_cur_row() const { return cur_row_; }
-private:
-  common::ObFixedArray<ObExprOperatorCtx*, common::ObIAllocator> iter_expr_ctxs_;
-  RowIterIArray *index_scan_iters_;
-  ObExecContext &ctx_;
-  common::ObIAllocator &allocator_;
-  common::ObNewRow *cur_row_;
-};
-
 class ObFastExprOperator
 {
 public:
@@ -266,28 +206,6 @@ public:
   virtual int assign(const ObFastExprOperator &other) = 0;
 protected:
   ObExprOperatorType op_type_;
-};
-
-class ObIterExprOperator
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObIterExprOperator()
-    : expr_id_(common::OB_INVALID_ID),
-      expr_type_(T_INVALID) {}
-  virtual ~ObIterExprOperator() {}
-
-  virtual int get_next_row(ObIterExprCtx &expr_ctx, const common::ObNewRow *&result) const = 0;
-  inline uint64_t get_expr_id() const { return expr_id_; }
-  inline void set_expr_id(uint64_t expr_id) { expr_id_ = expr_id; }
-  inline void set_expr_type(ObExprOperatorType expr_type) { expr_type_ = expr_type; }
-  inline ObExprOperatorType get_expr_type() const { return expr_type_; }
-
-  TO_STRING_KV(K_(expr_id),
-               K_(expr_type));
-protected:
-  uint64_t expr_id_;
-  ObExprOperatorType expr_type_;
 };
 
 #define DECLARE_SET_LOCAL_SESSION_VARS \

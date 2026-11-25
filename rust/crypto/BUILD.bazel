@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_visibility = ["//rust:__subpackages__"])
+
+exports_files(["src/bridge.rs", "include/sdk.h"], visibility = ["//rust:__pkg__"])
+
+cc_library(
+    name = "sdk_headers",
+    hdrs = ["include/sdk.h"],
+    deps = ["//rust:cxx_headers"],
+    visibility = ["//rust:__pkg__"],
+)
+
+cc_library(
+    name = "sdk",
+    srcs = ["src/sdk.cpp"],
+    deps = [
+        ":sdk_headers",
+        "//rust:crypto_headers",
+    ],
+    implementation_deps = [
+        "//bazel/third_party:libcrypto",
+        "//bazel/third_party:openssl_headers",
+    ],
+)
+
+rust_library(
+    name = "crypto",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/**/*.rs"]),
+    edition = crate_edition(),
+    version = "0.1.0",
+    deps = all_crate_deps(normal = True),
+    link_deps = [":sdk", "//rust:crypto_bridge"],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    aliases = aliases(),
+    tags = ["no-remote"],
+)
+
+rust_test(
+    name = "crypto_test",
+    crate = ":crypto",
+    compile_data = glob(["src/testdata/*"]),
+)

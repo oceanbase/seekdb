@@ -20,7 +20,6 @@
 #include "ob_sql.h"
 #include "sql/ob_query_retry_ctrl.h"
 #include "query/protocol/ob_client_protocol.h"
-#include "sql/plan_cache/ob_param_value_formatter.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
@@ -1274,7 +1273,26 @@ int ObSPIService::spi_set_variable(ObPLExecCtx *ctx,
             scope = static_cast<ObSetVar::SetScopeType>(expr->get_expr_items().at(2).get_obj().get_int());
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(set_variable(ctx, scope, name, *value, is_default))) {
+        if (OB_SUCC(ret) && T_OP_GET_USER_VAR == expr_type && !is_default) {
+          // Re-issuing the assignment as SET @x = <literal> normalizes the
+          // evaluated value exactly like the SQL path, but that synthetic
+          // statement owns a diagnostics area of its own. Give it a scratch
+          // buffer so its reset/warnings cannot erase the conditions produced
+          // by evaluating the RHS. On failure keep the scratch contents: the
+          // error message and SQLSTATE are reported from there.
+          ObWarningBuffer *outer_wb = ob_get_tsi_warning_buffer();
+          ObWarningBuffer inner_wb;
+          if (OB_NOT_NULL(outer_wb)) {
+            ob_setup_tsi_warning_buffer(&inner_wb);
+          }
+          ret = set_variable(ctx, scope, name, *value, is_default);
+          if (OB_NOT_NULL(outer_wb)) {
+            ob_setup_tsi_warning_buffer(outer_wb);
+            if (OB_FAIL(ret)) {
+              *outer_wb = inner_wb;
+            }
+          }
+        } else if (OB_SUCC(ret) && OB_FAIL(set_variable(ctx, scope, name, *value, is_default))) {
         }
       }
     } else if (T_OP_GET_PACKAGE_VAR == expr_type) {
@@ -2225,7 +2243,6 @@ int ObSPIService::prepare_dynamic_sql_params(ObPLExecCtx *ctx,
     CK (OB_NOT_NULL(params[i]));
     OZ (deep_copy_dynamic_param(ctx, spi_result, allocator, params[i], exec_params));
   }
-  OZ (store_params_string(ctx, spi_result, exec_params));
   return ret;
 }
 
@@ -2245,7 +2262,6 @@ int ObSPIService::prepare_cursor_params(ObPLExecCtx *ctx,
   for (int64_t i = 0; OB_SUCC(ret) && i < exec_param_cnt; ++i) {
     OZ (deep_copy_dynamic_param(ctx, spi_result, allocator, &params->at(i), exec_params));
   }
-  OZ (store_params_string(ctx, spi_result, exec_params));
   return ret;
 }
 
@@ -4295,26 +4311,6 @@ int ObSPIService::process_function_out_result(ObPLExecCtx *ctx,
   return ret;
 }
 
-int ObSPIService::store_params_string(
-  ObPLExecCtx *ctx, ObSPIResultSet &spi_result, ParamStore *exec_params)
-{
-  int ret = OB_SUCCESS;
-  if (OB_SUCC(ret) 
-      && OB_NOT_NULL(ctx)
-      && OB_NOT_NULL(ctx->exec_ctx_)
-      && OB_NOT_NULL(ctx->exec_ctx_->get_my_session())) {
-    char *tmp_ptr = NULL;
-    int64_t tmp_len = 0;
-    OZ (store_params_value_to_str(spi_result.get_memory_ctx()->get_arena_allocator(),
-                                  *ctx->exec_ctx_->get_my_session(),
-                                  exec_params,
-                                  tmp_ptr,
-                                  tmp_len));
-    OX (spi_result.get_exec_params_str_ptr()->assign(tmp_ptr, tmp_len));
-  }
-  return ret;
-}
-
 int ObSPIService::prepare_static_sql_params(ObPLExecCtx *ctx,
                                             ObIAllocator &param_allocator, // used to copy runtime parameters
                                             const ObString &sql,
@@ -4344,8 +4340,6 @@ int ObSPIService::prepare_static_sql_params(ObPLExecCtx *ctx,
     OZ (construct_exec_params(ctx, param_allocator, param_exprs, param_count,
                               into_exprs, into_count, *exec_params, out_params),
       K(sql), K(ps_sql), K(type), K(param_count), K(out_params), KPC(exec_params));
-
-    OZ (store_params_string(ctx, spi_result, exec_params));
   }
 
   return ret;

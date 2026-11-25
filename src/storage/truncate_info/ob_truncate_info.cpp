@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 #include "storage/truncate_info/ob_truncate_info.h"
+#include <inttypes.h>
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "storage/multi_data_source/adapter_define/mds_dump_node.h"
 #include "share/truncate_info/ob_truncate_info_util.h"
@@ -765,7 +766,7 @@ void ObTruncatePartition::gene_info(char* buf, const int64_t buf_len, int64_t &p
       J_COMMA();
       const ObNewRow *values = list_row_values_.get_values();
       for (int64_t idx = 0; idx < list_row_values_.count(); ++idx) {
-        BUF_PRINTF("[%ld]:", idx);
+        BUF_PRINTF("[%" PRId64 "]:", idx);
         const ObNewRow &row = values[idx];
         (void)databuff_print_obj_array(buf, buf_len, pos, row.cells_, row.count_);
         if (idx + 1 != list_row_values_.count()) {

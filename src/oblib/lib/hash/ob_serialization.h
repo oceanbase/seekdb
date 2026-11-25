@@ -17,6 +17,7 @@
 #ifndef  OCEANBASE_COMMON_HASH_SERIALIZATION_
 #define  OCEANBASE_COMMON_HASH_SERIALIZATION_
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -122,10 +123,10 @@ public:
       HASH_WRITE_LOG(HASH_WARNING, "have not inited");
       ret = OB_NOT_INIT;
     } else if (OB_ISNULL(data) || 0 == size) {
-      HASH_WRITE_LOG(HASH_WARNING, "invalid param data=%p size=%ld", data, size);
+      HASH_WRITE_LOG(HASH_WARNING, "invalid param data=%p size=%" PRId64 "", data, size);
       ret = OB_INVALID_ARGUMENT;
     } else if (size != (int64_t)(write_ret = write(fd_, data, size))) {
-      HASH_WRITE_LOG(HASH_WARNING, "write fail errno=%u fd_=%d data=%p size=%ld write_ret=%ld",
+      HASH_WRITE_LOG(HASH_WARNING, "write fail errno=%u fd_=%d data=%p size=%" PRId64 " write_ret=%" PRId64 "",
           errno, fd_, data, size, write_ret);
       ret = OB_ERR_SYS;
     } else {
@@ -141,10 +142,10 @@ public:
       HASH_WRITE_LOG(HASH_WARNING, "have not inited");
       ret = OB_NOT_INIT;
     } else if (OB_ISNULL(data) || 0 == size) {
-      HASH_WRITE_LOG(HASH_WARNING, "invalid param data=%p size=%ld", data, size);
+      HASH_WRITE_LOG(HASH_WARNING, "invalid param data=%p size=%" PRId64 "", data, size);
       ret = OB_INVALID_ARGUMENT;
     } else if (size != (int64_t)(read_ret = read(fd_, data, size))) {
-      HASH_WRITE_LOG(HASH_WARNING, "read fail errno=%u fd_=%d data=%p size=%ld read_ret=%ld",
+      HASH_WRITE_LOG(HASH_WARNING, "read fail errno=%u fd_=%d data=%p size=%" PRId64 " read_ret=%" PRId64 "",
           errno, fd_, data, size, read_ret);
       ret = OB_ERR_SYS;
     } else {

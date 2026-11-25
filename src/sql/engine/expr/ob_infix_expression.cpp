@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 
+#include "common/json_type/json_builder.h"
 #include "ob_infix_expression.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 #include "sql/engine/expr/ob_expr_operator_factory.h"
 #include "sql/engine/expr/ob_expr_regexp.h"
 #include "share/ob_unique_index_row_transformer.h"
@@ -334,10 +335,8 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
           ObObj *tmp = stack + item.get_param_idx() + i;
           if (OB_FAIL(get_param_is_boolean(expr_ctx, *tmp, is_bool))) {
           } else if (is_bool) {
-            ObJsonBoolean j_bool(tmp->get_bool());
-            ObIJsonBase *j_base = &j_bool;
             ObString raw_bin; // 
-            if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, expr_ctx.calc_buf_))) {
+            if (OB_FAIL(encode_json_boolean(*expr_ctx.calc_buf_, tmp->get_bool(), raw_bin))) {
             } else {
               // bool type convert to json bool, need to know outside has lob header or not
               bool has_lob_header = true;
@@ -365,10 +364,8 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
         bool is_bool = false;
         if (OB_FAIL(get_param_is_boolean(expr_ctx, *stack, is_bool))) {
         } else if (is_bool) {
-          ObJsonBoolean j_bool(stack->get_bool());
-          ObIJsonBase *j_base = &j_bool;
           ObString raw_bin;
-          if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, expr_ctx.calc_buf_))) {
+          if (OB_FAIL(encode_json_boolean(*expr_ctx.calc_buf_, stack->get_bool(), raw_bin))) {
           } else {
             // bool type convert to json bool, need to know outside has lob header or not
             bool has_lob_header = true;

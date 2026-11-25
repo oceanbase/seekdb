@@ -18,6 +18,7 @@
 #define OCEANBASE_DATA_PLANE_BLOCKSSTABLE_OB_STORAGE_DATUM_H_
 
 #include <algorithm>
+#include <inttypes.h>
 #include <cctype>
 #include <cstdint>
 
@@ -56,6 +57,7 @@ struct ObStorageDatum : public common::ObDatum
   OB_INLINE int to_obj_enhance(common::ObObj &obj, const common::ObObjMeta &meta) const;
   OB_INLINE int deep_copy(const ObStorageDatum &src, common::ObIAllocator &allocator);
   OB_INLINE int deep_copy(const ObStorageDatum &src, char *buf, const int64_t buf_len, int64_t &pos);
+  OB_INLINE int deep_copy_from_datum(const common::ObDatum &src, common::ObIAllocator &allocator);
   OB_INLINE void shallow_copy_from_datum(const common::ObDatum &src);
   OB_INLINE int64_t get_deep_copy_size() const;
   OB_INLINE ObStorageDatum &operator=(const ObStorageDatum &other);
@@ -147,6 +149,34 @@ OB_INLINE int ObStorageDatum::deep_copy(
     pos += src.len_;
   }
 
+  return ret;
+}
+
+// SQL expression frames can be overwritten by the next index row/batch. Copy
+// their values directly, retaining small payloads in the storage datum itself.
+// Extended SQL datums may contain a full ObObj and need the existing adapter.
+OB_INLINE int ObStorageDatum::deep_copy_from_datum(
+    const common::ObDatum &src, common::ObIAllocator &allocator)
+{
+  int ret = common::OB_SUCCESS;
+  if (static_cast<const common::ObDatum *>(this) == &src) {
+    // Already owned by this storage datum.
+  } else if (OB_UNLIKELY(src.is_ext())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    reuse();
+    pack_ = src.pack_;
+    if (!src.is_null() && src.len_ > 0) {
+      char *dest = buf_;
+      if (src.len_ > sizeof(buf_) && OB_ISNULL(dest = static_cast<char *>(allocator.alloc(src.len_)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        pack_ = 0;
+      } else {
+        MEMCPY(dest, src.ptr_, src.len_);
+        ptr_ = dest;
+      }
+    }
+  }
   return ret;
 }
 
@@ -305,7 +335,7 @@ OB_INLINE int64_t ObStorageDatum::storage_to_string(
         } else {
           // maybe ObIntTC
           if (sizeof(int64_t) == len_) {
-            BUF_PRINTF(", int: %ld", *int_);
+            BUF_PRINTF(", int: %" PRId64 "", *int_);
             // maybe number with one digit
             if (1 == num_->desc_.len_) {
               BUF_PRINTF(", num_digit0: %u", num_->digits_[0]);

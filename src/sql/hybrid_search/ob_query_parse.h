@@ -67,11 +67,14 @@ enum ObMsmApplyType : int8_t {
 class ObRankFusion {
 public :
   ObRankFusion() :
-    method(ObFusionMethod::WEIGHT_SUM), rank_const(nullptr), size(nullptr) {}
+    method(ObFusionMethod::WEIGHT_SUM), rank_const(nullptr), size(nullptr), weights() {}
   virtual ~ObRankFusion() {}
   ObFusionMethod method;
   ObReqConstExpr *rank_const;
   ObReqConstExpr *size;
+  // Per-route weights of rank fusion, in route order. Only used by RRF, where the
+  // contribution of a route is weight / (rank_constant + rank). Empty means all 1.
+  common::ObSEArray<ObReqConstExpr *, 2, common::ModulePageAllocator, true> weights;
 };
 
 class ObRankFeatDef {
@@ -154,7 +157,6 @@ public:
   common::ObSEArray<ObReqExpr *, 4, common::ModulePageAllocator, true> score_alias_items_;
   common::ObSEArray<ObReqColumnExpr *, 4, common::ModulePageAllocator, true> field_exprs_;
   common::ObSEArray<ObReqConstExpr *, 4, common::ModulePageAllocator, true> keyword_exprs_;
-  common::ObSEArray<ObEsQueryInfo *, 4, common::ModulePageAllocator, true> sub_query_infos_;
   common::ObSEArray<common::ObSEArray<ObReqMatchExpr *, 4, common::ModulePageAllocator, true>, 4, common::ModulePageAllocator, true> match_exprs_matrix_;
 
   void set_msm_apply_type();
@@ -228,7 +230,6 @@ private:
       score_alias_items_(),
       field_exprs_(),
       keyword_exprs_(),
-      sub_query_infos_(),
       match_exprs_matrix_(),
       apply_es_mode_(false) 
   {
@@ -370,7 +371,10 @@ private :
   int add_pk_to_sort(ObQueryReqFromJson *query, const ObEsQueryItem query_item);
   int parse_rank(ObIJsonBase &req_node);
   int parse_rrf(ObIJsonBase &req_node);
-  int construct_rank_score(const ObString &table_name, const ObString &rank_alias, ObReqExpr *&rank_score);
+  int parse_rrf_weights(ObIJsonBase &req_node);
+  int get_rrf_route_weights(ObReqConstExpr *&fts_weight, ObReqConstExpr *&knn_weight);
+  int construct_rank_score(const ObString &table_name, const ObString &rank_alias,
+                           ObReqConstExpr *weight, ObReqExpr *&rank_score);
   int construct_rank_query(ObString &sub_query_name, ObReqExpr *order_expr, ObString &rank_alias, ObQueryReqFromJson *&query_req);
   int init_default_params(ObIJsonBase &req_node);
   int construct_sub_query_with_minimum_should_match(ObQueryReqFromJson *&query_req, ObEsQueryInfo &query_info, const ObString &sub_query_name);

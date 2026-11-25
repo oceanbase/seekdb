@@ -71,47 +71,7 @@ int ObExprJsonMergePreserve::calc_result_typeN(ObExprResType& type,
 
 int ObExprJsonMergePreserve::eval_json_merge_preserve(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
-  INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
-  ObIJsonBase *j_base = NULL;
-  ObIJsonBase *j_patch_node = NULL;
-  bool has_null = false;
-  if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
-    ret = OB_ERR_INVALID_JSON_CHARSET;
-  }
-
-  for (int32 i = 0; OB_SUCC(ret) && i < expr.arg_cnt_ && !has_null; i++) {
-    ObIJsonBase *j_res = NULL;
-    if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, i, j_patch_node, has_null))) {
-    } else if (has_null) {
-      // do nothing
-    } else {
-      if (i == 0) {
-        j_base = j_patch_node;
-      } else {
-        ObIJsonBase *j_res = NULL;
-        if (OB_FAIL(j_base->merge_tree(&temp_allocator, j_patch_node, j_res))) {
-        } else {
-          j_base = j_res;
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObString raw_bin;
-    if (has_null) {
-      res.set_null();
-    } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
-    } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
-    }
-  }
-
-  return ret;
+  return ObJsonExprHelper::eval_json_merge(expr, ctx, res, false);
 }
 
 int ObExprJsonMergePreserve::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

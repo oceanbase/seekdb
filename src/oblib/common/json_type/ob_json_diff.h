@@ -37,69 +37,22 @@ enum class ObJsonDiffOp : uint8_t
   RENAME
 };
 
-const char* get_json_diff_op_str(ObJsonDiffOp op);
-
-
-struct ObJsonDiff {
-  OB_UNIS_VERSION(1);
-public:
-
-  ObJsonDiff() :
-      op_(ObJsonDiffOp::INVALID),
-      value_type_(0),
-      flag_(0),
-      path_(),
-      value_()
-  {}
-
-  int print(ObStringBuffer &buffer);
-
-public:
-  ObJsonDiffOp op_;
-  uint8_t value_type_;
-  union {
-    struct {
-      uint16_t entry_var_type_ : 2;
-    };
-    uint16_t flag_;
-  };
-  ObString path_;
-  ObString value_;
-  TO_STRING_KV(
-      K(op_),
-      K(value_type_),
-      K(entry_var_type_),
-      K(path_),
-      K(value_));
-};
-
-struct ObJsonBinaryDiff
+struct BinaryDiff
 {
-  ObJsonBinaryDiff():
-    dst_offset_(0),
-    dst_len_(0)
-  {}
-  int64_t dst_offset_;
-  int64_t dst_len_;
-
-  TO_STRING_KV(
-      K(dst_offset_),
-      K(dst_len_))
+  int64_t offset;
+  int64_t length;
 };
 
-
-typedef ObSEArray<ObJsonDiff, 10> ObJsonDiffArray;
-typedef ObSEArray<ObJsonBinaryDiff, 10> ObJsonBinaryDiffArray;
+class DeltaState;
+class BinaryEdit;
 
 class ObJsonBinUpdateCtx {
 public:
-  ObJsonBinUpdateCtx(ObIAllocator *allocator) :
-      allocator_(allocator),
-      is_rebuild_all_(false),
-      cursor_(nullptr),
-      tmp_buffer_(allocator)
-  {}
+  explicit ObJsonBinUpdateCtx(ObIAllocator *allocator);
+  ObJsonBinUpdateCtx(const ObJsonBinUpdateCtx &) = delete;
+  ObJsonBinUpdateCtx &operator=(const ObJsonBinUpdateCtx &) = delete;
   ~ObJsonBinUpdateCtx();
+  int init_status() const { return delta_ == nullptr ? OB_ALLOCATE_MEMORY_FAILED : OB_SUCCESS; }
 
   ObStringBuffer& get_tmp_buffer() { tmp_buffer_.reuse(); return tmp_buffer_; }
 
@@ -108,8 +61,18 @@ public:
     return cursor_->get_data(data);
   }
 
-  bool is_no_update();
-  bool is_rebuild_all() { return is_rebuild_all_; }
+  bool is_no_update() const;
+  bool is_rebuild_all() const;
+  void mark_rebuild_all();
+  int64_t logical_diff_count() const;
+  int64_t binary_diff_count() const;
+  BinaryDiff binary_diff(int64_t index) const;
+  bool intersects(uint64_t offset, uint64_t length) const;
+  int64_t logical_serialize_size() const;
+  int merge_edit(BinaryEdit &edit);
+  int should_pack_diff(uint64_t total, uint64_t extension, uint64_t root_offset, bool &pack) const;
+  int serialize_logical(char *buf, int64_t buf_len, int64_t &pos) const;
+  int restore_delta(const char *buf, int64_t buf_len, const ObIArray<BinaryDiff> &physical);
 
   void set_lob_cursor(ObILobCursor *cursor) { cursor_ = cursor; }
 
@@ -120,33 +83,17 @@ public:
 
 public:
   ObIAllocator *allocator_;
-  bool is_rebuild_all_;
   ObILobCursor *cursor_;
   ObStringBuffer tmp_buffer_;
-  ObJsonDiffArray json_diffs_;
-  ObJsonBinaryDiffArray binary_diffs_;
 
-  TO_STRING_KV(
-      K(is_rebuild_all_),
-      K(json_diffs_),
-      K(binary_diffs_));
 
+  TO_STRING_KV("rebuild_all", is_rebuild_all(),
+               "logical_diff_count", logical_diff_count(),
+               "binary_diff_count", binary_diff_count());
+
+private:
+  DeltaState *delta_;
 };
-
-struct ObJsonDiffHeader {
-
-  ObJsonDiffHeader() :
-      version_(0),
-      cnt_(0)
-  {}
-  uint8_t version_;
-  uint8_t cnt_;
-  TO_STRING_KV(
-      K(version_),
-      K(cnt_));
-  NEED_SERIALIZE_AND_DESERIALIZE;
-};
-
 
 } // namespace common
 } // namespace oceanbase

@@ -19,6 +19,7 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/ob_timezone_mgr.h"
 #include "sql/engine/ob_exec_context.h"
+#include "share/ob_math_compat.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -391,7 +392,7 @@ int ObExprUtil::get_mb_str_info(const ObString &str,
 
 double ObExprUtil::round_double(double val, int64_t dec)
 {
-  const double pow_val = std::pow(10.0, static_cast<double>(std::abs(dec)));
+  const double pow_val = math_compat::pow(10.0, static_cast<double>(std::abs(dec)));
   double val_div_tmp = val / pow_val;
   double val_mul_tmp = val * pow_val;
   double res = 0.0;
@@ -431,7 +432,7 @@ uint64_t ObExprUtil::round_uint64(uint64_t val, int64_t dec)
 
 double ObExprUtil::trunc_double(double val, int64_t dec)
 {
-  const double pow_val = std::pow(10, static_cast<double>(std::abs(dec)));
+  const double pow_val = math_compat::pow(10, static_cast<double>(std::abs(dec)));
   volatile double val_div_tmp = val / pow_val;
   volatile double val_mul_tmp = val * pow_val;
   volatile double res = 0.0;

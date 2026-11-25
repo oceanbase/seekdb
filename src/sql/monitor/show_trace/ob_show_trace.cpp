@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "sql/monitor/show_trace/ob_show_trace.h"
+#include <inttypes.h>
 #include "lib/time/ob_time_utility.h"
 #include "sql/session/ob_basic_session_info.h"
 #include <stdio.h>
@@ -202,7 +203,7 @@ void ObShowTraceSessionBuffer::reset_for_stmt(const uint64_t sessid)
   depth_truncated_ = false;
   tag_truncated_ = false;
   const int64_t now = common::ObTimeUtility::current_time();
-  const int n = snprintf(trace_id_, sizeof(trace_id_), "show-trace-%llu-%ld",
+  const int n = snprintf(trace_id_, sizeof(trace_id_), "show-trace-%llu-%" PRId64,
                          static_cast<unsigned long long>(sessid), now);
   if (n <= 0 || n >= static_cast<int>(sizeof(trace_id_))) {
     trace_id_[0] = '\0';

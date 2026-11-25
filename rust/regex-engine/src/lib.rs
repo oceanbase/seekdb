@@ -23,7 +23,7 @@ mod bridge;
 
 pub use bridge::ffi::{RegexBuffer, RegexError, RegexErrorKind, RegexFlags, RegexMatch};
 
-use fancy_regex::{Captures, CompileError, Error, ParseError, Regex, RegexBuilder};
+use fancy_regex::{Captures, CompileError, Error, Expr, ParseError, Regex, RegexBuilder};
 use std::borrow::Cow;
 use std::ffi::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -186,7 +186,9 @@ fn utf16_to_byte(text: &str, start: i64) -> Result<usize> {
     if units == start {
         Ok(text.len())
     } else {
-        Err(err(ARGUMENT, "start position exceeds input"))
+        // Preserve SQL error 1139 for positions beyond the input. Other
+        // invalid arguments, including a split surrogate pair, remain 1210.
+        Err(err(GENERIC, "start position exceeds input"))
     }
 }
 
@@ -223,6 +225,29 @@ fn limits(stack_limit: i64, time_limit: i64) -> Result<(usize, usize)> {
     Ok((compiled, backtracks))
 }
 
+fn validate_capture_conditions(pattern: &str, capture_count: usize) -> Result<()> {
+    // fancy-regex validates ordinary backreferences but accepts conditions on
+    // nonexistent groups. Inspect its resolved AST instead of scanning group
+    // numbers in pattern text, where escapes, classes and comments can hide them.
+    // Extended mode permits whitespace/comments between '(' and '?('.
+    if pattern.contains("?(") {
+        let tree = Expr::parse_tree(pattern).map_err(regex_error)?;
+        let mut pending = vec![&tree.expr];
+        while let Some(expr) = pending.pop() {
+            if let Expr::BackrefExistsCondition { group, .. } = expr {
+                if *group >= capture_count {
+                    return Err(err(
+                        GENERIC,
+                        format!("invalid capture-group reference {group} in regular-expression condition"),
+                    ));
+                }
+            }
+            pending.extend(expr.children_iter());
+        }
+    }
+    Ok(())
+}
+
 fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Result<RegexEngine> {
     if flags & !(CASE_INSENSITIVE | MULTILINE | DOTALL | UNIX_LINES) != 0 {
         return Err(err(ARGUMENT, "unknown regular-expression flags"));
@@ -239,9 +264,9 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
         .delegate_dfa_size_limit(compiled_bytes)
         .delegate_dfa_skip_cache_capacity_check(false)
         .max_prog_size((compiled_bytes / 64).max(1));
-    Ok(RegexEngine {
-        regex: builder.build().map_err(regex_error)?,
-    })
+    let regex = builder.build().map_err(regex_error)?;
+    validate_capture_conditions(&pattern, regex.captures_len())?;
+    Ok(RegexEngine { regex })
 }
 
 /// Compile a UTF-16BE pattern into an immutable, reusable handle.

@@ -86,6 +86,7 @@ public:
 
   // Pool-level control
   void stop();
+  // Call after stop; joins and releases the workers.
   void wait();
   bool has_set_stop() const { return stop_; }
 
@@ -99,10 +100,15 @@ public:
 
   // Thread count configuration
   int set_thread_count(int64_t n_threads);
+  void commit_bound_thread_count(int64_t n_threads);
   int set_adaptive_thread(int64_t min_thread_num, int64_t max_thread_num);
 
   // CRTP for lib::ObAdaptiveWorkerPool
   bool do_add_worker();
+  bool try_expand_one(int64_t limit) {
+    return lib::ObAdaptiveWorkerPool<ObSimpleThreadPoolBase<T>>::try_expand_one(
+        limit, [this]() { return has_set_stop(); });
+  }
   int64_t queue_size() const { return queue_.size(); }
 
   // Reap stopped workers (called by Mgr background thread only)
@@ -116,8 +122,10 @@ protected:
   virtual void run1();
 
 private:
+  static void destroy_workers(WorkerList &workers);
+
   bool is_inited_;
-  bool stop_;
+  std::atomic<bool> stop_;
   T queue_;
   lib::IRunWrapper *run_wrapper_;
   WorkerList workers_;

@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_COMMON_SERIALIZATION_H_
 #define OCEANBASE_COMMON_SERIALIZATION_H_
 #include <cstdint>
+#include <inttypes.h>
 #include <cstring>
 #include <cstdio>
 #include <utility>
@@ -1595,7 +1596,7 @@ inline int encode_createtime_type(char *buf, const int64_t buf_len, int64_t &pos
   int ret = OB_SIZE_OVERFLOW;
   if (NULL == buf || buf_len - pos <= 0 || val < 0) {
     ret = OB_SIZE_OVERFLOW;
-    _OB_LOG(WARN, "fail to encode_createtime_type: buf[%p], buf_len[%ld], pos[%ld] val[%ld]",
+    _OB_LOG(WARN, "fail to encode_createtime_type: buf[%p], buf_len[%" PRId64 "], pos[%" PRId64 "] val[%" PRId64 "]",
               buf, buf_len, pos, val);
   } else {
     int8_t first_byte = OB_CREATETIME_TYPE;

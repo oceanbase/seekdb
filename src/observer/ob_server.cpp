@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "share/ob_io_device_helper.h"
+#include "lib/file/path_operations.h"
+#include "logservice/palf/log_meta.h"
+#include "share/io_request.h"
 #include "rust/config.h"
 #include "rust/config/config_checkers.h"
 #ifndef _WIN32
@@ -32,7 +34,7 @@
 #include <cstdio>
 #include "observer/ob_server.h"
 #include "lib/alloc/alloc_func.h"
-#include "observer/ob_system_package_load_service.h"
+#include "lib/allocator/ob_jemalloc.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
@@ -44,7 +46,7 @@
 #include "share/ob_freeze_info_proxy.h"
 namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
@@ -66,13 +68,12 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/ob_file_system_router.h"
 #include "sql/engine/px/ob_px_target_monitor.h"
-#include "share/ob_device_manager.h"
+#include "storage/blocksstable/ob_block_manager.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/multi_data_source/ob_mds_event_buffer.h"
 #include "storage/tmp_file/ob_tmp_file_cache.h"
-#include "storage/blocksstable/ob_io_bench_controller.h"
 #include "storage/meta_store/storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
@@ -86,7 +87,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "share/ob_ddl_sim_point.h"
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
 #include "observer/ob_server_utils.h"
-#include "common/xml/ob_libxml2_sax_handler.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/composition/retrieval/ob_das_legacy_tr_merge_iter.h"
@@ -94,6 +94,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "lib/utility/ob_target_specific.h"
+#include "lib/utility/ob_platform_io.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "data_plane/fts/ob_fts_parser_helper.h"
 #include "rpc/ob_request.h"
@@ -194,6 +195,8 @@ public:
       LOG_WARN("failed to wait for schema readiness", KR(ret));
     } else if (OB_FAIL(server_.check_if_timezone_usable())) {
       LOG_WARN("failed to wait for timezone readiness", KR(ret));
+    } else if (OB_FAIL(server_.ob_service_.ensure_system_packages())) {
+      LOG_WARN("failed to install system packages before SQL startup", KR(ret));
     }
     return ret;
   }
@@ -364,11 +367,17 @@ storage::ObIVectorIndexRuntime *ObServer::vector_index_runtime()
 }
 
 int ObServer::wait_until_refreshed(
-    common::ObMySQLProxy &mysql_proxy,
-    const int64_t timeout_us)
+    const int64_t abs_timeout_us)
 {
   return share::ObChangeStreamMgr::wait_refresh_scn(
-      mysql_proxy, timeout_us);
+      abs_timeout_us);
+}
+
+int ObServer::get_min_dep_lsn(palf::LSN &min_dep_lsn)
+{
+  return OB_ISNULL(mods_change_stream_mgr_)
+      ? common::OB_NOT_INIT
+      : mods_change_stream_mgr_->get_min_dep_lsn(min_dep_lsn);
 }
 } // namespace observer
 } // namespace oceanbase
@@ -435,8 +444,8 @@ static int create_redo_path(const char *redo_dir, bool &created_leaf)
   } else {
     // A trailing separator must not cause the parent creation to create the
     // leaf first and lose its provenance. Normalize before splitting the path.
-    char absolute_dir[PATH_MAX] = {0};
-    if (NULL == _fullpath(absolute_dir, redo_dir, sizeof(absolute_dir))) {
+    char absolute_dir[4096] = {0};
+    if (0 != ob_absolute_path_utf8(redo_dir, absolute_dir, sizeof(absolute_dir))) {
       return OB_IO_ERROR;
     }
     size_t length = strlen(absolute_dir);
@@ -452,8 +461,8 @@ static int create_redo_path(const char *redo_dir, bool &created_leaf)
     if (OB_ISNULL(separator) || separator == redo_dir) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(parent_dir.assign(redo_dir, separator - redo_dir + (separator == redo_dir + 2 && ':' == redo_dir[1] ? 1 : 0)))) {
-    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(parent_dir.ptr()))) {
-    } else if (0 == _mkdir(redo_dir)) {
+    } else if (OB_FAIL(path_operations::create_full_path(parent_dir.ptr()))) {
+    } else if (0 == ob_mkdir_utf8(redo_dir, 0755)) {
       created_leaf = true;
     } else if (EEXIST != errno) {
       ret = OB_IO_ERROR;
@@ -476,24 +485,19 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
   ObSqlString redo_file_path;
   if (OB_FAIL(data_file_path.assign_fmt("%s/%s/%s", data_dir, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
   }
-#ifdef _WIN32
   if (OB_FAIL(ret)) {
   } else {
-    const DWORD attributes = GetFileAttributesA(data_file_path.ptr());
-    if (INVALID_FILE_ATTRIBUTES != attributes) {
+    ObPlatformFileStat data_file_info;
+    if (0 == ob_stat_utf8(data_file_path.ptr(), data_file_info)) {
       data_file_exists = true;
+    } else if (ENOENT == errno) {
+      data_file_exists = false;
     } else {
-      const DWORD error = GetLastError();
-      if (ERROR_FILE_NOT_FOUND != error && ERROR_PATH_NOT_FOUND != error) {
-        ret = OB_IO_ERROR;
-        LOG_WARN("Failed to query data file", K(data_file_path), K(error), K(ret));
-      }
+      ret = OB_IO_ERROR;
+      LOG_WARN("Failed to query data file", K(data_file_path), K(errno), K(ret));
     }
   }
   if (OB_FAIL(ret)) {
-#else
-  if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
-#endif
 #ifdef _WIN32
   } else if (OB_FAIL(create_redo_path(redo_dir, created_redo_leaf))) {
     LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
@@ -505,7 +509,7 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
   } else if (data_file_exists && created_redo_leaf) {
     ret = OB_ERR_UNEXPECTED;
 #else
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir))) {
+  } else if (OB_FAIL(path_operations::create_full_path(redo_dir))) {
     LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
   } else if (OB_FAIL(ObServerLogBlockMgr::check_clog_directory_is_empty(redo_dir, redo_empty))) {
 #endif
@@ -517,12 +521,14 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
     ret = OB_ERR_UNEXPECTED;
     // The logger is not initialized yet; LOG_STDERR also skips redirected streams.
     std::fprintf(stderr,
-        "The status of deployment environment is not consistent. "
-        "Please clear the directories and restart. ret=%d\n"
+        "The data file and redo directory are inconsistent; startup stopped. ret=%d\n"
+        "    data-file-exists: %d\n"
+        "    redo-directory-empty: %d\n"
         "    base-dir: %s\n"
         "    data-dir: %s\n"
-        "    redo-dir: %s\n",
-        ret, base_dir, data_dir, redo_dir);
+        "    redo-dir: %s\n"
+        "    PALF-dir: %s/sys/log_stream\n",
+        ret, data_file_exists, redo_empty, base_dir, data_dir, redo_dir, redo_dir);
     std::fflush(stderr);
   }
   return ret;
@@ -728,11 +734,18 @@ int ObServer::init(const ObServerOptions &opts)
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
+  // Daemon startup has already forked. Configure allocator defaults before the
+  // logger or server workers can create further arenas.
+  const int allocator_config_ret = jemalloc_configure_runtime();
+
   // Config loading can fail before the rest of the server is initialized.
   // Start the log writer first so the offending config key is
   // recorded in observer.log.
   if (OB_FAIL(OB_LOGGER.init())) {
     LOG_ERROR("async log init error", KR(ret));
+  }
+  if (OB_SUCC(ret) && 0 != allocator_config_ret) {
+    LOG_WARN("failed to configure jemalloc runtime", K(allocator_config_ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
@@ -823,11 +836,6 @@ int ObServer::init(const ObServerOptions &opts)
       LOG_ERROR("parse role failed", KR(ret));
     } else if (OB_FAIL(init_sql_proxy())) {
       LOG_ERROR("init sql connection pool failed", KR(ret));
-    }
-    if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
-      LOG_ERROR("init device manager failed", KR(ret));
-    }
     }
     if (OB_SUCC(ret)) {
     if (OB_FAIL(init_io())) {
@@ -992,6 +1000,11 @@ void ObServer::destroy()
 
   if (!has_destroy_ && has_stopped_) {
 
+    FLOG_INFO("begin to destroy net frame");
+    net_frame_.destroy();
+    FLOG_INFO("net frame destroyed");
+
+
     FLOG_INFO("begin to destroy OB_LOGGER");
     OB_LOGGER.stop();
     OB_LOGGER.wait();
@@ -1075,10 +1088,6 @@ void ObServer::destroy()
     sql_engine_.destroy();
     FLOG_INFO("sql engine destroyed");
 
-    FLOG_INFO("begin to destroy xml ctx");
-    ObLibXml2SaxHandler::destroy();
-    FLOG_INFO("xml ctx destroyed");
-
     FLOG_INFO("begin to destroy pl engine");
     pl_engine_.destory();
     FLOG_INFO("pl engine destroyed");
@@ -1103,13 +1112,12 @@ void ObServer::destroy()
     tmp_file::ObTmpPageCache::get_instance().destroy();
     FLOG_INFO("tmp page cache destroyed");
 
-    FLOG_INFO("begin to destroy net frame");
-    net_frame_.destroy();
-    FLOG_INFO("net frame destroyed");
-
-    FLOG_INFO("begin to destroy io manager");
-    ObIOManager::get_instance().destroy();
-    FLOG_INFO("io manager destroyed");
+    FLOG_INFO("begin to release I/O service");
+    const int io_error = io_service_->shutdown_service();
+    if (io_error != 0) {
+      LOG_ERROR_RET(convert_storage_error(io_error), "I/O shutdown failed", K(io_error));
+    }
+    FLOG_INFO("I/O service released");
 
     FLOG_INFO("begin to destroy server storage meta service");
     STORAGE_META_SERVICE.destroy();
@@ -1164,10 +1172,10 @@ void ObServer::destroy()
 
     deinit_fts();
 
-    FLOG_INFO("begin to destroy io device");
-    ObIODeviceWrapper::get_instance().destroy();
-    log_device_.destroy();
-    FLOG_INFO("io device destroyed");
+    const int data_close_error = OB_SERVER_BLOCK_MGR.close_file();
+    if (data_close_error != OB_SUCCESS) {
+      LOG_ERROR_RET(data_close_error, "data file close failed");
+    }
 
     // Release local storage after all metadata users and their timers stop.
     local_store_.destroy();
@@ -1222,10 +1230,10 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to init mds schema helper");
     }
-    if (FAILEDx(ObIOManager::get_instance().start())) {
-      LOG_ERROR("fail to start io manager", KR(ret));
+    if (FAILEDx(convert_storage_error(io_service_->activate_service()))) {
+      LOG_ERROR("failed to activate I/O service", KR(ret));
     } else {
-      FLOG_INFO("success to start io manager");
+      FLOG_INFO("I/O service activated");
     }
     int64_t metadata_reserved_size = 0;
     int64_t effective_log_disk_size = storage_env_.log_disk_size_;
@@ -1263,12 +1271,6 @@ int ObServer::start()
         ret = tmp_ret;
         LOG_ERROR("fail to get runtime log disk size", KR(ret));
       }
-    }
-    // Validate local disk capacity after the storage runtime is ready.
-    if (FAILEDx(OB_STORAGE_OBJECT_MGR.check_disk_space_available())) {
-      LOG_ERROR("failed to check disk space available", K(ret));
-    } else {
-      LOG_INFO("success to check disk space available");
     }
     if (FAILEDx(log_block_mgr_.start(effective_log_disk_size))) {
       LOG_ERROR("fail to start log pool", KR(ret));
@@ -1451,17 +1453,25 @@ int ObServer::wait_for_server_runtime()
 {
   int ret = OB_SUCCESS;
   bool synced = false;
+  bool replay_ready = false;
   bool timestamp_ready = false;
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait for server runtime begin.");
-  while (OB_SUCC(ret) && !stop_ && (!synced || !timestamp_ready)) {
+  while (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
     if (OB_FAIL(startup_result_.error())) {
       LOG_ERROR("log allocation failed while waiting for server runtime", KR(ret));
       break;
     }
     synced = server_runtime_controller_.has_synced();
-    if (synced && !timestamp_ready) {
+    if (synced && !replay_ready) {
+      if (OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {
+        LOG_WARN("standby startup replay did not become ready", KR(ret));
+      } else if (!stop_) {
+        replay_ready = true;
+      }
+    }
+    if (OB_SUCC(ret) && !stop_ && replay_ready && !timestamp_ready) {
       SCN gts;
       if (OB_FAIL(OB_TS_MGR.get_gts(gts))) {
         if (OB_EAGAIN == ret) {
@@ -1472,16 +1482,12 @@ int ObServer::wait_for_server_runtime()
         timestamp_ready = true;
       }
     }
-    if (!synced || !timestamp_ready) {
+    if (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
       ob_usleep(10 * 1000);
     }
   }
-  if (OB_SUCC(ret) && !stop_
-      && OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {
-    LOG_WARN("standby startup replay did not become ready", KR(ret));
-  }
-  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(timestamp_ready));
-  if (OB_SUCC(ret) && !stop_ && synced && timestamp_ready) {
+  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(replay_ready), K(timestamp_ready));
+  if (OB_SUCC(ret) && !stop_ && synced && replay_ready && timestamp_ready) {
     LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "wait for server runtime success.");
@@ -1578,20 +1584,6 @@ void ObServer::set_stop()
   FLOG_INFO("[OBSERVER_NOTICE] observer is setted to stop");
 }
 
-/** Cancel package DDL before joining its loader; null modules support partial initialization. */
-static void stop_in_process_package_ddl(
-    rootserver::ObDDLServiceLauncher *launcher,
-    rootserver::ObSystemPackageLoadService *loader)
-{
-  if (launcher != nullptr) {
-    launcher->deactivate();
-  }
-  if (loader != nullptr) {
-    loader->stop();
-    loader->wait();
-  }
-}
-
 int ObServer::stop()
 {
   int ret = OB_SUCCESS;
@@ -1599,10 +1591,8 @@ int ObServer::stop()
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_STOP_BEGIN, "observer stop begin.");
 
-  if (in_process_) {
-    // DDL retries must observe cancellation while schema and SQL services are still available.
-    // Otherwise session cleanup waits for a loader query that cannot publish its schema.
-    stop_in_process_package_ddl(mods_ddl_service_launcher_, mods_system_package_load_service_);
+  if (in_process_ && mods_ddl_service_launcher_ != nullptr) {
+    mods_ddl_service_launcher_->deactivate();
   }
 
 #ifndef __EMSCRIPTEN__
@@ -1705,9 +1695,11 @@ int ObServer::stop()
     ob_service_.wait();
 #endif
 
-    FLOG_INFO("begin to stop io manager");
-    ObIOManager::get_instance().stop();
-    FLOG_INFO("io manager stopped");
+    FLOG_INFO("begin to stop I/O service");
+    io_service_->stop_service();
+    const int io_error = io_service_->shutdown_service();
+    if (io_error != 0) { LOG_ERROR("I/O drain failed", K(io_error)); }
+    FLOG_INFO("I/O service stopped");
 
     FLOG_INFO("begin to stop kv global cache");
     ObKVGlobalCache::get_instance().stop();
@@ -1894,11 +1886,11 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
   rust::String configured_redo_dir = config::redo_dir();
 
   // remove current_directory prefix of data_dir and redo_dir if exists
-  char current_dir[PATH_MAX] = {0};
-  if (nullptr == getcwd(current_dir, sizeof(current_dir))) {
+  char current_dir[4096] = {0};
+  if (0 != ob_getcwd_utf8(current_dir, sizeof(current_dir))) {
     LOG_ERROR("failed to get current directory", K(ret), KCSTRING(strerror(errno)));
   } else if (current_dir[strlen(current_dir) - 1] == '/') {
-  } else if (strlen(current_dir) + 2 >= PATH_MAX) {
+  } else if (strlen(current_dir) + 2 >= sizeof(current_dir)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_ERROR("current directory is too long", K(ret), KCSTRING(current_dir));
   } else {
@@ -1918,8 +1910,8 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
 
   if (OB_FAIL(ret)) {
   } else if (!data_dir.empty()) {
-    if (OB_FAIL(FileDirectoryUtils::create_full_path(data_dir.ptr()))) {
-    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(data_dir))) {
+    if (OB_FAIL(path_operations::create_full_path(data_dir.ptr()))) {
+    } else if (OB_FAIL(path_operations::to_absolute_path(data_dir))) {
     } else {
       ObString tmp_data_dir(data_dir.length(), data_dir.ptr());
       if (tmp_data_dir.prefix_match(current_dir)) {
@@ -1951,10 +1943,10 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
   if (OB_FAIL(ret)) {
   } else if (!redo_dir.empty()) {
 #ifdef _WIN32
-    if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+    if (OB_FAIL(path_operations::to_absolute_path(redo_dir))) {
 #else
-    if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir.ptr()))) {
-    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+    if (OB_FAIL(path_operations::create_full_path(redo_dir.ptr()))) {
+    } else if (OB_FAIL(path_operations::to_absolute_path(redo_dir))) {
 #endif
     } else {
       ObString tmp_redo_dir(redo_dir.length(), redo_dir.ptr());
@@ -2081,35 +2073,56 @@ int ObServer::init_sql_proxy()
   return ret;
 }
 
+int ObServer::validate_io_threads()
+{
+  const int64_t data_threads = config::sync_io_thread_count();
+  const int64_t log_threads = config::disk_io_thread_count();
+  if (data_threads < 0 || log_threads < 0) { return OB_INVALID_ARGUMENT; }
+  int ret = OB_SERVER_BLOCK_MGR.validate_io_threads(data_threads);
+  if (ret == OB_SUCCESS) {
+    ret = convert_storage_error(log_block_mgr_.physical_owner().validate_named_workers(log_threads));
+  }
+  return ret;
+}
+
+int ObServer::configure_io(int64_t server_memory_bytes, int64_t callback_threads)
+{
+  if (server_memory_bytes <= 0 || callback_threads < 0) { return OB_INVALID_ARGUMENT; }
+  return convert_storage_error(io_service_->configure_resources(
+      server_memory_bytes, 0, callback_threads));
+}
+
 int ObServer::init_io()
 {
   int ret = OB_SUCCESS;
   rust::String data_dir = config::data_dir();
   rust::String redo_dir = config::redo_dir();
   if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(data_dir.c_str(), redo_dir.c_str()))) {
+  } else {
+    char log_dir[MAX_PATH_SIZE] = {'\0'};
+    bool directory_exists = false;
+    const int length = snprintf(log_dir, sizeof(log_dir), "%s/sys/log_stream",
+        OB_FILE_SYSTEM_ROUTER.get_clog_dir());
+    if (length < 0 || length >= sizeof(log_dir)) {
+      ret = OB_BUF_NOT_ENOUGH;
+    } else if (OB_FAIL(palf::meta_store::check_directory(local_store_, log_dir, directory_exists))) {
+      LOG_ERROR("PALF directory check failed before log recovery", KR(ret), K(log_dir));
+    }
   }
 
   if (OB_SUCC(ret)) {
-    static const double IO_MEMORY_RATIO = 0.2;
-    const ObIORuntimeOptions io_runtime_options(GMEMCONF.get_server_memory_budget());
-    if (OB_FAIL(ObIOManager::get_instance().init(
-        io_runtime_options, GMEMCONF.get_reserved_server_memory() * IO_MEMORY_RATIO))) {
+    storage_io::RuntimeConfig io_config{};
+    io_config.server_memory_bytes = GMEMCONF.get_server_memory_budget();
+    io_config.request_limit = 10000;
+    io_config.statistics_lanes = (SYS_MODULE_CNT + 1) * 2;
+    if (OB_FAIL(convert_storage_error(io_service_->prepare_service(io_config)))) {
     } else {
-      ObIOConfig io_config;
-      int64_t cpu_cnt = config::cpu_count();
-      if (cpu_cnt <= 0) {
-        cpu_cnt = common::get_cpu_num();
-      }
-      io_config.disk_io_thread_count_ = config::disk_io_thread_count();
-      io_config.sync_io_thread_count_ = config::sync_io_thread_count();
+      const int64_t disk_threads = config::disk_io_thread_count();
+      const int64_t sync_threads = config::sync_io_thread_count();
       const int64_t max_io_depth = 256;
-      if (OB_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
+      if (disk_threads < 0 || sync_threads < 0) {
+        ret = OB_INVALID_ARGUMENT;
       } else {
-        //allow load benchmark fail, please ignore return code.
-        static storage::ObIOBenchController io_bench_controller;
-        if (OB_FAIL(ObIOCalibration::get_instance().init(io_bench_controller))) {
-        }
-
         storage_env_.data_dir_ = OB_FILE_SYSTEM_ROUTER.get_data_dir();
         storage_env_.sstable_dir_ = OB_FILE_SYSTEM_ROUTER.get_sstable_dir();
         storage_env_.default_block_size_ = OB_DEFAULT_MACRO_BLOCK_SIZE;  // 2MB
@@ -2128,23 +2141,11 @@ int ObServer::init_io()
         int64_t data_disk_percentage = 0;
         int64_t log_disk_percentage = 0;
 
-        share::LocalIOConfig data_io_config;
-        share::LocalIOConfig log_io_config;
-        int io_error = 0;
-        if (OB_FAIL(ret)) {
-        } else if (0 != (io_error = share::probe_local_io(storage_env_.sstable_dir_, data_io_config))) {
-          ret = ObIODeviceLocalFileOp::convert_sys_errno(io_error);
-          LOG_ERROR("data directory I/O probe failed", KR(ret), K(io_error), "directory", storage_env_.sstable_dir_);
-        } else if (0 != (io_error = share::probe_local_io(storage_env_.clog_dir_, log_io_config))) {
-          ret = ObIODeviceLocalFileOp::convert_sys_errno(io_error);
-          LOG_ERROR("log directory I/O probe failed", KR(ret), K(io_error), "directory", storage_env_.clog_dir_);
-        } else if (OB_FAIL(log_device_.init(storage_env_.clog_dir_,
-                       io_config.disk_io_thread_count_, max_io_depth,
-                       &ObIOManager::get_instance(), &ObDeviceManager::get_instance(), log_io_config))) {
-          LOG_ERROR("log device init failed", KR(ret));
-        } else if (OB_FAIL(log_block_mgr_.init(
-            storage_env_.clog_dir_,
-            ObServerUtils::get_log_disk_info_in_config, log_io_config))) {
+        if (!log_block_mgr_.can_reinitialize()) {
+          ret = OB_STATE_NOT_MATCH;
+          LOG_ERROR("previous log physical owner has not drained", KR(ret));
+        } else if (OB_FAIL(log_block_mgr_.init(storage_env_.clog_dir_,
+            ObServerUtils::get_log_disk_info_in_config, *io_service_, disk_threads, max_io_depth))) {
           LOG_ERROR("log block mgr init failed", KR(ret));
         } else if (OB_FAIL(ObServerUtils::cal_all_part_disk_size(config::datafile_size(),
                                                   config::log_disk_size(),
@@ -2163,18 +2164,9 @@ int ObServer::init_io()
         }
 
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(ObIODeviceWrapper::get_instance().init(
-                storage_env_.data_dir_,
-                storage_env_.sstable_dir_,
-                storage_env_.default_block_size_,
-                storage_env_.data_disk_percentage_,
-                storage_env_.data_disk_size_,
-                STORAGE_META_SERVICE, data_io_config))) {
-          } else if (OB_FAIL(ObIOManager::get_instance().add_device_channel(&LOCAL_DEVICE_INSTANCE,
-                                                                            io_config.disk_io_thread_count_,
-                                                                            io_config.sync_io_thread_count_,
-                                                                            max_io_depth))) {
-          }
+          ret = OB_SERVER_BLOCK_MGR.prepare_file(*io_service_,
+              storage_env_.data_dir_, storage_env_.sstable_dir_, storage_env_.default_block_size_,
+              storage_env_.data_disk_size_, storage_env_.data_disk_percentage_, sync_threads, max_io_depth);
         }
       }
     }
@@ -2407,10 +2399,6 @@ int ObServer::init_sql()
       LOG_ERROR("allocate DTL service fail", KR(ret));
     } else if (OB_FAIL(DTL.init())) {
     }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObLibXml2SaxHandler::init();
   }
 
   if (OB_SUCC(ret)) {
@@ -2850,7 +2838,7 @@ int ObServer::clean_up_invalid_tables()
           } else if (FALSE_IT(table_item.database_name_ = database_schema->get_database_name_str())) {
             //impossible
           } else if (OB_FAIL(drop_table_arg.tables_.push_back(table_item))) {
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{
+          } else if (OB_FAIL(share::local_ddl_serial_call([&]{
                        return ::oceanbase::share::server_service<
                            ::oceanbase::rootserver::ObLocalManagementService>()
                            ->drop_table(drop_table_arg, res);

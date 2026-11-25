@@ -19,7 +19,7 @@ export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 ./build.py build --config=ios seekdb
 ```
 
-`init --ios` prepares the host tools and Rust iOS target, and builds the base libraries into `deps/ios/iphoneos/devel`. Bazel builds the remaining pinned source dependencies through `//bazel/sdk_sources:source_sdk`. Use `build` directly for subsequent builds; initialization reuses dependencies that are still current. The project's `.bazelversion` pins Bazel, which `build.py` downloads on first use.
+`init --ios` prepares the host tools and Rust iOS target, and installs the target libraries pinned in `deps.lock.json` into `deps/prebuilt/ios` (or `deps/prebuilt/ios_simulator`). Use `build` directly for subsequent builds; initialization reuses dependencies that are still current. The project's `.bazelversion` pins Bazel, which `build.py` downloads on first use.
 
 The arm64 simulator uses a separate dependency directory and configuration:
 

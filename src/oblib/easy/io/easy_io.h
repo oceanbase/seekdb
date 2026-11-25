@@ -112,29 +112,6 @@ extern easy_file_task_t     *easy_file_task_create(easy_request_t *r, int fd, in
 extern void                 easy_file_task_set(easy_file_task_t *ft, char *buffer, int64_t offset, int64_t bufsize, void *args);
 extern void                 easy_file_task_reset(easy_file_task_t *ft, int type);
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// easy_ssl
-extern int                  easy_ssl_init();
-extern int                  easy_ssl_cleanup();
-extern easy_ssl_t          *easy_ssl_config_load(char *filename);
-//extern easy_ssl_t          *easy_ssl_config_load_for_mysql(const char *ssl_ca, const char *ssl_cert, const char *ssl_key);
-extern easy_ssl_ctx_t      *easy_ssl_ctx_load(easy_pool_t *pool, const char *ssl_ca,
-                                              const char *ssl_cert, const char *ssl_key,
-                                              const char *ssl_enc_cert, const char *ssl_enc_key,
-                                              const int is_from_file, const int is_babassl,
-                                              const int is_server);
-extern int                  easy_ssl_ob_config_load(easy_io_t *eio, const char *ssl_ca,
-                                                    const char *ssl_cert, const char *ssl_key,
-                                                    const char *ssl_enc_cert, const char *ssl_enc_key,
-                                                    const int is_from_file, const int is_babassl,
-                                                    const int used_for_rpc);
-extern int                  easy_ssl_ob_config_check(const char *ssl_ca,
-                                                     const char *ssl_cert, const char *ssl_key,
-                                                     const char *ssl_enc_cert, const char *ssl_enc_key,
-                                                     const int is_from_file, const int is_babassl);
-extern int                  easy_ssl_config_destroy(easy_ssl_t *ssl);
-extern int easy_ssl_client_authenticate(easy_ssl_t *ssl, SSL *conn, const void *host, int len);
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
 // define
 #define EASY_IOTH_SELF ((easy_io_thread_t*) easy_baseth_self)
 #define easy_session_set_args(s, a)      (s)->r.args = (void*)a

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include "lib/time/ob_time_utility.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_operator.h"
@@ -262,7 +263,7 @@ int ObDDLService::fork_database(
         if (OB_ISNULL(local_runtime)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(local_runtime->wait_until_change_stream_refreshed(
-                       get_sql_proxy(), lock_timeout_us))) {
+                       ObTimeUtility::current_time() + lock_timeout_us))) {
         } else {
           LOG_INFO("async index sync completed before fork database snapshot");
         }
@@ -272,11 +273,12 @@ int ObDDLService::fork_database(
     // Obtain snapshot for all user tables at once to ensure consistency.
     ObArray<ObDDLTaskRecord> task_records;
     int64_t fork_snapshot_version = 0;
+    int64_t fork_snapshot_schema_version = 0;
     if (OB_SUCC(ret)) {
       if (user_table_schemas.count() == 0) {
         LOG_INFO("no user tables to fork", "src_database_name", fork_database_arg.src_database_name_);
       } else if (OB_FAIL(ObForkTableUtil::obtain_snapshot(trans, schema_guard, user_table_schemas,
-                                                   fork_snapshot_version))) {
+                                                   fork_snapshot_version, fork_snapshot_schema_version))) {
       } else if (fork_snapshot_version <= 0) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -307,7 +309,7 @@ int ObDDLService::fork_database(
 
         if (OB_FAIL(fork_single_table_in_trans_(*src_table_schema, *src_db_schema, dst_db_schema,
                 src_table_schema->get_table_name_str(),
-                fork_snapshot_version, fork_database_arg.session_id_,
+                fork_snapshot_version, fork_snapshot_schema_version, fork_database_arg.session_id_,
                 empty_ddl_stmt_str, schema_guard, trans, allocator,
                 task_record,
                 need_fk_rebuild ? &table_id_map : nullptr,

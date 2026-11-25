@@ -316,13 +316,13 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
              OB_FAIL(select_sql.append_fmt(
         "select cast(sum(inserts + updates + deletes) - sum(last_inserts + last_updates + " \
         "last_deletes) as signed) as inc_mod_count " \
-        "from %s where table_id = %lu;",
+        "from %s where table_id = %" PRIu64 ";",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
   } else if (!need_inc_modified_count &&
              OB_FAIL(select_sql.append_fmt(
         "select cast(sum(inserts + updates + deletes) as signed) as modified_count " \
-        "from %s where table_id = %lu;",
+        "from %s where table_id = %" PRIu64 ";",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
   } else {
@@ -376,7 +376,7 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
   } else if (OB_FAIL(select_sql.append_fmt(
           "select tablet_id, (inserts + updates + deletes - last_inserts - " \
           "last_updates - last_deletes) as inc_mod_count "\
-          "from %s where table_id = %lu order by 1;",
+          "from %s where table_id = %" PRIu64 " order by 1;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
   } else {
@@ -559,7 +559,7 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
     // do nothing
   } else if (OB_FAIL(select_sql.append_fmt(
                  "select partition_id, stattype_locked, row_cnt, spare2 from %s where "
-                 "table_id = %lu and (last_analyzed > 0 or spare2 >= 5) order by 1;",
+                 "table_id = %" PRIu64 " and (last_analyzed > 0 or spare2 >= 5) order by 1;",
                  share::OB_ALL_TABLE_STAT_TNAME,
                  share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
   } else {
@@ -728,12 +728,12 @@ int ObBasicStatsEstimator::get_need_stats_tables(ObExecContext &ctx,
   if (OB_FAIL(get_gather_table_type_list(gather_table_type_list))) {
   } else if (OB_FAIL(select_sql.append_fmt("SELECT /*+no_rewrite*/table_id "\
                                            " FROM   %s t "\
-                                           " WHERE  table_id > %ld"
+                                           " WHERE  table_id > %" PRId64 ""
                                            "  AND  table_type IN %s"\
                                            " AND table_id  not in (select distinct table_id from %s "\
-                                           " WHERE table_id > %ld AND spare2 >= 5) "\
+                                           " WHERE table_id > %" PRId64 " AND spare2 >= 5) "\
                                            " ORDER  BY table_id "\
-                                           " LIMIT  %ld;",
+                                           " LIMIT  %" PRId64 ";",
                                            share::OB_ALL_TABLE_TNAME,
                                            last_table_id,
                                            gather_table_type_list.ptr(),
@@ -889,7 +889,7 @@ int ObBasicStatsEstimator::fill_hints(common::ObIAllocator &alloc,
   const char *no_use_plan_cache_hint = " USE_PLAN_CACHE(NONE)";
   if (OB_UNLIKELY(table_name.empty() || gather_vectorize < 0)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(default_hints.append_fmt("NO_REWRITE DBMS_STATS OPT_PARAM('ROWSETS_MAX_ROWS', %ld)",
+  } else if (OB_FAIL(default_hints.append_fmt("NO_REWRITE DBMS_STATS OPT_PARAM('ROWSETS_MAX_ROWS', %" PRId64 ")",
                                                gather_vectorize))) {
   } else if (OB_FAIL(default_hints.append_fmt(use_full_table_hint,
                                               table_name.length(),
@@ -911,7 +911,7 @@ int ObBasicStatsEstimator::get_gather_table_type_list(ObSqlString &gather_table_
   for (int64_t i = 0; OB_SUCC(ret) && i < table_type_cnt; ++i) {
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == table_type_cnt - 1 ? ')' : ',');
-    if (OB_FAIL(gather_table_type_list.append_fmt("%c%lu%c", prefix, table_type_arr[i], suffix))) {
+    if (OB_FAIL(gather_table_type_list.append_fmt("%c%" PRIu64 "%c", prefix, table_type_arr[i], suffix))) {
     } else {/*do nothing*/}
   }
   return ret;
@@ -921,6 +921,7 @@ int ObBasicStatsEstimator::get_gather_table_type_list(ObSqlString &gather_table_
 
 int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
                                                          const int64_t max_table_cnt,
+                                                         const bool only_collectable,
                                                          int64_t &last_table_id,
                                                          int64_t &last_tablet_id,
                                                          int64_t &total_part_cnt,
@@ -928,11 +929,45 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSqlString select_sql;
-  if (OB_FAIL(select_sql.append_fmt(
+  ObSqlString collectable_candidate_join;
+  ObSqlString collectable_candidate_filter;
+  // Exclude candidates that cannot currently be gathered before LIMIT. The
+  // pending probe skips this filter so an unlock is retried without new DML.
+  if (only_collectable && OB_FAIL(collectable_candidate_join.append_fmt(
+          " LEFT JOIN %s schema_table ON schema_table.table_id = m.table_id "
+          " LEFT JOIN %s schema_part "
+          " ON schema_table.part_level = 1 "
+          " AND schema_part.table_id = m.table_id "
+          " AND schema_part.tablet_id = m.tablet_id "
+          " LEFT JOIN %s schema_subpart "
+          " ON schema_table.part_level = 2 "
+          " AND schema_subpart.table_id = m.table_id "
+          " AND schema_subpart.tablet_id = m.tablet_id "
+          " LEFT JOIN %s leaf_stat "
+          " ON leaf_stat.table_id = m.table_id "
+          " AND leaf_stat.partition_id = "
+          " CASE schema_table.part_level "
+          " WHEN 0 THEN schema_table.table_id "
+          " WHEN 1 THEN schema_part.part_id "
+          " WHEN 2 THEN schema_subpart.sub_part_id END ",
+          share::OB_ALL_TABLE_TNAME,
+          share::OB_ALL_PART_TNAME,
+          share::OB_ALL_SUB_PART_TNAME,
+          share::OB_ALL_TABLE_STAT_TNAME))) {
+  } else if (only_collectable && OB_FAIL(collectable_candidate_filter.append_fmt(
+          " AND coalesce(leaf_stat.stattype_locked, 0) = 0 "
+          " AND coalesce(leaf_stat.spare2, 0) < 5 "
+          " AND NOT EXISTS (SELECT 1 FROM %s global_stat "
+          " WHERE global_stat.table_id = m.table_id "
+          " AND global_stat.stattype_locked > 0 "
+          " AND global_stat.partition_id IN (-1, m.table_id)) ",
+          share::OB_ALL_TABLE_STAT_TNAME))) {
+  } else if (OB_FAIL(select_sql.append_fmt(
           "SELECT table_id, tablet_id, avg(changed_ratio) over (partition by table_id)  ratio from "\
           " ( SELECT    m.table_id, m.tablet_id, (CASE WHEN (m.last_inserts-m.last_deletes) = 0 THEN 1 + cast(coalesce(up.valchar, gp.spare4) as double) "\
           "                            ELSE (m.inserts - m.last_inserts + m.updates - m.last_updates + m.deletes - m.last_deletes) * 1.0 / (m.last_inserts-m.last_deletes) END) as changed_ratio "\
           "  FROM    %s m "\
+          " %.*s "\
           "  LEFT JOIN %s up "\
           "  ON        m.table_id = up.table_id "\
           "  AND       up.pname = 'ASYNC_GATHER_STALE_RATIO' "\
@@ -943,12 +978,17 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
           " double) "\
           "    ELSE (m.inserts - m.last_inserts + m.updates - m.last_updates + m.deletes - m.last_deletes) * 1.0 "\
           " / (m.last_inserts-m.last_deletes) END) > cast(coalesce(up.valchar, gp.spare4) as double) "\
-          " AND m.table_id > %lu and m.tablet_id > %lu"\
+          " %.*s "\
+          " AND m.table_id > %" PRIu64 " and m.tablet_id > %" PRIu64 ""\
           " )t "\
-          " order by ratio desc,table_id, tablet_id  limit %lu ",
+          " order by ratio desc,table_id, tablet_id  limit %" PRIu64 " ",
           share::OB_ALL_MONITOR_MODIFIED_TNAME,
+          static_cast<int>(collectable_candidate_join.length()),
+          collectable_candidate_join.empty() ? "" : collectable_candidate_join.ptr(),
           share::OB_ALL_OPTSTAT_USER_PREFS_TNAME,
           share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
+          static_cast<int>(collectable_candidate_filter.length()),
+          collectable_candidate_filter.empty() ? "" : collectable_candidate_filter.ptr(),
           last_table_id,
           last_tablet_id,
           max_table_cnt
@@ -992,6 +1032,29 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
       }
     }
     
+  }
+  return ret;
+}
+
+int ObBasicStatsEstimator::has_async_gather_stats_tables(ObExecContext &ctx,
+                                                         bool &has_pending)
+{
+  int ret = OB_SUCCESS;
+  int64_t total_part_cnt = 0;
+  int64_t last_table_id = 0;
+  int64_t last_tablet_id = 0;
+  ObSEArray<AsyncStatTable, 1> stat_tables;
+  has_pending = false;
+  if (OB_FAIL(get_async_gather_stats_tables(ctx,
+                                            1,
+                                            false,
+                                            last_table_id,
+                                            last_tablet_id,
+                                            total_part_cnt,
+                                            stat_tables))) {
+    LOG_WARN("failed to check async gather stats candidates", K(ret));
+  } else {
+    has_pending = total_part_cnt > 0;
   }
   return ret;
 }

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_log_topk.h"
+#include <inttypes.h>
 #include "sql/rewrite/ob_transform_utils.h"
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -131,7 +132,7 @@ int ObLogTopk::get_plan_item_info(PlanText &plan_text,
   } 
   BEGIN_BUF_PRINT; 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(BUF_PRINTF("minimum_row_count:%ld top_precision:%ld ",
+  } else if (OB_FAIL(BUF_PRINTF("minimum_row_count:%" PRId64 " top_precision:%" PRId64 " ",
                                 minimum_row_count_, topk_precision_))) {
   } else {
     ObRawExpr *limit = topk_limit_count_;

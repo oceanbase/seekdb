@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_virtual_show_trace.h"
+#include <inttypes.h>
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 #include <stdio.h>
@@ -55,7 +56,7 @@ int append_json_int_tag(char *buf, const int64_t buf_len, int64_t &pos,
   if (OB_FAIL(append_json_tag_prefix(buf, buf_len, pos, has_tag))) {
     // do nothing
   } else {
-    const int n = snprintf(buf + pos, buf_len - pos, "\"%s\":%ld", key, value);
+    const int n = snprintf(buf + pos, buf_len - pos, "\"%s\":%" PRId64, key, value);
     if (n <= 0 || n >= buf_len - pos) {
       ret = OB_SIZE_OVERFLOW;
       SERVER_LOG(WARN, "failed to append show trace int tag", K(ret), K(key), K(pos), K(buf_len));
@@ -165,7 +166,7 @@ int ObVirtualShowTrace::build_show_trace_rows_from_session()
       char parent_id_buf[128];
       char tags_buf[512];
       const int64_t trace_id_len = static_cast<int64_t>(strlen(trace_id));
-      const int span_id_len = snprintf(span_id_buf, sizeof(span_id_buf), "%s-%ld", trace_id, i);
+      const int span_id_len = snprintf(span_id_buf, sizeof(span_id_buf), "%s-%" PRId64, trace_id, i);
       int parent_id_len = 0;
       int64_t tag_len = 0;
       bool has_tag = false;

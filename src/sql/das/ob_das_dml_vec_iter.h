@@ -159,11 +159,13 @@ public:
       ObDASWriteBuffer::Iterator &write_iter,
       const ObDASDMLBaseCtDef *das_ctdef,
       const ObDASDMLBaseCtDef *main_ctdef,
-      const common::ObLobReadOptions *lob_read_options)
+      const common::ObLobReadOptions *lob_read_options,
+      bool force_text_embedding = false)
     : ObDomainDMLIterator(
           allocator, row_projector, write_iter, das_ctdef, main_ctdef,
           lob_read_options),
-      is_old_row_(das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE || das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_DELETE)
+      is_old_row_(das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE || das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_DELETE),
+      force_text_embedding_(force_text_embedding)
     {}
   virtual ~ObEmbeddedVecDMLIterator() = default;
 protected:
@@ -176,6 +178,7 @@ private:
   virtual int check_sync_interval(bool &is_sync_interval) const override;
 public:
   bool is_old_row_;
+  bool force_text_embedding_;
 };
 
 } // end namespace sql

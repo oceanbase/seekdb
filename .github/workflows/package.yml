@@ -1,0 +1,304 @@
+name: Package seekdb
+run-name: Package ${{ inputs.platform }} / ${{ inputs.linux_glibc }} / ${{ inputs.binary_run_id && format('binary run {0}', inputs.binary_run_id) || inputs.version || 'source version' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platforms to build
+        type: choice
+        default: linux-x86_64
+        options: [all, linux-x86_64, linux-aarch64, macos-arm64, windows-x86_64, android-arm64, ios, ios-arm64, ios-simulator-arm64]
+      linux_glibc:
+        description: Linux compatibility baseline
+        type: choice
+        default: '2.17'
+        options: ['2.17', '2.28', both]
+      version:
+        description: Package version (empty uses the source or reused binary version)
+        type: string
+      formats:
+        description: Linux system packages (all choices also export the binary archive)
+        type: choice
+        default: all
+        options: [all, binary, rpm, deb]
+      binary_run_id:
+        description: Existing run ID to reuse Linux binaries for RPM/DEB (empty builds binaries)
+        type: string
+      jobs:
+        description: Local build parallelism (0 selects hosted-runner defaults)
+        type: number
+        default: 0
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: package-${{ github.ref }}-${{ inputs.platform }}-${{ inputs.linux_glibc }}-${{ inputs.binary_run_id || 'build' }}
+  cancel-in-progress: false
+
+env:
+  RUSTUP_DIST_SERVER: https://static.rust-lang.org
+  RUSTUP_UPDATE_ROOT: https://static.rust-lang.org/rustup
+  RUSTUP_INIT_URL: https://sh.rustup.rs
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      linux_matrix: ${{ steps.matrix.outputs.linux_matrix }}
+      has_linux: ${{ steps.matrix.outputs.has_linux }}
+      has_ios_pair: ${{ steps.matrix.outputs.has_ios_pair }}
+      version: ${{ steps.matrix.outputs.version }}
+      release: ${{ steps.matrix.outputs.release }}
+      binary_run_id: ${{ steps.matrix.outputs.binary_run_id }}
+      binary_source_commit: ${{ steps.matrix.outputs.binary_source_commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select and validate targets
+        id: matrix
+        env:
+          PACKAGE_PLATFORM: ${{ inputs.platform }}
+          PACKAGE_GLIBC: ${{ inputs.linux_glibc }}
+          PACKAGE_VERSION: ${{ inputs.version }}
+          PACKAGE_FORMATS: ${{ inputs.formats }}
+          PACKAGE_BINARY_RUN_ID: ${{ inputs.binary_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/package.py matrix
+
+  binary:
+    name: binary-${{ matrix.id }}
+    needs: prepare
+    if: needs.prepare.outputs.binary_run_id == ''
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PACKAGE_OS: ${{ matrix.os }}
+      PACKAGE_ARCH: ${{ matrix.arch }}
+      PACKAGE_GLIBC: ${{ matrix.glibc }}
+      LINUX_PROFILE: ${{ matrix.profile }}
+      PACKAGE_APPLE_SDK: ${{ matrix.sdk }}
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
+      PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
+      BUILD_JOBS: ${{ inputs.jobs }}
+      SEEKDB_DEPS_GITHUB_PROXY_PREFIX: ''
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Free unused tools on disposable Linux runners
+        if: runner.os == 'Linux' && runner.environment == 'github-hosted'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h "$GITHUB_WORKSPACE"
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+      - name: Install Linux build utilities
+        if: runner.os == 'Linux'
+        run: |
+          packages=(rpm2cpio cpio make binutils patchelf)
+          if [[ "$LINUX_PROFILE" == el7 ]]; then
+            # EL7 Clang needs libtinfo.so.5, which Ubuntu 24 no longer ships.
+            archive=https://archive.ubuntu.com/ubuntu
+            if [[ "$RUNNER_ARCH" == ARM64 ]]; then archive=https://ports.ubuntu.com/ubuntu-ports; fi
+            for suite in jammy jammy-updates jammy-security; do
+              echo "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] $archive $suite universe"
+            done | sudo tee /etc/apt/sources.list.d/seekdb-compat.list >/dev/null
+            # Allow only libtinfo5 from the older release.
+            printf 'Package: *\nPin: release n=jammy\nPin-Priority: -1\n\nPackage: libtinfo5\nPin: release n=jammy\nPin-Priority: 500\n' |
+              sudo tee /etc/apt/preferences.d/seekdb-compat >/dev/null
+            packages+=(libtinfo5)
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y "${packages[@]}"
+      - name: Set up Conda sysroot
+        id: conda
+        if: matrix.os == 'linux'
+        uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+        with:
+          micromamba-version: ${{ matrix.micromamba }}
+          micromamba-root-path: ${{ github.workspace }}/.ci-cache/micromamba
+          environment-name: sysroot
+          create-args: >-
+            --override-channels -c conda-forge --strict-channel-priority
+            ${{ matrix.conda_spec }}
+          init-shell: none
+          generate-run-shell: false
+          cache-downloads: false
+          cache-environment: false
+      - name: Validate sysroot and configure Clang
+        if: matrix.os == 'linux'
+        env:
+          CONDA_ENVIRONMENT: ${{ steps.conda.outputs.environment-path }}
+        run: python .github/scripts/package.py sysroot
+      - name: Configure dependency cache key
+        id: keys
+        run: python .github/scripts/package.py environment
+      - name: Restore dependency SDK
+        id: sdk
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            deps/3rd
+            deps/prebuilt
+          key: package-sdk-v2-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
+          # Use exact cache keys for iOS to keep Xcode and SDK versions separate.
+          restore-keys: ${{ matrix.os != 'ios' && format('package-sdk-v2-{0}-', matrix.id) || '' }}
+      - name: Clear incomplete SDK restore
+        if: steps.sdk.outputs.cache-matched-key == ''
+        run: |
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          for path in (Path('deps/3rd'), Path('deps/prebuilt')):
+              if path.exists():
+                  shutil.rmtree(path)
+          PY
+      - name: Initialize dependencies
+        run: python .github/scripts/package.py initialize
+      - name: Save initialized SDK
+        if: steps.sdk.outputs.cache-hit != 'true' && steps.sdk.outputs.cache-primary-key != ''
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            deps/3rd
+            deps/prebuilt
+          key: ${{ steps.sdk.outputs.cache-primary-key }}
+      - name: Compile seekdb once
+        id: build
+        run: python .github/scripts/package.py build
+      - name: Export verified binary distribution
+        run: python .github/scripts/package.py export
+      - name: Check the packaged Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/check_windows.ps1
+      - name: Upload binary distribution
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: binary-${{ matrix.id }}
+          path: |
+            dist/seekdb-binary-*
+            dist/seekdb-framework-*
+            dist/obshell.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload separate debug information
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: debug-info-${{ matrix.id }}
+          path: dist/seekdb-debug-info-*
+          if-no-files-found: error
+          compression-level: 0
+      - name: Preserve completed Windows build after packaging failure
+        if: failure() && runner.os == 'Windows' && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-build-inputs
+          path: |
+            build/bin/src/observer/seekdb/
+            build/bin/src/share/inner_table/sys_package/bazel_generated/syspack_release/
+            deps/prebuilt/native/manifest.json
+            deps/prebuilt/native/share/licenses/
+            deps.lock.json
+          if-no-files-found: error
+          compression-level: 0
+      - name: Stop Bazel
+        if: always() && steps.build.outcome != 'skipped'
+        run: python .github/scripts/package.py shutdown
+
+  ios-xcframework:
+    name: ios-xcframework
+    needs: [prepare, binary]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.has_ios_pair == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: binary-ios*
+          merge-multiple: true
+          path: input
+      - name: Combine verified iOS frameworks without compiling
+        run: python3 .github/scripts/package.py xcframework
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-xcframework
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+
+  system-packages:
+    name: package-${{ matrix.id }}
+    needs: [prepare, binary]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.has_linux == 'true' && inputs.formats != 'binary'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.linux_matrix) }}
+    env:
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
+      PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
+      PACKAGE_FORMAT: ${{ matrix.format }}
+      PACKAGE_DISTRIBUTION: ${{ matrix.distribution }}
+      PACKAGE_ARCH: ${{ matrix.arch }}
+      PACKAGE_GLIBC: ${{ matrix.glibc }}
+      BINARY_RUN_ID: ${{ needs.prepare.outputs.binary_run_id || github.run_id }}
+      BINARY_SOURCE_COMMIT: ${{ needs.prepare.outputs.binary_source_commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: binary-${{ matrix.binary_id }}
+          run-id: ${{ env.BINARY_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: input
+      - name: Install packaging tools
+        run: sudo apt-get update -qq && sudo apt-get install -y rpm binutils dpkg-dev file
+      - name: Package the existing binary without initializing or compiling
+        run: |
+          mkdir -p .ci-cache
+          python3 .github/scripts/package.py system
+      - name: Validate the installed DEB on its target distribution
+        if: matrix.format == 'deb'
+        timeout-minutes: 15
+        env:
+          PACKAGE_IMAGE: ${{ matrix.image }}
+        run: python3 .github/scripts/check_deb.py
+      - name: Upload system packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: system-packages-${{ matrix.id }}
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0

@@ -16,6 +16,7 @@
 
 
 #include "ob_tx_data_memtable.h"
+#include <inttypes.h>
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1052,7 +1053,7 @@ int ObTxDataMemtable::dump2text(const char *fname)
   if (OB_ISNULL(fname)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "fanme is NULL");
-  } else if (snprintf(real_fname, sizeof(real_fname), "%s.%ld", fname,
+  } else if (snprintf(real_fname, sizeof(real_fname), "%s.%" PRId64, fname,
                       ::oceanbase::common::ObTimeUtility::current_time()) >= (int64_t)sizeof(real_fname)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "fname too long", K(fname));
@@ -1072,7 +1073,7 @@ int ObTxDataMemtable::dump2text(const char *fname)
     } else {
       fprintf(fd,
           "memtable: key=%s is_inited=%d construct_list_done=%d pre_process_done=%d do_recycle_=%d min_tx_log_ts=%s max_tx_log_ts=%s "
-          "min_start_log_ts=%s inserted_cnt=%ld deleted_cnt=%ld write_ref=%ld occupied_size=%ld total_undo_node_cnt=%ld last_insert_ts=%ld "
+          "min_start_log_ts=%s inserted_cnt=%" PRId64 " deleted_cnt=%" PRId64 " write_ref=%" PRId64 " occupied_size=%" PRId64 " total_undo_node_cnt=%" PRId64 " last_insert_ts=%" PRId64 " "
           "state=%d\n",
           key_ptr,
           is_inited_,
@@ -1090,7 +1091,7 @@ int ObTxDataMemtable::dump2text(const char *fname)
           last_insert_ts_,
           state_);
     }
-    fprintf(fd, "tx_data_count=%ld \n", tx_data_map_->count());
+    fprintf(fd, "tx_data_count=%" PRId64 " \n", tx_data_map_->count());
     DumpTxDataMemtableFunctor fn(fd);
     // tx_data_map_->for_each(fn);
   }
@@ -1169,7 +1170,7 @@ void ObTxDataMemtable::DEBUG_print_start_scn_list_(const char* fname)
 
       ObCStringHelper helper;
       fprintf(fd,
-              "ObTxData : tx_id=%-19ld state=%-8s start_scn=%-19s "
+              "ObTxData : tx_id=%-19" PRId64 " state=%-8s start_scn=%-19s "
               "end_scn=%-19s "
               "commit_version=%-19s\n",
               tx_data->tx_id_.get_id(),

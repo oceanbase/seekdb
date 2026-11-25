@@ -1448,42 +1448,12 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_IO_CALIBRATION_STATUS_TID: {
-            ObAllVirtualIOCalibrationStatus *calibration_status = nullptr;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualIOCalibrationStatus, calibration_status))) {
-              if (OB_FAIL(calibration_status->init(addr_))) {
+          case OB_ALL_VIRTUAL_IO_STAT_TID: {
+            ObAllVirtualIOStat *io_stat= nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualIOStat, io_stat))) {
+              if (OB_FAIL(io_stat->init(addr_))) {
               } else {
-                vt_iter = static_cast<ObVirtualTableIterator *>(calibration_status);
-              }
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_IO_BENCHMARK_TID: {
-            ObAllVirtualIOBenchmark *io_benchmark = nullptr;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualIOBenchmark, io_benchmark))) {
-              if (OB_FAIL(io_benchmark->init(addr_))) {
-              } else {
-                vt_iter = static_cast<ObVirtualTableIterator *>(io_benchmark);
-              }
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_IO_QUOTA_TID: {
-            ObAllVirtualIOQuota *io_quota= nullptr;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualIOQuota, io_quota))) {
-              if (OB_FAIL(io_quota->init(addr_))) {
-              } else {
-                vt_iter = static_cast<ObVirtualTableIterator *>(io_quota);
-              }
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_GROUP_IO_STAT_TID: {
-            ObAllVirtualGroupIOStat *group_io_stat= nullptr;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualGroupIOStat, group_io_stat))) {
-              if (OB_FAIL(group_io_stat->init(addr_))) {
-              } else {
-                vt_iter = static_cast<ObVirtualTableIterator *>(group_io_stat);
+                vt_iter = static_cast<ObVirtualTableIterator *>(io_stat);
               }
             }
             break;

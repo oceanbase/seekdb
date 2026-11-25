@@ -332,6 +332,7 @@ private:
   int check_data_disk_write_limit_(obcall::ObAdminSetConfigItem &item);
   int check_data_disk_usage_limit_(obcall::ObAdminSetConfigItem &item);
   int start_ddl_service_();
+  int retire_obsolete_io_tables_();
 private:
   bool inited_;
   bool need_bootstrap_;

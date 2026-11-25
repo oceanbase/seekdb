@@ -9,6 +9,7 @@ load(
     "MODULE_C_COPTS",
     "RELEASE_LOCAL_DEFINES",
     "MODULE_CXX_COPTS",
+    "debug_info_copts",
     "sanity_settings",
     "logging_defines",
 )
@@ -30,7 +31,7 @@ def _cc_library_impl(
         name = name,
         visibility = visibility,
         additional_compiler_inputs = additional_compiler_inputs + platform_compiler_inputs() + sanity.additional_compiler_inputs,
-        copts = copts + arch_copts() + platform_copts() + sanity.copts,
+        copts = copts + arch_copts() + platform_copts() + sanity.copts + debug_info_copts(),
         cxxopts = cxxopts + sanity.cxxopts + select({
             "@platforms//os:windows": ["/std:c++20"],
             "//conditions:default": [],

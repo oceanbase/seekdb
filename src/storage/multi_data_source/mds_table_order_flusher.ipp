@@ -18,6 +18,7 @@
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_TABLE_HIGH_PRIORITY_FLUSHER_IPP
 
 #include "lib/ob_errno.h"
+#include <inttypes.h>
 #include "lib/utility/ob_sort.h"
 #ifndef SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_TABLE_HIGH_PRIORITY_FLUSHER_H_IPP
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_TABLE_HIGH_PRIORITY_FLUSHER_H_IPP
@@ -85,7 +86,7 @@ template <int64_t STACK_QUEUE_SIZE>
 int64_t MdsTableHighPriorityFlusher<STACK_QUEUE_SIZE>::to_string(char *buf, const int64_t len) const {
   int64_t pos = 0;
   constexpr int64_t MAX_PRINT_NUMBER = 32L;
-  databuff_printf(buf, len, pos, "size:%ld, ordered_tablets:{", size_);
+  databuff_printf(buf, len, pos, "size:%" PRId64 ", ordered_tablets:{", size_);
   int64_t print_numnber = std::min(size_, MAX_PRINT_NUMBER);
   for (int64_t i = 0; i < print_numnber; ++i) {
     databuff_printf(buf, len, pos, high_priority_mds_tables_[i]);
@@ -93,7 +94,7 @@ int64_t MdsTableHighPriorityFlusher<STACK_QUEUE_SIZE>::to_string(char *buf, cons
       databuff_printf(buf, len, pos, ", ");
     } else {
       if (print_numnber < size_) {
-        databuff_printf(buf, len, pos, "%ld more...}", size_ - print_numnber);
+        databuff_printf(buf, len, pos, "%" PRId64 " more...}", size_ - print_numnber);
       } else {
         databuff_printf(buf, len, pos, "}");
       }

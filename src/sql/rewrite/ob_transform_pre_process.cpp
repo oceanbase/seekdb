@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_expr_arg_case.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
@@ -2617,7 +2618,7 @@ int ObTransformPreProcess::create_params_expr(ObPseudoColumnRawExpr *&pseudo_par
   } else if (OB_ISNULL(pseudo_name = static_cast<char*>(ctx_->allocator_->alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(databuff_printf(pseudo_name, buf_len, pos,
-                                     "group_param_%ld", name_id))) {
+                                     "group_param_%" PRId64 "", name_id))) {
   } else if (OB_FAIL(expr_factory->create_raw_expr(T_PSEUDO_GROUP_PARAM, pseudo_param_expr))) {
   } else {
     pseudo_param_expr->set_expr_name(ObString(pos, pseudo_name));

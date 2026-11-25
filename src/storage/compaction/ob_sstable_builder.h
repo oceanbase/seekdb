@@ -39,7 +39,6 @@ public:
     const ObIArray<blocksstable::MacroBlockId> &macro_id_array,
     const ObITableReadInfo &index_read_info)
     : allocator_("RebuildIter"),
-      io_allocator_("SSRMB_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE),
       macro_id_array_(macro_id_array),
       index_read_info_(index_read_info),
       mirco_block_iter_(),
@@ -48,7 +47,6 @@ public:
       prefetch_idx_(-1)
   {}
   ~ObSSTableRebuildMicroBlockIter() = default;
-  int init();
   int prepare() { return prefetch_idx_ != -1 ? OB_ERR_UNEXPECTED : prefetch(); }
   int open_next_macro_block();
   int get_next_micro_block(
@@ -66,14 +64,12 @@ private:
   static const int64_t PREFETCH_DEPTH = 3;
 private:
   ObArenaAllocator allocator_;
-  ObArenaAllocator io_allocator_;
   const ObIArray<blocksstable::MacroBlockId> &macro_id_array_;
   const ObITableReadInfo &index_read_info_;
   blocksstable::ObMicroBlockBareIterator mirco_block_iter_;
   blocksstable::ObStorageObjectHandle macro_io_handle_[PREFETCH_DEPTH];
   int64_t iter_idx_;
   int64_t prefetch_idx_;
-  char *io_buf_[PREFETCH_DEPTH];
 };
 
 class ObSSTableRebuilder;

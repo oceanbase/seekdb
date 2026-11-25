@@ -125,8 +125,7 @@ int PalfHandleImpl::load(share::LocalStore &store, const char *log_dir,
                          IPalfEnvImpl *palf_env_impl,
                          const common::ObAddr &self,
                          const int64_t palf_epoch,
-                         LogIOAdapter *io_adapter,
-                         bool &is_integrity)
+                         LogIOAdapter *io_adapter)
 {
   int ret = OB_SUCCESS;
   PalfBaseInfo palf_base_info;
@@ -146,9 +145,7 @@ int PalfHandleImpl::load(share::LocalStore &store, const char *log_dir,
         K(log_io_worker), K(log_shared_queue_th));
   } else if (OB_FAIL(log_engine_.load(store, log_dir, alloc_mgr, log_block_pool, &log_cache_,
         log_io_worker, log_shared_queue_th, &plugins_, last_group_entry_header_lsn, entry_header, palf_epoch, PALF_BLOCK_SIZE,
-        io_adapter, is_integrity))) {
-  } else if (false == is_integrity) {
-    PALF_LOG(INFO, "log stream is incomplete", KPC(this));
+        io_adapter))) {
   } else if (FALSE_IT(snapshot_meta = log_engine_.get_log_meta().get_log_snapshot_meta())) {
   } else if (FALSE_IT(max_committed_end_lsn =
          (true == entry_header.is_valid() ?
@@ -606,14 +603,15 @@ int PalfHandleImpl::inner_append_log(const LSN &lsn,
 
 int PalfHandleImpl::inner_append_log(const LSNArray &lsn_array,
                                      const LogWriteBufArray &write_buf_array,
-                                     const SCNArray &scn_array)
+                                     const SCNArray &scn_array, int64_t &completed_count)
 {
   int ret = OB_SUCCESS;
+  completed_count = 0;
   const int64_t begin_ts = ObTimeUtility::current_time();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "PalfHandleImpl not inited", K(ret), KPC(this));
-  } else if (OB_FAIL(log_engine_.append_log(lsn_array, write_buf_array, scn_array))) {
+  } else if (OB_FAIL(log_engine_.append_log(lsn_array, write_buf_array, scn_array, completed_count))) {
   } else {
     int64_t accum_size = 0;
     int64_t curr_size = 0;

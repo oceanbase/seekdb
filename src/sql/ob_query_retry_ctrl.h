@@ -25,6 +25,10 @@
 #include "sql/das/ob_das_retry_ctrl.h"
 namespace oceanbase
 {
+namespace share
+{
+struct ObGlobalContext;
+}
 namespace sql
 {
 class ObMultiStmtItem;

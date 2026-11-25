@@ -19,7 +19,7 @@
 
 #include "lib/container/ob_array.h"
 #include "lib/utility/ob_print_utils.h"
-#include "share/io/ob_io_define.h"
+#include "share/io_request.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
 
 namespace oceanbase

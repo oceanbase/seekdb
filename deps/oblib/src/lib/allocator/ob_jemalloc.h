@@ -21,7 +21,6 @@
 
 #if defined(OB_HAVE_BUNDLED_JEMALLOC)
 extern "C" {
-extern const char *je_malloc_conf;
 void *je_malloc(size_t size) noexcept;
 void je_free(void *ptr) noexcept;
 void *je_realloc(void *ptr, size_t size) noexcept;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_freeze_info_proxy.h"
+#include <inttypes.h>
 #include "share/ob_share_util.h" // ObShareUtil::get_rs_default_timeout_ctx
 #include "common/ob_timeout_ctx.h" // ObTimeoutCtx
 
@@ -50,7 +51,7 @@ int ObFreezeInfoProxy::get_freeze_info(
             OB_ALL_FREEZE_INFO_TNAME))) {
         }
       } else {
-        if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn = %lu",
+        if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn = %" PRIu64 "",
             OB_ALL_FREEZE_INFO_TNAME, frozen_scn.get_val_for_inner_table_field()))) {
         }
       }
@@ -116,7 +117,7 @@ int ObFreezeInfoProxy::get_freeze_info_larger_or_equal_than(
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = nullptr;
     const uint64_t frozen_scn_val = frozen_scn.get_val_for_inner_table_field();
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn >= %lu ORDER BY frozen_scn",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn >= %" PRIu64 " ORDER BY frozen_scn",
         OB_ALL_FREEZE_INFO_TNAME, frozen_scn_val))) {
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
@@ -155,7 +156,7 @@ int ObFreezeInfoProxy::get_max_frozen_scn_smaller_or_equal_than(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = nullptr;
       const uint64_t compaction_scn_val = compaction_scn.get_val_for_inner_table_field();
-      if (OB_FAIL(sql.assign_fmt("SELECT MAX(frozen_scn) as value FROM %s WHERE frozen_scn <= %lu",
+      if (OB_FAIL(sql.assign_fmt("SELECT MAX(frozen_scn) as value FROM %s WHERE frozen_scn <= %" PRIu64 "",
           OB_ALL_FREEZE_INFO_TNAME, compaction_scn_val))) {
       } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -206,7 +207,7 @@ int ObFreezeInfoProxy::batch_delete(
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(!upper_frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE frozen_scn <= %lu AND frozen_scn > 1",
+  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE frozen_scn <= %" PRIu64 " AND frozen_scn > 1",
              OB_ALL_FREEZE_INFO_TNAME, upper_frozen_scn.get_val_for_inner_table_field()))) {
   } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
   } else {
@@ -231,7 +232,7 @@ int ObFreezeInfoProxy::get_frozen_info_less_than(
       ObMySQLResult *result = nullptr;
       int tmp_ret = OB_SUCCESS;
       const uint64_t frozen_scn_val = frozen_scn.get_val_for_inner_table_field();
-      if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn <= %lu ORDER BY frozen_scn DESC %s",
+      if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn <= %" PRIu64 " ORDER BY frozen_scn DESC %s",
                                  OB_ALL_FREEZE_INFO_TNAME, frozen_scn_val, (get_all ? "" : "LIMIT 1")))) {
       } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -354,7 +355,7 @@ int ObFreezeInfoProxy::get_freeze_schema_info(
       || (!frozen_scn.is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn = %ld",
+  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn = %" PRId64 "",
                                     OB_ALL_FREEZE_INFO_TNAME, frozen_scn.get_val_for_inner_table_field()))) {
   }
 

@@ -1,16 +1,10 @@
 %global _missing_build_ids_terminate_build 0
-%global _find_debuginfo_opts -g
+%global _binary_payload w2.xzdio
 %global __brp_check_rpaths %{nil}
 %undefine __brp_mangle_shebangs
 %global __requires_exclude ^(/bin/bash|/usr/bin/.*)$
-%undefine _debugsource_packages
-%undefine _debuginfo_subpackages
 %define __strip @STRIP@
-%define __debug_install_post \
-  mv %{buildroot}/usr/bin/obshell %{_builddir}/obshell; \
-  %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}; \
-  mv %{_builddir}/obshell %{buildroot}/usr/bin/obshell; \
-%{nil}
+%global debug_package %{nil}
 Name: seekdb
 Version: @VERSION@
 Release: @RELEASE@%{?dist}
@@ -18,33 +12,21 @@ Summary: seekdb single-node database
 License: Apache-2.0
 URL: https://www.oceanbase.ai
 Group: Applications/Databases
-Requires: seekdb-libs%{?_isa} = %{version}-%{release}, systemd
+Requires: libaio, systemd
 %description
 seekdb single-node relational database.
-%package libs
-Summary: Runtime libraries for seekdb
-%description libs
-libaio runtime libraries for seekdb.
-%global __debug_package 1
-%package debuginfo
-Summary: Debug information for seekdb
-Group: Development/Debug
-AutoReq: no
-%description debuginfo
-Debug information for the seekdb release binaries.
 %prep
 %build
 %install
 mkdir -p %{buildroot}
 cp -a @PAYLOAD@/. %{buildroot}/
-cp -a @LIBS@/. %{buildroot}/
-%pre -p /bin/bash
+%pre -p /bin/sh
 @PRE@
-%post -p /bin/bash
+%post -p /bin/sh
 @POST@
-%preun -p /bin/bash
+%preun -p /bin/sh
 @PREUN@
-%postun -p /bin/bash
+%postun -p /bin/sh
 @POSTUN@
 %files
 %defattr(-,root,root,-)
@@ -59,10 +41,5 @@ cp -a @LIBS@/. %{buildroot}/
 /usr/lib/systemd/system/seekdb.service
 /usr/libexec/seekdb/import*.py
 /usr/libexec/seekdb/scripts
-/usr/share/seekdb
-%files libs
-%defattr(-,root,root,-)
 /usr/libexec/seekdb/lib
-%files debuginfo
-%defattr(-,root,root,-)
-/usr/lib/debug
+/usr/share/seekdb

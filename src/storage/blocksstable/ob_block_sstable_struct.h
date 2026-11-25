@@ -17,7 +17,6 @@
 #ifndef __BLOCK_SSTABLE_DATA_STRUCTURE_H__
 #define __BLOCK_SSTABLE_DATA_STRUCTURE_H__
 
-#include "common/log/ob_log_cursor.h"
 #include "common/ob_store_format.h"
 #include "lib/utility/ob_mod_define.h"
 #include "lib/compress/ob_compress_util.h"

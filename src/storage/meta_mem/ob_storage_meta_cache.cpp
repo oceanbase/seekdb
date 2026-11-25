@@ -410,7 +410,6 @@ ObStorageMetaCache::ObStorageMetaIOCallback::ObStorageMetaIOCallback(
     tablet_(tablet),
     arena_allocator_(arena_allocator)
 {
-  static_assert(sizeof(*this) <= CALLBACK_BUF_SIZE, "IOCallback buf size not enough");
 }
 
 ObStorageMetaCache::ObStorageMetaIOCallback::~ObStorageMetaIOCallback()
@@ -437,10 +436,6 @@ int ObStorageMetaCache::ObStorageMetaIOCallback::do_process(const char *buf, con
   return ret;
 }
 
-int64_t ObStorageMetaCache::ObStorageMetaIOCallback::size() const
-{
-  return sizeof(*this);
-}
 
 
 bool ObStorageMetaCache::ObStorageMetaIOCallback::is_valid() const
@@ -541,10 +536,6 @@ int ObStorageMetaCache::prefetch(
                                                    nullptr/*bypass_cache if nullptr*/);
       if (OB_FAIL(read_io(key.get_meta_addr(), *callback, meta_handle))) {
       }
-      if (OB_FAIL(ret) && OB_NOT_NULL(callback->get_allocator())) { //Avoid double_free with io_handle
-        callback->~ObStorageMetaIOCallback();
-        io_allocator.free(callback);
-      }
     }
   }
   return ret;
@@ -576,10 +567,6 @@ int ObStorageMetaCache::get_meta_and_bypass_cache(
                                                    &allocator/*bypass_cache if nullptr*/);
       if (OB_FAIL(read_io(key.get_meta_addr(), *callback, handle))) {
       }
-      if (OB_FAIL(ret) && OB_NOT_NULL(callback->get_allocator())) { //Avoid double_free with io_handle
-        callback->~ObStorageMetaIOCallback();
-        io_allocator.free(callback);
-      }
     }
   }
   return ret;
@@ -591,6 +578,8 @@ int ObStorageMetaCache::read_io(
     ObStorageMetaHandle &handle)
 {
   int ret = OB_SUCCESS;
+  auto owner = storage_io::adopt_callback(&callback);
+  if (!owner) { return OB_ALLOCATE_MEMORY_FAILED; }
   if (OB_UNLIKELY(!meta_addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(!meta_addr.is_block())) {
@@ -599,12 +588,10 @@ int ObStorageMetaCache::read_io(
   } else {
     ObObjectReadInfo read_info;
     read_info.addr_ = meta_addr;
-    read_info.io_callback_ = &callback;
     read_info.io_desc_.set_mode(ObIOMode::READ);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
     handle.phy_addr_ = meta_addr;
-    if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, handle.io_handle_))) {
+    if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, handle.io_handle_, std::move(owner)))) {
     }
   }
   return ret;

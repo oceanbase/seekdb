@@ -75,6 +75,11 @@ static const int64_t DEFAULT_LOG_HISTORY = 30; // days
 class ObDBMSSchedJobInfo
 {
 public:
+  enum SchedulerFlag
+  {
+    TIMER_DRIVEN = 1LL << 0
+  };
+
   ObDBMSSchedJobInfo() :
     user_id_(common::OB_INVALID_ID),
     database_id_(common::OB_INVALID_ID),
@@ -202,6 +207,7 @@ public:
   bool is_stats_maintenance_job() const { return ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB == get_func_type(); }
   bool is_user_job() const { return ObDBMSSchedFuncType::USER_JOB == get_func_type(); }
   bool is_shadow() const { return ObDBMSSchedFuncSet::instance_.is_shadow(get_func_type()); }
+  bool is_timer_driven() const { return 0 != (scheduler_flags_ & TIMER_DRIVEN); }
 
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobInfo &other);
 
