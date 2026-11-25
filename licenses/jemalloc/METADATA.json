@@ -1,0 +1,16 @@
+{
+  "name": "jemalloc",
+  "version": "5.3.1",
+  "source": "https://github.com/jemalloc/jemalloc",
+  "packaged_as": "Static native library linked into the engine (libjemalloc_pic.a / jemalloc.lib)",
+  "license": "BSD-2-Clause",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "COPYING"
+  ],
+  "redistribution": "Retain the copyright, conditions, and disclaimer.",
+  "evidence": "deps.lock.json jemalloc 5.3.1; deps/external/bazel/jemalloc.bzl links @third_party_native//:lib/libjemalloc_pic.a; the 1.4.1 engine binary contains jemalloc runtime strings",
+  "shipped_in": [
+    "engine"
+  ]
+}
