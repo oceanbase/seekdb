@@ -9,7 +9,7 @@
     "rust-mio-1.2.3.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; licenses/rust-mio-1.2.3.txt",
+  "evidence": "Cargo.lock; licenses/mio/rust-mio-1.2.3.txt",
   "shipped_in": [
     "engine"
   ]

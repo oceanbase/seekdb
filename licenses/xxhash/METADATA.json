@@ -9,7 +9,7 @@
     "xxhash-LICENSE.txt"
   ],
   "redistribution": "Reproduce the copyright, conditions, and disclaimer; no source or relink offer is required for unmodified binaries.",
-  "evidence": "src/oblib/lib/hash_func/xxhash.h version macros; licenses/xxhash-LICENSE.txt",
+  "evidence": "src/oblib/lib/hash_func/xxhash.h version macros; licenses/xxhash/xxhash-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

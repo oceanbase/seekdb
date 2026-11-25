@@ -9,7 +9,7 @@
     "rust-walkdir-2.5.0.txt"
   ],
   "redistribution": "Retain the supplied texts; using the MIT option requires its copyright and permission notice.",
-  "evidence": "Cargo.lock; licenses/rust-walkdir-2.5.0.txt",
+  "evidence": "Cargo.lock; licenses/walkdir/rust-walkdir-2.5.0.txt",
   "shipped_in": [
     "engine"
   ]

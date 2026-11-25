@@ -9,7 +9,7 @@
     "rust-tokio-1.52.3.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; licenses/rust-tokio-1.52.3.txt",
+  "evidence": "Cargo.lock; licenses/tokio/rust-tokio-1.52.3.txt",
   "shipped_in": [
     "engine"
   ]

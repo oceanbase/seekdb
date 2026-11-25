@@ -9,7 +9,7 @@
     "rust-fast-float2-0.2.4.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-fast-float2-0.2.4.txt",
+  "evidence": "Cargo.lock; licenses/fast-float2/rust-fast-float2-0.2.4.txt",
   "shipped_in": [
     "engine"
   ]

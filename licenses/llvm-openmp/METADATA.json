@@ -9,7 +9,7 @@
     "openmp-LICENSE.TXT.txt"
   ],
   "redistribution": "Retain the Apache-2.0 and LLVM exception notices.",
-  "evidence": "src/observer/observer_link_deps.bzl; seekdb-deps vsag 0.16.20 recipes/build.py LIBOMP_VERSION and WINDOWS_LIBOMP_VERSION; Linux links libgomp_static.a; licenses/openmp-LICENSE.TXT.txt",
+  "evidence": "src/observer/observer_link_deps.bzl; seekdb-deps vsag 0.16.20 recipes/build.py LIBOMP_VERSION and WINDOWS_LIBOMP_VERSION; Linux links libgomp_static.a; licenses/llvm-openmp/openmp-LICENSE.TXT.txt",
   "shipped_in": [
     "engine"
   ]

@@ -9,7 +9,7 @@
     "rust-spdlog-rs-0.5.3.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-spdlog-rs-0.5.3.txt",
+  "evidence": "Cargo.lock; licenses/spdlog-rs/rust-spdlog-rs-0.5.3.txt",
   "shipped_in": [
     "engine"
   ]

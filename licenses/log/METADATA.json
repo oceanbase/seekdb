@@ -9,7 +9,7 @@
     "rust-log-0.4.34.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-log-0.4.34.txt",
+  "evidence": "Cargo.lock; licenses/log/rust-log-0.4.34.txt",
   "shipped_in": [
     "engine"
   ]

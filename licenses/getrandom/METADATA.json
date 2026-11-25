@@ -9,7 +9,7 @@
     "rust-getrandom-0.4.3.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices. Only the version with a staged text is listed here.",
-  "evidence": "Cargo.lock; licenses/rust-getrandom-0.4.3.txt",
+  "evidence": "Cargo.lock; licenses/getrandom/rust-getrandom-0.4.3.txt",
   "shipped_in": [
     "engine"
   ]

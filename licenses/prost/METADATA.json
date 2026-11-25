@@ -9,7 +9,7 @@
     "rust-prost-0.14.3.txt"
   ],
   "redistribution": "Retain the license and applicable notices; mark modified files.",
-  "evidence": "Cargo.lock; licenses/rust-prost-0.14.3.txt",
+  "evidence": "Cargo.lock; licenses/prost/rust-prost-0.14.3.txt",
   "shipped_in": [
     "engine"
   ]

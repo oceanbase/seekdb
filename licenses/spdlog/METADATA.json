@@ -9,7 +9,7 @@
     "spdlog-LICENSE.txt"
   ],
   "redistribution": "Retain the copyright and permission notice.",
-  "evidence": "vsag 0.16.20 extern/spdlog/spdlog.cmake; deps.lock.json; licenses/spdlog-LICENSE.txt",
+  "evidence": "vsag 0.16.20 extern/spdlog/spdlog.cmake; deps.lock.json; licenses/spdlog/spdlog-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

@@ -9,7 +9,7 @@
     "robin-map-LICENSE.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "bazel/sdk_sources/dependencies.json; licenses/robin-map-LICENSE.txt",
+  "evidence": "bazel/sdk_sources/dependencies.json; licenses/robin-map/robin-map-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

@@ -9,7 +9,7 @@
     "zstd-sys.txt"
   ],
   "redistribution": "Reproduce the Meta copyright, conditions, disclaimer, and non-endorsement term.",
-  "evidence": "Cargo.lock; NOTICE zstd-sys section; licenses/zstd-sys.txt",
+  "evidence": "Cargo.lock; licenses/zstd-sys/zstd-sys.txt",
   "shipped_in": [
     "engine"
   ]

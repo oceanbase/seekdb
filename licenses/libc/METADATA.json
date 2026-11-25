@@ -9,7 +9,7 @@
     "rust-libc-0.2.189.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-libc-0.2.189.txt",
+  "evidence": "Cargo.lock; licenses/libc/rust-libc-0.2.189.txt",
   "shipped_in": [
     "engine"
   ]

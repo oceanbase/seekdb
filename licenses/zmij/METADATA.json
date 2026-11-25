@@ -9,7 +9,7 @@
     "zmij.txt"
   ],
   "redistribution": "Retain the supplied copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; NOTICE zmij section; licenses/zmij.txt",
+  "evidence": "Cargo.lock; licenses/zmij/zmij.txt",
   "shipped_in": [
     "engine"
   ]

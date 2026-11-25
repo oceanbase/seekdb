@@ -9,7 +9,7 @@
     "rust-socket2-0.6.5.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-socket2-0.6.5.txt",
+  "evidence": "Cargo.lock; licenses/socket2/rust-socket2-0.6.5.txt",
   "shipped_in": [
     "engine"
   ]

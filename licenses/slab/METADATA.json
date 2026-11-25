@@ -9,7 +9,7 @@
     "rust-slab-0.4.12.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; licenses/rust-slab-0.4.12.txt",
+  "evidence": "Cargo.lock; licenses/slab/rust-slab-0.4.12.txt",
   "shipped_in": [
     "engine"
   ]

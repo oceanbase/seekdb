@@ -9,7 +9,7 @@
     "zlib.txt"
   ],
   "redistribution": "Retain the notice, do not misrepresent origin, and mark altered source versions.",
-  "evidence": "1.4.0 engine binary exports inflate 1.2.13; devdeps-zlib-static-1.2.13; licenses/zlib.txt",
+  "evidence": "1.4.0 engine binary exports inflate 1.2.13; zlib 1.2.13 devkit package; licenses/zlib/zlib.txt",
   "shipped_in": [
     "engine"
   ]

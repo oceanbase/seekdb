@@ -9,7 +9,7 @@
     "rust-tokio-stream-0.1.18.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; licenses/rust-tokio-stream-0.1.18.txt",
+  "evidence": "Cargo.lock; licenses/tokio-stream/rust-tokio-stream-0.1.18.txt",
   "shipped_in": [
     "engine"
   ]

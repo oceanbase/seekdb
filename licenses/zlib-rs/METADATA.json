@@ -9,7 +9,7 @@
     "rust-zlib-rs-0.6.8.txt"
   ],
   "redistribution": "Retain the notice, do not misrepresent origin, and mark altered source versions.",
-  "evidence": "Cargo.lock; licenses/rust-zlib-rs-0.6.8.txt",
+  "evidence": "Cargo.lock; licenses/zlib-rs/rust-zlib-rs-0.6.8.txt",
   "shipped_in": [
     "engine"
   ]

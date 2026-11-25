@@ -9,7 +9,7 @@
     "rust-rustls-0.23.46.txt"
   ],
   "redistribution": "Retain the supplied alternative-license texts and the notice for the selected option.",
-  "evidence": "Cargo.lock; licenses/rust-rustls-0.23.46.txt",
+  "evidence": "Cargo.lock; licenses/rustls/rust-rustls-0.23.46.txt",
   "shipped_in": [
     "engine"
   ]

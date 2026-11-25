@@ -9,7 +9,7 @@
     "rust-ryu-1.0.23.txt"
   ],
   "redistribution": "Retain the supplied alternative-license texts and applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-ryu-1.0.23.txt",
+  "evidence": "Cargo.lock; licenses/ryu/rust-ryu-1.0.23.txt",
   "shipped_in": [
     "engine"
   ]

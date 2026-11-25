@@ -9,7 +9,7 @@
     "rust-s2rst-0.5.1.txt"
   ],
   "redistribution": "Retain both the license and the embedded NOTICE, including Google S2 attribution; mark modified files.",
-  "evidence": "Cargo.lock; licenses/rust-s2rst-0.5.1.txt",
+  "evidence": "Cargo.lock; licenses/s2rst/rust-s2rst-0.5.1.txt",
   "shipped_in": [
     "engine"
   ]

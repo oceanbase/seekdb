@@ -9,7 +9,7 @@
     "rust-fancy-regex-0.20.0.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; licenses/rust-fancy-regex-0.20.0.txt",
+  "evidence": "Cargo.lock; licenses/fancy-regex/rust-fancy-regex-0.20.0.txt",
   "shipped_in": [
     "engine"
   ]

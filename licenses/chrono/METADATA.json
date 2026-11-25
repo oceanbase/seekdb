@@ -9,7 +9,7 @@
     "rust-chrono-0.4.45.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; licenses/rust-chrono-0.4.45.txt",
+  "evidence": "Cargo.lock; licenses/chrono/rust-chrono-0.4.45.txt",
   "shipped_in": [
     "engine"
   ]

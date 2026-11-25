@@ -9,7 +9,7 @@
     "rust-x509-parser-0.18.1.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-x509-parser-0.18.1.txt",
+  "evidence": "Cargo.lock; licenses/x509-parser/rust-x509-parser-0.18.1.txt",
   "shipped_in": [
     "engine"
   ]

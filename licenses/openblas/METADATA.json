@@ -9,7 +9,7 @@
     "openblas-LICENSE.txt"
   ],
   "redistribution": "Retain the copyright, conditions, disclaimer, and non-endorsement term; source patches are recorded in the source repository.",
-  "evidence": "bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; seekdb-deps vsag 0.16.20 build-adjustments.patch (0.3.34 outside Linux); licenses/openblas-LICENSE.txt",
+  "evidence": "bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; seekdb-deps vsag 0.16.20 build-adjustments.patch (0.3.34 outside Linux); licenses/openblas/openblas-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

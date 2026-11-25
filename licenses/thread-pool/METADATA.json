@@ -9,7 +9,7 @@
     "thread-pool-LICENSE.txt"
   ],
   "redistribution": "Retain the copyright and permission notice.",
-  "evidence": "vsag 0.16.20 extern/thread_pool/thread_pool.cmake (commit-pinned, no release tag); deps.lock.json; licenses/thread-pool-LICENSE.txt",
+  "evidence": "vsag 0.16.20 extern/thread_pool/thread_pool.cmake (commit-pinned, no release tag); deps.lock.json; licenses/thread-pool/thread-pool-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

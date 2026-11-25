@@ -9,7 +9,7 @@
     "rust-tonic-0.14.6.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; licenses/rust-tonic-0.14.6.txt",
+  "evidence": "Cargo.lock; licenses/tonic/rust-tonic-0.14.6.txt",
   "shipped_in": [
     "engine"
   ]

@@ -9,7 +9,7 @@
     "rust-quick-xml-0.41.0.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "Cargo.lock; licenses/rust-quick-xml-0.41.0.txt",
+  "evidence": "Cargo.lock; licenses/quick-xml/rust-quick-xml-0.41.0.txt",
   "shipped_in": [
     "engine"
   ]

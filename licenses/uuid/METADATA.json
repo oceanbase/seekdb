@@ -9,7 +9,7 @@
     "rust-uuid-1.29.0.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-uuid-1.29.0.txt",
+  "evidence": "Cargo.lock; licenses/uuid/rust-uuid-1.29.0.txt",
   "shipped_in": [
     "engine"
   ]

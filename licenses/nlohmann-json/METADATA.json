@@ -9,7 +9,7 @@
     "nlohmann-json-LICENSE.MIT.txt"
   ],
   "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
-  "evidence": "bazel/sdk_sources/dependencies.json; licenses/nlohmann-json-LICENSE.MIT.txt",
+  "evidence": "bazel/sdk_sources/dependencies.json; licenses/nlohmann-json/nlohmann-json-LICENSE.MIT.txt",
   "shipped_in": [
     "engine"
   ]

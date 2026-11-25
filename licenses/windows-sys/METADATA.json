@@ -9,7 +9,7 @@
     "rust-windows-sys-0.61.2.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices. Only the version with a staged text is listed here.",
-  "evidence": "Cargo.lock; licenses/rust-windows-sys-0.61.2.txt",
+  "evidence": "Cargo.lock; licenses/windows-sys/rust-windows-sys-0.61.2.txt",
   "shipped_in": [
     "engine"
   ]

@@ -9,7 +9,7 @@
     "rust-rustls-pki-types-1.15.1.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-rustls-pki-types-1.15.1.txt",
+  "evidence": "Cargo.lock; licenses/rustls-pki-types/rust-rustls-pki-types-1.15.1.txt",
   "shipped_in": [
     "engine"
   ]

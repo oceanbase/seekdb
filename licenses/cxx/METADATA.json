@@ -9,7 +9,7 @@
     "rust-cxx-1.0.202.txt"
   ],
   "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
-  "evidence": "Cargo.lock; licenses/rust-cxx-1.0.202.txt",
+  "evidence": "Cargo.lock; licenses/cxx/rust-cxx-1.0.202.txt",
   "shipped_in": [
     "engine"
   ]

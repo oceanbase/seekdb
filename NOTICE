@@ -11,4 +11,4 @@ notices for this distribution and must be retained together with it.
 
 Components with a separate upstream notice file keep it in this bundle, for
 example the Boost.Geometry notices under
-licenses/devdeps-boost/boost-geometry-notices.txt.
+licenses/boost/boost-geometry-notices.txt.

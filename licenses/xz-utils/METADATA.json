@@ -9,7 +9,7 @@
     "xz-COPYING.txt"
   ],
   "redistribution": "Retain the complete XZ licensing text and identify any LGPL/GPL components.",
-  "evidence": "deps/init/oceanbase.macos15.arm64.deps (devdeps-xz-5.2.2-20251208); licenses/xz-COPYING.txt",
+  "evidence": "deps/init/oceanbase.macos15.arm64.deps (xz 5.2.2 devkit package); licenses/xz-utils/xz-COPYING.txt",
   "shipped_in": [
     "engine"
   ]

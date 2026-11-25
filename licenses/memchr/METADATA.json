@@ -9,7 +9,7 @@
     "rust-memchr-2.8.3.txt"
   ],
   "redistribution": "Retain the supplied texts; using the MIT option requires its copyright and permission notice.",
-  "evidence": "Cargo.lock; licenses/rust-memchr-2.8.3.txt",
+  "evidence": "Cargo.lock; licenses/memchr/rust-memchr-2.8.3.txt",
   "shipped_in": [
     "engine"
   ]

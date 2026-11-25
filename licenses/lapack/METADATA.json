@@ -9,7 +9,7 @@
     "lapack-LICENSE.txt"
   ],
   "redistribution": "Retain the copyright, conditions, and disclaimer.",
-  "evidence": "bazel/third_party/repositories.bzl; OpenBLAS lapack-netlib SRC ilaver.f (VERS_MINOR 11 for 0.3.23, 12 for 0.3.34); licenses/lapack-LICENSE.txt",
+  "evidence": "bazel/third_party/repositories.bzl; OpenBLAS lapack-netlib SRC ilaver.f (VERS_MINOR 11 for 0.3.23, 12 for 0.3.34); licenses/lapack/lapack-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

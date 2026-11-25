@@ -9,7 +9,7 @@
     "zstd-safe.txt"
   ],
   "redistribution": "Reproduce the copyright, conditions, disclaimer, and non-endorsement term.",
-  "evidence": "Cargo.lock; NOTICE zstd-safe section; licenses/zstd-safe.txt",
+  "evidence": "Cargo.lock; licenses/zstd-safe/zstd-safe.txt",
   "shipped_in": [
     "engine"
   ]

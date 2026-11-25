@@ -9,7 +9,7 @@
     "rust-simsimd-6.5.16.txt"
   ],
   "redistribution": "Retain the license and applicable notices; mark modified files.",
-  "evidence": "Cargo.lock; licenses/rust-simsimd-6.5.16.txt",
+  "evidence": "Cargo.lock; licenses/simsimd/rust-simsimd-6.5.16.txt",
   "shipped_in": [
     "engine"
   ]

@@ -9,7 +9,7 @@
     "libm.txt"
   ],
   "redistribution": "Retain the copyright and permission notice, including the musl-derived attribution.",
-  "evidence": "Cargo.lock; NOTICE libm section; licenses/libm.txt",
+  "evidence": "Cargo.lock; licenses/libm/libm.txt",
   "shipped_in": [
     "engine"
   ]
