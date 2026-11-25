@@ -972,6 +972,22 @@ public:
                                     ObIArray<ColumnItem> &column_items,
                                     ObIAllocator &alloc,
                                     ObQueryRangeArray &ranges);
+  // @brief Strip the arithmetic identity operations of a comparison operand, i.e.
+  // `c1 + 0`, `0 + c1`, `c1 - 0`, `c1 * 1`, `1 * c1` and `c1 / 1`. Such an operand has
+  // the same value and the same type as the column itself, so a predicate that compares
+  // a column through these operations is equivalent to the predicate that compares the
+  // column directly.
+  // @param expr the operand to inspect
+  // @param stripped_expr the operand without the identity operations
+  // @param changed whether an identity operation was stripped
+  static int strip_identity_arith_expr(const ObRawExpr *expr,
+                                       const ObRawExpr *&stripped_expr,
+                                       bool &changed);
+  // @brief Apply strip_identity_arith_expr() to the operands of every comparison
+  // predicate in quals. Predicates that are changed are rebuilt by the expression
+  // factory of the optimizer context.
+  static int strip_identity_arith_quals(const OptSelectivityCtx &ctx,
+                                        common::ObIArray<ObRawExpr *> &quals);
   // @brief Detect the mutual exclusivity of expr for the index-th sub-expression in OR, only detect the case of c1 = v,
   // And only consider this layer.
   // @param ref_expr OR expression
