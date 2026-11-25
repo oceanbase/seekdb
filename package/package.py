@@ -42,9 +42,22 @@ def copy(source, destination, executable=False):
     destination.chmod(0o755 if executable else 0o644)
 
 
-def stage_compliance(destination, share, version, source_commit=None):
+def current_source_commit():
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def stage_compliance(destination, share, version, source_commit=None, binary_package=None):
+    target = destination / share / "licenses"
+    if binary_package and (binary_package / "licenses").is_dir():
+        # A reused binary archive carries the compliance bundle that was verified
+        # for that exact binary. Never regenerate it from the current checkout.
+        shutil.copytree(binary_package / "licenses", target, dirs_exist_ok=True)
+        return
     import compliance
-    compliance.stage(destination / share / "licenses", version, source_commit)
+    compliance.stage(target, version, source_commit)
 
 
 def normalize_permissions(root):
@@ -59,7 +72,7 @@ def normalize_permissions(root):
 def stage(destination, artifacts, dependencies, layout, version, release, component="server",
           binary_package=None, seekdb_bin=None, obshell_bin=None, portable=False, source_commit=None):
     if component == "libs":
-        stage_compliance(destination, "usr/share/seekdb", version, source_commit)
+        stage_compliance(destination, "usr/share/seekdb", version, source_commit, binary_package)
         if binary_package:
             shutil.copytree(binary_package / "lib/seekdb", destination / "usr/libexec/seekdb/lib",
                             dirs_exist_ok=True)
@@ -83,7 +96,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
     }
     directories = ("bin", "etc/seekdb", "share/seekdb", "libexec/seekdb") if portable else paths[layout]
     binary, config, share, helpers = [destination / path for path in directories]
-    stage_compliance(destination, share, version, source_commit)
+    stage_compliance(destination, share, version, source_commit, binary_package)
     executable = "seekdb.exe" if layout == "windows" else "seekdb"
     if binary_package:
         for source, target in (("bin", binary), ("etc/seekdb", config),
@@ -360,9 +373,10 @@ def main():
                                  (metadata["glibc"], options.distribution, baseline))
             release = package_release(release, options.distribution)
         payload = output if options.format == "stage" else work / "server"
+        source_commit = options.source_commit or current_source_commit()
         stage(payload, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
               options.version, release, options.component,
-              binary_package=binary_package, obshell_bin=options.obshell_bin)
+              binary_package=binary_package, obshell_bin=options.obshell_bin, source_commit=source_commit)
         if metadata and options.layout == "linux" and options.component == "server":
             if binary_distribution.architecture(payload / "usr/bin/obshell", "linux") != metadata["arch"]:
                 raise ValueError("obshell architecture does not match the seekdb binary")
@@ -407,7 +421,8 @@ def main():
             if options.layout == "linux" and options.component == "server":
                 libs = work / "libs"
                 stage(libs, options.artifacts.resolve(), options.dependencies.resolve(), "linux",
-                      options.version, options.release, "libs", binary_package=binary_package)
+                      options.version, options.release, "libs", binary_package=binary_package,
+                      source_commit=source_commit)
                 debug_symbols.strip_tree(libs, "linux")
                 tgz(libs, output, options.version, options.release, "libs", "linux",
                     metadata["arch"] if metadata else None)
