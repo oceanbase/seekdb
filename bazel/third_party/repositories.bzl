@@ -89,7 +89,7 @@ def _third_party_headers_repository_impl(repository_ctx):
                 fail("Missing prepared Wasm Boost headers; run ./build.py init --wasm")
             repository_ctx.symlink(source, "include/" + child.basename)
             locked_names.append(child.basename)
-        if ios_sdk:
+        if ios_sdk and repository_ctx.path(headers).exists:
             for child in repository_ctx.path(headers).readdir():
                 if child.basename not in source_headers + locked_names:
                     repository_ctx.symlink(child, "include/" + child.basename)

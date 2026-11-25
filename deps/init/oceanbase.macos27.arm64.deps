@@ -9,10 +9,5 @@ os=macos
 arch=arm64
 repo=https://mirrors.oceanbase.com/oceanbase/development-kit/darwin/15/arm64
 
-[deps]
-[tools]
-obdevtools-bison-2.4.1-20251219.tar.gz
-obdevtools-flex-2.5.35-20251219.tar.gz
-
 [tools-deps]
 obshell-4.4.1.1-20260325.tgz

@@ -114,7 +114,7 @@ def environment():
     if target == "linux":
         profiles = ["oceanbase.%s.%s.deps" % (os.environ["LINUX_PROFILE"], arch)]
     elif target == "ios":
-        profiles = ["oceanbase.ios-host.arm64.deps"]
+        profiles = []
     elif target == "macos":
         profiles = ["oceanbase.macos15.arm64.deps"]
     elif target == "windows":
@@ -171,7 +171,8 @@ def initialize():
         import prepare
         simulator = os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator"
         prepare.prepare_rust("aarch64-apple-ios-sim" if simulator else "aarch64-apple-ios")
-        prepare.install(ROOT / "deps/init/oceanbase.ios-host.arm64.deps", ROOT / "deps/3rd", None)
+        prepare.install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/native",
+                               None, "Darwin", "arm64", package_names=("bison-flex",))
         prepare.install_locked(ROOT / "deps.lock.json",
                                ROOT / "deps/prebuilt" / ("ios_simulator" if simulator else "ios"),
                                None, "iOSSimulator" if simulator else "iOSDevice", "arm64")

@@ -12,9 +12,5 @@ repo=http://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/
 [deps]
 devdeps-libaio-0.3.112-12022092915.el8.x86_64.rpm
 
-[tools]
-obdevtools-bison-2.4.1-12022100413.el8.x86_64.rpm
-obdevtools-flex-2.5.35-12022100417.el8.x86_64.rpm
-
 [tools-deps]
 obshell-4.5.1.3-12026111915.el8.x86_64.rpm target=community
