@@ -22,7 +22,10 @@ class SrsDataImporter:
         self.old_result_cnt = [0, 0]
         self.new_result_cnt = [0, 0]
         self.print_srs_sql = False
-        print("host:{0} port:{1} pwd:{2} file:{3}".format(self.host, self.port, self.pwd, self.file_name))
+        # Never echo the root password: this output usually ends up in terminals,
+        # CI logs and deployment logs. Only show whether a password was given.
+        masked_pwd = '******' if self.pwd else '(empty)'
+        print("host:{0} port:{1} pwd:{2} file:{3}".format(self.host, self.port, masked_pwd, self.file_name))
 
     def generate_sql(self):
         self.sql_list = []
@@ -38,7 +41,7 @@ class SrsDataImporter:
             print(err)
             exit("ERROR: failed to connect host")
         self.cur = self.conn.cursor(buffered=True)
-        print("INFO: sucess to connect server {0}:{1}".format(self.host, self.port))
+        print("INFO: success to connect server {0}:{1}".format(self.host, self.port))
     def execute_sql(self):
         try:
             for sql in self.sql_list:
