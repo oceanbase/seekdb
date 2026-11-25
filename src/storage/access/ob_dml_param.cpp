@@ -280,6 +280,7 @@ DEF_TO_STRING(ObTableScanParam)
        N_COLUMN_IDS, column_ids_,
        N_INDEX_ID, index_id_,
        N_KEY_RANGES, key_ranges_,
+       KPC_(datum_lookup_keys),
        K_(range_array_pos),
        N_TIMEOUT, timeout_,
        N_SCAN_FLAG, scan_flag_,
