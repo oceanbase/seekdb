@@ -549,7 +549,31 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
+  // Keep identifier quoting in the shared DDL layer. The SQL layer also
+  // depends on this module, so its formatting utilities cannot be used here.
+  auto append_identifier = [&](bool shadow) -> int {
+    int ret = sql_string.append("`");
+    const ObString &name = column_name_info.column_name_;
+    if (OB_SUCC(ret) && shadow) {
+      ret = sql_string.append("__SHADOW_");
+    }
+    int64_t start = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < name.length(); ++i) {
+      if (name[i] == '`') {
+        if (i > start && OB_FAIL(sql_string.append(name.ptr() + start, i - start))) {
+        } else if (OB_FAIL(sql_string.append("``"))) {
+        }
+        start = i + 1;
+      }
+    }
+    if (OB_SUCC(ret) && start < name.length()) {
+      ret = sql_string.append(name.ptr() + start, name.length() - start);
+    }
+    if (OB_SUCC(ret)) {
+      ret = sql_string.append("`");
+    }
+    return ret;
+  };
   // append comma
   if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
@@ -559,9 +583,11 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append("cast("))) {
+      } else if (OB_FAIL(append_identifier(false))) {
+      } else if (OB_FAIL(sql_string.append(" as unsigned)"))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(append_identifier(false))) {
     }
   }
   // append AS
@@ -571,8 +597,7 @@ int ObDDLUtil::generate_column_name_str(
   }
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_identifier(column_name_info.is_shadow_column_))) {
     }
   }
   return ret;
