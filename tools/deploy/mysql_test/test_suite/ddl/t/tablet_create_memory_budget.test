@@ -1,0 +1,27 @@
+# owner: cms-cms
+# owner group: storage
+# description: legal tablet creation can exceed the temporary allocator's old 5% waterline
+
+--disable_query_log
+let $saved_memory_budget = query_get_value(SELECT value FROM oceanbase.__all_virtual_sys_parameter_stat WHERE name = 'memory_budget', value, 1);
+let $saved_ddl_timeout = query_get_value(SELECT value FROM oceanbase.__all_virtual_sys_parameter_stat WHERE name = '_ob_ddl_timeout', value, 1);
+ALTER SYSTEM SET memory_budget = '1G';
+ALTER SYSTEM SET _ob_ddl_timeout = '120s';
+--disable_warnings
+DROP TABLE IF EXISTS tablet_memory_budget;
+--enable_warnings
+--enable_query_log
+
+CREATE TABLE tablet_memory_budget (p BIGINT)
+PARTITION BY HASH (p) PARTITIONS 8192;
+SELECT COUNT(*) AS partition_count
+FROM information_schema.PARTITIONS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tablet_memory_budget';
+INSERT INTO tablet_memory_budget VALUES (1), (2);
+SELECT p FROM tablet_memory_budget WHERE p IN (1, 2) ORDER BY p;
+DROP TABLE tablet_memory_budget;
+
+--disable_query_log
+eval ALTER SYSTEM SET _ob_ddl_timeout = '$saved_ddl_timeout';
+eval ALTER SYSTEM SET memory_budget = '$saved_memory_budget';
+--enable_query_log
