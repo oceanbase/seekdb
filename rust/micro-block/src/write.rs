@@ -56,6 +56,43 @@ pub enum OwnedDatum {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BorrowedDatum<'a> {
+    Null,
+    Nop,
+    Bytes(&'a [u8]),
+    UInt(u64),
+}
+
+impl OwnedDatum {
+    fn as_borrowed(&self) -> BorrowedDatum<'_> {
+        match self {
+            Self::Null => BorrowedDatum::Null,
+            Self::Nop => BorrowedDatum::Nop,
+            Self::Bytes(bytes) => BorrowedDatum::Bytes(bytes),
+            Self::UInt(value) => BorrowedDatum::UInt(*value),
+        }
+    }
+}
+
+impl BorrowedDatum<'_> {
+    fn try_to_owned(self) -> Result<OwnedDatum> {
+        Ok(match self {
+            Self::Null => OwnedDatum::Null,
+            Self::Nop => OwnedDatum::Nop,
+            Self::Bytes(bytes) => {
+                let mut owned = Vec::new();
+                owned
+                    .try_reserve_exact(bytes.len())
+                    .map_err(|_| Error::SizeOverflow)?;
+                owned.extend_from_slice(bytes);
+                OwnedDatum::Bytes(owned)
+            }
+            Self::UInt(value) => OwnedDatum::UInt(value),
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ColumnSpec {
     pub obj_type: u8,
     /// `None` selects row-local variable-length storage. Integer values require
@@ -109,6 +146,7 @@ pub struct WriterConfig {
     pub block_size_limit: usize,
     pub block_size_upper_bound: usize,
     pub minimum_rows: usize,
+    pub encoding_granularity: u64,
     pub need_column_checksums: bool,
     pub all_lob_in_row: bool,
     pub max_merged_trans_version: i64,
@@ -124,6 +162,7 @@ impl WriterConfig {
             block_size_limit: 2 * 1024 * 1024,
             block_size_upper_bound: usize::MAX,
             minimum_rows: 1,
+            encoding_granularity: u64::MAX,
             need_column_checksums: false,
             all_lob_in_row: true,
             max_merged_trans_version: 0,
@@ -479,73 +518,98 @@ impl BlockWriter {
         self.config.max_merged_trans_version = max_merged_trans_version;
     }
 
+    pub(crate) fn configure_storage_limit(
+        &mut self,
+        micro_block_size: usize,
+        macro_block_size: usize,
+        minimum_data_limit: usize,
+        expand_percent: usize,
+        encoding_granularity: u64,
+    ) -> Result<()> {
+        let header_size = self.total_header_size()?;
+        let double_micro_size = micro_block_size.checked_mul(2).ok_or(Error::SizeOverflow)?;
+        let data_limit = match double_micro_size.checked_sub(header_size) {
+            Some(size) if size > 0 => size,
+            _ => double_micro_size,
+        };
+        let estimated_limit = data_limit
+            .max(minimum_data_limit)
+            .checked_mul(expand_percent)
+            .ok_or(Error::SizeOverflow)?
+            / 100;
+        self.config.block_size_limit = header_size
+            .checked_add(estimated_limit.min(macro_block_size))
+            .ok_or(Error::SizeOverflow)?;
+        // Storage permits one row beyond the configured granularity, up to the
+        // encoded micro-block writer's historical maximum.
+        self.config.encoding_granularity = encoding_granularity.min(u64::from(u16::MAX) - 1);
+        Ok(())
+    }
+
     pub fn append_row(&mut self, row: &[OwnedDatum]) -> Result<AppendOutcome> {
+        self.append_cells(row.iter().map(OwnedDatum::as_borrowed))
+    }
+
+    pub fn append_borrowed_row(&mut self, row: &[BorrowedDatum<'_>]) -> Result<AppendOutcome> {
+        self.append_cells(row.iter().copied())
+    }
+
+    fn append_cells<'a>(
+        &mut self,
+        row: impl ExactSizeIterator<Item = BorrowedDatum<'a>> + Clone,
+    ) -> Result<AppendOutcome> {
         if self.frozen {
             return Err(Error::Frozen);
         }
-        if row.len() != self.config.columns.len() || self.rows.len() >= u32::MAX as usize {
+        let row_count = self.rows.len();
+        if row.len() != self.config.columns.len() || row_count >= u32::MAX as usize {
             return Err(Error::InvalidArgument);
         }
-        let mut row_size = 0usize;
-        for (datum, column) in row.iter().zip(&self.config.columns) {
-            self.validate_datum(datum, column)?;
-            let datum_size = original_datum_len(datum, column)?;
-            row_size = row_size
-                .checked_add(datum_size)
+        let full = AppendOutcome {
+            accepted_rows: row_count,
+            is_full: true,
+        };
+        if row_count as u64 > self.config.encoding_granularity {
+            return Ok(full);
+        }
+
+        let mut original_size = self.original_size;
+        for (datum, column) in row.clone().zip(&self.config.columns) {
+            original_size = original_size
+                .checked_add(original_datum_len(datum, column)?)
                 .ok_or(Error::SizeOverflow)?;
         }
-        let header_size = self.total_header_size()?;
-        let would_exceed = header_size
-            .checked_add(self.original_size)
-            .and_then(|size| size.checked_add(row_size))
-            .ok_or(Error::SizeOverflow)?
-            >= self.config.block_size_limit;
-        let would_exceed_upper_bound = header_size
-            .checked_add(self.original_size)
-            .and_then(|size| size.checked_add(row_size))
-            .ok_or(Error::SizeOverflow)?
-            > self.config.block_size_upper_bound;
-        if would_exceed_upper_bound || (self.rows.len() >= self.config.minimum_rows && would_exceed)
+        let block_size = self
+            .total_header_size()?
+            .checked_add(original_size)
+            .ok_or(Error::SizeOverflow)?;
+        if block_size > self.config.block_size_upper_bound
+            || (row_count >= self.config.minimum_rows && block_size >= self.config.block_size_limit)
         {
-            return Ok(AppendOutcome {
-                accepted_rows: self.rows.len(),
-                is_full: true,
-            });
+            return Ok(full);
         }
+
         #[cfg(test)]
         if FAIL_NEXT_ROW_RESERVE.with(|fail| fail.replace(false)) {
             return Err(Error::SizeOverflow);
         }
         self.rows.try_reserve(1).map_err(|_| Error::SizeOverflow)?;
-        self.rows.push(row.to_vec());
-        self.original_size = self
-            .original_size
-            .checked_add(row_size)
-            .ok_or(Error::SizeOverflow)?;
+        let mut owned = Vec::new();
+        owned
+            .try_reserve_exact(row.len())
+            .map_err(|_| Error::SizeOverflow)?;
+        for datum in row {
+            owned.push(datum.try_to_owned()?);
+        }
+        self.rows.push(owned);
+        self.original_size = original_size;
         Ok(AppendOutcome {
-            accepted_rows: self.rows.len(),
+            accepted_rows: row_count + 1,
             is_full: false,
         })
     }
 
-    fn validate_datum(&self, datum: &OwnedDatum, column: &ColumnSpec) -> Result<()> {
-        match (datum, column.fixed_length) {
-            (OwnedDatum::Null | OwnedDatum::Nop, _) => Ok(()),
-            (OwnedDatum::Bytes(bytes), Some(length)) if bytes.len() <= length => Ok(()),
-            (OwnedDatum::Bytes(_), None) => Ok(()),
-            (OwnedDatum::UInt(value), Some(length @ (1 | 2 | 4))) => {
-                if *value < (1u64 << (length * 8)) {
-                    Ok(())
-                } else {
-                    Err(Error::InvalidArgument)
-                }
-            }
-            (OwnedDatum::UInt(_), Some(8)) => Ok(()),
-            _ => Err(Error::InvalidArgument),
-        }
-    }
-
-    fn total_header_size(&self) -> Result<usize> {
+    pub(crate) fn total_header_size(&self) -> Result<usize> {
         let checksum_bytes = if self.config.need_column_checksums {
             self.config
                 .columns
@@ -2477,23 +2541,24 @@ fn datum_len(datum: &OwnedDatum, spec: &ColumnSpec) -> Result<usize> {
     }
 }
 
-fn original_datum_len(datum: &OwnedDatum, spec: &ColumnSpec) -> Result<usize> {
+fn original_datum_len(datum: BorrowedDatum<'_>, spec: &ColumnSpec) -> Result<usize> {
+    let is_integer = integer_store_size(spec.obj_type).is_some();
     match datum {
-        OwnedDatum::Null => Ok(8),
-        OwnedDatum::Nop => Ok(0),
-        OwnedDatum::UInt(_) if integer_store_size(spec.obj_type).is_some() => Ok(8),
-        OwnedDatum::UInt(_) => Err(Error::InvalidArgument),
-        OwnedDatum::Bytes(bytes) => {
-            datum_len(datum, spec)?;
-            let mut size = if integer_store_size(spec.obj_type).is_some() {
-                8
-            } else {
-                bytes.len()
-            };
-            if spec.fixed_length.is_none() {
-                size = size.checked_add(8).ok_or(Error::SizeOverflow)?;
+        BorrowedDatum::Null => Ok(8),
+        BorrowedDatum::Nop => Ok(0),
+        BorrowedDatum::UInt(value) if is_integer => match spec.fixed_length {
+            Some(width @ (1 | 2 | 4)) if value < (1u64 << (width * 8)) => Ok(8),
+            Some(8) => Ok(8),
+            _ => Err(Error::InvalidArgument),
+        },
+        BorrowedDatum::UInt(_) => Err(Error::InvalidArgument),
+        BorrowedDatum::Bytes(bytes) => {
+            if spec.fixed_length.is_some_and(|length| bytes.len() > length) {
+                return Err(Error::InvalidArgument);
             }
-            Ok(size)
+            let size = if is_integer { 8 } else { bytes.len() };
+            size.checked_add(if spec.fixed_length.is_none() { 8 } else { 0 })
+                .ok_or(Error::SizeOverflow)
         }
     }
 }
@@ -2792,7 +2857,7 @@ mod tests {
     };
     use crate::format::COLUMN_HEADER_SIZE;
     use crate::format::{COLUMN_FIX_LENGTH, COLUMN_HAS_EXTEND_VALUE};
-    use crate::{Block, Cell, Error};
+    use crate::{Block, BorrowedDatum, Cell, Error};
 
     fn specs() -> Vec<ColumnSpec> {
         let mut key = ColumnSpec::fixed(5, 8);
@@ -2892,6 +2957,82 @@ mod tests {
             1
         );
         assert_eq!(writer.finish().unwrap_err(), Error::Frozen);
+    }
+
+    #[test]
+    fn borrowed_row_is_owned_only_after_admission() {
+        let mut writer = BlockWriter::new(WriterConfig::new(specs(), 1)).unwrap();
+        let header_size = writer.total_header_size().unwrap();
+        let mut payload = vec![b'x'; 4096];
+        let fixed = 2u16.to_le_bytes();
+        let row_size = 8 + 8 + payload.len() + 8 + 8;
+        let limit = header_size + row_size;
+        writer.set_block_size_upper_bound(limit - 1);
+        let row = [
+            BorrowedDatum::UInt(7),
+            BorrowedDatum::Bytes(&fixed),
+            BorrowedDatum::Bytes(&payload),
+            BorrowedDatum::Null,
+        ];
+        assert!(writer.append_borrowed_row(&row).unwrap().is_full);
+        assert_eq!(writer.row_count(), 0);
+        assert_eq!(writer.original_size(), 0);
+
+        writer.set_block_size_upper_bound(limit);
+        assert!(!writer.append_borrowed_row(&row).unwrap().is_full);
+        assert_eq!(writer.original_size(), row_size);
+        payload.fill(b'z');
+        drop(payload);
+
+        let bytes = writer.finish().unwrap();
+        let block = Block::new(&bytes).unwrap();
+        let projection = block.project(&[0], &[0, 1, 2, 3]).unwrap();
+        assert_eq!(projection.get(0, 0).unwrap().as_u64().unwrap(), 7);
+        assert_eq!(projection.get(0, 1).unwrap().as_u64().unwrap(), 2);
+        assert_eq!(
+            projection.get(0, 2).unwrap().bytes().unwrap(),
+            vec![b'x'; 4096]
+        );
+        assert_eq!(projection.get(0, 3).unwrap(), Cell::Null);
+    }
+
+    #[test]
+    fn row_limits_apply_even_when_the_size_is_below_budget() {
+        let mut config = WriterConfig::new(vec![ColumnSpec::variable(22)], 0);
+        config.encoding_granularity = 1;
+        let mut writer = BlockWriter::new(config.clone()).unwrap();
+        let row = [BorrowedDatum::Nop];
+        for count in 1..=2 {
+            assert_eq!(
+                writer.append_borrowed_row(&row).unwrap(),
+                AppendOutcome {
+                    accepted_rows: count,
+                    is_full: false
+                },
+            );
+        }
+        assert_eq!(
+            writer.append_borrowed_row(&row).unwrap(),
+            AppendOutcome {
+                accepted_rows: 2,
+                is_full: true
+            },
+        );
+
+        let mut writer = BlockWriter::new(config).unwrap();
+        writer
+            .configure_storage_limit(16 * 1024, 2 * 1024 * 1024, 256 * 1024, 150, u64::MAX)
+            .unwrap();
+        for _ in 0..u16::MAX {
+            assert!(!writer.append_borrowed_row(&row).unwrap().is_full);
+        }
+        assert_eq!(
+            writer.append_borrowed_row(&row).unwrap(),
+            AppendOutcome {
+                accepted_rows: u16::MAX as usize,
+                is_full: true
+            },
+        );
     }
 
     #[test]

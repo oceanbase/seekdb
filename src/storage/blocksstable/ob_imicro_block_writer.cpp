@@ -227,12 +227,5 @@ int ObIMicroBlockWriter::build_micro_block_desc(ObMicroBlockDesc &micro_block_de
   return ret;
 }
 
-int ObIMicroBlockWriter::get_pre_agg_param(const int64_t col_idx, ObMicroDataPreAggParam &pre_agg_param) const
-{
-  int ret = OB_NOT_SUPPORTED;
-  STORAGE_LOG(WARN, "unsupported get data from micro writer", K(ret));
-  return ret;
-}
-
 }//end namespace blocksstable
 }//end namespace oceanbase

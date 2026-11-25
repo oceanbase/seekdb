@@ -25,8 +25,6 @@ namespace oceanbase
 {
 namespace blocksstable
 {
-class ObIMicroBlockWriter;
-class ObIDatumIter;
 
 
 struct ObSkipIndexDatumAttr
@@ -84,7 +82,6 @@ public:
   virtual void reset() = 0;
   virtual void reuse();
   virtual int eval(const ObStorageDatum &datum, const ObSkipIndexDatumAttr &agg_datum_attr) = 0;
-  virtual int eval(ObIDatumIter &datum_iter) = 0;
   virtual int get_result(const ObStorageDatum *&result) = 0;
   VIRTUAL_TO_STRING_KV(
       K_(col_desc),
@@ -129,7 +126,6 @@ public:
   void reset() override { new (this) ObColNullCountAggregator(); }
   void reuse() override;
   int eval(const ObStorageDatum &datum, const ObSkipIndexDatumAttr &agg_datum_attr) override;
-  int eval(ObIDatumIter &datum_iter) override;
   int get_result(const ObStorageDatum *&result) override;
 private:
   int64_t null_count_;
@@ -150,7 +146,6 @@ public:
   void reset() override { new (this) ObColMaxAggregator(); }
   void reuse() override;
   int eval(const ObStorageDatum &datum, const ObSkipIndexDatumAttr &agg_datum_attr) override;
-  int eval(ObIDatumIter &datum_iter) override;
   int get_result(const ObStorageDatum *&result) override;
 private:
   int cmp_with_prefix(
@@ -179,7 +174,6 @@ public:
   void reset() override { new (this) ObColMinAggregator(); }
   void reuse() override;
   int eval(const ObStorageDatum &datum, const ObSkipIndexDatumAttr &agg_datum_attr) override;
-  int eval(ObIDatumIter &datum_iter) override;
   int get_result(const ObStorageDatum *&result) override;
 private:
   int cmp_with_prefix(
@@ -208,7 +202,6 @@ public:
   void reset() override { new (this) ObColSumAggregator(); }
   void reuse() override;
   int eval(const ObStorageDatum &datum, const ObSkipIndexDatumAttr &agg_datum_attr) override;
-  int eval(ObIDatumIter &datum_iter) override;
   int get_result(const ObStorageDatum *&result) override;
 private:
   // eval
@@ -228,20 +221,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObColSumAggregator);
 };
 
-template <typename T, int64_t MAX_COUNT, int64_t BLOCK_SIZE>
-class ObPodFix2dArray;
-
-struct ObMicroDataPreAggParam
-{
-  ObMicroDataPreAggParam() { reset(); }
-  void reset() { memset(this, 0, sizeof(*this)); }
-  bool is_all_null_column() const { OB_ASSERT(nullptr != col_datums_); return null_cnt_ == col_datums_->count(); }
-  TO_STRING_KV(KP_(col_datums), K_(null_cnt));
-
-  const ObPodFix2dArray<ObDatum, 1 << 20, common::OB_MALLOC_NORMAL_BLOCK_SIZE> *col_datums_;
-  uint64_t null_cnt_;
-};
-
 class ObIMultiColAggregator
 {
 public:
@@ -256,8 +235,6 @@ public:
   virtual void reuse();
   // agg from raw data row
   virtual int eval(const ObDatumRow &data_row) = 0;
-  // agg from micro block writer
-  virtual int eval(const ObIMicroBlockWriter &data_micro_writer) = 0;
   // agg from aggregated row
   virtual int eval(const ObSkipIndexAggResult &agg_row) = 0;
   // agg from serialized agg row
@@ -290,7 +267,6 @@ public:
   virtual void reset() override;
   virtual void reuse() override;
   virtual int eval(const ObDatumRow &data_row) override;
-  virtual int eval(const ObIMicroBlockWriter &data_micro_writer) override;
   virtual int eval(const ObSkipIndexAggResult &agg_row) override;
   virtual int eval(ObAggRowReader &agg_row_reader) override;
 private:
@@ -380,10 +356,7 @@ public:
   virtual ~ObSkipIndexDataAggregator() {}
 
   int eval(const ObDatumRow &datum_row);
-  int eval(const ObIMicroBlockWriter &data_micro_writer);
 private:
-  template<typename IterParamType>
-  int do_col_agg(const int64_t agg_idx, const IterParamType &iter_param);
   DISALLOW_COPY_AND_ASSIGN(ObSkipIndexDataAggregator);
 };
 

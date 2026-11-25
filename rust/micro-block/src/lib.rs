@@ -28,7 +28,9 @@ pub use flat::{FlatBlock, FlatRowInfo};
 pub use flat_write::{FlatDatum, FlatFinishOptions, FlatWriter, FlatWriterConfig};
 pub use read::{Block, Cell, Projection, RowRange, RowkeyBound};
 pub use rowkey::{compare_unicode_ci, RowkeyKind, RowkeyValue, UcaTable};
-pub use write::{AppendOutcome, BlockWriter, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig};
+pub use write::{
+    AppendOutcome, BlockWriter, BorrowedDatum, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig,
+};
 
 /// Errors produced while validating or transforming one micro-block.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

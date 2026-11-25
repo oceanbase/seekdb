@@ -873,13 +873,12 @@ int ObMacroBlockWriter::append_row(const ObDatumRow &row, const int64_t split_si
   }
 
   if (OB_SUCC(ret)) {
-    const bool need_pre_agg_evaluation = (nullptr != data_aggregator_) && !micro_writer_->micro_block_row_data_buffered();
     is_macro_or_micro_block_reused_ = false;
     bool is_split = false;
     if (OB_FAIL(append(*row_to_append))) {
     } else if (OB_FAIL(update_micro_commit_info(*row_to_append))) {
     } else if (OB_FAIL(save_last_key(*row_to_append))) {
-    } else if (need_pre_agg_evaluation && OB_FAIL(data_aggregator_->eval(*row_to_append))) {
+    } else if (nullptr != data_aggregator_ && OB_FAIL(data_aggregator_->eval(*row_to_append))) {
       STORAGE_LOG(WARN, "Fail to evaluate aggregate data", K(ret));
     } else if (OB_FAIL(micro_block_adaptive_splitter_.check_need_split(micro_writer_->get_block_size(), micro_writer_->get_row_count(),
           split_size, macro_blocks_[current_index_].get_data_size(), is_keep_freespace(), is_split))) {
@@ -1252,7 +1251,6 @@ int ObMacroBlockWriter::append_batch_to_micro_block(const ObBatchDatumRows &datu
 {
   int ret = OB_SUCCESS;
   ObDatumRow &last_row = datum_row_;
-  const bool need_pre_agg_evaluation = (nullptr != data_aggregator_) && !micro_writer_->micro_block_row_data_buffered();
 
   if (OB_FAIL(datum_rows.to_datum_row(start + write_row_count - 1, last_row))) {
   } else if (OB_FAIL(micro_writer_->append_batch(datum_rows, start, write_row_count))) {
@@ -1261,7 +1259,7 @@ int ObMacroBlockWriter::append_batch_to_micro_block(const ObBatchDatumRows &datu
     }
   } else if (OB_FAIL(update_micro_commit_info(datum_rows, start, write_row_count))) {
   } else if (OB_FAIL(save_last_key(last_row))) {
-  } else if (need_pre_agg_evaluation && OB_FAIL(data_aggregator_eval(datum_rows, start, write_row_count))) {
+  } else if (nullptr != data_aggregator_ && OB_FAIL(data_aggregator_eval(datum_rows, start, write_row_count))) {
     STORAGE_LOG(WARN, "Fail to evaluate aggregate data", K(ret));
   }
 
@@ -1322,15 +1320,12 @@ int ObMacroBlockWriter::build_micro_block()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  const bool need_data_aggregate = (nullptr != data_aggregator_) && micro_writer_->micro_block_row_data_buffered();
   int64_t block_size = 0;
   ObMicroBlockDesc micro_block_desc;
   if (micro_writer_->get_row_count() <= 0) {
     ret = OB_INNER_STAT_ERROR;
     STORAGE_LOG(WARN, "micro_block_writer is empty", K(ret));
   } else if (OB_FAIL(micro_writer_->build_micro_block_desc(micro_block_desc))) {
-  } else if (need_data_aggregate && OB_FAIL(data_aggregator_->eval(*micro_writer_))) {
-    STORAGE_LOG(WARN, "failed to evaluate skip index with micro writer", K(ret), KPC_(micro_writer));
   } else {
     micro_block_desc.last_rowkey_ = last_key_;
     block_size = micro_block_desc.buf_size_;

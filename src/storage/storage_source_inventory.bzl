@@ -152,7 +152,6 @@ STORAGE_UNITY_GROUPS = [
         name = "ob_storage_blocksstable_encoding1_0",
         language = "c++",
         srcs = [
-            "src/storage/blocksstable/encoding/ob_column_datum_iter.cpp",
             "src/storage/blocksstable/encoding/ob_encoding_util.cpp",
             "src/storage/blocksstable/encoding/ob_new_column_decoder.cpp",
         ],

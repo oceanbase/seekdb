@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::{
-    Block, BlockWriter, Cell, ColumnSpec, Error, FlatBlock, FlatDatum, FlatRowInfo, FlatWriter,
-    FlatWriterConfig, OwnedDatum, Result, RowRange, WriterConfig,
+    Block, BlockWriter, BorrowedDatum, Cell, ColumnSpec, Error, FlatBlock, FlatDatum, FlatRowInfo,
+    FlatWriter, FlatWriterConfig, Result, RowRange, WriterConfig,
 };
 
 #[cxx::bridge(namespace = "oceanbase::blocksstable::micro_block")]
@@ -127,6 +127,18 @@ mod ffi {
         weights: usize,
     }
 
+    struct PaxWriterConfig {
+        rowkey_column_count: u32,
+        row_store_type: u8,
+        need_column_checksums: bool,
+        micro_block_size: u64,
+        macro_block_size: u64,
+        minimum_data_limit: u64,
+        expand_percent: u64,
+        minimum_rows: u64,
+        encoding_granularity: u64,
+    }
+
     extern "Rust" {
         type PaxWriter;
         type FlatWriter;
@@ -136,11 +148,7 @@ mod ffi {
         fn init_pax_writer(
             writer: &mut PaxWriter,
             columns: Vec<BridgeColumn>,
-            rowkey_column_count: u32,
-            row_store_type: u8,
-            need_column_checksums: bool,
-            block_size_limit: u64,
-            minimum_rows: u64,
+            options: PaxWriterConfig,
         ) -> Code;
 
         /// Cells borrow C++ datum storage only for this call. Rust copies an
@@ -158,6 +166,8 @@ mod ffi {
             max_merged_trans_version: i64,
         ) -> BuildResult;
 
+        fn pax_writer_row_count(writer: &PaxWriter) -> u64;
+        fn pax_writer_header_size(writer: &PaxWriter) -> u64;
         fn pax_writer_stats(writer: &PaxWriter, expand_percent: u64) -> WriterStatsResult;
 
         fn new_flat_writer() -> Box<FlatWriter>;
@@ -238,14 +248,10 @@ fn new_pax_writer() -> Box<PaxWriter> {
 fn init_pax_writer(
     writer: &mut PaxWriter,
     columns: Vec<ffi::BridgeColumn>,
-    rowkey_column_count: u32,
-    row_store_type: u8,
-    need_column_checksums: bool,
-    block_size_limit: u64,
-    minimum_rows: u64,
+    options: ffi::PaxWriterConfig,
 ) -> ffi::Code {
     let result = (|| {
-        let row_store_type = crate::RowStoreType::try_from(row_store_type)?;
+        let row_store_type = crate::RowStoreType::try_from(options.row_store_type)?;
         let specs = columns
             .iter()
             .map(|column| ColumnSpec {
@@ -254,13 +260,20 @@ fn init_pax_writer(
                 enable_bit_packing: row_store_type == crate::RowStoreType::Encoding,
             })
             .collect();
-        let mut config = WriterConfig::new(specs, rowkey_column_count as usize);
+        let to_size = |value| usize::try_from(value).map_err(|_| Error::SizeOverflow);
+        let mut config = WriterConfig::new(specs, options.rowkey_column_count as usize);
         config.row_store_type = row_store_type;
-        config.need_column_checksums = need_column_checksums;
-        config.block_size_limit =
-            usize::try_from(block_size_limit).map_err(|_| Error::SizeOverflow)?;
-        config.minimum_rows = usize::try_from(minimum_rows).map_err(|_| Error::SizeOverflow)?;
-        BlockWriter::new(config)
+        config.need_column_checksums = options.need_column_checksums;
+        config.minimum_rows = to_size(options.minimum_rows)?;
+        let mut writer = BlockWriter::new(config)?;
+        writer.configure_storage_limit(
+            to_size(options.micro_block_size)?,
+            to_size(options.macro_block_size)?,
+            to_size(options.minimum_data_limit)?,
+            to_size(options.expand_percent)?,
+            options.encoding_granularity,
+        )?;
+        Ok(writer)
     })();
     match result {
         Ok(new_writer) => {
@@ -305,14 +318,14 @@ unsafe fn append_pax_row(
                 })
             };
             row.push(match cell.kind {
-                ffi::InputKind::Bytes => OwnedDatum::Bytes(bytes()?.to_vec()),
-                ffi::InputKind::Null => OwnedDatum::Null,
-                ffi::InputKind::Nop => OwnedDatum::Nop,
-                ffi::InputKind::UInt => OwnedDatum::UInt(cell.value),
+                ffi::InputKind::Bytes => BorrowedDatum::Bytes(bytes()?),
+                ffi::InputKind::Null => BorrowedDatum::Null,
+                ffi::InputKind::Nop => BorrowedDatum::Nop,
+                ffi::InputKind::UInt => BorrowedDatum::UInt(cell.value),
                 _ => return Err(Error::InvalidArgument),
             });
         }
-        writer.append_row(&row)
+        writer.append_borrowed_row(&row)
     })();
     match result {
         Ok(outcome) => ffi::AppendResult {
@@ -346,6 +359,21 @@ fn finish_pax_writer(
         })
     })();
     build_result(result)
+}
+
+fn pax_writer_row_count(writer: &PaxWriter) -> u64 {
+    writer
+        .writer
+        .as_ref()
+        .map_or(0, |writer| writer.row_count() as u64)
+}
+
+fn pax_writer_header_size(writer: &PaxWriter) -> u64 {
+    writer
+        .writer
+        .as_ref()
+        .and_then(|writer| writer.total_header_size().ok())
+        .unwrap_or(0) as u64
 }
 
 fn pax_writer_stats(writer: &PaxWriter, expand_percent: u64) -> ffi::WriterStatsResult {
