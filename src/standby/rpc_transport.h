@@ -52,6 +52,8 @@ public:
   void set_source_lsn(uint64_t value) { frame_.source_lsn = value; }
   uint64_t end_scn() const { return frame_.end_scn; }
   void set_end_scn(uint64_t value) { frame_.end_scn = value; }
+  uint32_t zero_padding_before() const { return frame_.zero_padding_before; }
+  void set_zero_padding_before(uint32_t value) { frame_.zero_padding_before = value; }
   Control &control() { return frame_.control; }
   const Control &control() const { return frame_.control; }
   Frame take_frame() { return std::exchange(frame_, Frame{}); }

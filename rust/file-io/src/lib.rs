@@ -49,14 +49,15 @@ pub use durability::{
 };
 pub use filesystem::{
     canonical_existing, create_dir, create_dir_all, create_new_read_write, exists,
-    lexical_absolute, metadata, open_data_synchronous_read_write_with_options, open_read_write,
-    open_synchronous_read_write, publish_file, remove_dir, remove_file, rename, symlink_file,
-    symlink_metadata, truncate_path,
+    lexical_absolute, metadata, open_data_synchronous_read_write_prefer_direct,
+    open_data_synchronous_read_write_with_options, open_read_write, open_synchronous_read_write,
+    publish_file, remove_dir, remove_file, rename, symlink_file, symlink_metadata, truncate_path,
 };
 pub use identity::FileIdentity;
 pub use ownership::{close_file, ExclusiveFile};
 pub use positioned::{
-    read_at, read_exact_at, read_uninit_at, read_up_to_at, write_all_at, write_at, write_fully_at,
+    read_at, read_exact_at, read_uninit_at, read_up_to_at, write_all_at,
+    write_all_data_synchronous_at, write_at, write_fully_at,
 };
 pub use space::{space, usable_space, Space, UsableSpace};
 pub use stdio::redirect_stdio;

@@ -210,7 +210,7 @@ public:
       const wal::LSN &start_lsn,
       const int64_t max_bytes,
       const std::function<int(const char *, int64_t, const wal::LSN &,
-                              const share::SCN &)> &consume_log);
+                              const share::SCN &, uint32_t)> &consume_log);
   int get_promotion_boundary(
       const StandbyPromotionBoundaryRequest &request,
       StandbyPromotionBoundary &boundary);

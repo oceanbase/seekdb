@@ -928,6 +928,7 @@ int StandbyRpcService::fetch_log(
           response.set_size(size);
           response.set_source_lsn(log_lsn.val_);
           response.set_end_scn(log_scn.get_val_for_logservice());
+          response.set_zero_padding_before(iterator.get_zero_padding_before());
           if (!writer->write(response.take_frame())) {
             ret = OB_CANCELED;
           } else {
@@ -1285,7 +1286,7 @@ int StandbyRpcClient::fetch_log(
     const wal::LSN &start_lsn,
     const int64_t max_bytes,
     const std::function<int(const char *, int64_t, const wal::LSN &,
-                            const share::SCN &)> &consume_log)
+                            const share::SCN &, uint32_t)> &consume_log)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
@@ -1316,7 +1317,8 @@ int StandbyRpcClient::fetch_log(
         } else if (OB_FAIL(log_scn.convert_for_logservice(response.end_scn()))) {
           LOG_WARN("invalid source log scn", K(ret), "source_scn", response.end_scn());
         } else if (OB_FAIL(consume_log(
-            response.buf().data(), static_cast<int64_t>(response.size()), source_lsn, log_scn))) {
+            response.buf().data(), static_cast<int64_t>(response.size()), source_lsn,
+            log_scn, response.zero_padding_before()))) {
           LOG_WARN("failed to consume source log group", K(ret), K(source_lsn),
               K(log_scn), "size", response.size());
         }

@@ -428,7 +428,8 @@ int ObStandbyLogSyncService::sync_once_(
       FETCH_BATCH_BYTES,
       [&groups](const char *buf, const int64_t size,
                 const wal::LSN &source_lsn,
-                const share::SCN &source_scn) -> int {
+                const share::SCN &source_scn,
+                const uint32_t zero_padding_before) -> int {
         int ret = OB_SUCCESS;
         if (OB_ISNULL(buf) || size <= 0 || size > wal::MAX_LOG_BUFFER_SIZE
             || !source_lsn.is_valid() || !source_scn.is_valid()) {
@@ -436,6 +437,7 @@ int ObStandbyLogSyncService::sync_once_(
         } else {
           auto copied = wal::wal_rs::copy_imported_group(
               source_lsn.val_, source_scn.get_val_for_logservice(),
+              zero_padding_before,
               {reinterpret_cast<const uint8_t *>(buf), static_cast<size_t>(size)});
           if (wal::wal_rs::Code::Ok != copied.code) {
             ret = wal::from_rust_code(copied.code);

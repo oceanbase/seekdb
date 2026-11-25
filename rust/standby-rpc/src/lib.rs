@@ -64,6 +64,7 @@ impl Frame {
             max_bytes: 0,
             source_lsn: 0,
             end_scn: 0,
+            zero_padding_before: 0,
         }
     }
 }
@@ -379,6 +380,7 @@ impl StandbyService for Handler {
                 size: frame.size,
                 source_lsn: frame.source_lsn,
                 end_scn: frame.end_scn,
+                zero_padding_before: frame.zero_padding_before,
             })
         }))))
     }
@@ -703,6 +705,7 @@ async fn client_call(
                         size: response.size,
                         source_lsn: response.source_lsn,
                         end_scn: response.end_scn,
+                        zero_padding_before: response.zero_padding_before,
                         ..Frame::empty()
                     }))
                     .await

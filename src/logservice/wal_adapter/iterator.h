@@ -152,6 +152,11 @@ public:
     return is_valid() ? LSN(wal_rs::end_lsn(**cursor_)) : LSN();
   }
 
+  uint32_t get_zero_padding_before() const
+  {
+    return is_valid() ? wal_rs::zero_padding_before(**cursor_) : 0;
+  }
+
   LSN get_next_lsn() const
   {
     return is_inited_ && cursor_.has_value() ? LSN(wal_rs::next_lsn(**cursor_)) : LSN();

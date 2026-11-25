@@ -658,3 +658,30 @@ fn synchronous_file_writes_remain_synchronous_with_or_without_direct_io() {
     assert_ne!(flags, -1);
     assert_eq!(flags & libc::O_SYNC, libc::O_DSYNC);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn preferred_direct_positional_write_preserves_data_sync() {
+    use std::os::fd::AsRawFd;
+
+    let directory = Directory::new();
+    let path = directory.0.join("data");
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    let file = open_data_synchronous_read_write_prefer_direct(&mut options, &path).unwrap();
+    // SAFETY: F_GETFL reads flags from this live, owned descriptor.
+    let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
+    assert_ne!(flags, -1);
+    assert_eq!(flags & libc::O_SYNC, libc::O_DSYNC);
+    match open_data_synchronous_read_write_with_options(&mut options, &path, true) {
+        Ok(_) => assert_ne!(flags & libc::O_DIRECT, 0),
+        Err(error) => {
+            assert!(crate::capability::unsupported(&error));
+            assert_eq!(flags & libc::O_DIRECT, 0);
+        }
+    }
+    let mut data = AlignedBuffer::zeroed(4096, 4096).unwrap();
+    data.as_mut_slice().fill(0x5a);
+    write_all_data_synchronous_at(&file, data.as_slice(), 0).unwrap();
+    assert_eq!(fs::read(path).unwrap(), data.as_slice());
+}
