@@ -1,0 +1,136 @@
+# Regression for #1489: simplify ANN filters without losing vector access.
+SET ob_hnsw_ef_search = 64;
+CREATE TABLE ann_filter_simplify (
+  id INT PRIMARY KEY, v VECTOR(3), category INT, age INT,
+  KEY idx_category(category), KEY idx_age(age),
+  VECTOR INDEX idx_v(v) WITH (distance=l2, type=hnsw, lib=vsag,
+    sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO ann_filter_simplify VALUES
+  (1, '[1,0,0]', 1, 10), (2, '[2,0,0]', 2, 20),
+  (3, '[3,0,0]', NULL, NULL), (4, '[4,0,0]', 1, NULL),
+  (5, '[5,0,0]', NULL, 30), (6, '[6,0,0]', 2, NULL),
+  (7, '[7,0,0]', 1, 1000), (8, '[8,0,0]', 2, 40);
+
+# Both the ANN operator and simplified filter are part of the assertion.
+--replace_regex /filter_before_indexback\[([a-z]+)\], /filter_before_indexback[\1],/
+EXPLAIN BASIC SELECT id FROM ann_filter_simplify
+WHERE category = 1 OR FALSE OR category = 1
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_filter_simplify WHERE category = 1
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+
+# Exceed the former 100-expression cutoff. Keep the nonconstant predicate:
+# age > 1000 is false only for the initial data, not a SQL contradiction.
+--replace_regex /filter_before_indexback\[([a-z]+)\], /filter_before_indexback[\1],/
+EXPLAIN BASIC SELECT id FROM ann_filter_simplify
+WHERE category = 1 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_filter_simplify
+WHERE category = 1 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+
+# SQL three-valued logic, nested predicates, aliases, and offset.
+SELECT id FROM ann_filter_simplify
+WHERE (category = 1 OR category = 1 OR NULL) AND (age > 0 OR age IS NULL)
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 1, 2;
+SELECT id FROM ann_filter_simplify
+WHERE NOT (category <> 1 AND category <> 1)
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM ann_filter_simplify WHERE category = 1 AND FALSE
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+SELECT id FROM (
+  SELECT id, l2_distance(v, '[0,0,0]') AS distance FROM ann_filter_simplify
+  WHERE category = 1 OR FALSE OR category = 1
+  ORDER BY distance APPROXIMATE LIMIT 2
+) AS nearest ORDER BY id;
+
+# A later matching row must not be removed by simplification or plan caching.
+INSERT INTO ann_filter_simplify VALUES (9, '[9,0,0]', NULL, 2000);
+SELECT id FROM ann_filter_simplify
+WHERE category = 1 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR
+  age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000 OR age > 1000
+ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+
+# Parameter equality constraints must be rechecked on plan reuse.
+PREPARE ann_filter_stmt FROM 'SELECT id FROM ann_filter_simplify WHERE category = ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? OR age > ? ORDER BY l2_distance(v, \'[0,0,0]\') APPROXIMATE LIMIT 10';
+SET @category = 1, @high = 1000, @low = 25;
+EXECUTE ann_filter_stmt USING @category, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high;
+EXECUTE ann_filter_stmt USING @category, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @low;
+EXECUTE ann_filter_stmt USING @category, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high, @high;
+DEALLOCATE PREPARE ann_filter_stmt;
+# The comparison budget may be exhausted with many distinct predicates.
+# Partial simplification must preserve the remaining conditions and NULLs.
+let $or_filter = age > 0;
+let $and_filter = category = 1;
+let $duplicate_filter = category = 1;
+let $counter = 128;
+while ($counter)
+{
+  let $or_filter = $or_filter OR age > $counter;
+  let $and_filter = $and_filter AND category = 1;
+  let $duplicate_filter = $duplicate_filter OR age > 1000;
+  dec $counter;
+}
+--echo # Distinct OR predicates after exhausting the comparison budget
+--disable_query_log
+eval SELECT id FROM ann_filter_simplify WHERE $or_filter ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+--enable_query_log
+--echo # Repeated top-level AND predicates also simplify
+--disable_query_log
+--replace_regex /filter_before_indexback\[([a-z]+)\], /filter_before_indexback[\1],/
+eval EXPLAIN BASIC SELECT id FROM ann_filter_simplify WHERE $and_filter ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+eval SELECT id FROM ann_filter_simplify WHERE $and_filter ORDER BY l2_distance(v, '[0,0,0]') APPROXIMATE LIMIT 10;
+--enable_query_log
+--echo # The shared deduplication budget also preserves exact search results
+--disable_query_log
+eval SELECT id FROM ann_filter_simplify WHERE $duplicate_filter ORDER BY l2_distance(v, '[0,0,0]') LIMIT 10;
+--enable_query_log
+DROP TABLE ann_filter_simplify;
