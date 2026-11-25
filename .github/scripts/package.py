@@ -109,14 +109,10 @@ def matrix():
 def environment():
     CACHE.mkdir(parents=True, exist_ok=True)
     target = os.environ["PACKAGE_OS"]
-    profiles = {
-        "macos": ["oceanbase.macos15.arm64.deps"],
-        "windows": ["oceanbase.windows.x86_64.deps"],
-    }.get(target, [])
     sdk = hashlib.sha256((ROOT / "deps/init/prepare.py").read_bytes())
     sdk.update((ROOT / "deps.lock.json").read_bytes())
-    for name in profiles:
-        sdk.update((ROOT / "deps/init" / name).read_bytes())
+    if target == "windows":
+        sdk.update((ROOT / "deps/init/oceanbase.windows.x86_64.deps").read_bytes())
     if target == "ios":
         developer = os.environ.get("DEVELOPER_DIR") or subprocess.check_output(
             ["xcode-select", "-p"], text=True).strip()

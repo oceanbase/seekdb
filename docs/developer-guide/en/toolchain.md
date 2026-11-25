@@ -36,7 +36,7 @@ The build script downloads locked Cargo dependencies through the RsProxy sparse 
 On Linux, `build.py init` selects dependencies from `deps.lock.json` by CPU architecture
 and glibc version. The x86_64 and aarch64 profiles require glibc 2.17 or later.
 
-The compatibility build also recognizes macOS 13 or later on both `arm64` and `x86_64`. Apple Silicon is the primary tested development platform; accepting an Intel host in the build scripts does not constitute a production-support guarantee.
+On macOS, `build.py init` requires macOS 15 or later on arm64 and selects dependencies from `deps.lock.json`.
 
 Windows 11 x64 uses `python build.py`; `init` selects the Windows dependency manifest.
 

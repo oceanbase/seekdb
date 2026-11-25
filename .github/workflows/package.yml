@@ -142,8 +142,8 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
-            deps/3rd
             deps/prebuilt
+            ${{ matrix.os == 'windows' && 'deps/3rd' || '' }}
           key: package-sdk-v2-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
           # Use exact cache keys for iOS to keep Xcode and SDK versions separate.
           restore-keys: ${{ matrix.os != 'ios' && format('package-sdk-v2-{0}-', matrix.id) || '' }}
@@ -166,8 +166,8 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
-            deps/3rd
             deps/prebuilt
+            ${{ matrix.os == 'windows' && 'deps/3rd' || '' }}
           key: ${{ steps.sdk.outputs.cache-primary-key }}
       - name: Compile seekdb once
         id: build

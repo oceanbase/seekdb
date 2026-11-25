@@ -19,25 +19,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PROFILES = Path(__file__).resolve().parent
 
 
-def host_profile():
-    system = platform.system()
-    arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(
-        platform.machine().lower(), platform.machine().lower())
-    if system == "Windows":
-        tag = "windows." + arch
-    elif system == "Darwin":
-        arm = subprocess.run(["sysctl", "-n", "hw.optional.arm64"],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
-        if arch == "aarch64" or arm.stdout.strip() == "1":
-            arch = "arm64"
-        major = int(subprocess.check_output(["sw_vers", "-productVersion"], universal_newlines=True).split(".")[0])
-        if major < 15:
-            raise ValueError("macOS 15 or newer is required for native dependencies")
-        # The dependency ABI follows the release baseline, not the build host.
-        tag = "macos15.%s" % arch
-    else:
-        raise ValueError("Unsupported host: " + system)
-    profile = PROFILES / ("oceanbase." + tag + ".deps")
+def windows_profile(architecture):
+    profile = PROFILES / ("oceanbase.windows." + architecture + ".deps")
     if not profile.is_file():
         raise ValueError("No dependencies profile for this host: " + profile.name)
     return profile
@@ -418,10 +401,16 @@ def main(arguments):
     system = platform.system()
     architecture = platform.machine().lower()
     if system == "Darwin":
-        architecture = {"aarch64": "arm64", "amd64": "x86_64"}.get(architecture, architecture)
-    else:
+        architecture = "arm64" if architecture == "aarch64" else architecture
+        if int(platform.mac_ver()[0].split(".")[0]) < 15:
+            raise ValueError("macOS 15 or newer is required for native dependencies")
+        if architecture != "arm64":
+            raise ValueError("macOS native dependencies require an arm64 environment")
+    elif system in ("Linux", "Windows"):
         architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture)
-    profile = host_profile() if system != "Linux" else None
+    else:
+        raise ValueError("Unsupported host: " + system)
+    profile = windows_profile(architecture) if system == "Windows" else None
     rust_target = None
     if options.android:
         rust_target = "aarch64-linux-android"
