@@ -3152,9 +3152,11 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
   int ret = OB_SUCCESS;
   bool is_enable_rewrite = false;
   bool is_question_mark = true;
+  const ParseNode *effective_node = node;
   if (OB_ISNULL(node)|| OB_ISNULL(left_expr)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*node,
+  } else if (OB_FAIL(dedupe_in_list_nodes(node, effective_node))) {
+  } else if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*effective_node,
             op_type,
             *left_expr,
             ctx_.current_scope_,
@@ -3175,9 +3177,9 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
     } else {
       ObInListInfo inlist_info;
       inlist_info.in_list_expr_ = sub_query_expr;
-      inlist_info.in_list_ = node;
+      inlist_info.in_list_ = effective_node;
       inlist_info.column_cnt_ = left_expr->get_expr_type() == T_OP_ROW ? left_expr->get_param_count() : 1;
-      inlist_info.row_cnt_ = node->num_child_;
+      inlist_info.row_cnt_ = effective_node->num_child_;
       inlist_info.is_question_mark_ = is_question_mark;
       if (OB_FAIL(ctx_.inlist_infos_->push_back(inlist_info))) {
       } else {
@@ -3185,8 +3187,118 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
       }
     }
   /* do as normal process */
-  } else if (OB_FAIL(SMART_CALL(recursive_resolve(node, right_expr)))) {
+  } else if (OB_FAIL(SMART_CALL(recursive_resolve(effective_node, right_expr)))) {
   } else {/* do nothing */}
+  return ret;
+}
+
+// Deduplicate constant items in an IN list before the inlist-to-values-table
+// rewrite decision (see ObInListResolver::check_inlist_rewrite_enable).
+// Duplicate values do not change IN semantics, and keeping them may push an
+// equivalent compact list over the inlist rewrite threshold or inflate the
+// generated values table, which changes the plan of semantically equivalent
+// membership filters. The original parse tree is not modified: a new
+// T_EXPR_LIST node is allocated only when deduplication actually happens.
+// Items are compared by node type and raw token text, which is conservative:
+// only truly identical constant items are removed, compound expressions and
+// row constructors are left untouched, and genuine "?" placeholders are never
+// merged because each one binds an independent runtime value. Items are
+// bucketed by a hash of that key, so deduplication is linear in list length.
+// A leaf item of a parameterized literal carries the per-item parameter index
+// in value_; that index must not take part in the comparison.
+static bool is_text_in_list_item(const ParseNode *item)
+{
+  return NULL != item && NULL != item->str_value_ && item->str_len_ > 0 &&
+         !(1 == item->str_len_ && '?' == item->str_value_[0]);
+}
+
+static bool in_list_item_equal(const ParseNode *a, const ParseNode *b)
+{
+  return NULL != a && NULL != b && a->type_ == b->type_ &&
+         a->num_child_ == b->num_child_ && is_text_in_list_item(a) &&
+         is_text_in_list_item(b) && a->str_len_ == b->str_len_ &&
+         0 == memcmp(a->str_value_, b->str_value_, a->str_len_);
+}
+
+static uint64_t in_list_item_hash(const ParseNode *item)
+{
+  const uint64_t offset_basis = 14695981039346656037ULL;
+  const uint64_t hash_prime = 1099511628211ULL;
+  uint64_t h = offset_basis;
+  h = (h ^ static_cast<uint64_t>(item->type_)) * hash_prime;
+  h = (h ^ static_cast<uint64_t>(item->num_child_)) * hash_prime;
+  for (int64_t i = 0; i < item->str_len_; ++i) {
+    h = (h ^ static_cast<uint8_t>(item->str_value_[i])) * hash_prime;
+  }
+  return h;
+}
+
+int ObRawExprResolverImpl::dedupe_in_list_nodes(const ParseNode *in_list,
+                                                const ParseNode *&ret_list)
+{
+  int ret = OB_SUCCESS;
+  ret_list = in_list;
+  bool can_dedupe = NULL != in_list && T_EXPR_LIST == in_list->type_ &&
+                    in_list->num_child_ > 1;
+  for (int64_t i = 0; can_dedupe && i < in_list->num_child_; ++i) {
+    const ParseNode *item = in_list->children_[i];
+    // row constructors and compound expressions are left untouched
+    can_dedupe = NULL != item && 0 == item->num_child_;
+  }
+  if (can_dedupe) {
+    const int64_t item_cnt = in_list->num_child_;
+    int64_t bucket_cnt = 8;
+    while (bucket_cnt < item_cnt) {
+      bucket_cnt <<= 1;
+    }
+    ObSEArray<int64_t, 64> heads;  // first kept index per bucket, -1 when empty
+    ObSEArray<int64_t, 64> chain;  // previous kept index in the same bucket
+    ObSEArray<const ParseNode *, 64> kept;
+    for (int64_t i = 0; OB_SUCC(ret) && i < bucket_cnt; ++i) {
+      if (OB_FAIL(heads.push_back(-1))) {
+        LOG_WARN("failed to init in list dedupe bucket", K(ret));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < item_cnt; ++i) {
+      const ParseNode *item = in_list->children_[i];
+      bool found = false;
+      int64_t bucket = -1;
+      if (is_text_in_list_item(item)) {
+        bucket = static_cast<int64_t>(in_list_item_hash(item) & (bucket_cnt - 1));
+        for (int64_t k = heads.at(bucket); !found && k >= 0; k = chain.at(k)) {
+          found = in_list_item_equal(item, kept.at(k));
+        }
+      }
+      if (OB_SUCC(ret) && !found) {
+        const int64_t head = -1 == bucket ? -1 : heads.at(bucket);
+        if (OB_FAIL(kept.push_back(item))) {
+          LOG_WARN("failed to keep in list item", K(ret));
+        } else if (OB_FAIL(chain.push_back(head))) {
+          LOG_WARN("failed to record in list bucket chain", K(ret));
+        } else if (bucket >= 0) {
+          heads.at(bucket) = kept.count() - 1;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && kept.count() < item_cnt) {
+      ObIAllocator &alloc = ctx_.expr_factory_.get_allocator();
+      ParseNode *new_list = NULL;
+      if (OB_ISNULL(new_list = new_node(&alloc, T_EXPR_LIST, static_cast<int>(kept.count())))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc deduped in list node", K(ret));
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < kept.count(); ++i) {
+          new_list->children_[i] = const_cast<ParseNode *>(kept.at(i));
+        }
+        if (OB_SUCC(ret)) {
+          new_list->num_child_ = static_cast<int32_t>(kept.count());
+          ret_list = new_list;
+          LOG_TRACE("deduped constant items in in list",
+                    K(item_cnt), "kept", kept.count());
+        }
+      }
+    }
+  }
   return ret;
 }
 
