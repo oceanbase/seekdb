@@ -57,6 +57,7 @@ pub mod ffi {
         max_bytes: u64,
         source_lsn: u64,
         end_scn: u64,
+        zero_padding_before: u32,
     }
     struct Trace {
         id: String,

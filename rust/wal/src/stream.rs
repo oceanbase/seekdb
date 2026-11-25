@@ -19,7 +19,7 @@ use crate::format::{
     Result, SegmentHeader, BLOCK_SIZE, ENTRY_HEADER_SIZE, GROUP_HEADER_SIZE, MAX_LOG_BODY_SIZE,
     PHYSICAL_BLOCK_SIZE, SEGMENT_HEADER_SIZE,
 };
-use file_io::{AlignedBuffer, Allocation};
+use file_io::AlignedBuffer;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -37,6 +37,7 @@ const MAX_APPEND_BATCH_BYTES: usize = 2 * 1024 * 1024;
 pub struct ImportedGroup<'a> {
     pub source_lsn: u64,
     pub source_scn: u64,
+    pub zero_padding_before: u32,
     pub bytes: &'a [u8],
 }
 
@@ -272,6 +273,7 @@ pub struct Cursor {
     current_committed_end_lsn: u64,
     current_accumulated_checksum: u64,
     current_padding: bool,
+    zero_padding_before: u32,
     next_min_scn: u64,
     seek_required: bool,
 }
@@ -699,6 +701,7 @@ impl Cursor {
             current_committed_end_lsn: 0,
             current_accumulated_checksum: 0,
             current_padding: false,
+            zero_padding_before: 0,
             next_min_scn: 0,
             seek_required: true,
         }
@@ -712,11 +715,13 @@ impl Cursor {
         self.next_lsn = lsn;
         self.bytes.clear();
         self.entry_offset = 0;
+        self.zero_padding_before = 0;
         self.seek_required = true;
         Ok(())
     }
 
     pub fn next(&mut self, replayable_point: u64) -> Result<Next> {
+        self.zero_padding_before = 0;
         loop {
             if !self.group_mode && !self.bytes.is_empty() {
                 let entries = group_entries(&self.bytes[GROUP_HEADER_SIZE..], self.group_lsn)?;
@@ -743,19 +748,28 @@ impl Cursor {
                 return Ok(Next::End);
             }
             let remaining = BLOCK_SIZE - block_offset(self.next_lsn);
-            if remaining < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64
+            let (read_lsn, zero_padding_before) = if remaining
+                < (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64
                 && self.next_lsn + remaining <= state.end_lsn
             {
                 let next_lsn = state.skip_zero_padding(self.next_lsn)?;
-                drop(state);
-                self.next_lsn = next_lsn;
-                self.bytes.clear();
-                continue;
-            }
-            let (meta, bytes) = if self.seek_required {
-                state.find_record(self.next_lsn)?
+                if !self.group_mode {
+                    drop(state);
+                    self.next_lsn = next_lsn;
+                    self.bytes.clear();
+                    continue;
+                }
+                if next_lsn == state.end_lsn {
+                    return Ok(Next::End);
+                }
+                (next_lsn, remaining as u32)
             } else {
-                match state.read_record(self.next_lsn) {
+                (self.next_lsn, 0)
+            };
+            let (meta, bytes) = if self.seek_required {
+                state.find_record(read_lsn)?
+            } else {
+                match state.read_record(read_lsn) {
                     Ok(record) => record,
                     Err(Error::OutUpper) => return Err(Error::Partial),
                     Err(error) => return Err(error),
@@ -763,7 +777,7 @@ impl Cursor {
             };
             let header = validate_group(&bytes, meta.lsn)?;
             if self.group_mode {
-                if self.next_lsn != meta.lsn {
+                if read_lsn != meta.lsn {
                     return Err(Error::Partial);
                 }
                 drop(state);
@@ -777,6 +791,7 @@ impl Cursor {
                 self.current_committed_end_lsn = header.committed_end_lsn;
                 self.current_accumulated_checksum = header.accumulated_checksum;
                 self.current_padding = header.padding;
+                self.zero_padding_before = zero_padding_before;
                 self.next_lsn = meta.end_lsn();
                 self.next_min_scn = 0;
                 self.seek_required = false;
@@ -873,6 +888,9 @@ impl Cursor {
     }
     pub fn padding(&self) -> bool {
         self.current_padding
+    }
+    pub fn zero_padding_before(&self) -> u32 {
+        self.zero_padding_before
     }
     pub fn next_min_scn(&self) -> u64 {
         self.next_min_scn
@@ -1026,7 +1044,15 @@ impl AppendBatch {
         if group.source_lsn < self.end_lsn {
             return Err(Error::Duplicate);
         }
-        if group.source_lsn != self.end_lsn || group.source_scn == u64::MAX {
+        let padding = u64::from(group.zero_padding_before);
+        let gap = group.source_lsn - self.end_lsn;
+        if gap != padding || group.source_scn == u64::MAX {
+            return Err(Error::Invalid);
+        }
+        if padding != 0
+            && (padding >= (GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE) as u64
+                || padding != BLOCK_SIZE - block_offset(self.end_lsn))
+        {
             return Err(Error::Invalid);
         }
         let header = validate_group(group.bytes, group.source_lsn)?;
@@ -1040,6 +1066,9 @@ impl AppendBatch {
                 )
         {
             return Err(Error::Invalid);
+        }
+        if padding != 0 {
+            self.push_record(state, self.end_lsn, zeroed_bytes(padding as usize)?, None)?;
         }
         self.push_record(
             state,
@@ -1166,7 +1195,6 @@ impl State {
                 return;
             }
         }
-        state.publish_append_batch(&plan);
         state.io_in_progress = true;
         let directory = state.directory.clone();
         let mut append_file = state.append_file.take();
@@ -1200,6 +1228,7 @@ impl State {
             }
             return;
         }
+        state.publish_append_batch(&plan);
         let flush_result = requests.last().map(|request| request.result);
         drop(state);
         for request in requests {
@@ -1608,16 +1637,12 @@ fn open_state(directory: &Path) -> Result<State> {
         }
     }
     ids.sort_unstable();
-    if ids
-        .first()
-        .is_some_and(|id| *id < block_id(manifest.base_lsn))
-    {
-        return Err(Error::Corrupt);
-    }
     let first_required = block_id(manifest.base_lsn);
+    let (obsolete, retained) = ids.split_at(ids.partition_point(|id| *id < first_required));
+    reclaim_obsolete_segments(directory, &manifest_writer.file, obsolete);
     let mut segments = BTreeMap::new();
     let mut removed_segment = false;
-    for id in ids.iter().copied() {
+    for id in retained.iter().copied() {
         if id != first_required + segments.len() as u64 {
             return Err(Error::Corrupt);
         }
@@ -1644,7 +1669,7 @@ fn open_state(directory: &Path) -> Result<State> {
             Ok(metadata) => {
                 segments.insert(id, metadata);
             }
-            Err(_) if Some(id) == ids.last().copied() => {
+            Err(_) if Some(id) == retained.last().copied() => {
                 fs::remove_file(path)?;
                 removed_segment = true;
             }
@@ -1706,9 +1731,8 @@ fn open_state(directory: &Path) -> Result<State> {
             let path = segment_path(directory, id);
             let tail = read_append_tail(&path, valid_length)?;
             let file = open_append_file(id, &path, false, tail)?;
-            file.set_len(valid_length)?;
-            file.allocate()?;
-            file.set_len(PHYSICAL_BLOCK_SIZE)?;
+            file.file.set_len(valid_length)?;
+            file_io::extend_file(&file.file, PHYSICAL_BLOCK_SIZE)?;
             append_file = Some(file);
             if let Some(segment) = segments.get_mut(&id) {
                 segment.length = valid_length;
@@ -1751,6 +1775,43 @@ fn open_state(directory: &Path) -> Result<State> {
         unflushed_appends: 0,
         failed: None,
     })
+}
+
+fn reclaim_obsolete_segments(directory: &Path, manifest: &File, obsolete: &[u64]) {
+    if obsolete.is_empty() {
+        return;
+    }
+    // A valid slot from the previous process may still be dirty in the page cache.
+    if let Err(error) = manifest.sync_data() {
+        log::warn!(
+            target: "WAL",
+            "failed to sync the manifest before removing obsolete segments in {}: {error}",
+            directory.display()
+        );
+        return;
+    }
+    let mut removed = false;
+    for &id in obsolete {
+        let path = segment_path(directory, id);
+        match fs::remove_file(&path) {
+            Ok(()) => removed = true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => log::warn!(
+                target: "WAL",
+                "failed to remove obsolete segment {}: {error}",
+                path.display()
+            ),
+        }
+    }
+    if removed {
+        if let Err(error) = sync_directory_io(directory) {
+            log::warn!(
+                target: "WAL",
+                "failed to sync obsolete segment removal in {}: {error}",
+                directory.display()
+            );
+        }
+    }
 }
 
 impl ManifestWriter {
@@ -1917,16 +1978,13 @@ fn open_append_file_with_failure(
     let file = AppendFile {
         id,
         path: path.to_path_buf(),
-        file: file_io::open_data_synchronous_read_write_with_options(&mut options, path, true)
+        file: file_io::open_data_synchronous_read_write_prefer_direct(&mut options, path)
             .map_err(|error| capture_io_error(failure, path, "open segment", error))?,
         tail,
     };
     if create {
-        file_io::allocate(&file.file, 0..PHYSICAL_BLOCK_SIZE, Allocation::Reserve)
+        file_io::extend_file(&file.file, PHYSICAL_BLOCK_SIZE)
             .map_err(|error| capture_io_error(failure, path, "allocate segment", error))?;
-        file.file
-            .set_len(PHYSICAL_BLOCK_SIZE)
-            .map_err(|error| capture_io_error(failure, path, "resize segment", error))?;
         file.file
             .sync_all()
             .map_err(|error| capture_io_error(failure, path, "fsync segment", error))?;
@@ -1935,15 +1993,6 @@ fn open_append_file_with_failure(
 }
 
 impl AppendFile {
-    fn allocate(&self) -> Result<()> {
-        file_io::allocate(&self.file, 0..PHYSICAL_BLOCK_SIZE, Allocation::Reserve)?;
-        Ok(())
-    }
-
-    fn set_len(&self, len: u64) -> Result<()> {
-        Ok(self.file.set_len(len)?)
-    }
-
     fn write(
         &mut self,
         start: u64,
@@ -1966,7 +2015,7 @@ impl AppendFile {
         output[..prefix_len].copy_from_slice(&self.tail);
         output[prefix_len..logical_len].copy_from_slice(bytes);
         output[logical_len..].fill(0);
-        file_io::write_all_at(&self.file, output, aligned_start)
+        file_io::write_all_data_synchronous_at(&self.file, output, aligned_start)
             .map_err(|error| capture_io_error(failure, &self.path, "write segment", error))?;
         let tail_len = logical_len % DIO_ALIGNMENT;
         let mut tail = Vec::new();
@@ -2036,6 +2085,7 @@ mod tests {
         stream.append_imported(&[ImportedGroup {
             source_lsn: lsn,
             source_scn: scn,
+            zero_padding_before: 0,
             bytes,
         }])
     }
@@ -2241,6 +2291,94 @@ mod tests {
     }
 
     #[test]
+    fn standby_imports_short_zero_padding_on_the_following_group() {
+        let source_directory = Directory::new();
+        let source_path = source_directory.0.to_string_lossy();
+        let source = Stream::create(&source_path, base(), 0);
+        let group_overhead = GROUP_HEADER_SIZE + ENTRY_HEADER_SIZE;
+        let padding = 32;
+        let mut payload_remaining = BLOCK_SIZE as usize - 5 * group_overhead - padding;
+        let payload = vec![7; MAX_LOG_BODY_SIZE];
+        for scn in 10..15 {
+            let length = payload_remaining.min(MAX_LOG_BODY_SIZE);
+            source.append(&payload[..length], scn).unwrap();
+            payload_remaining -= length;
+        }
+        source.append(b"next", 15).unwrap();
+        source.append(b"after", 16).unwrap();
+
+        let target_directory = Directory::new();
+        let target_path = target_directory.0.to_string_lossy();
+        let target = Stream::create(&target_path, base(), 0);
+        let mut source_cursor = source.cursor(0, true);
+        for _ in 0..5 {
+            assert_eq!(source_cursor.next(u64::MAX), Ok(Next::Entry));
+            assert_eq!(source_cursor.zero_padding_before(), 0);
+            import(
+                &target,
+                source_cursor.lsn(),
+                source_cursor.scn(),
+                source_cursor.bytes(),
+            )
+            .unwrap();
+        }
+
+        let resume_lsn = target.progress().unwrap().end_lsn;
+        assert_eq!(resume_lsn, BLOCK_SIZE - padding as u64);
+        let mut resumed = source.cursor(resume_lsn, true);
+        assert_eq!(resumed.next(u64::MAX), Ok(Next::Entry));
+        assert_eq!(resumed.lsn(), BLOCK_SIZE);
+        assert_eq!(resumed.zero_padding_before(), padding as u32);
+        assert_eq!(source_cursor.next(u64::MAX), Ok(Next::Entry));
+        assert_eq!(
+            source_cursor.zero_padding_before(),
+            resumed.zero_padding_before()
+        );
+
+        let mut group = ImportedGroup {
+            source_lsn: resumed.lsn(),
+            source_scn: resumed.scn(),
+            zero_padding_before: 0,
+            bytes: resumed.bytes(),
+        };
+        for invalid_padding in [0, padding as u32 - 1, group_overhead as u32] {
+            group.zero_padding_before = invalid_padding;
+            assert_eq!(
+                target.append_imported(std::slice::from_ref(&group)),
+                Err(Error::Invalid)
+            );
+        }
+        group.zero_padding_before = padding as u32 + 1;
+        group.source_lsn += 1;
+        assert_eq!(
+            target.append_imported(std::slice::from_ref(&group)),
+            Err(Error::Invalid)
+        );
+        assert_eq!(target.progress().unwrap().end_lsn, resume_lsn);
+
+        group.source_lsn = resumed.lsn();
+        group.zero_padding_before = resumed.zero_padding_before();
+        target.append_imported(&[group]).unwrap();
+        assert_eq!(resumed.next(u64::MAX), Ok(Next::Entry));
+        assert_eq!(resumed.zero_padding_before(), 0);
+        import(&target, resumed.lsn(), resumed.scn(), resumed.bytes()).unwrap();
+        assert_eq!(
+            target.progress().unwrap().end_lsn,
+            source.progress().unwrap().end_lsn
+        );
+        drop(target);
+
+        let reopened = Stream::open(&target_path);
+        let mut cursor = reopened.cursor(resume_lsn, true);
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::Entry));
+        assert_eq!(cursor.lsn(), BLOCK_SIZE);
+        assert_eq!(cursor.zero_padding_before(), padding as u32);
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::Entry));
+        assert_eq!(cursor.zero_padding_before(), 0);
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::End));
+    }
+
+    #[test]
     fn checkpoint_is_persistent_and_old_segments_disappear() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
@@ -2255,15 +2393,20 @@ mod tests {
         );
         let checkpoint = BLOCK_SIZE;
         let expected_base = stream.base_info(checkpoint).unwrap();
+        let obsolete = segment_path(&directory.0, 0);
+        let saved = directory.0.join("obsolete-segment.saved");
+        fs::copy(&obsolete, &saved).unwrap();
         let progress = stream.set_base_lsn(checkpoint).unwrap();
         assert_eq!(progress.unrecyclable_disk, progress.end_lsn - checkpoint);
-        assert!(!segment_path(&directory.0, 0).exists());
+        assert!(!obsolete.exists());
         let expected_begin_scn = stream.progress().unwrap().begin_scn;
         drop(stream);
+        fs::rename(saved, &obsolete).unwrap();
         let reopened = Stream::open(&path);
         assert_eq!(reopened.progress().unwrap().base_lsn, checkpoint);
         assert_eq!(reopened.base_info(checkpoint).unwrap(), expected_base);
         assert_eq!(reopened.progress().unwrap().begin_scn, expected_begin_scn);
+        assert!(!obsolete.exists());
     }
 
     #[test]
@@ -2491,6 +2634,7 @@ mod tests {
             .map(|(lsn, scn, bytes)| ImportedGroup {
                 source_lsn: *lsn,
                 source_scn: *scn,
+                zero_padding_before: 0,
                 bytes,
             })
             .collect();
@@ -2519,11 +2663,13 @@ mod tests {
                 ImportedGroup {
                     source_lsn: records[0].0,
                     source_scn: records[0].1,
+                    zero_padding_before: 0,
                     bytes: &records[0].2,
                 },
                 ImportedGroup {
                     source_lsn: records[1].0,
                     source_scn: records[1].1,
+                    zero_padding_before: 0,
                     bytes: &corrupted,
                 },
             ]),

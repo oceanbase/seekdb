@@ -56,6 +56,7 @@ mod ffi {
     struct ImportedGroup {
         source_lsn: u64,
         source_scn: u64,
+        zero_padding_before: u32,
         bytes: Vec<u8>,
     }
 
@@ -129,8 +130,12 @@ mod ffi {
         ) -> Code;
         fn set_failure_callback_ffi(stream: &Stream) -> Code;
         fn submit_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult;
-        fn copy_imported_group(source_lsn: u64, source_scn: u64, bytes: &[u8])
-            -> ImportedGroupResult;
+        fn copy_imported_group(
+            source_lsn: u64,
+            source_scn: u64,
+            zero_padding_before: u32,
+            bytes: &[u8],
+        ) -> ImportedGroupResult;
         fn append_imported_ffi(stream: &Stream, groups: &[ImportedGroup]) -> AppendResult;
         fn progress_ffi(stream: &Stream) -> Progress;
         fn base_info_ffi(stream: &Stream, lsn: u64) -> BaseInfoResult;
@@ -151,6 +156,7 @@ mod ffi {
         fn scn(cursor: &Cursor) -> u64;
         fn log_id(cursor: &Cursor) -> i64;
         fn next_min_scn(cursor: &Cursor) -> u64;
+        fn zero_padding_before(cursor: &Cursor) -> u32;
     }
 }
 
@@ -315,13 +321,19 @@ fn submit_ffi(stream: &Stream, payload: &[u8], ref_scn: u64) -> AppendResult {
     }
 }
 
-fn copy_imported_group(source_lsn: u64, source_scn: u64, bytes: &[u8]) -> ImportedGroupResult {
+fn copy_imported_group(
+    source_lsn: u64,
+    source_scn: u64,
+    zero_padding_before: u32,
+    bytes: &[u8],
+) -> ImportedGroupResult {
     match copied_bytes(bytes) {
         Ok(bytes) => ImportedGroupResult {
             code: Code::Ok,
             group: ImportedGroup {
                 source_lsn,
                 source_scn,
+                zero_padding_before,
                 bytes,
             },
         },
@@ -330,6 +342,7 @@ fn copy_imported_group(source_lsn: u64, source_scn: u64, bytes: &[u8]) -> Import
             group: ImportedGroup {
                 source_lsn: 0,
                 source_scn: 0,
+                zero_padding_before: 0,
                 bytes: Vec::new(),
             },
         },
@@ -343,6 +356,7 @@ fn append_imported_ffi(stream: &Stream, groups: &[ImportedGroup]) -> AppendResul
         native.extend(groups.iter().map(|group| stream::ImportedGroup {
             source_lsn: group.source_lsn,
             source_scn: group.source_scn,
+            zero_padding_before: group.zero_padding_before,
             bytes: &group.bytes,
         }));
         stream.append_imported(&native)
@@ -501,4 +515,7 @@ fn log_id(cursor: &Cursor) -> i64 {
 }
 fn next_min_scn(cursor: &Cursor) -> u64 {
     cursor.next_min_scn()
+}
+fn zero_padding_before(cursor: &Cursor) -> u32 {
+    cursor.zero_padding_before()
 }

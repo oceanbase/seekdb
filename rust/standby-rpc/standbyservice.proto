@@ -127,6 +127,7 @@ message FetchLogRes {
   uint64 size = 2;
   uint64 source_lsn = 3;
   uint64 end_scn = 4;
+  uint32 zero_padding_before = 5;
 }
 
 message NodeAddress {

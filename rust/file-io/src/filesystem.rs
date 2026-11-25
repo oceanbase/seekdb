@@ -43,13 +43,40 @@ pub fn open_synchronous_read_write(path: &Path, direct_io: bool) -> io::Result<s
     )
 }
 
-/// Opens a file whose successful writes include data and data-retrieval metadata durability.
+/// Requests synchronous writes for file data and the metadata needed to retrieve it.
+/// Use [`crate::write_all_data_synchronous_at`] for portable durability.
 pub fn open_data_synchronous_read_write_with_options(
     options: &mut std::fs::OpenOptions,
     path: &Path,
     direct_io: bool,
 ) -> io::Result<std::fs::File> {
     open_synchronous_read_write_with_mode(options, path, direct_io, SynchronousMode::Data)
+}
+
+/// Opens a file for [`crate::write_all_data_synchronous_at`], preferring direct I/O
+/// when the platform and file support it. Use direct I/O alignment for all writes.
+pub fn open_data_synchronous_read_write_prefer_direct(
+    options: &mut std::fs::OpenOptions,
+    path: &Path,
+) -> io::Result<std::fs::File> {
+    #[cfg(not(windows))]
+    {
+        let file = open_data_synchronous_read_write_with_options(options, path, false)?;
+        match crate::enable_direct_io(&file) {
+            Ok(()) => Ok(file),
+            Err(error) if crate::capability::unsupported(&error) => Ok(file),
+            Err(error) => Err(error),
+        }
+    }
+    #[cfg(windows)]
+    {
+        match open_data_synchronous_read_write_with_options(options, path, true) {
+            Err(error) if crate::capability::unsupported(&error) => {
+                open_data_synchronous_read_write_with_options(options, path, false)
+            }
+            result => result,
+        }
+    }
 }
 
 enum SynchronousMode {
