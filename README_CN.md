@@ -363,6 +363,21 @@ docker run -d \
   -v ./data:/var/lib/oceanbase \
   oceanbase/seekdb:latest
 ```
+
+**Windows 上的 Docker Desktop（WSL 2）**
+
+运行 Docker Desktop 后，在 WSL 2 发行版的终端中执行上述命令。
+如果找不到 `docker`，请在 Docker Desktop 的 **Settings → Resources →
+WSL Integration** 中启用该发行版并应用更改，详见 Docker 的
+[WSL 2 集成指南](https://docs.docker.com/desktop/features/wsl/)。
+
+如果连接 `/var/run/docker.sock` 时提示 `permission denied`，请检查套接字的所有者、
+所属组和当前用户的组成员关系。如果用户已加入该套接字所属的 `docker` 组，
+请退出登录后重新登录，或执行 `newgrp docker`（不加 `sudo`）刷新当前命令行的组权限。
+`docker` 组具有 root 级别权限；修改组成员关系前，请阅读 Docker 的
+[非 root 用户访问说明](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user)。
+再次运行 `docker version`，确认同时显示 Client 和 Server 信息后，再启动 seekdb。
+
 请参考此 Docker 镜像的[文档](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md)获取详细信息。
 
 </details>
