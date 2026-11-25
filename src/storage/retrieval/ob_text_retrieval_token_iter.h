@@ -89,7 +89,7 @@ private:
   int fill_token_weight();
   int eval_relevance_expr();
   int batch_eval_relevance_expr(const int64_t count);
-  int estimate_token_doc_cnt();
+  int calculate_token_doc_cnt();
   inline bool need_inv_idx_agg() { return inv_idx_agg_iter_ != nullptr; }
   inline bool need_calc_relevance() { return inv_idx_agg_iter_ != nullptr; }
 public:

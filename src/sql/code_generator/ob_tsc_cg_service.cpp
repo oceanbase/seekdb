@@ -1830,6 +1830,7 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
 
   if (OB_FAIL(ret)) {
   } else if (tr_info.need_calc_relevance_) {
+    const ObStoragePushdownFlag &pushdown_flag = tsc_ctdef.scan_ctdef_.pd_expr_spec_.pd_storage_flag_;
     ObDASScanCtDef *inv_idx_agg_ctdef = nullptr;
     ObDASScanCtDef *doc_agg_ctdef = nullptr;
     ObDASScanCtDef *block_max_scan_ctdef = nullptr;
@@ -1837,6 +1838,9 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     } else {
       inv_idx_agg_ctdef->ref_table_id_ = tr_info.inv_idx_tid_;
       inv_idx_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_aggregate_pushdown(true);
+      inv_idx_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_enable_skip_index(pushdown_flag.is_apply_skip_index());
+      inv_idx_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_blockscan_pushdown(pushdown_flag.is_blockscan_pushdown());
+      inv_idx_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_filter_pushdown(pushdown_flag.is_filter_pushdown());
       inv_idx_agg_ctdef->ir_scan_type_ = ObTSCIRScanType::OB_IR_INV_IDX_AGG;
       if (OB_FAIL(generate_das_scan_ctdef(op, cg_ctx, *inv_idx_agg_ctdef, has_rowscn))) {
       }
@@ -1847,6 +1851,9 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
       } else {
         doc_agg_ctdef->ref_table_id_ = op.need_skip_rowkey_doc() ? tr_info.data_table_id_ : tr_info.doc_id_idx_tid_;
         doc_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_aggregate_pushdown(true);
+        doc_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_enable_skip_index(pushdown_flag.is_apply_skip_index());
+        doc_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_blockscan_pushdown(pushdown_flag.is_blockscan_pushdown());
+        doc_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_filter_pushdown(pushdown_flag.is_filter_pushdown());
         doc_agg_ctdef->ir_scan_type_ = ObTSCIRScanType::OB_IR_DOC_ID_IDX_AGG;
         if (OB_FAIL(generate_das_scan_ctdef(op, cg_ctx, *doc_agg_ctdef, has_rowscn))) {
         }
@@ -1905,7 +1912,8 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
       } else {
         partition_row_cnt = est_cost_info->table_meta_info_->table_row_count_ / est_cost_info->table_meta_info_->part_count_;
       }
-      ir_scan_ctdef->estimated_total_doc_cnt_ = partition_row_cnt;
+      // BM25 counts must describe snapshot-visible documents, not optimizer estimates.
+      ir_scan_ctdef->estimated_total_doc_cnt_ = tr_info.need_calc_relevance_ ? 0 : partition_row_cnt;
       if (tr_info.match_expr_->get_columns_boosts().count() > 0) {
         if (tr_info.column_boost_idx_ < 0 || tr_info.column_boost_idx_ >= tr_info.match_expr_->get_columns_boosts().count()) {
           ret = OB_ERR_UNEXPECTED;
