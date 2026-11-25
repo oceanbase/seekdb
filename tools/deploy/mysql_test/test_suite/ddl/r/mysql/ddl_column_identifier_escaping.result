@@ -1,0 +1,42 @@
+# Shared DDL must escape backticks without depending on the SQL layer.
+DROP TABLE IF EXISTS ddl_escape_enum, ddl_escape_set, ddl_escape_pk, ddl_escape_utf8, ddl_escape_plain;
+# ENUM and SET unique-index builds use unsigned casts and generated aliases.
+CREATE TABLE ddl_escape_enum (id INT PRIMARY KEY, `enum``value``` ENUM('red','blue'));
+INSERT INTO ddl_escape_enum VALUES (1,'red'), (2,'blue');
+CREATE UNIQUE INDEX idx_enum ON ddl_escape_enum (`enum``value```);
+SELECT id, `enum``value``` FROM ddl_escape_enum FORCE INDEX (idx_enum) ORDER BY id;
+id	enum`value`
+1	red
+2	blue
+CREATE TABLE ddl_escape_set (id INT PRIMARY KEY, ```set````value` SET('red','blue'));
+INSERT INTO ddl_escape_set VALUES (1,'red'), (2,'red,blue');
+CREATE UNIQUE INDEX idx_set ON ddl_escape_set (```set````value`);
+SELECT id, ```set````value` FROM ddl_escape_set FORCE INDEX (idx_set) ORDER BY id;
+id	`set``value
+1	red
+2	red,blue
+# Offline primary-key changes must preserve backtick-containing columns.
+CREATE TABLE ddl_escape_pk (`key``id` INT PRIMARY KEY, `value``text` VARCHAR(12), next_id INT NOT NULL);
+INSERT INTO ddl_escape_pk VALUES (1,'first',11), (2,'second',22);
+ALTER TABLE ddl_escape_pk DROP PRIMARY KEY, ADD PRIMARY KEY (next_id);
+SELECT `key``id`, `value``text`, next_id FROM ddl_escape_pk ORDER BY next_id;
+key`id	value`text	next_id
+1	first	11
+2	second	22
+# Preserve multibyte names around the escaped delimiter.
+CREATE TABLE ddl_escape_utf8 (id INT PRIMARY KEY, `选项``name` ENUM('red','blue'));
+INSERT INTO ddl_escape_utf8 VALUES (1,'red'), (2,'blue');
+CREATE UNIQUE INDEX idx_utf8 ON ddl_escape_utf8 (`选项``name`);
+SELECT id, `选项``name` FROM ddl_escape_utf8 FORCE INDEX (idx_utf8) ORDER BY id;
+id	选项`name
+1	red
+2	blue
+# Ordinary identifiers keep their original formatting and behavior.
+CREATE TABLE ddl_escape_plain (id INT PRIMARY KEY, value_enum ENUM('red','blue'));
+INSERT INTO ddl_escape_plain VALUES (1,'red'), (2,'blue');
+CREATE UNIQUE INDEX idx_plain ON ddl_escape_plain (value_enum);
+SELECT id, value_enum FROM ddl_escape_plain FORCE INDEX (idx_plain) ORDER BY id;
+id	value_enum
+1	red
+2	blue
+DROP TABLE ddl_escape_enum, ddl_escape_set, ddl_escape_pk, ddl_escape_utf8, ddl_escape_plain;
