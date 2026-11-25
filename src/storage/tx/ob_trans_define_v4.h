@@ -24,7 +24,6 @@
 #include "lib/literals/ob_literals.h"
 #include "lib/list/ob_list.h"
 #include "lib/oblog/ob_log_module.h"
-#include "lib/trace/ob_trace_event.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/container/ob_tuple.h"
 #include "share/ob_light_hashmap.h"
@@ -289,7 +288,6 @@ private:
   int64_t cb_tid_;                  // commit callback thread id
   int64_t exec_info_reap_ts_;       // the time reaping incremental tx exec info
   ObTxTimeoutTask commit_task_;     // commit retry task
-  ObTransTraceLog tlog_;
 #ifdef ENABLE_DEBUG_LOG
   struct DLink {
     DLink(): next_(this), prev_(this) {}
@@ -333,7 +331,7 @@ private:
   bool has_extra_state_() const;
   bool in_tx_or_has_extra_state_() const;
   bool in_tx_for_free_route_();
-  void print_trace_() const;
+  void print_trace_(const bool slow_commit = false) const;
 public:
   ObTxDesc();
   ~ObTxDesc();
@@ -465,7 +463,6 @@ public:
   void add_implicit_savepoint(const ObTxSEQ savepoint);
   void release_all_implicit_savepoint();
   void release_implicit_savepoint(const ObTxSEQ savepoint);
-  ObTransTraceLog &get_tlog() { return tlog_; }
   bool need_rollback() { return state_ == State::ABORTED; }
   int64_t get_timeout_us() const { return timeout_us_; }
   share::SCN get_tx_snapshot_version() {
@@ -624,24 +621,6 @@ public:
 };
 
 typedef lib::ObLockGuardWithTimeout<ObSpinLock> ObSpinLockGuardWithTimeout;
-
-#define REC_TRANS_TRACE(recorder_ptr, trace_event) do {   \
-  if (NULL != recorder_ptr) {                             \
-    REC_TRACE(*recorder_ptr, trace_event);                \
-  }                                                       \
-} while (0)
-
-#define REC_TRANS_TRACE_EXT(recorder_ptr, trace_event, pairs...) do {  \
-  if (NULL != recorder_ptr) {                                          \
-    REC_TRACE_EXT(*recorder_ptr, trace_event, ##pairs);                \
-  }                                                                    \
-} while (0)
-
-#define REC_TRANS_TRACE_EXT2(recorder_ptr, trace_event, pairs...) do { \
-  if (NULL != recorder_ptr) {                                          \
-    REC_TRACE_EXT(*recorder_ptr, trace_event, ##pairs, OB_ID(opid), opid_);\
-  }                                                                    \
-} while (0)
 
 inline ObTxSEQ ObTxDesc::get_tx_seq(int64_t seq_abs) const
 {
