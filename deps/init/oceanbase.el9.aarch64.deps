@@ -25,5 +25,3 @@ obdevtools-flex-2.5.35-12022100417.el8.aarch64.rpm
 
 [tools-deps]
 obshell-4.5.1.3-12026111915.el8.aarch64.rpm target=community
-
-[test-utils]
