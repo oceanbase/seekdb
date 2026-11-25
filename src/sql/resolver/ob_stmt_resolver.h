@@ -16,7 +16,7 @@
 
 #ifndef _OB_STMT_RESOLVER_H
 #define _OB_STMT_RESOLVER_H 1
-#include "sql/parser/parse_node.h"
+#include "rust/sql_parser.h"
 #include "sql/resolver/ob_stmt.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/oblog/ob_log.h"
@@ -50,18 +50,17 @@ public:
   }
   virtual ~ObStmtResolver() {}
 
-  virtual int resolve(const ParseNode &parse_tree) = 0;
   inline ObStmt *get_basic_stmt() { return stmt_; }
   inline void set_basic_stmt(ObStmt *stmt) { stmt_ = stmt; }
   /// @param org If org is true, means get original db name.
   /// Else, when db node is NULL, get session db name.
-  int resolve_table_relation_node_v2(const ParseNode *node,
+  int resolve_table_relation_node_v2(const peg::Node *node,
                                      common::ObString &table_name,
                                      common::ObString &db_name,
                                      bool &is_db_explicit,
                                      bool org = false);
 
-  int resolve_table_relation_node(const ParseNode *node,
+  int resolve_table_relation_node(const peg::Node *node,
                                   common::ObString &table_name,
                                   common::ObString &db_name,
                                   bool org = false);
@@ -75,8 +74,9 @@ public:
    * @retval OB_SOME_ERROR special errno need to handle
    *
    */
-  static int resolve_ref_factor(const ParseNode *node, ObSQLSessionInfo *session_info, common::ObString &table_name, common::ObString &db_name);
-  int resolve_database_factor(const ParseNode *node,
+  static int resolve_ref_factor(const peg::Node *node, ObSQLSessionInfo *session_info, common::ObIAllocator &allocator,
+                                common::ObString &table_name, common::ObString &db_name);
+  int resolve_database_factor(const peg::Node *node,
                               uint64_t &database_id,
                               common::ObString &db_name);
 

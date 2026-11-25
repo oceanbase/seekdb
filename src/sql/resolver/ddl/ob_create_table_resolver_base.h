@@ -38,9 +38,8 @@ public:
 
 protected:
   //resolve partition option only used in ObCreateTableResolver now.
-  int resolve_partition_option(ParseNode *node,
-                               share::schema::ObTableSchema &table_schema,
-                               const bool is_partition_option_node_with_opt);
+  int resolve_partition_option(const peg::Node *definition,
+                               share::schema::ObTableSchema &table_schema);
   int set_table_option_to_schema(share::schema::ObTableSchema &table_schema);
   int add_primary_key_part(const ObString &column_name,
                            ObTableSchema &table_schema,
@@ -48,7 +47,7 @@ protected:
                            int64_t &pk_data_length,
                            ObColumnSchemaV2 *&col);
 
-  int resolve_table_organization(ParseNode *node);
+  int resolve_table_organization(rust::Slice<const peg::Node> options);
 };
 
 } // end namespace sql

@@ -19,6 +19,7 @@
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/resolver/dml/ob_column_namespace_checker.h"
 #include "sql/resolver/ob_stmt_resolver.h"
+#include "rust/sql_parser.h"
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -91,7 +92,6 @@ class ObDMLResolver : public ObStmtResolver
   public:
     ObCteResolverCtx():
       left_select_stmt_(NULL),
-      opt_col_alias_parse_node_(NULL),
       is_with_clause_resolver_(false),
       current_cte_table_name_(""),
       is_recursive_cte_(false),
@@ -136,7 +136,6 @@ class ObDMLResolver : public ObStmtResolver
     inline bool check_has_recursive_word() const { return has_recursive_word_; }
     int assign(ObCteResolverCtx &cte_ctx) {
       left_select_stmt_ = cte_ctx.left_select_stmt_;
-      opt_col_alias_parse_node_ = cte_ctx.opt_col_alias_parse_node_;
       is_with_clause_resolver_ = cte_ctx.is_with_clause_resolver_;
       current_cte_table_name_ = cte_ctx.current_cte_table_name_;
       is_recursive_cte_ = cte_ctx.is_recursive_cte_;
@@ -159,7 +158,6 @@ class ObDMLResolver : public ObStmtResolver
                  K_(has_recursive_word));
   private:
     ObSelectStmt* left_select_stmt_;
-    const ParseNode* opt_col_alias_parse_node_;
     bool is_with_clause_resolver_;
     ObString current_cte_table_name_;
     bool is_recursive_cte_;
@@ -195,74 +193,41 @@ public:
                                     ObRawExpr *&ref_expr,
                                     const bool used_for_generated_column = true,
                                     ObDMLStmt *stmt = NULL);
-  int do_resolve_generate_table(const ParseNode &table_node,
-                                const ParseNode *alias_node,
+  virtual int resolve_generated_query(const peg::Node &query, const peg::Node &table_node,
+                              TableItem *&table_item);
+  int resolve_hybrid_search_item(const peg::Node &table_node, TableItem *&table_item);
+  int do_resolve_generate_table(const peg::Node &query, const peg::Node &table_node,
                                 ObChildStmtResolver &child_resolver,
                                 TableItem *&table_item);
   int extract_var_init_exprs(ObSelectStmt *ref_query, common::ObIArray<ObRawExpr*> &assign_exprs);
   int resolve_generate_table_item(ObSelectStmt *ref_query, const ObString &alias_name, TableItem *&tbl_item);
-  int resolve_joined_table(const ParseNode &parse_node, JoinedTable *&joined_table);
-  int resolve_joined_table_item(const ParseNode &parse_node, JoinedTable *&joined_table);
-  int resolve_function_table_item(const ParseNode &table_node,
+  int resolve_joined_table(const peg::Node &parse_node, JoinedTable *&joined_table);
+  int resolve_joined_table_item(const peg::Node &parse_node, JoinedTable *&joined_table);
+  int resolve_function_table_item(const peg::Node &table_node,
                                   TableItem *&table_item);
-  int resolve_json_table_item(const ParseNode &table_node,
+  int resolve_unnest_table(const peg::Node &table_node, TableItem *&table_item);
+  int create_unnest_table(TableItem *&table_item, common::ObString table_name);
+  int add_unnest_column(TableItem &table_item, common::ObString column_name);
+  int resolve_json_table_item(const peg::Node &table_node,
                               TableItem *&table_item);
-  int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);
-  int create_unnest_table_item(TableItem *&table_item, ObString table_name);
-  int unnest_table_add_column(TableItem *&table_item, ColumnItem *&col_item, ObString col_name);
-  int resolve_hybrid_search_item(const ParseNode &parse_tree, TableItem *&table_item);
 
-  int fill_same_column_to_using(JoinedTable* &joined_table);
-  int get_columns_from_table_item(const TableItem *table_item, common::ObIArray<common::ObString> &column_names);
 
-  int resolve_using_columns(const ParseNode &using_node, common::ObIArray<common::ObString> &column_names);
+  int resolve_using_columns(rust::Slice<const peg::Node> columns, common::ObIArray<common::ObString> &column_names);
+  int resolve_natural_join_columns(const JoinedTable &joined_table);
+  int collect_table_column_names(const TableItem &table_item, common::ObIArray<common::ObString> &column_names);
   int transfer_using_to_on_expr(JoinedTable *&joined_table);
   int resolve_table_column_expr(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
   int resolve_join_table_column_item(const JoinedTable &joined_table,
                                      const common::ObString &column_name,
                                      ObRawExpr *&real_ref_expr);
-  int json_table_make_json_path(const ParseNode &parse_tree,
-                                ObIAllocator* allocator,
-                                ObString& path_str,
-                                MulModeTableType table_type);
-  int resolve_str_const(const ParseNode &parse_tree, ObString& path_str);
-  int resolve_json_table_column_name_and_path(const ParseNode *name_node,
-                                           const ParseNode *path_node,
-                                           ObIAllocator* allocator,
-                                           ObDmlJtColDef *col_def,
-                                           MulModeTableType table_type);
+  int resolve_str_const(const peg::Node &parse_tree, ObString& path_str);
   int resolve_single_table_column_item(const TableItem &table_item,
                                        const common::ObString &column_name,
                                        bool include_hidden,
                                        ColumnItem *&col_item);
-  // dot notation
-  int expand_column_in_json_object_star(ParseNode *node);
-  int pre_process_mvt_agg(ParseNode &node);
-  int pre_process_json_expr(ParseNode &node);
-  int print_json_path(ParseNode *&tmp_path, ObJsonBuffer &res_str);
-  int check_depth_obj_access_ref(ParseNode *node, int8_t &depth, bool &exist_fun, ObJsonBuffer &sql_str, bool obj_check = true);  // obj_check : whether need check dot notaion
-  int check_first_node_name(const ObString &node_name, bool &check_res);
-  int create_col_ref_node(ParseNode *table_node, const ObString &column_name, ParseNode *&new_node);
-  int create_int_val_node(ParseNode *table_node, const uint64_t value, ParseNode *&new_node);
-  int create_char_node(const ObString &value, ParseNode *&new_node);
-  int check_column_json_type(ParseNode *tab_col, bool &is_json_cst, bool &is_json_type, ObColumnRefRawExpr *&column_expr, int8_t only_is_json = 1);
-  int check_size_obj_access_ref(ParseNode *node);
-  /* json object resolve star */
   int get_target_column_list(ObSEArray<ColumnItem, 4> &target_list, ObString &tab_name, bool all_tab,
                             bool &tab_has_alias, TableItem *&tab_item, bool is_col = false);
-  int pre_process_json_expr_constraint(ParseNode *node, common::ObIAllocator &allocator);
-  int process_json_object_array_node(ParseNode *node, common::ObIAllocator &allocator);
-  int process_json_agg_node(ParseNode*& node, common::ObIAllocator &allocator);
-  int check_is_json_constraint(common::ObIAllocator &allocator,
-                               ParseNode *col_node,
-                               bool& is_json_cst,
-                               bool& is_json_type,
-                               int8_t only_is_json = 0); // 1 is json & json type ; 0 is json; 2 json type
-  bool is_array_json_expr(ParseNode *node);
-  bool is_object_json_expr(ParseNode *node);
-  int set_format_json_output(ParseNode *node);
-  int transfer_to_inner_joined(const ParseNode &parse_node, JoinedTable *&joined_table);
-  virtual int check_special_join_table(const TableItem &join_table, bool is_left_child, ObItemType join_type);
+  virtual int check_special_join_table(const TableItem &join_table, bool is_left_child, peg::JoinKind join_type);
   /**
    * Allocate memory for a `JoinedTable`
    * @param joined_table new `JoinedTable`
@@ -294,7 +259,7 @@ public:
                                             const ObTableSchema &parent_table_schema,
                                             const ObForeignKeyInfo *fk_info);
   virtual int resolve_column_ref_expr(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
-  int resolve_sql_expr(const ParseNode &node, ObRawExpr *&expr,
+  int resolve_sql_expr(const peg::Node &node, ObRawExpr *&expr,
                        ObArray<ObQualifiedName> *input_columns = NULL);
   int resolve_partition_expr(const TableItem &table_item,
                              const share::schema::ObTableSchema &table_schema,
@@ -334,7 +299,7 @@ public:
   int estimate_values_table_stats(ObValuesTableDef &table_def);
 protected:
   int generate_pl_data_type(ObRawExpr *expr, pl::ObPLDataType &pl_data_type);
-  int resolve_into_variables(const ParseNode *node,
+  int resolve_into_variables(rust::Slice<const peg::Node> variables,
                              ObIArray<ObString> &user_vars,
                              ObIArray<ObRawExpr*> &pl_vars,
                              ObSelectStmt *select_stmt);
@@ -368,26 +333,24 @@ protected:
   int adjust_values_desc_position(ObInsertTableInfo& table_info,
                                   ObIArray<int64_t> &value_idxs);
 public:
-  virtual int resolve_table(const ParseNode &parse_tree, TableItem *&table_item);
+  virtual int resolve_table(const peg::Node &parse_tree, TableItem *&table_item);
   int resolve_all_basic_table_columns(const TableItem &table_item,
                                       bool included_hidden,
                                       common::ObIArray<ColumnItem> *column_items);
   int resolve_all_generated_table_columns(const TableItem &table_item,
                                           common::ObIArray<ColumnItem> &column_items);
 protected:
-  virtual int resolve_generate_table(const ParseNode &table_node,
-                                     const ParseNode *alias_node,
-                                     TableItem *&tbl_item);
+  virtual int resolve_generate_table(const peg::Node &table_node,
+                                          TableItem *&tbl_item);
 
-  int resolve_lateral_generated_table(const ParseNode &table_node,
-                                      const ParseNode *alias_node,
-                                      TableItem *&tbl_item);
+  int resolve_lateral_generated_table(const peg::Node &table_node,
+                                            TableItem *&tbl_item);
 
-  int check_contain_lateral_node(const ParseNode *parse_tree, bool &is_contain);
+  int check_contain_lateral_node(const peg::Node *parse_tree, bool &is_contain);
 
   int check_stmt_has_snapshot_query(ObDMLStmt *stmt, bool check_all, bool &has_fq);
-  virtual int resolve_basic_table(const ParseNode &parse_tree, TableItem *&table_item);
-  int resolve_snapshot_query_node(const ParseNode *time_node, TableItem *table_item);
+  virtual int resolve_basic_table(const peg::Node &parse_tree, TableItem *&table_item);
+  int resolve_snapshot_query_node(const peg::Node *time_node, TableItem *table_item);
   int check_snapshot_expr_validity(ObRawExpr *expr, bool &has_column);
   int set_snapshot_info_for_view(ObSelectStmt *select_stmt, TableItem *table_item);
   int resolve_base_or_alias_table_item_normal(const uint64_t database_id,
@@ -401,28 +364,25 @@ protected:
   int resolve_columns_for_partition_expr(ObRawExpr *&expr, ObIArray<ObQualifiedName> &columns,
                                          const TableItem &table_item,
                                          bool is_hidden);
-  int resolve_and_split_sql_expr(const ParseNode &node, common::ObIArray<ObRawExpr*> &and_exprs);
-  int resolve_and_split_sql_expr_with_bool_expr(const ParseNode &node,
+  int resolve_and_split_sql_expr(const peg::Node &node, common::ObIArray<ObRawExpr*> &and_exprs);
+  int resolve_and_split_sql_expr_with_bool_expr(const peg::Node &node,
                                                 ObIArray<ObRawExpr*> &and_exprs);
-  int resolve_where_clause(const ParseNode *node);
-  int resolve_order_clause(const ParseNode *node, bool is_for_set_query = false);
-  int resolve_limit_clause(const ParseNode *node, bool disable_offset = false);
-  int resolve_approx_clause(const ParseNode *approx_node);
-  int resolve_vector_index_params(const ParseNode *params_node);
-  int resolve_into_clause(const ParseNode *node);
+  int resolve_where_clause(const peg::Node *expression);
+  int resolve_order_clause(rust::Slice<const peg::Node> order_items, bool is_for_set_query = false);
+  int resolve_limit_clause(const peg::Node *node, bool disable_offset = false);
+  int resolve_approx_clause(bool approximate);
+  int resolve_vector_index_params(rust::Slice<const peg::Node> parameters);
 public:
-  int resolve_hints(const ParseNode *node);
+  int resolve_hints(rust::Slice<const peg::Node> hints);
   int resolve_outline_data_hints();
 protected:
-  const ParseNode *get_outline_data_hint_node();
-  int inner_resolve_hints(const ParseNode &node,
+  int inner_resolve_hints(rust::Slice<const peg::Node> hints,
                           const bool filter_embedded_hint,
                           bool &get_outline_data,
                           ObGlobalHint &global_hint,
-                          ObIArray<ObHint*> &hints,
+                          ObIArray<ObHint*> &resolved_hints,
                           ObString &qb_name);
-  int resolve_outline_hints();
-  virtual int resolve_order_item(const ParseNode &sort_node, OrderItem &order_item);
+  virtual int resolve_order_item(const peg::Node &sort_node, OrderItem &order_item);
 
   int add_column_to_stmt(const TableItem &table_item,
                          const share::schema::ObColumnSchemaV2 &col,
@@ -475,14 +435,16 @@ protected:
     ObDMLStmt *stmt = NULL);
   virtual int resolve_subquery_info(const common::ObIArray<ObSubQueryInfo> &subquery_info);
   virtual int resolve_inlist_info(common::ObIArray<ObInListInfo> &inlist_infos);
+  int expand_mvt_arguments(const common::ObIArray<ObAggFunRawExpr *> &aggregates,
+                           common::ObIArray<ObQualifiedName> &names);
   virtual int resolve_aggr_exprs(ObRawExpr *&expr, common::ObIArray<ObAggFunRawExpr*> &aggr_exprs,
                                  const bool need_analyze = true);
   virtual int resolve_win_func_exprs(ObRawExpr *&expr, common::ObIArray<ObWinFunRawExpr*> &win_exprs);
   int do_resolve_subquery_info(const ObSubQueryInfo &subquery_info, ObChildStmtResolver &child_resolver);
-  int resolve_partitions(const ParseNode *part_node,
+  int resolve_partitions(rust::Slice<const peg::Node> partitions,
                          const share::schema::ObTableSchema &table_schema,
                          TableItem &table_item);
-  int resolve_sample_clause(const ParseNode *part_node,
+  int resolve_sample_clause(const peg::Node *part_node,
                             TableItem &table_item);
   int generate_ddl_sample_info_if_needed(TableItem &table_item);
 
@@ -513,23 +475,23 @@ protected:
   // check in sys view or show statement
   virtual int check_in_sysview(bool &in_sysview) const;
 public:
-  int resolve_table_relation_factor_wrapper(const ParseNode *table_node,
+  int resolve_table_relation_factor_wrapper(const peg::Node *table_node,
                                             uint64_t &database_id,
                                             common::ObString &table_name,
                                             common::ObString &db_name,
                                             bool &is_db_explicit);
 
 protected:
-  int resolve_table_relation_factor(const ParseNode *node,
+  int resolve_table_relation_factor(const peg::Node *node,
                                     uint64_t &database_id,
                                     common::ObString &table_name,
                                     common::ObString &db_name,
                                     bool &is_db_explicit);
-  int resolve_table_relation_factor_normal(const ParseNode *node,
+  int resolve_table_relation_factor_normal(const peg::Node *node,
                                            uint64_t &database_id,
                                            common::ObString &table_name,
                                            common::ObString &db_name);
-  int resolve_table_relation_factor_normal(const ParseNode *node,
+  int resolve_table_relation_factor_normal(const peg::Node *node,
                                            uint64_t &database_id,
                                            common::ObString &table_name,
                                            common::ObString &db_name,
@@ -541,7 +503,7 @@ protected:
   int resolve_is_expr(ObRawExpr *&expr, bool &replace_happened);
   int resolve_autoincrement_column_is_null(ObRawExpr *&expr);
   int resolve_not_null_date_column_is_null(ObRawExpr *&expr, const ObRawExprResType* col_type);
-  int resolve_partition_expr(const ParseNode &part_expr_node, ObRawExpr *&expr, common::ObIArray<ObQualifiedName> &columns);
+  int resolve_partition_expr(const peg::Node &part_expr_node, ObRawExpr *&expr, common::ObIArray<ObQualifiedName> &columns);
 
   void report_user_error_msg(int &ret, const ObRawExpr *root_expr, const ObQualifiedName &q_name) const;
   bool is_need_add_additional_function(const ObRawExpr *expr);
@@ -574,15 +536,12 @@ protected:
       bool is_depend_col);
 
   int check_json_table_column_constrain(ObDmlJtColDef *col_def);
-  bool check_generated_column_has_json_constraint(const ObSelectStmt *stmt,
-                                                  const ObColumnRefRawExpr *col_expr);
 
   int resolve_json_table_check_dup_name(const ObJsonTableDef* table_def,
                                             const ObString& column_name,
                                             bool& exists);
 
-  int resolve_json_table_column_type(const ParseNode &parse_tree,
-                                     const int col_type,
+  int resolve_json_table_column_type(const peg::Node &column,
                                      ObDataType &data_type,
                                      ObDmlJtColDef *col_def);
   int generate_json_table_output_column_item(TableItem *table_item,
@@ -590,19 +549,19 @@ protected:
                                           const ObString &column_name,
                                           int64_t column_id,
                                           ColumnItem *&col_item);
-  int resolve_json_table_regular_column(const ParseNode &parse_tree,
+  int resolve_json_table_regular_column(const peg::Node &parse_tree,
                                         TableItem *table_item,
                                         ObDmlJtColDef *&col_def,
                                         int32_t parent,
                                         int32_t& id,
                                         int64_t& column_id);
-  int resolve_json_table_nested_column(const ParseNode &parse_tree,
+  int resolve_json_table_nested_column(const peg::Node &parse_tree,
                                         TableItem *table_item,
                                         ObDmlJtColDef *&col_def,
                                         int32_t parent,
                                         int32_t& id,
                                         int64_t& column_id);
-  int resolve_json_table_column_item(const ParseNode &parse_tree,
+  int resolve_json_table_column_item(rust::Slice<const peg::Node> columns,
                                       TableItem *table_item,
                                       ObDmlJtColDef* col,
                                       int32_t parent,
@@ -642,16 +601,16 @@ protected:
   int check_CTE_name_exist(const ObString &var_name, bool &dup_name, TableItem *&table_item);
   int set_cte_ctx(ObCteResolverCtx &cte_ctx, bool copy_col_name = true, bool in_subquery = false);
   int add_cte_table_item(TableItem *table_item,  bool &dup_name);
-  int get_opt_alias_colnames_for_recursive_cte(ObCteResolverCtx &ctx, const ParseNode *parse_tree);
-  int init_cte_resolver(ObSelectResolver &select_resolver, const ParseNode *opt_col_node, ObString& table_name, bool has_recursive_word);
+  int get_opt_alias_colnames_for_recursive_cte(ObCteResolverCtx &ctx, rust::Slice<const peg::Node> columns);
+  int init_cte_resolver(ObSelectResolver &select_resolver, rust::Slice<const peg::Node> columns, ObString& table_name, bool has_recursive_word);
   int add_fake_schema(ObSelectStmt* left_stmt);
-  int resolve_basic_table_without_cte(const ParseNode &parse_tree, TableItem *&table_item);
-  int resolve_basic_table_with_cte(const ParseNode &parse_tree, TableItem *&table_item);
-  int resolve_cte_table(const ParseNode &parse_tree, const TableItem *CTE_table_item, TableItem *&table_item);
-  int resolve_recursive_cte_table(const ParseNode &parse_tree, TableItem *&table_item);
-  int resolve_with_clause_opt_alias_colnames(const ParseNode *parse_tree, TableItem *&table_item);
-  int resolve_with_clause_subquery(const ParseNode &parse_tree, TableItem *&table_item, bool has_recursive_word);
-  int resolve_with_clause(const ParseNode *node, bool same_level = false);
+  int resolve_basic_table_without_cte(const peg::Node &parse_tree, TableItem *&table_item);
+  int resolve_basic_table_with_cte(const peg::Node &parse_tree, TableItem *&table_item);
+  int resolve_cte_table(const peg::Node &parse_tree, const TableItem *CTE_table_item, TableItem *&table_item);
+  int resolve_recursive_cte_table(const peg::Node &parse_tree, TableItem *&table_item);
+  int resolve_with_clause_opt_alias_colnames(rust::Slice<const peg::Node> columns, TableItem *&table_item);
+  int resolve_with_clause_subquery(const peg::Node &parse_tree, TableItem *&table_item, bool has_recursive_word);
+  int resolve_with_clause(const peg::Node &query, bool same_level = false);
 
   int add_check_constraint_to_stmt(const TableItem *table_item,
                                    const share::schema::ObTableSchema *table_schema,
@@ -693,6 +652,7 @@ private:
                               ObRawExpr *parent_expr,
                               ObExprResolveContext &ctx);
 
+  int resolve_partition_id_conditions(ObRawExpr *&expr, ObIArray<ObQualifiedName> &columns);
   int reset_calc_part_id_param_exprs(ObRawExpr *&expr, ObIArray<ObQualifiedName> &columns);
 
   int check_index_table_has_partition_keys(const ObTableSchema *index_schema,
@@ -700,63 +660,52 @@ private:
                                            bool &has_part_key);
 
   ///////////functions for sql hint/////////////
-  int resolve_global_hint(const ParseNode &hint_node,
+  int resolve_global_hint(const peg::Node &hint_node,
                           ObGlobalHint &global_hint,
                           bool &resolved_hint);
-  int resolve_transform_hint(const ParseNode &hint_node,
+  int resolve_transform_hint(const peg::Node &hint_node,
                              bool &resolved_hint,
-                             ObIArray<ObHint*> &trans_hints);
-  int resolve_optimize_hint(const ParseNode &hint_node,
+                             ObIArray<ObHint*> &hints);
+  int resolve_optimize_hint(const peg::Node &hint_node,
                             bool &resolved_hint,
-                            ObIArray<ObHint*> &opt_hints);
-  int resolve_index_hint(const ParseNode &index_node,
-                         ObOptHint *&opt_hint);
-  int resolve_index_hint(const TableItem &table, // resolved mysql mode index hint after table
-                         const ParseNode &index_hint_node);
-  int resolve_union_merge_hint(const ParseNode &hint_node,
-                               ObOptHint *&opt_hint);
-  int resolve_table_parallel_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
-  int resolve_join_order_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
-  int resolve_join_hint(const ParseNode &join_node, ObIArray<ObHint*> &join_hints);
-  int resolve_pq_map_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
-  int resolve_pq_distribute_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
-  int resolve_pq_set_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
-  int resolve_pq_subquery_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
-  int resolve_normal_pq_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
-  int resolve_join_filter_hint(const ParseNode &join_node, ObOptHint *&opt_hint);
-  int resolve_aggregation_hint(const ParseNode &hint_node, ObOptHint *&hint);
-  int resolve_normal_transform_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_normal_optimize_hint(const ParseNode &hint_node, ObOptHint *&hint);
-  int resolve_view_merge_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_or_expand_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_materialize_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_semi_to_inner_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_coalesce_sq_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_count_to_exists_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_left_to_anti_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_eliminate_join_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_win_magic_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_place_group_by_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_coalesce_aggr_hint(const ParseNode &hint_node, ObTransHint *&hint);
-  int resolve_tb_name_list(const ParseNode *tb_name_list_node, ObIArray<ObHint::TablesInHint> &tb_name_list);
-  int resolve_alloc_ops(const ParseNode &alloc_op_node, ObIArray<ObAllocOpHint> &alloc_op_hints);
-  int resolve_tables_in_leading_hint(const ParseNode *tables_node, ObLeadingTable &leading_table);
-  int resolve_simple_table_list_in_hint(const ParseNode *table_list,
-                                        common::ObIArray<ObTableInHint> &hint_tables);
-  int resolve_table_relation_in_hint(const ParseNode &table_node, ObTableInHint &table_in_hint);
-  int resolve_qb_name_node(const ParseNode *qb_name_node, common::ObString &qb_name);
-  int resolve_multi_qb_name_list(const ParseNode *qb_name_node, common::ObIArray<QbNameList> &qb_name_list);
-  int resolve_qb_name_list(const ParseNode *qb_name_node, ObIArray<ObString> &qb_name_list);
-  int get_valid_dist_methods(const ParseNode *dist_methods_node,
-                             ObIArray<ObItemType> &dist_methods,
-                             bool &is_valid);
-  int resolve_pq_distribute_window_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
-  int resolve_win_dist_options(const ParseNode *option_list,
-                               ObIArray<ObWindowDistHint::WinDistOption> &win_dist_options);
-  int resolve_win_dist_option(const ParseNode *option,
-                              ObWindowDistHint::WinDistOption &dist_option,
-                              bool &is_valid);
-  int resolve_table_dynamic_sampling_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
+                            ObIArray<ObHint*> &hints);
+  int resolve_table_parallel_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_index_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_union_merge_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_index_hint(const TableItem &table, rust::Slice<const peg::Node> hints);
+  int resolve_join_order_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_join_hint(const peg::Node &hint_node, ObIArray<ObHint*> &hints);
+  int resolve_join_filter_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_window_distribution_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_pq_map_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_pq_distribute_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_pq_set_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_pq_subquery_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_normal_pq_hint(const peg::Node &hint_node, ObOptHint *&opt_hint);
+  int resolve_view_merge_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_or_expand_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_materialize_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_coalesce_sq_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_count_to_exists_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_semi_to_inner_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_left_to_anti_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_eliminate_join_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_place_group_by_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_win_magic_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_normal_transform_hint(const peg::Node &hint_node, ObTransHint *&result);
+  int resolve_normal_optimize_hint(const peg::Node &hint_node, ObOptHint *&result);
+  int resolve_aggregation_hint(const peg::Node &hint_node, ObOptHint *&result);
+  int resolve_tb_name_list(rust::Slice<const peg::Node> groups,
+                           ObIArray<ObHint::TablesInHint> &tables);
+  int resolve_tables_in_leading_hint(const peg::Node &node, ObLeadingTable &leading);
+  int resolve_simple_table_list_in_hint(const peg::Node &node,
+                                        ObIArray<ObTableInHint> &tables);
+  int resolve_table_relation_in_hint(const peg::Node &node, ObTableInHint &table);
+  int resolve_qb_name_node(const peg::Node *name, ObString &qb_name);
+  int resolve_multi_qb_name_list(rust::Slice<const peg::Node> groups,
+                                 ObIArray<QbNameList> &names);
+  int resolve_qb_name_list(rust::Slice<const peg::Node> names, ObIArray<ObString> &result);
+  int resolve_table_dynamic_sampling_hint(const peg::Node &node, ObOptHint *&hint);
   int get_ddl_schema_in_insert_into_select_clause(const ObTableSchema *&ddl_table_schema);
 public:
   //////////end of functions for sql hint/////////////
@@ -772,21 +721,21 @@ private:
                              int64_t &table_id,
                              int64_t &ref_id);
   int replace_col_udt_qname(ObQualifiedName& q_name);
-  int check_column_scalar_type(ParseNode *root_node, bool &is_scalar);
 
   int replace_pl_relative_expr_to_question_mark(ObRawExpr *&real_ref_expr);
   bool check_expr_has_colref(ObRawExpr *expr);
 
-  int resolve_values_table_item(const ParseNode &table_node, TableItem *&table_item);
-  int resolve_values_table_for_select(const ParseNode &table_node,
+  int resolve_values_table_item(const peg::Node &table_node, TableItem *&table_item);
+  int resolve_values_table_for_select(const peg::Node &table_node,
                                       ObValuesTableDef &table_values);
-  int resolve_values_table_for_insert(const ParseNode &table_node,
+  int resolve_row_alias_value(int64_t index, ObRawExpr *&expr);
+  int resolve_values_table_for_insert(const peg::Node &table_node,
                                       ObValuesTableDef &table_values);
   int get_values_res_types(const ObIArray<ObRawExprResType> &cur_values_types,
                            ObIArray<ObRawExprResType> &res_types);
   int try_add_cast_to_values(const ObIArray<ObRawExprResType> &res_types,
                              ObIArray<ObRawExpr*> &values_vector);
-  int refine_generate_table_column_name(const ParseNode &column_alias_node,
+  int refine_generate_table_column_name(rust::Slice<const peg::Node> columns,
                                         ObSelectStmt &select_stmt);
   int replace_column_ref(ObIArray<ObRawExpr*> &values_vector,
                          ObIArray<ObColumnRefRawExpr*> &values_desc,

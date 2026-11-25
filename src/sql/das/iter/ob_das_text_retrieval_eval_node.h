@@ -18,13 +18,16 @@
 #define OB_DAS_TEXT_RETRIEVAL_EVAL_NODE_H_
 
 #include "ob_das_iter.h"
-#include "sql/parser/fts_base.h"
-#include "sql/parser/fts_parse.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+namespace peg
+{
+struct SearchNode;
+}
+
 struct ObFtsEvalNode
 {
 public:
@@ -60,8 +63,8 @@ public:
   static int print_node(ObFtsEvalNode *node, const ObArray<ObString> &tokens, int level);
   static int fts_boolean_eval(ObFtsEvalNode *node, const common::ObIArray<double> &relevences, double &result);
   static int fts_boolean_node_create(
-      ObFtsEvalNode *&parant_node,
-      const FtsNode *cur_node,
+      ObFtsEvalNode *&parent_node,
+      const peg::SearchNode &search_node,
       const ObCollationType &cs_type,
       ObIAllocator &allocator,
       ObArray<ObString> &tokens,

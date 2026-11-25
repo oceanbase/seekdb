@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_stmt.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
-#include "sql/parser/ob_parser.h"
+#include "sql/syntax.h"
 
 namespace oceanbase
 {

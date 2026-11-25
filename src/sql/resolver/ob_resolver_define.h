@@ -29,7 +29,7 @@
 #include "sql/resolver/ob_schema_checker.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
-#include "query/parser/ob_item_type.h"
+#include "query/engine/expr/ob_item_type.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
 
 namespace oceanbase
@@ -315,6 +315,8 @@ public:
   TO_STRING_KV(K_(start_pos), K_(end_pos), K_(column_name_list));
 };
 
+class ParsedSql;
+
 struct ObResolverParams
 {
   ObResolverParams()
@@ -331,6 +333,8 @@ struct ObResolverParams
        lob_read_service_(NULL),
        query_ctx_(NULL),
        param_list_(NULL),
+       parameterization_(nullptr),
+       syntax_(nullptr),
        select_item_param_infos_(NULL),
        prepare_param_count_(0),
        external_param_info_(),
@@ -368,7 +372,7 @@ struct ObResolverParams
        is_column_ref_(true),
        hidden_column_scope_(T_NONE_SCOPE),
        hidden_column_name_(NULL),
-       outline_parse_result_(NULL),
+       outline_(nullptr),
        is_execute_call_stmt_(false),
        enable_res_map_(false),
        need_check_col_dup_(true),
@@ -397,7 +401,9 @@ public:
   common::ObILobReadService *lob_read_service_;
   ObQueryCtx *query_ctx_;
   const ParamStore *param_list_;
-  const SelectItemParamInfoArray *select_item_param_infos_;
+  const ParameterizationResult *parameterization_;
+  const ParsedSql *syntax_;
+  const SelectItemParamInfoMap *select_item_param_infos_;
   int64_t prepare_param_count_;
   ExternalParams external_param_info_;
   common::ObMySQLProxy *sql_proxy_;
@@ -443,7 +449,7 @@ public:
   bool is_column_ref_;                   // used to mark normal column ref
   ObStmtScope hidden_column_scope_; // record scope for first hidden column which need check hidden_column_visable in opt_param hint
   const char *hidden_column_name_;  // record column name for first hidden column which need check hidden_column_visable in opt_param hint
-  ParseResult *outline_parse_result_;
+  const ParsedSql *outline_;
   bool is_execute_call_stmt_;
   bool enable_res_map_;
   bool need_check_col_dup_;

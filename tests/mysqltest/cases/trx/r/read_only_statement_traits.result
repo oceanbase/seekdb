@@ -1,0 +1,14 @@
+CREATE TABLE t (id INT PRIMARY KEY);
+CREATE OUTLINE existing_outline ON SELECT id FROM t;
+START TRANSACTION READ ONLY;
+LOAD DATA INFILE 'read_only_statement_traits.csv' INTO TABLE t;
+ERROR 25006: Cannot execute statement in a READ ONLY transaction.
+CREATE OUTLINE new_outline ON SELECT id FROM t WHERE id = 1;
+ERROR 25006: Cannot execute statement in a READ ONLY transaction.
+ALTER OUTLINE existing_outline ADD SELECT id FROM t;
+ERROR 25006: Cannot execute statement in a READ ONLY transaction.
+DROP OUTLINE existing_outline;
+ERROR 25006: Cannot execute statement in a READ ONLY transaction.
+ROLLBACK;
+DROP OUTLINE existing_outline;
+DROP TABLE t;

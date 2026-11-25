@@ -33,12 +33,12 @@ public:
   ~ObFTParserResolverHelper() = default;
 
   static int resolve_parser_properties(
-      const ParseNode &parse_tree,
+      const peg::Node &options,
       common::ObIAllocator &allocator,
       common::ObString &parser_property);
 
 private:
-  static int resolve_fts_index_parser_properties(const ParseNode *node,
+  static int resolve_fts_index_parser_properties(const peg::Node &node,
                                                  storage::ObFTParserJsonProps &property);
 };
 

@@ -28,24 +28,14 @@ namespace sql
 class ObUpdateResolver : public ObDelUpdResolver
 {
 public:
-  static const int64_t WITH_MYSQL = 0;         /*10. with_clause node in mysql mode*/
-  static const int64_t TABLE = 1;              /* 0. table node */
-  static const int64_t UPDATE_LIST = 2;       /* 1. update list */
-  static const int64_t WHERE = 3;              /* 2. where node */
-  static const int64_t ORDER_BY = 4;        /* 3. order by node */
-  static const int64_t LIMIT = 5;              /* 4. limit node */
-  static const int64_t WHEN = 6;                /* 5. when node */
-  static const int64_t HINT = 7;                /* 6. hint node */
-  static const int64_t IGNORE = 8;               /*7. ignore node */
-  
 public:
   explicit ObUpdateResolver(ObResolverParams &params);
   virtual ~ObUpdateResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &query);
   inline ObUpdateStmt *get_update_stmt() { return static_cast<ObUpdateStmt*>(stmt_); }
 private:
-  int resolve_table_list(const ParseNode &parse_tree);
+  int resolve_table_list(rust::Slice<const peg::Node> sources);
   int generate_update_table_info(ObTableAssignment &table_assign);
   int check_multi_update_table_conflict();
   int check_join_update_conflict();

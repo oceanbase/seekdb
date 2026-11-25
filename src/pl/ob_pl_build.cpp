@@ -253,7 +253,7 @@ int ObPLBuilder::init_anonymous_ast(
 
 //for anonymous
 int ObPLBuilder::compile(
-  const ObStmtNodeTree *block,
+  const sql::ParsedSql &syntax,
   const uint64_t stmt_id,
   ObPLFunction &func,
   ParamStore *params/*=NULL*/,
@@ -293,10 +293,10 @@ int ObPLBuilder::compile(
                             func_ast.get_expr_factory(), NULL/*parent ns*/, is_prepare_protocol,
                             false/*is_check_mode_ = false*/, false/*bool is_sql_scope_ = false*/,
                             params);
-      if (OB_ISNULL(block)) {
+      if (OB_ISNULL(syntax.statement())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(resolver.init(func_ast))) {
-      } else if (OB_FAIL(resolver.resolve_root(block, func_ast))) {
+      } else if (OB_FAIL(resolver.resolve_root(syntax, func_ast))) {
       }
     }
 
@@ -468,13 +468,13 @@ int ObPLBuilder::compile(
   LOG_INFO(">>>>>>>>Init AST Time: ", K(routine.get_routine_id()), K(routine.get_routine_name()), K(init_end - init_start));
     
   //Step 2: Parser
-  ObStmtNodeTree *parse_tree = NULL;
+  sql::ParsedSql syntax;
   if (OB_SUCC(ret)) {
     ObString body = routine.get_routine_body();
     ObDataTypeCastParams dtc_params = session_info_.get_dtc_params();
-    ObPLParser parser(allocator_, session_info_.get_charsets4parser(), session_info_.get_sql_mode());
+    ObParser parser(allocator_, session_info_.get_sql_mode());
     OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(allocator_, dtc_params, body), K(body));
-    OZ (parser.parse_routine_body(body, parse_tree, session_info_.is_for_trigger_package()), K(body));
+    OZ (parser.parse_routine_body(body, syntax), K(body));
   }
 
   int64_t parse_end = ObTimeUtility::current_time();
@@ -485,10 +485,10 @@ int ObPLBuilder::compile(
     ObPLResolver resolver(allocator_, session_info_, schema_guard_, package_guard_, sql_proxy_,
                           &plan_cache_, pl_sql_runtime_, pl_engine_, srs_provider_, lob_read_service_,
                           func_ast.get_expr_factory(), NULL/*parent ns*/, false/*is_prepare_protocol*/);
-    CK (OB_NOT_NULL(parse_tree));
+    CK (OB_NOT_NULL(syntax.statement()));
     OZ (resolver.init(func_ast));
     OZ (resolver.init_default_exprs(func_ast, routine.get_routine_params()));
-    OZ (resolver.resolve_root(parse_tree, func_ast));
+    OZ (resolver.resolve_root(syntax, func_ast));
     ObErrorInfo error_info;
     
     if (OB_SUCC(ret)) {
@@ -675,13 +675,24 @@ int ObPLBuilder::analyze_package(const ObString &source,
                                   bool is_for_trigger)
 {
   int ret = OB_SUCCESS;
+  ObParser parser(allocator_, session_info_.get_sql_mode());
+  sql::ParsedSql syntax;
+  OZ (parser.parse_routine_body(source, syntax));
+  OZ (analyze_package(syntax, parent_ns, package_ast, is_for_trigger));
+  return ret;
+}
+
+int ObPLBuilder::analyze_package(const sql::ParsedSql &syntax,
+                                  const ObPLBlockNS *parent_ns,
+                                  ObPLPackageAST &package_ast,
+                                  bool is_for_trigger)
+{
+  int ret = OB_SUCCESS;
   bool origin_is_for_trigger = session_info_.is_for_trigger_package();
   session_info_.set_for_trigger_package(is_for_trigger);
-  CK (!source.empty());
+  CK (OB_NOT_NULL(syntax.statement()));
   CK (package_ast.is_inited());
   if (OB_SUCC(ret)) {
-    ObPLParser parser(allocator_, session_info_.get_charsets4parser(), session_info_.get_sql_mode());
-    ObStmtNodeTree *parse_tree = NULL;
     ObPLResolver resolver(allocator_,
                           session_info_,
                           schema_guard_,
@@ -695,23 +706,8 @@ int ObPLBuilder::analyze_package(const ObString &source,
                           package_ast.get_expr_factory(),
                           parent_ns,
                           false);
-    const ObTriggerInfo *trg_info = NULL;
-    if (PL_PACKAGE_BODY == package_ast.get_package_type() && is_for_trigger) {
-      uint64_t trg_id = ObTriggerInfo::get_package_trigger_id(package_ast.get_id());
-      OZ (schema_guard_.get_trigger_info( trg_id, trg_info));
-      CK (OB_NOT_NULL(trg_info));
-    }
-    if (OB_SUCC(ret) && is_for_trigger && PL_PACKAGE_SPEC == package_ast.get_package_type()) {
-      const uint64_t trg_id = ObTriggerInfo::get_package_trigger_id(package_ast.get_id());
-      const ObTriggerInfo *trg_info = NULL;
-      
-      OZ (schema_guard_.get_trigger_info( trg_id, trg_info));
-      OV (OB_NOT_NULL(trg_info), OB_ERR_UNEXPECTED, trg_id);
-    }
-    OZ (parser.parse_package(source, parse_tree, session_info_.get_dtc_params(), 
-                             &schema_guard_, is_for_trigger, trg_info));
     OZ (resolver.init(package_ast));
-    OZ (resolver.resolve(parse_tree, package_ast));
+    OZ (resolver.resolve(syntax, package_ast));
     if (OB_SUCC(ret) && PL_PACKAGE_SPEC == package_ast.get_package_type()) {
       package_ast.process_default_compile_flag();
       package_ast.process_generic_type();

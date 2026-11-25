@@ -24,14 +24,11 @@ namespace sql
 class ObDropDatabaseResolver: public ObDDLResolver
 {
 public:
-  const static int64_t IF_EXIST = 0;
-  const static int64_t DBNAME = 1;
-  const static int64_t DB_NODE_COUNT = 2;
 
   explicit ObDropDatabaseResolver(ObResolverParams &params);
   virtual ~ObDropDatabaseResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObDropDatabaseResolver);

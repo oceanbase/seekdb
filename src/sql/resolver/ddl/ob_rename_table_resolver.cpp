@@ -34,16 +34,15 @@ ObRenameTableResolver::~ObRenameTableResolver()
 {
 }
 
-int ObRenameTableResolver::resolve(const ParseNode &parser_tree)
+int ObRenameTableResolver::resolve(const peg::Node &parser_tree)
 {
   int ret = OB_SUCCESS;
-  ParseNode *node = const_cast<ParseNode*>(&parser_tree);
   ObRenameTableStmt *rename_table_stmt = NULL;
-  if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_) || OB_ISNULL(node)) {
+  if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (T_RENAME_TABLE != node->type_) {
+  } else if (peg::NodeKind::RenameTables != parser_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree",  K(node->type_));
+    LOG_WARN("invalid parse tree",  K(parser_tree.kind()));
   }
   //create rename table stmt
   if (OB_SUCC(ret)) {
@@ -56,23 +55,20 @@ int ObRenameTableResolver::resolve(const ParseNode &parser_tree)
     }
   }
   if (OB_SUCC(ret)) {
-    int64_t count = node->num_child_;
+    const auto actions = peg::rename_actions(parser_tree);
     
     rename_table_stmt->set_lock_session_info(session_info_->get_server_sid(),
                                              session_info_->get_sess_create_time());
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      ParseNode *rename_node = node->children_[i];
-      if (OB_ISNULL(rename_node)) {
-        ret = OB_ERR_PARSE_SQL;
-      } else if (OB_FAIL(resolve_rename_action(*rename_node))) {
-      }
+    for (const auto &action : actions) {
+      if (OB_FAIL(ret)) { break; }
+      OZ (resolve_rename_action(action));
     }
   }
 
   return ret;
 }
 
-int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_node)
+int ObRenameTableResolver::resolve_rename_action(const peg::Node &rename_action_node)
 {
   int ret = OB_SUCCESS;
   //resolve table
@@ -82,18 +78,14 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
   ObString new_db_name;
   ObString new_table_name;
   ObRenameTableStmt *rename_table_stmt = get_rename_table_stmt();
-  if (OB_ISNULL(rename_table_stmt) || NAME_NODE_COUNT != rename_action_node.num_child_
-      || OB_ISNULL(rename_action_node.children_)) {
+  if (OB_ISNULL(rename_table_stmt)) {
     ret = OB_ERR_UNEXPECTED;
   }
   if (OB_SUCC(ret)) {
-    // Above judged rename_action_node.children_ pointer
-    ParseNode *origin_node = rename_action_node.children_[OLD_NAME_NODE];
-    ParseNode *new_node = rename_action_node.children_[NEW_NAME_NODE];
+    const auto *origin_node = &peg::rename_source(rename_action_node);
+    const auto *new_node = &peg::rename_destination(rename_action_node);
     const share::schema::ObTableSchema *table_schema = NULL;
-    if (OB_ISNULL(origin_node) || OB_ISNULL(new_node)) {
-      ret = OB_ERR_PARSE_SQL;
-    } else if (OB_FAIL(resolve_table_relation_node(origin_node,
+    if (OB_FAIL(resolve_table_relation_node(origin_node,
                                                    origin_table_name,
                                                    origin_db_name))) {
     } else if (OB_FAIL(resolve_table_relation_node(new_node,
@@ -105,7 +97,6 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
                                                                origin_table_name,
                                                                false, /*is_index*/
                                                                table_schema));
-      ParseNode *new_db_node = new_node->children_[0];
       obcall::ObRenameTableItem rename_table_item;
       rename_table_item.origin_db_name_ = origin_db_name;
       rename_table_item.origin_table_name_ = origin_table_name;

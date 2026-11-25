@@ -30,41 +30,26 @@ class ObSelectResolver;
 class ObInsertResolver : public ObDelUpdResolver
 {
 public:
-  static const int64_t INSERT_NODE = 0;
-  static const int64_t REPLACE_NODE = 1;
-  static const int64_t HINT_NODE = 2;
-  static const int64_t IGNORE_NODE = 3;
-  static const int64_t INTO_NODE = 0;
-  static const int64_t VALUE_NODE = 1;
-  static const int64_t DUPLICATE_NODE = 2;
-  static const int64_t target_relation = 0; /* target relation */
-  static const int64_t column_list = 1; /* column list */
-  static const int64_t value_list = 2; /* value list */
-  static const int64_t value_from_subq = 3; /* value from sub-query */
-  static const int64_t is_replacement = 4; /* is replacement */
-  static const int64_t on_duplicate = 5; /* on duplicate key update */
-  static const int64_t insert_field = 6; /* insert_field_spec*/
-  static const int64_t insert_ignore = 7; /* opt_ignore */
-  static const int64_t insert_hint = 8; /* hint */
 public:
   explicit ObInsertResolver(ObResolverParams &params);
   virtual ~ObInsertResolver();
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &query);
   const ObInsertStmt *get_insert_stmt() const { return static_cast<const ObInsertStmt*>(stmt_); }
   ObInsertStmt *get_insert_stmt()
   {
     return static_cast<ObInsertStmt*>(stmt_);
   }
-  bool is_mock_for_row_alias() {return is_mock_;}
+  bool has_row_alias() const { return row_alias_source_ != nullptr; }
+  bool is_row_alias_source(const peg::Node &query) const { return row_alias_source_ == &query; }
 protected:
   int process_values_function(ObRawExpr *&expr) override;
   virtual int mock_values_column_ref(const ObColumnRefRawExpr *column_ref) override;
-  virtual int resolve_order_item(const ParseNode &sort_node, OrderItem &order_item) override;
+  virtual int resolve_order_item(const peg::Node &sort_node, OrderItem &order_item) override;
   virtual int resolve_column_ref_expr(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr) override;
 private:
-  int resolve_insert_clause(const ParseNode &node);
-  int resolve_insert_field(const ParseNode &insert_into, TableItem*& table_item);
-  int resolve_insert_assign(const ParseNode &assign_list);
+  int resolve_insert_clause(const peg::Node &query);
+  int resolve_insert_field(const peg::Node &query, TableItem*& table_item);
+  int resolve_insert_assign(rust::Slice<const peg::Node> assignments);
   int fill_insert_stmt_default_value();
   int check_and_fill_default_value(int64_t col_index, const ColumnItem *column);
   int check_and_build_default_expr(const ColumnItem *column, ObRawExpr* &expr);
@@ -76,32 +61,13 @@ private:
                                  ObRawExpr *&expr,
                                  bool in_generated_column = false);
   int set();
-  int resolve_values(const ParseNode &value_node,
-                     TableItem* table_item,
-                     const ParseNode *duplicate_node);
-  int check_table_and_column_name(const ObIArray<ObColumnRefRawExpr*> & value_desc,
-                                  ObSelectStmt *select_stmt,
-                                  ObString &ori_table_name,
-                                  ObIArray<ObString> &ori_column_names,
-                                  ObString &row_alias_table_name,
-                                  ObIArray<ObString> &row_alias_column_names);
-  int check_validity_of_duplicate_node(const ParseNode* node,
-                                       ObString &ori_table_name,
-                                       ObIArray<ObString> &ori_column_names,
-                                       ObString &row_alias_table_name,
-                                       ObIArray<ObString> &row_alias_column_names);
-  int check_ambiguous_column(ObString &column_name,
-                             ObIArray<ObString> &ori_column_names,
-                             ObIArray<ObString> &row_alias_column_names);
-  bool find_in_column(ObString &column_name,
-                      ObIArray<ObString> &column_names);
-  virtual int resolve_insert_update_assignment(const ParseNode *node, ObInsertTableInfo& table_info) override;
+  int resolve_source(const peg::Node &query, TableItem *table_item);
+  virtual int resolve_insert_update_assignment(rust::Slice<const peg::Node> assignments, ObInsertTableInfo& table_info) override;
   int replace_column_to_default(ObRawExpr *&origin);
   int resolve_insert_constraint();
   int check_view_insertable();
   int check_insert_select_field(ObInsertStmt &insert_stmt,
-                                ObSelectStmt &select_stmt,
-                                bool is_mock = false);
+                                ObSelectStmt &select_stmt);
 
   int replace_column_with_mock_column(ObColumnRefRawExpr *gen_col,
                                       ObColumnRefRawExpr *value_desc);
@@ -117,7 +83,7 @@ private:
   int64_t row_count_;
   ObSelectResolver *sub_select_resolver_;
   bool autoinc_col_added_;
-  bool is_mock_;
+  const peg::Node *row_alias_source_;
 };
 }  // namespace sql
 }  // namespace oceanbase

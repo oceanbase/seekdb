@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_statement_digest.h"
+#include "sql/syntax.h"
 
 #include "sql/plan_cache/ob_sql_parameterization.h"
 #include "sql/engine/expr/ob_datum_cast.h"
@@ -35,38 +36,31 @@ int calc_digest_text_inner(const ObString &query,
                            ObIAllocator &allocator,
                            ObPlanCacheCtx &pc_ctx,
                            ObParser &parser,
-                           ObCharsets4Parser &charsets4parser,
                            ObString &digest_str)
 {
   int ret = OB_SUCCESS;
-  ParseResult parse_result;
+  ParsedSql parsed;
+  ParseResult &parse_result = parsed.metadata();
   ParamStore tmp_params((ObWrapperAllocator(allocator)));
   stmt::StmtType stmt_type = stmt::T_NONE;
-  ObItemType item_type = T_NULL;
-  if (OB_FAIL(parser.parse(query, parse_result))) {
-  } else if (OB_ISNULL(parse_result.result_tree_)
-            || OB_ISNULL(parse_result.result_tree_->children_[0])) {
+  if (OB_FAIL(parser.parse(query, parsed))) {
+  } else if (OB_ISNULL(parsed.statement())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (FALSE_IT(item_type = parse_result.result_tree_->children_[0]->type_)) {
   } else if (i > 0) {
-    if (OB_UNLIKELY(T_EMPTY_QUERY != item_type)) {
+    if (parsed.statement()->kind() != peg::NodeKind::EmptyQuery) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "digest function");
     }
-  } else if (OB_UNLIKELY(T_EMPTY_QUERY == item_type)) {
+  } else if (parsed.statement()->kind() == peg::NodeKind::EmptyQuery) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "digest function");
-  } else if (OB_FAIL(ObResolverUtils::resolve_stmt_type(parse_result, stmt_type))) {
+  } else if (OB_FAIL(parsed.statement_type(stmt_type))) {
   } else if (ObStmt::is_dml_stmt(stmt_type) && !ObStmt::is_show_stmt(stmt_type)) {
-    if (OB_UNLIKELY(parse_result.result_tree_->children_[0]->value_ > 0)) {
+    if (parse_result.question_mark_ctx_.count_ > 0) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "digest function");
     } else if (OB_FAIL(ObSqlParameterization::parameterize_syntax_tree(allocator,
-                                                                true,
-                                                                pc_ctx,
-                                                                parse_result.result_tree_,
-                                                                tmp_params,
-                                                                charsets4parser))) {
+        true, pc_ctx, parsed, tmp_params))) {
     } else {
       digest_str = pc_ctx.sql_ctx_.plan_key_.format_sql_;
     }
@@ -78,7 +72,6 @@ int calc_digest_text_inner(const ObString &query,
 
 int calc_digest_text(ObIAllocator &allocator,
                      const ObString sql_str,
-                     const ObCollationType cs_type,
                      ObSQLSessionInfo *session,
                      share::schema::ObSchemaGetterGuard *schema_guard,
                      ObString &digest_str)
@@ -95,16 +88,14 @@ int calc_digest_text(ObIAllocator &allocator,
     sql_ctx.session_info_ = session;
     sql_ctx.schema_guard_ = schema_guard;
     ObPlanCacheCtx pc_ctx(sql_str, PC_TEXT_MODE, allocator, sql_ctx, exec_ctx);
-    ObCharsets4Parser charsets4parser = session->get_charsets4parser();
-    charsets4parser.string_collation_ = cs_type;
-    ObParser parser(allocator, session->get_sql_mode(), charsets4parser);
+    ObParser parser(allocator, session->get_sql_mode());
     ObSEArray<ObString, 1> queries;
     ObMPParseStat parse_stat;
     if (OB_FAIL(parser.split_multiple_stmt(sql_str, queries, parse_stat))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < queries.count(); ++i) {
         if (OB_FAIL(calc_digest_text_inner(queries.at(i), i, allocator, pc_ctx, parser,
-                                           charsets4parser, digest_str))) {
+                                           digest_str))) {
         }
       }
     }
@@ -167,7 +158,7 @@ int ObExprStatementDigest::eval_statement_digest(const ObExpr &expr, ObEvalCtx &
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     char *buf = NULL;
-    if (OB_FAIL(calc_digest_text(calc_alloc, sql_str, expr.args_[0]->datum_meta_.cs_type_,
+    if (OB_FAIL(calc_digest_text(calc_alloc, sql_str,
                                  session, schema_guard, digest_str))) {
     } else if (OB_FAIL(ObHashUtil::hash(OB_HASH_MD5, digest_str, calc_alloc, hash_str))) {
     } else if (OB_FAIL(ObDatumHexUtils::hex(expr, hash_str, ctx, calc_alloc, expr_datum))) {
@@ -228,7 +219,7 @@ int ObExprStatementDigestText::eval_statement_digest_text(const ObExpr &expr, Ob
     const ObCollationType res_cs_type = expr.datum_meta_.cs_type_;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-    if (OB_FAIL(calc_digest_text(calc_alloc, sql_str, in_cs_type, session,
+    if (OB_FAIL(calc_digest_text(calc_alloc, sql_str, session,
                                  schema_guard, digest_str))) {
     } else if (OB_FAIL(ObSQLUtils::copy_and_convert_string_charset(calc_alloc, digest_str, res_str,
         in_cs_type, res_cs_type))) {

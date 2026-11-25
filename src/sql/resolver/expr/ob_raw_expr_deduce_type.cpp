@@ -15,13 +15,14 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "sql/engine/expr/cast_type_descriptor.h"
 #include "share/object/ob_obj_cast_util.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/engine/aggregate/ob_aggregate_processor.h"
 #include "sql/engine/expr/ob_expr_between.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "sql/parser/ob_parser.h"
+#include "sql/syntax.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
@@ -1227,13 +1228,12 @@ int ObRawExprDeduceType::set_json_agg_result_type(ObAggFunRawExpr &expr, ObExprR
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
           LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "CHAR", ob_obj_type_str(col_type.get_type()));
         } else {
-          ParseNode parse_node;
-          parse_node.value_ = static_cast<ObConstRawExpr *>(return_type_expr)->get_value().get_int();
+          CastTypeDescriptor type_descriptor(static_cast<ObConstRawExpr *>(return_type_expr)->get_value().get_int());
           ObScale scale = static_cast<ObConstRawExpr *>(return_type_expr)->get_accuracy().get_scale();
           bool is_json_type = (scale == 1) && (col_type.get_type_class() == ObJsonTC);
-          is_json_type = (is_json_type || parse_node.value_ == 0);
-          ObObjType obj_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
-          result_type.set_collation_type(static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]));
+          is_json_type = (is_json_type || type_descriptor.value() == 0);
+          ObObjType obj_type = static_cast<ObObjType>(type_descriptor.type());
+          result_type.set_collation_type(static_cast<ObCollationType>(type_descriptor.collation()));
           if (ob_is_string_type(obj_type) && !is_json_type) {
             result_type.set_type(obj_type);
             result_type.set_length(OB_MAX_SQL_LENGTH);
@@ -1939,10 +1939,10 @@ int ObRawExprDeduceType::adjust_cast_as_signed_unsigned(ObSysFunRawExpr &expr)
   } else {
     ObObjType src_type = param_expr1->get_result_type().get_type();
     ObObjTypeClass src_tc = ob_obj_type_class(src_type);
-    ParseNode node;
+    CastTypeDescriptor type_descriptor;
     ObConstRawExpr *const_expr = static_cast<ObConstRawExpr*>(param_expr2);
-    node.value_ = const_expr->get_param().get_int();
-    const ObObjType obj_type = static_cast<ObObjType>(node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
+    type_descriptor = CastTypeDescriptor(const_expr->get_param().get_int());
+    const ObObjType obj_type = static_cast<ObObjType>(type_descriptor.type());
     ObObjType dst_type = ObMaxType;
     if (ObIntTC == src_tc && ObUInt64Type == obj_type) {
       dst_type = INT_OPPOSITE_SIGNED_INT_TYPE[src_type];
@@ -1955,8 +1955,8 @@ int ObRawExprDeduceType::adjust_cast_as_signed_unsigned(ObSysFunRawExpr &expr)
     }
     if (ObMaxType != dst_type && obj_type != dst_type) {
       ObObj val;
-      node.int16_values_[OB_NODE_CAST_TYPE_IDX] = static_cast<int16_t>(dst_type);
-      val.set_int(node.value_);
+      type_descriptor.set_type(dst_type);
+      val.set_int(type_descriptor.value());
       const_expr->set_value(val);
     }
   }
@@ -2518,13 +2518,12 @@ int ObRawExprDeduceType::set_agg_json_array_result_type(ObAggFunRawExpr &expr,
       returning_type->get_data_type() != ObIntType) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ParseNode parse_node;
-    parse_node.value_ = static_cast<ObConstRawExpr *>(returning_type)->get_value().get_int();
-    ObObjType obj_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
-    result_type.set_collation_type(static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]));
+    CastTypeDescriptor type_descriptor(static_cast<ObConstRawExpr *>(returning_type)->get_value().get_int());
+    ObObjType obj_type = static_cast<ObObjType>(type_descriptor.type());
+    result_type.set_collation_type(static_cast<ObCollationType>(type_descriptor.collation()));
     result_type.set_type(obj_type);
     if (ob_is_string_type(obj_type)) {
-      result_type.set_full_length(parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX],
+      result_type.set_full_length(type_descriptor.length(),
                                   returning_type->get_result_type().get_accuracy().get_length_semantics());
       if (ob_is_blob(obj_type, result_type.get_collation_type())) {
         result_type.set_collation_type(CS_TYPE_BINARY);
@@ -2534,7 +2533,7 @@ int ObRawExprDeduceType::set_agg_json_array_result_type(ObAggFunRawExpr &expr,
         result_type.set_calc_collation_type(my_session_->get_nls_collation());
       }
       result_type.set_collation_level(CS_LEVEL_IMPLICIT);
-    } else if (ob_is_json(obj_type) || parse_node.value_ == 0) {
+    } else if (ob_is_json(obj_type) || type_descriptor.value() == 0) {
       result_type.set_json();
       result_type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
     }

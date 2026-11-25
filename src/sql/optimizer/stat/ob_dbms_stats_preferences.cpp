@@ -19,7 +19,7 @@
 #include "sql/optimizer/stat/ob_dbms_stats_preferences.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
-#include "sql/parser/ob_parser.h"
+#include "sql/syntax.h"
 
 namespace oceanbase {
 using namespace sql;
@@ -709,11 +709,10 @@ int ObMethodOptPrefs::check_pref_value_validity(ObTableStatParam *param/*default
   } else if (is_global_prefs() && OB_FAIL(check_global_method_opt_prefs_value_validity(pvalue_))) {
   } else {
     ObParser parser(*allocator_,
-                    session_info_->get_sql_mode(),
-                    session_info_->get_charsets4parser());
+                    session_info_->get_sql_mode());
     ParseMode parse_mode = METHOD_OPT_MODE;
-    ParseResult parse_result;
-    if (OB_FAIL(parser.parse(pvalue_, parse_result, parse_mode))) {
+    ParsedSql syntax;
+    if (OB_FAIL(parser.parse(pvalue_, syntax, parse_mode))) {
     } else {/*do nothing*/}
     if (OB_FAIL(ret)) {
       ret = OB_ERR_DBMS_STATS_PL;

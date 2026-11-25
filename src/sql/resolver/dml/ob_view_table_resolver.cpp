@@ -23,7 +23,7 @@ using namespace common;
 using namespace share::schema;
 namespace sql
 {
-int ObViewTableResolver::do_resolve_set_query(const ParseNode &parse_tree,
+int ObViewTableResolver::do_resolve_set_query(const peg::Node &parse_tree,
                                               ObSelectStmt *&child_stmt,
                                               const bool is_left_child) /*default false*/
 {
@@ -121,7 +121,8 @@ int ObViewTableResolver::check_view_circular_reference(const TableItem &view_ite
   return ret;
 }
 
-int ObViewTableResolver::resolve_generate_table(const ParseNode &table_node, const ParseNode *alias_node, TableItem *&table_item)
+int ObViewTableResolver::resolve_generated_query(const peg::Node &query, const peg::Node &table_node,
+                                                 TableItem *&table_item)
 {
   int ret = OB_SUCCESS;
   ObViewTableResolver view_table_resolver(params_, view_db_name_, view_name_);
@@ -133,7 +134,7 @@ int ObViewTableResolver::resolve_generate_table(const ParseNode &table_node, con
   view_table_resolver.set_current_view_item(current_view_item);
   if (OB_FAIL(view_table_resolver.set_cte_ctx(cte_ctx_, true, true))) {
   } else if (OB_FAIL(add_cte_table_to_children(view_table_resolver))) {
-  } else if (OB_FAIL(do_resolve_generate_table(table_node, alias_node, view_table_resolver, table_item))) {
+  } else if (OB_FAIL(do_resolve_generate_table(query, table_node, view_table_resolver, table_item))) {
   }
   return ret;
 }
