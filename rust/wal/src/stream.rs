@@ -240,6 +240,7 @@ struct State {
 struct AppendQueue {
     pending_appends: Vec<PendingAppend>,
     pending_append_bytes: usize,
+    worker_started: bool,
     closed: bool,
 }
 
@@ -256,7 +257,6 @@ struct StreamInner {
     changed: Condvar,
     append_changed: Condvar,
     worker_changed: Condvar,
-    worker_started: AtomicBool,
     handle_count: AtomicUsize,
 }
 
@@ -349,7 +349,6 @@ impl Stream {
                 changed: Condvar::new(),
                 append_changed: Condvar::new(),
                 worker_changed: Condvar::new(),
-                worker_started: AtomicBool::new(false),
                 handle_count: AtomicUsize::new(1),
             }),
         }
@@ -428,7 +427,6 @@ impl Stream {
         }
         let payload = copied_bytes(payload)?;
         let bytes_len = payload.len();
-        self.ensure_worker()?;
         let completion = wait_for_durable.then(|| Arc::new(AppendCompletion::default()));
         let mut queue = self.lock_appends()?;
         while !queue.closed && !queue.can_queue_append(payload.len()) {
@@ -443,6 +441,7 @@ impl Stream {
         }
         let mut state = self.lock()?;
         state.check_writable()?;
+        self.ensure_worker(&mut queue)?;
         let result = state.reserve_append(payload.len(), ref_scn)?;
         state.unflushed_appends += 1;
         drop(state);
@@ -458,27 +457,15 @@ impl Stream {
         Ok((result, completion))
     }
 
-    fn ensure_worker(&self) -> Result<()> {
-        if self.inner.worker_started.load(Ordering::Acquire) {
-            return Ok(());
+    fn ensure_worker(&self, queue: &mut AppendQueue) -> Result<()> {
+        if !queue.worker_started {
+            let inner = Arc::clone(&self.inner);
+            std::thread::Builder::new()
+                .name("wal-io".into())
+                .spawn(move || Self::run_append_worker(inner))
+                .map_err(|_| Error::Io)?;
+            queue.worker_started = true;
         }
-        self.lock()?.check_writable()?;
-        if self
-            .inner
-            .worker_started
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return Ok(());
-        }
-        let inner = Arc::clone(&self.inner);
-        std::thread::Builder::new()
-            .name("wal-io".into())
-            .spawn(move || Self::run_append_worker(inner))
-            .map_err(|_| {
-                self.inner.worker_started.store(false, Ordering::Release);
-                Error::Io
-            })?;
         Ok(())
     }
 
@@ -701,12 +688,13 @@ impl Stream {
     }
 
     pub fn close(&self) -> Result<()> {
-        {
+        let worker_started = {
             let mut queue = self.lock_appends()?;
             queue.closed = true;
-        }
+            queue.worker_started
+        };
         self.inner.append_changed.notify_all();
-        if !self.inner.worker_started.load(Ordering::Acquire) {
+        if !worker_started {
             let mut state = self.lock()?;
             state.closed = true;
             self.inner.changed.notify_all();
