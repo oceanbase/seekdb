@@ -250,15 +250,20 @@ def _license_name(component):
     return "seekdb-" + re.sub(r"[^a-z0-9]+", "-", component["name"].lower()).strip("-")
 
 
-def _license_text(component):
+def _component_base(component, base):
+    directory = component.get("directory", "")
+    return base / Path(directory).name if directory else base
+
+
+def _license_text(component, base=ROOT):
     parts = []
     for relative in component["license_files"]:
-        path = ROOT / component["directory"] / relative
+        path = _component_base(component, base) / relative
         parts.append(path.read_text(encoding="utf-8", errors="replace").rstrip())
     return "\n\n".join(parts)
 
 
-def render_debian_copyright(data):
+def render_debian_copyright(data, base=ROOT):
     lines = [
         "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/",
         "Upstream-Name: seekdb",
@@ -288,20 +293,20 @@ def render_debian_copyright(data):
         "",
         "License: Apache-2.0",
     ])
-    apache = (ROOT / "LICENSE").read_text(encoding="utf-8").rstrip()
+    apache = (base / "LICENSE").read_text(encoding="utf-8").rstrip()
     lines.extend(_debian_text_lines(apache))
     lines.append("")
     lines.extend([
         "License: seekdb-notice",
     ])
-    lines.extend(_debian_text_lines((ROOT / "NOTICE").read_text(encoding="utf-8").rstrip()))
+    lines.extend(_debian_text_lines((base / "NOTICE").read_text(encoding="utf-8").rstrip()))
     lines.append("")
     for component in sorted(data["components"], key=lambda item: item["name"].lower()):
         lines.extend([
             "License: %s" % _license_name(component),
             " " + component["name"] + " " + component["version"] + " license and notice text.",
         ])
-        text = _license_text(component)
+        text = _license_text(component, base)
         lines.extend(_debian_text_lines(text))
         lines.append("")
     return "\n".join(lines)
@@ -312,11 +317,20 @@ def _debian_text_lines(text):
         yield " ." if not line.strip() else " " + line
 
 
-def write_debian_copyright(path):
-    data = load_manifest()
+def write_debian_copyright(path, bundle=None):
+    if bundle is None:
+        data, base = load_manifest(), ROOT
+    else:
+        base = Path(bundle)
+        inventory = base / "THIRD_PARTY_COMPONENTS.json"
+        if not inventory.is_file():
+            raise ValueError("bundle is missing THIRD_PARTY_COMPONENTS.json: %s" % inventory)
+        data = {"components": json.loads(inventory.read_text(encoding="utf-8")).get("components", [])}
+        if not data["components"]:
+            raise ValueError("bundle inventory has no components: %s" % inventory)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_debian_copyright(data), encoding="utf-8")
+    path.write_text(render_debian_copyright(data, base), encoding="utf-8")
 
 
 def check():

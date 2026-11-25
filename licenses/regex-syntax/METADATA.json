@@ -1,0 +1,16 @@
+{
+  "name": "regex-syntax",
+  "version": "0.8.11",
+  "source": "https://github.com/rust-lang/regex",
+  "license": "MIT OR Apache-2.0",
+  "license_files": [
+    "rust-regex-syntax-0.8.11.txt"
+  ],
+  "redistribution": "Retain the MIT and Apache-2.0 texts and copyright notices.",
+  "packaged_as": "Rust crate linked into the engine through fancy-regex",
+  "modified": "No local patch recorded",
+  "evidence": "Cargo.lock; fancy-regex 0.20.0 dependency graph; licenses/regex-syntax/rust-regex-syntax-0.8.11.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

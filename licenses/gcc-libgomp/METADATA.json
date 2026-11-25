@@ -1,0 +1,17 @@
+{
+  "name": "GCC libgomp",
+  "version": "12.4.0",
+  "source": "https://gcc.gnu.org/",
+  "packaged_as": "Static OpenMP runtime linked into the engine on Linux (libgomp_static.a)",
+  "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "COPYING3",
+    "COPYING.RUNTIME"
+  ],
+  "redistribution": "Retain the GPL-3.0 text and the GCC Runtime Library Exception. The exception permits linking libgomp into the engine without imposing GPL on the combined work, provided the exception notice is retained.",
+  "evidence": "src/observer/observer_link_deps.bzl links vsag/lib/libgomp_static.a; seekdb-deps vsag 0.16.20 manifest records c_compiler 12.4.0; licenses/gcc-libgomp/COPYING3 and COPYING.RUNTIME",
+  "shipped_in": [
+    "engine"
+  ]
+}

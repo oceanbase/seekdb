@@ -1,0 +1,16 @@
+{
+  "name": "regex-automata",
+  "version": "0.4.18",
+  "source": "https://github.com/rust-lang/regex",
+  "license": "MIT OR Apache-2.0",
+  "license_files": [
+    "rust-regex-automata-0.4.18.txt"
+  ],
+  "redistribution": "Retain the MIT and Apache-2.0 texts and copyright notices.",
+  "packaged_as": "Rust crate linked into the engine through fancy-regex",
+  "modified": "No local patch recorded",
+  "evidence": "Cargo.lock; fancy-regex 0.20.0 dependency graph; licenses/regex-automata/rust-regex-automata-0.4.18.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

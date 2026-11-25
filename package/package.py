@@ -195,10 +195,11 @@ def deb(payload, output, version, release, distribution, architecture=None):
     import compliance
     docs = payload / "usr/share/doc/seekdb"
     docs.mkdir(parents=True)
-    compliance.write_debian_copyright(docs / "copyright")
-    copy(ROOT / "LICENSE", docs / "LICENSE")
-    copy(ROOT / "NOTICE", docs / "NOTICE")
-    shutil.copytree(payload / "usr/share/seekdb/licenses", docs / "licenses", dirs_exist_ok=True)
+    bundle = payload / "usr/share/seekdb/licenses"
+    compliance.write_debian_copyright(docs / "copyright", bundle=bundle)
+    copy(bundle / "LICENSE", docs / "LICENSE")
+    copy(bundle / "NOTICE", docs / "NOTICE")
+    shutil.copytree(bundle, docs / "licenses", dirs_exist_ok=True)
     for name, script in LIFECYCLE.items():
         copy(payload / "usr/libexec/seekdb/scripts" / (script + ".sh"), control / name, True)
     target = output / ("seekdb_%s-%s_%s.deb" % (version, release, architecture))

@@ -1,0 +1,16 @@
+{
+  "name": "bit-vec",
+  "version": "0.8.0",
+  "source": "https://github.com/contain-rs/bit-vec",
+  "license": "Apache-2.0 OR MIT",
+  "license_files": [
+    "rust-bit-vec-0.8.0.txt"
+  ],
+  "redistribution": "Retain the MIT and Apache-2.0 texts and copyright notices.",
+  "packaged_as": "Rust crate linked into the engine through fancy-regex",
+  "modified": "No local patch recorded",
+  "evidence": "Cargo.lock; fancy-regex 0.20.0 dependency graph; licenses/bit-vec/rust-bit-vec-0.8.0.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

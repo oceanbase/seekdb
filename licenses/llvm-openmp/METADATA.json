@@ -1,15 +1,15 @@
 {
   "name": "LLVM OpenMP",
-  "version": "23.1.5 (libomp, macos/ios); 18.1.8 (windows); GCC libgomp (linux)",
+  "version": "23.1.5 (libomp, macos/ios); 18.1.8 (windows)",
   "source": "https://github.com/llvm/llvm-project",
-  "packaged_as": "Static native runtime linked into the engine",
+  "packaged_as": "Static OpenMP runtime linked into the engine on macOS/iOS and Windows (libomp)",
   "license": "Apache-2.0 WITH LLVM-exception",
   "modified": "No local patch recorded",
   "license_files": [
     "openmp-LICENSE.TXT.txt"
   ],
   "redistribution": "Retain the Apache-2.0 and LLVM exception notices.",
-  "evidence": "src/observer/observer_link_deps.bzl; seekdb-deps vsag 0.16.20 recipes/build.py LIBOMP_VERSION and WINDOWS_LIBOMP_VERSION; Linux links libgomp_static.a; licenses/llvm-openmp/openmp-LICENSE.TXT.txt",
+  "evidence": "src/observer/observer_link_deps.bzl (libomp_static.a on macOS/iOS, libomp on Windows); seekdb-deps vsag 0.16.20 recipes/build.py LIBOMP_VERSION; Linux links GCC libgomp instead (see gcc-libgomp); licenses/llvm-openmp/openmp-LICENSE.TXT.txt",
   "shipped_in": [
     "engine"
   ]
