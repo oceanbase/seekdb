@@ -28,8 +28,6 @@ namespace oceanbase
 namespace obcall
 {
 
-OB_SERIALIZE_MEMBER(ObAdminSetConfigItem, name_, value_, comment_, is_reset_);
-
 } // namespace obcall
 
 namespace common

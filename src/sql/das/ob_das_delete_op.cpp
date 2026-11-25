@@ -23,22 +23,6 @@
 #include "share/schema/ob_schema_struct.h"
 namespace oceanbase
 {
-namespace common
-{
-namespace serialization
-{
-template <>
-struct EnumEncoder<false, const sql::ObDASDelCtDef *> : sql::DASCtRefEncoder<sql::ObDASDelCtDef>
-{
-};
-
-template <>
-struct EnumEncoder<false, sql::ObDASDelRtDef *> : sql::DASRtRefEncoder<sql::ObDASDelRtDef>
-{
-};
-} // end namespace serialization
-} // end namespace common
-
 using namespace common;
 using namespace storage;
 using namespace share;
@@ -142,18 +126,6 @@ int ObDASDeleteOp::record_task_result_to_rtdef()
   return ret;
 }
 
-int ObDASDeleteOp::assign_task_result(ObIDASTaskOp *other)
-{
-  int ret = OB_SUCCESS;
-  if (other->get_type() != get_type()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObDASDeleteOp *del_op = static_cast<ObDASDeleteOp *>(other);
-    affected_rows_ = del_op->get_affected_rows();
-  }
-  return ret;
-}
-
 int ObDASDeleteOp::release_op()
 {
   int ret = OB_SUCCESS;
@@ -180,11 +152,6 @@ int ObDASDeleteOp::write_row(const ExprFixedArray &row,
   }
   return ret;
 }
-
-OB_SERIALIZE_MEMBER((ObDASDeleteOp, ObIDASTaskOp),
-                    del_ctdef_,
-                    del_rtdef_,
-                    write_buffer_);
 
 }  // namespace sql
 }  // namespace oceanbase

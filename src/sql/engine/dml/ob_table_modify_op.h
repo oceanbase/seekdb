@@ -276,7 +276,6 @@ protected:
   //such as: set affected_rows to query context, rewrite some error code
   virtual int write_rows_post_proc(int last_errno)
   { UNUSED(last_errno); return common::OB_NOT_IMPLEMENT; }
-  virtual ObDasParallelType check_das_parallel_type();
 
   int init_das_dml_ctx();
   //to merge array binding cusor info when array binding is executed in batch mode

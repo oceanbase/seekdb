@@ -185,12 +185,6 @@ public:
   const common::ObAccuracy &get_accuracy() const { return accuracy_; }
 
   int64_t to_string(char *buf, const int64_t buf_len) const;
-  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
-  int deserialize(common::ObIAllocator &alloc,
-                  const char *buf,
-                  const int64_t data_len,
-                  int64_t &pos);
-  int64_t get_serialize_size() const;
   // for testing
   void set_int(int64_t v) { common::ObObj obj; obj.set_int(v); assign(obj); }
   /* for unittest only */

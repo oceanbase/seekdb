@@ -36,7 +36,6 @@ ObSqcCtx::ObSqcCtx(ObPxInitSqcArgs &sqc_arg) : msg_loop_(),
       transmit_data_ch_provider_(sqc_proxy_.get_msg_ready_cond()),
       all_tasks_finish_(false),
       interrupted_(false),
-      opt_stats_gather_whole_msg_proc_(msg_proc_),
       join_filter_count_row_whole_msg_proc_(msg_proc_)
 {
 }

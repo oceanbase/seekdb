@@ -108,7 +108,6 @@
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/aggregate/ob_scalar_aggregate_op.h"
 #include "sql/engine/window_function/ob_window_function_op.h"
-#include "sql/engine/table/ob_table_row_store_op.h"
 #include "sql/engine/table/ob_row_sample_scan_op.h"
 #include "sql/engine/table/ob_block_sample_scan_op.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_delete_op.h"

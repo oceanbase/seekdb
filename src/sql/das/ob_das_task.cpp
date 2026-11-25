@@ -19,22 +19,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-namespace serialization
-{
-template <>
-struct EnumEncoder<false, const sql::ObDASBaseCtDef*> : sql::DASCtRefEncoder<sql::ObDASBaseCtDef>
-{
-};
-
-template <>
-struct EnumEncoder<false, sql::ObDASBaseRtDef*> : sql::DASRtRefEncoder<sql::ObDASBaseRtDef>
-{
-};
-} // end namespace serialization
-} // end namespace common
-
 using namespace common;
 using namespace transaction;
 namespace sql
@@ -95,63 +79,6 @@ int ObIDASTaskOp::init_das_snapshot_opt_info(transaction::ObTxIsolationLevel iso
     snapshot_ = get_das_snapshot_opt_info().get_specify_snapshot();
   }
   return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObIDASTaskOp,
-                    task_id_,
-                    task_flag_,
-                    tablet_id_,
-                    related_ctdefs_,
-                    related_rtdefs_,
-                    related_tablet_ids_,
-                    attach_ctdef_,
-                    attach_rtdef_,
-                    das_snapshot_opt_info_,
-                    plan_line_id_);
-
-OB_DEF_SERIALIZE(ObDASSnapshotOptInfo)
-{
-  int ret = OB_SUCCESS;
-  bool serialize_specify_snapshot = specify_snapshot_ == nullptr ? false : true;
-  LST_DO_CODE(OB_UNIS_ENCODE,
-              use_specify_snapshot_,
-              isolation_level_,
-              serialize_specify_snapshot);
-  if (serialize_specify_snapshot) {
-    OB_UNIS_ENCODE(*specify_snapshot_);
-  }
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObDASSnapshotOptInfo)
-{
-  int ret = OB_SUCCESS;
-  bool serialize_specify_snapshot = false;
-  LST_DO_CODE(OB_UNIS_DECODE,
-              use_specify_snapshot_,
-              isolation_level_,
-              serialize_specify_snapshot);
-  if (serialize_specify_snapshot) {
-    if (OB_FAIL(init(isolation_level_))) {
-    } else {
-      OB_UNIS_DECODE(*specify_snapshot_);
-    }
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObDASSnapshotOptInfo)
-{
-  int64_t len = 0;
-  bool serialize_specify_snapshot = specify_snapshot_ == nullptr ? false : true;
-  LST_DO_CODE(OB_UNIS_ADD_LEN,
-              use_specify_snapshot_,
-              isolation_level_,
-              serialize_specify_snapshot);
-  if (serialize_specify_snapshot) {
-    OB_UNIS_ADD_LEN(*specify_snapshot_);
-  }
-  return len;
 }
 
 int ObDASSnapshotOptInfo::init(transaction::ObTxIsolationLevel isolation_level)

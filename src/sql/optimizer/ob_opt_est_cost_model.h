@@ -874,7 +874,6 @@ protected:
 };
 
 class ObCostTableScanSimpleInfo {
-  OB_UNIS_VERSION_V(1);
 public:
   ObCostTableScanSimpleInfo()
   :is_index_back_(false),

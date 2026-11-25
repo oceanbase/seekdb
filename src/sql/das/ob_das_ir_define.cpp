@@ -161,12 +161,8 @@ OB_DEF_SERIALIZE_SIZE(ObDASIRScanCtDef)
   return len;
 }
 
-OB_SERIALIZE_MEMBER(ObDASIRScanRtDef);
-
 OB_SERIALIZE_MEMBER((ObDASIRAuxLookupCtDef, ObDASAttachCtDef),
                     relevance_proj_col_);
-
-OB_SERIALIZE_MEMBER((ObDASIRAuxLookupRtDef, ObDASAttachRtDef));
 
 OB_SERIALIZE_MEMBER((ObDASFuncLookupCtDef, ObDASAttachCtDef),
     main_lookup_cnt_,
@@ -174,18 +170,12 @@ OB_SERIALIZE_MEMBER((ObDASFuncLookupCtDef, ObDASAttachCtDef),
     func_lookup_cnt_,
     lookup_domain_id_expr_);
 
-OB_SERIALIZE_MEMBER((ObDASFuncLookupRtDef, ObDASAttachRtDef));
-
 OB_SERIALIZE_MEMBER((ObDASIREsMatchCtDef, ObDASAttachCtDef),
                     relevance_proj_col_,
                     inv_scan_domain_id_col_,
                     es_param_text_expr_);
 
-OB_SERIALIZE_MEMBER((ObDASIREsMatchRtDef, ObDASAttachRtDef));
-
 OB_SERIALIZE_MEMBER((ObDASIREsScoreCtDef, ObDASAttachCtDef));
-
-OB_SERIALIZE_MEMBER((ObDASIREsScoreRtDef, ObDASAttachRtDef));
 
 ObDocIdExt::ObDocIdExt()
   : buf_{}, datum_(buf_, 0, false)

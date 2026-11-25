@@ -22,10 +22,6 @@
 
 namespace oceanbase
 {
-namespace rpc
-{
-class ObRequest;
-}
 namespace query
 {
 
@@ -43,7 +39,6 @@ public:
   virtual int get_current_tenant_min_worker_count(int64_t &worker_count) const = 0;
   virtual int get_current_worker_unit_min_cpu(double &min_cpu) const = 0;
   virtual int64_t current_query_start_time() const = 0;
-  virtual int submit_current_tenant_request(rpc::ObRequest &request) const = 0;
   virtual int submit_px_task(
       int64_t group_id,
       const std::function<void(bool)> &task) const = 0;

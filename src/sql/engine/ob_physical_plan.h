@@ -53,7 +53,6 @@ class ObOpSpec;
 class ObSqlSchemaGuard;
 
 //class ObPhysicalPlan: public common::ObDLinkBase<ObPhysicalPlan>
-typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>, common::ObIAllocator> PhyRowParamMap;
 typedef common::ObFixedArray<TableAccessPlan, common::ObIAllocator> TableAccessPlanArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
 
@@ -252,8 +251,6 @@ public:
   inline void set_is_affect_found_row(bool is_affect_found_row) { is_affect_found_row_ = is_affect_found_row; }
   inline bool is_affect_found_row() const { return is_affect_found_row_; }
   inline uint64_t get_plan_hash_value() const { return signature_; }
-  inline const PhyRowParamMap &get_row_param_map() const { return row_param_map_; }
-  inline PhyRowParamMap &get_row_param_map() { return row_param_map_; }
   int init_params_info_str();
   inline void set_is_batched_multi_stmt(bool is_batched_multi_stmt) {
     is_batched_multi_stmt_ = is_batched_multi_stmt;}
@@ -453,7 +450,6 @@ private:
   TableAccessPlanArray table_access_plans_; // ordinary table's table access, participate in plan cache plan selection
   TableAccessPlanArray das_table_access_plans_; // DAS table's table access, used for calculating DAS partition information
 
-  PhyRowParamMap row_param_map_;
   bool is_update_uniq_index_;
   // Determine whether the base tables involved in this plan contain a global index
   bool has_index_access_plan_;
@@ -509,7 +505,6 @@ public:
   int64_t ddl_task_id_;
   //parallel encoding of output_expr in advance to speed up packet response
   bool is_packed_;
-  bool reserved_advanced_trigger_;
   bool need_record_plan_info_;
   ObLogicalPlanRawData logical_plan_;
   ObSubSchemaCtx subschema_ctx_;

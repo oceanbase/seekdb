@@ -210,7 +210,6 @@ protected:
 
   int deal_hint_part_selection(ObObjectID partition_id);
   virtual int check_need_exec_single_row() override;
-  virtual ObDasParallelType check_das_parallel_type() override;
 
   void guarantee_session_last_insert_id() { has_guarantee_last_insert_id_ = true; }
   int record_session_last_insert_id();

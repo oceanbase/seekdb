@@ -27,7 +27,6 @@ namespace sql
 
 class ObExprToType: public ObFuncExprOperator
 {
-  OB_UNIS_VERSION_V(1);
 public:
   ObExprToType();
   explicit ObExprToType(common::ObIAllocator &alloc);

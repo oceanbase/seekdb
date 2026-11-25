@@ -60,8 +60,6 @@ struct ObPlParamInfo : public sql::ObParamInfo
   uint8_t pl_type_;
   uint64_t udt_id_;
   static const int64_t MAX_STR_DES_LEN_PL = 96;
-
-  OB_UNIS_VERSION_V(1);
 };
 
 enum ObPLCacheObjectType

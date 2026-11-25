@@ -312,14 +312,6 @@ int AsyncStatTable::assign(const AsyncStatTable &other)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObOptDmlStat,
-                    
-                    table_id_,
-                    tablet_id_,
-                    insert_row_count_,
-                    update_row_count_,
-                    delete_row_count_);
-
 
 class BasicStatAuditItem : public AuditBaseItem 
 {

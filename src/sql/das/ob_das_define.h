@@ -49,7 +49,6 @@ namespace das
 // Reserve 8 KiB for the DAS write-buffer bookkeeping structures.
 const int64_t OB_DAS_TASK_BUFFER_SIZE = 2 * 1024 * 1024l - 8 * 1024;
 const int64_t OB_DAS_TOTAL_TASK_BUFFER_SIZE = OB_DAS_TASK_BUFFER_SIZE;
-// offset of das parallel thread_pool group_id
 }  // namespace das
 
 enum class ObDasTaskStatus: uint8_t
@@ -335,7 +334,6 @@ protected:
 //RtDef: Runtime Definition
 struct ObDASBaseRtDef
 {
-  OB_UNIS_VERSION_PV();
 public:
   ObDASOpType op_type_;
   const ObDASBaseCtDef *ctdef_;

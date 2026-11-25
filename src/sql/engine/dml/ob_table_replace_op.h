@@ -147,7 +147,6 @@ protected:
                    const ObChunkDatumStore::StoredRow *replace_row,
                    const ObChunkDatumStore::StoredRow *delete_row);
   virtual int check_need_exec_single_row() override;
-  virtual ObDasParallelType check_das_parallel_type() override;
 private:
   int check_replace_ctdefs_valid() const;
 

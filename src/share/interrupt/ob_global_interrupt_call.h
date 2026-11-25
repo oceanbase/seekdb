@@ -24,8 +24,6 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/coro/co_var.h"
 
-using oceanbase::obcall::ObInterruptMessage;
-
 namespace oceanbase {
 
 namespace common {

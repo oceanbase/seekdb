@@ -457,8 +457,6 @@ struct ObTableRowCount
   ObTableRowCount() : op_id_(OB_INVALID_ID), row_count_(0) {}
   ObTableRowCount(int64_t op_id, int64_t row_count) : op_id_(op_id), row_count_(row_count) {}
   TO_STRING_KV(K_(op_id), K_(row_count));
-
-  OB_UNIS_VERSION(1);
 };
 
 struct ObVecIndexExecCtx {

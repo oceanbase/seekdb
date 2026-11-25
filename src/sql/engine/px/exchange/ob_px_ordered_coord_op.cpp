@@ -37,7 +37,6 @@ ObPxOrderedCoordOp::ObPxOrderedCoordOp(ObExecContext &exec_ctx, const ObOpSpec &
     parallel_scheduler_(coord_info_, *this, listener_, msg_proc_),
     msg_proc_(coord_info_, listener_, *this),
     sqc_finish_msg_proc_(exec_ctx, msg_proc_),
-    sqc_init_msg_proc_(exec_ctx, msg_proc_),
     barrier_piece_msg_proc_(exec_ctx, msg_proc_),
     winbuf_piece_msg_proc_(exec_ctx, msg_proc_),
     interrupt_proc_(exec_ctx, msg_proc_),
@@ -105,7 +104,6 @@ int ObPxOrderedCoordOp::setup_loop_proc()
   msg_loop_.clear_all_proc();
   (void)msg_loop_
       .register_processor(px_row_msg_proc_)
-      .register_processor(sqc_init_msg_proc_)
       .register_processor(sqc_finish_msg_proc_)
       .register_processor(barrier_piece_msg_proc_)
       .register_processor(winbuf_piece_msg_proc_)
@@ -202,10 +200,9 @@ int ObPxOrderedCoordOp::inner_get_next_row()
     } else {
       ObDtlMsgType msg_type = msg_loop_.get_last_msg_type();
       switch (msg_type) {
-        case ObDtlMsgType::PX_NEW_ROW:
+        case ObDtlMsgType::PX_DATUM_ROW:
           // got rows
           break;
-        case ObDtlMsgType::INIT_SQC_RESULT:
         case ObDtlMsgType::FINISH_SQC_RESULT:
         case ObDtlMsgType::DH_BARRIER_PIECE_MSG:
         case ObDtlMsgType::DH_WINBUF_PIECE_MSG:
@@ -341,10 +338,9 @@ int ObPxOrderedCoordOp::inner_get_next_batch(const int64_t max_row_cnt)
     } else {
       ObDtlMsgType msg_type = msg_loop_.get_last_msg_type();
       switch (msg_type) {
-        case ObDtlMsgType::PX_NEW_ROW:
+        case ObDtlMsgType::PX_DATUM_ROW:
           // got rows
           break;
-        case ObDtlMsgType::INIT_SQC_RESULT:
         case ObDtlMsgType::FINISH_SQC_RESULT:
         case ObDtlMsgType::DH_BARRIER_PIECE_MSG:
         case ObDtlMsgType::DH_WINBUF_PIECE_MSG:

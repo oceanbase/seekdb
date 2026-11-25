@@ -47,7 +47,6 @@ public:
 
 class ObExprJsonSchemaValid : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprJsonSchemaValid(common::ObIAllocator &alloc);
   virtual ~ObExprJsonSchemaValid();

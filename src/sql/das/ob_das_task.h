@@ -56,7 +56,6 @@ typedef ObDList<DasTaskNode> DasTaskLinkedList;
 
 struct ObDASSnapshotOptInfo
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASSnapshotOptInfo(common::ObIAllocator &alloc)
     : alloc_(alloc),
@@ -97,25 +96,10 @@ public:
   transaction::ObTxReadSnapshot *response_snapshot_;
 };
 
-struct ObDASCopyContext
-{
-public:
-  ObDASCopyContext() : ctdefs_(), rtdefs_() {}
-  OB_INLINE static ObDASCopyContext *&get_copy_context()
-  {
-    RLOCAL_INLINE(ObDASCopyContext*, g_copy_context);
-    return g_copy_context;
-  }
-  common::ObSEArray<const ObDASBaseCtDef*, 2> ctdefs_;
-  common::ObSEArray<ObDASBaseRtDef*, 2> rtdefs_;
-};
-
 class ObIDASTaskOp
 {
   friend class ObDataAccessService;
   friend class ObDASRef;
-  friend class ObDASParallelHandler;
-  OB_UNIS_VERSION_V(1);
 public:
   ObIDASTaskOp(common::ObIAllocator &op_alloc)
     : errcode_(OB_SUCCESS),
@@ -150,14 +134,11 @@ public:
   virtual int open_op() = 0; // Execute specific DAS Task Op logic, customized by the instantiated TaskOp
   virtual int release_op() = 0; //close DAS Task Op, release the corresponding resources
   virtual int record_task_result_to_rtdef() = 0;
-  virtual int assign_task_result(ObIDASTaskOp *other) = 0;
   void set_tablet_id(const common::ObTabletID &tablet_id) { tablet_id_ = tablet_id; }
   const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
   void set_task_id(const int64_t task_id) { task_id_ = task_id; }
   int64_t get_task_id() const { return task_id_; }
   void set_tablet_access(const DASRuntimeTabletAccess *tablet_access) { tablet_access_ = tablet_access; }
-  // tablet_access_ will not be serialized, therefore it cannot be accessed during the execution phase
-  // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
   const DASRuntimeTabletAccess *get_tablet_access() const { return tablet_access_; }
   void set_vec_datum_kind(const DasVecDatumKind kind) { vec_datum_kind_ = kind; }
   DasVecDatumKind get_vec_datum_kind() const { return vec_datum_kind_; }
@@ -246,7 +227,7 @@ protected:
   int end_das_task();
 
 public:
-  int errcode_; //don't need serialize it
+  int errcode_;
   transaction::ObTxDesc *trans_desc_; // transaction state is owned by the SQL session
   transaction::ObTxReadSnapshot *snapshot_; // Mvcc snapshot
 
@@ -274,8 +255,6 @@ protected:
   };
   int16_t write_branch_id_;  // branch id for parallel write, required for partially rollback
   common::ObTabletID tablet_id_;
-  // tablet_access_ will not be serialized, therefore it cannot be accessed during the execution phase
-  // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
   const DASRuntimeTabletAccess *tablet_access_;
   // Rows of different kinds have different projectors, so they cannot share
   // one task. Execution always uses the task's actual ctdefs.
@@ -324,112 +303,6 @@ public:
   bool is_end() const { return task_iter_.is_end(); }
 private:
   DASTaskIter task_iter_;
-};
-
-template <typename T>
-struct DASCtRefEncoder
-{
-  static int encode(char *buf, const int64_t buf_len, int64_t &pos, const T *val)
-  {
-    int ret = common::OB_SUCCESS;
-    int64_t idx = common::OB_INVALID_INDEX;
-    const ObDASBaseCtDef *ctdef = val;
-    ObDASCopyContext *copy_context = ObDASCopyContext::get_copy_context();
-    if (OB_ISNULL(copy_context)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret));
-    } else if (OB_ISNULL(val)) {
-      idx = common::OB_INVALID_INDEX;
-    } else if (!common::has_exist_in_array(copy_context->ctdefs_, ctdef, &idx)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "val not found in ctdefs", K(ret), K(val), KPC(val));
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(common::serialization::encode_i32(buf, buf_len, pos, static_cast<int32_t>(idx)))) {
-      }
-    }
-    return ret;
-  }
-
-  static int decode(const char *buf, const int64_t data_len, int64_t &pos, const T *&val)
-  {
-    int ret = common::OB_SUCCESS;
-    int32_t idx = common::OB_INVALID_INDEX;
-    ObDASCopyContext *copy_context = ObDASCopyContext::get_copy_context();
-    if (OB_ISNULL(copy_context)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret));
-    } else if (OB_FAIL(common::serialization::decode_i32(buf, data_len, pos, &idx))) {
-    } else if (OB_UNLIKELY(common::OB_INVALID_INDEX == idx)) {
-      val = nullptr;
-    } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= copy_context->ctdefs_.count())) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "idx is invalid", K(ret), K(idx), K(copy_context->ctdefs_.count()));
-    } else {
-      val = static_cast<const T *>(copy_context->ctdefs_.at(idx));
-    }
-    return ret;
-  }
-
-  static int64_t encoded_length(const T *val)
-  {
-    UNUSED(val);
-    int32_t idx = common::OB_INVALID_INDEX;
-    return common::serialization::encoded_length_i32(idx);
-  }
-};
-
-template <typename T>
-struct DASRtRefEncoder
-{
-  static int encode(char *buf, const int64_t buf_len, int64_t &pos, const T *val)
-  {
-    int ret = common::OB_SUCCESS;
-    int64_t idx = common::OB_INVALID_INDEX;
-    ObDASBaseRtDef *rtdef = const_cast<T*>(val);
-    ObDASCopyContext *copy_context = ObDASCopyContext::get_copy_context();
-    if (OB_ISNULL(copy_context)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret), K(val));
-    } else if (OB_ISNULL(val)) {
-      idx = common::OB_INVALID_INDEX;
-    } else if (!common::has_exist_in_array(copy_context->rtdefs_, rtdef, &idx)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "val not found in rtdefs", K(ret), K(val), KPC(val));
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(common::serialization::encode_i32(buf, buf_len, pos, static_cast<int32_t>(idx)))) {
-      }
-    }
-    return ret;
-  }
-
-  static int decode(const char *buf, const int64_t data_len, int64_t &pos, T *&val)
-  {
-    int ret = common::OB_SUCCESS;
-    int32_t idx = 0;
-    ObDASCopyContext *copy_context = ObDASCopyContext::get_copy_context();
-    if (OB_ISNULL(copy_context)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "copy context is nullptr", K(ret));
-    } else if (OB_FAIL(common::serialization::decode_i32(buf, data_len, pos, &idx))) {
-    } else if (OB_UNLIKELY(common::OB_INVALID_INDEX == idx)) {
-      val = nullptr;
-    } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= copy_context->rtdefs_.count())) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_DAS_LOG(WARN, "idx is invalid", K(ret), K(idx), K(copy_context->rtdefs_.count()));
-    } else {
-      val = static_cast<T *>(copy_context->rtdefs_.at(idx));
-    }
-    return ret;
-  }
-
-  static int64_t encoded_length(const T *val)
-  {
-    UNUSED(val);
-    int32_t idx = 0;
-    return common::serialization::encoded_length_i32(idx);
-  }
 };
 
 }  // namespace sql

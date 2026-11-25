@@ -27,7 +27,6 @@ namespace sql
 {
 class ObExprPLIntegerChecker : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   struct ExtraInfo : public ObIExprExtraInfo
   {

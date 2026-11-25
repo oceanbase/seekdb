@@ -32,7 +32,6 @@ namespace sql
 class ObExprResType;
 class ObExprTypeToStr : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION_V(1);
 public:
     ObExprTypeToStr(common::ObIAllocator &alloc, ObExprOperatorType type,
                     const char *name, int32_t param_num, ObValidForGeneratedColFlag valid_for_generated_col, int32_t dimension,

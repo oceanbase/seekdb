@@ -675,13 +675,6 @@ void ObTableModifyOp::clear_dml_evaluated_flag()
   }
 }
 
-ObDasParallelType ObTableModifyOp::check_das_parallel_type()
-{
-  ObDasParallelType type = DAS_SERIALIZATION;
-  // Local DAS modification runs serially.
-  return type;
-}
-
 OB_INLINE int ObTableModifyOp::init_das_dml_ctx()
 {
   ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
@@ -708,11 +701,6 @@ OB_INLINE int ObTableModifyOp::init_das_dml_ctx()
                                         ? MY_SPEC.expr_frame_info_
                                         : &MY_SPEC.plan_->get_expr_frame_info());
   dml_rtctx_.das_ref_.set_mem_attr(memattr);
-  dml_rtctx_.das_ref_.get_das_parallel_ctx().set_das_parallel_type(check_das_parallel_type());
-  dml_rtctx_.das_ref_.get_das_parallel_ctx().set_das_dop(ctx_.get_das_ctx().get_real_das_dop());
-  if (check_das_parallel_type() != DAS_SERIALIZATION) {
-    LOG_TRACE("this sql use das parallel submit", K(check_das_parallel_type()));
-  }
   return OB_SUCCESS;
 }
 
@@ -1074,7 +1062,7 @@ int ObTableModifyOp::discharge_das_write_buffer()
   if (dml_rtctx_.need_submit_all_tasks()) {
     LOG_INFO("DASWriteBuffer full, now to write storage",
              "buffer memory", dml_rtctx_.das_ref_.get_das_alloc().used(),
-             K(dml_rtctx_.get_das_task_memory_size()), K(dml_rtctx_.get_das_parallel_task_size()));
+             K(dml_rtctx_.get_das_task_memory_size()));
     ret = submit_all_dml_task();
   } else if (execute_single_row_) {
     if (REACH_COUNT_INTERVAL(100)) { // print log per 100 times.

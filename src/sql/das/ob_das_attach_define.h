@@ -43,7 +43,6 @@ protected:
 
 struct ObDASAttachRtDef : ObDASBaseRtDef
 {
-  OB_UNIS_VERSION(1);
 protected:
   ObDASAttachRtDef(ObDASOpType op_type)
     : ObDASBaseRtDef(op_type)
@@ -73,7 +72,6 @@ public:
 
 struct ObDASTableLookupRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASTableLookupRtDef(const ObDASOpType &op_type = DAS_OP_TABLE_LOOKUP)
     : ObDASAttachRtDef(op_type)
@@ -110,7 +108,6 @@ public:
 
 struct ObDASIndexProjLookupRtDef : ObDASTableLookupRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASIndexProjLookupRtDef()
     : ObDASTableLookupRtDef(DAS_OP_INDEX_PROJ_LOOKUP)
@@ -149,7 +146,6 @@ public:
 
 struct ObDASSortRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASSortRtDef()
     : ObDASAttachRtDef(DAS_OP_SORT) {}
@@ -171,7 +167,6 @@ public:
 
 struct ObDASDocIdMergeRtDef final : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASDocIdMergeRtDef()
     : ObDASAttachRtDef(DAS_OP_DOC_ID_MERGE)
@@ -194,7 +189,6 @@ public:
 
 struct ObDASVIdMergeRtDef final : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASVIdMergeRtDef()
     : ObDASAttachRtDef(DAS_OP_VID_MERGE)
@@ -226,7 +220,6 @@ public:
 
 struct ObDASIndexMergeRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASIndexMergeRtDef()
     : ObDASAttachRtDef(DAS_OP_INDEX_MERGE) {}
@@ -250,7 +243,6 @@ public:
 
 struct ObDASDomainIdMergeRtDef final : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASDomainIdMergeRtDef()
     : ObDASAttachRtDef(DAS_OP_DOMAIN_ID_MERGE)

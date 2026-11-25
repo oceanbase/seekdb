@@ -386,7 +386,6 @@ public:
   };
 
   class ApplicationInfo {
-    OB_UNIS_VERSION(1);
   public:
     common::ObString module_name_;  // name as set by the dbms_application_info(set_module)
     common::ObString action_name_;  // action as set by the dbms_application_info(set_action)
@@ -431,11 +430,6 @@ public:
   void set_db_priv_set(const ObPrivSet priv_set) { db_priv_set_ = priv_set; }
   void set_show_warnings_buf(int error_code);
   void update_show_warnings_buf();
-  void set_global_sessid(const int64_t global_sessid)
-  {
-    global_sessid_ = global_sessid;
-  }
-  int64_t get_global_sessid() const { return global_sessid_; }
   void set_read_uncommited(bool read_uncommited) { read_uncommited_ = read_uncommited; }
   bool get_read_uncommited() const { return read_uncommited_; }
   void set_version_provider(const common::ObVersionProvider *version_provider)
@@ -900,7 +894,6 @@ private:
   int64_t found_rows_;
   // Record affected_row in dml operations, for use by row_count()
   int64_t affected_rows_;
-  int64_t global_sessid_;
   bool read_uncommited_; // record whether the current statement reads uncommitted modifications
   common::ObTraceEventRecorder *trace_recorder_;
   // Mark whether there is a write operation in a transaction, used to determine if the commit statement can succeed when setting read_only
@@ -909,8 +902,6 @@ private:
   // in_transaction_ has been merged into trans_flags_.
 //  int64_t has_write_stmt_in_trans_;
   bool inner_flag_; // whether it is a virtual session for an internal request
-  // After version 2.2, this variable is no longer used
-  bool is_max_availability_mode_;
   typedef common::hash::ObHashMap<ObPsStmtId, ObPsSessionInfo *,
                                   common::hash::SpinReadWriteDefendMode> PsSessionInfoMap;
   PsSessionInfoMap ps_session_info_map_;

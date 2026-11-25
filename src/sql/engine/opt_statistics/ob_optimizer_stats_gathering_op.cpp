@@ -37,28 +37,6 @@ ObOptimizerStatsGatheringSpec::ObOptimizerStatsGatheringSpec(ObIAllocator &alloc
 {
 }
 
-int ObOptimizerStatsGatheringSpec::register_to_datahub(ObExecContext &ctx) const
-{
-  int ret = OB_SUCCESS;
-  if (type_ == OSG_TYPE::GATHER_OSG) {
-    if (OB_ISNULL(ctx.get_sqc_handler())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      void *buf = ctx.get_allocator().alloc(sizeof(ObOptStatsGatherWholeMsg::WholeMsgProvider));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        ObOptStatsGatherWholeMsg::WholeMsgProvider *provider =
-          new (buf)ObOptStatsGatherWholeMsg::WholeMsgProvider();
-        ObSqcCtx &sqc_ctx = ctx.get_sqc_handler()->get_sqc_ctx();
-        if (OB_FAIL(sqc_ctx.add_whole_msg_provider(get_id(), dtl::DH_OPT_STATS_GATHER_WHOLE_MSG, *provider))) {
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 OB_SERIALIZE_MEMBER((ObOptimizerStatsGatheringSpec, ObOpSpec),
                     part_level_,
                     calc_part_id_expr_,
@@ -221,14 +199,12 @@ int ObOptimizerStatsGatheringOp::send_stats()
 {
   int ret = OB_SUCCESS;
   ObPxSqcHandler *handler = ctx_.get_sqc_handler();
-  const ObOptStatsGatherWholeMsg *whole_msg = NULL;
   if (OB_ISNULL(handler)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("do not need sqc in serial mode");
   } else if (OB_FAIL(build_piece_msg(piece_msg_, handler->get_sqc_proxy()))) {
-  } else if (OB_FAIL(handler->get_sqc_proxy().get_dh_msg(
-                MY_SPEC.id_, dtl::DH_OPT_STATS_GATHER_WHOLE_MSG, piece_msg_, whole_msg,
-                ctx_.get_physical_plan_ctx()->get_timeout_timestamp(), true, false))) {
+  } else if (OB_FAIL(handler->get_sqc_proxy().send_dh_piece_msg(
+                piece_msg_, ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
   } else {
     //after send we need to reset table_stat_map and column_stat_map
     piece_msg_.reset();

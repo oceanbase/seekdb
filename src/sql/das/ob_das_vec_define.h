@@ -196,7 +196,6 @@ public:
 
 struct ObDASVecAuxScanRtDef : ObDASAttachRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASVecAuxScanRtDef()
     : ObDASAttachRtDef(DAS_OP_VEC_SCAN) {}

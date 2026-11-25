@@ -31,7 +31,6 @@ namespace common {
  */
 class ObOptSystemStat : public common::ObIKVCacheValue
 {
-  OB_UNIS_VERSION_V(1);
 public:
   struct Key : public common::ObIKVCacheKey
   {

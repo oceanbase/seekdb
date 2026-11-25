@@ -91,9 +91,6 @@ int ObFastColumnConvExpr::set_const_value(const ObObj &value)
   }
   return ret;
 }
-// Due to ObExprColumnConv using the serialization function of the parent class ObExprOperator in version 14x
-// To ensure compatibility, serialize the members of the parent class ObExprOperator first, then serialize its own members
-OB_SERIALIZE_MEMBER(ObExprColumnConv, row_dimension_, real_param_num_, result_type_, input_types_, id_, str_values_);
 
 ObExprColumnConv::ObExprColumnConv(ObIAllocator &alloc)
     : ObBaseExprColumnConv(alloc),

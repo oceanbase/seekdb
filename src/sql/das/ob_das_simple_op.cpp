@@ -42,10 +42,7 @@ int ObDASSimpleOp::init_task_info(uint32_t row_extend_size)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER((ObDASSimpleOp, ObIDASTaskOp));
-
 OB_SERIALIZE_MEMBER(ObDASEmptyCtDef);
-OB_SERIALIZE_MEMBER(ObDASEmptyRtDef);
 
 ObDASSplitRangesOp::ObDASSplitRangesOp(ObIAllocator &op_alloc)
   : ObDASSimpleOp(op_alloc), expected_task_count_(0), timeout_us_(0) {}
@@ -74,11 +71,6 @@ int ObDASSplitRangesOp::init(const common::ObIArray<ObStoreRange> &ranges, int64
   return ret;
 }
 
-OB_SERIALIZE_MEMBER((ObDASSplitRangesOp, ObIDASTaskOp),
-                     ranges_,
-                     expected_task_count_,
-                     timeout_us_);
-
 ObDASRangesCostOp::ObDASRangesCostOp(common::ObIAllocator &op_alloc)
   : ObDASSimpleOp(op_alloc), total_size_(0), timeout_us_(0) {}
 
@@ -102,11 +94,6 @@ int ObDASRangesCostOp::init(const common::ObIArray<ObStoreRange> &ranges, const 
   timeout_us_ = timeout_us;
   return ret;
 }
-
-OB_SERIALIZE_MEMBER((ObDASRangesCostOp, ObIDASTaskOp),
-                     ranges_,
-                     total_size_,
-                     timeout_us_);
 
 int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
                                          DASRuntimeTabletAccess *tablet_access,

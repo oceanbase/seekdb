@@ -24,20 +24,14 @@ using namespace oceanbase::sql;
 using namespace oceanbase::sql::dtl;
 
 OB_SERIALIZE_MEMBER(ObPxUserErrorMsg, rcode_, msg_, warnings_);
-OB_SERIALIZE_MEMBER(ObPxTabletInfo,
-                    tablet_id_,
-                    logical_row_count_,
-                    physical_row_count_);
 OB_SERIALIZE_MEMBER((ObPxTaskChSet, dtl::ObDtlChSet), sqc_id_, task_id_);
 OB_SERIALIZE_MEMBER(ObPxPartChMapItem, first_, second_, third_);
 OB_SERIALIZE_MEMBER(ObPxReceiveDataChannelMsg, child_dfo_id_, ch_sets_, ch_total_info_, has_filled_channel_);
 OB_SERIALIZE_MEMBER(ObPxTransmitDataChannelMsg, ch_sets_, part_affinity_map_, ch_total_info_, has_filled_channel_);
-OB_SERIALIZE_MEMBER(ObPxInitSqcResultMsg, dfo_id_, sqc_id_, rc_, task_count_, err_msg_);
 OB_SERIALIZE_MEMBER(ObPxFinishSqcResultMsg, dfo_id_, sqc_id_, rc_, trans_result_,
                     sqc_affected_rows_, dml_row_info_, temp_table_id_,
                     interm_result_ids_, fb_info_, err_msg_, das_retry_rc_,
                     sqc_memstore_row_read_count_, sqc_ssstore_row_read_count_);
-OB_SERIALIZE_MEMBER(ObPxFinishTaskResultMsg, dfo_id_, sqc_id_, task_id_, rc_);
 OB_SERIALIZE_MEMBER(ObPxDmlRowInfo, row_match_count_, row_duplicated_count_, row_deleted_count_);
 OB_SERIALIZE_MEMBER(ObPxTabletRange, tablet_id_, range_cut_, range_weights_);
 

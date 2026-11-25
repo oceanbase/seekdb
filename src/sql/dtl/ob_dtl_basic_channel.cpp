@@ -856,36 +856,20 @@ int ObDtlBasicChannel::switch_writer(const ObDtlMsg &msg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == msg_writer_)) {
-    if (msg.is_data_msg()) {
-      const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
-      if (DtlWriterType::CHUNK_ROW_WRITER == msg_writer_map[px_row.get_data_type()]) {
-        msg_writer_ = &row_msg_writer_;
-      } else if (DtlWriterType::CHUNK_DATUM_WRITER == msg_writer_map[px_row.get_data_type()]) {
-        msg_writer_ = &datum_msg_writer_;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-      }
-      LOG_TRACE("msg writer", K(px_row.get_data_type()), K(msg_writer_->type()), K(ret));
+    const DtlWriterType writer_type = msg_writer_map[msg.get_type()];
+    if (CHUNK_DATUM_WRITER == writer_type) {
+      msg_writer_ = &datum_msg_writer_;
+    } else if (CONTROL_WRITER == writer_type) {
+      msg_writer_ = &ctl_msg_writer_;
     } else {
-      if (DtlWriterType::CONTROL_WRITER == msg_writer_map[msg.get_type()]) {
-        msg_writer_ = &ctl_msg_writer_;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unkown msg writer", K(msg.get_type()), K(msg_writer_->type()));
-      }
-      LOG_TRACE("msg writer", K(msg.get_type()), K(msg_writer_->type()), K(ret));
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unknown msg writer", K(msg.get_type()), K(ret));
     }
+    LOG_TRACE("msg writer", K(msg.get_type()), K(writer_type), K(ret));
   } else {
 #ifndef NDEBUG
-    if (msg.is_data_msg()) {
-      const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
-      if (msg_writer_map[px_row.get_data_type()] != msg_writer_->type()) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    } else {
-      if (msg_writer_map[msg.get_type()] != msg_writer_->type()) {
-        ret = OB_ERR_UNEXPECTED;
-      }
+    if (msg_writer_map[msg.get_type()] != msg_writer_->type()) {
+      ret = OB_ERR_UNEXPECTED;
     }
 #endif
   }
@@ -937,10 +921,7 @@ int ObDtlBasicChannel::switch_buffer(const int64_t min_size, const bool is_eof,
 {
   int ret = OB_SUCCESS;
   if (write_buffer_ != nullptr && write_buffer_->pos() != 0) {
-    if (CHUNK_DATUM_WRITER != msg_writer_->type()
-        && OB_FAIL(msg_writer_->serialize())) {
-    } else if (OB_FAIL(push_back_send_list())) {
-    }
+    ret = push_back_send_list();
   } else if (write_buffer_ != nullptr) {
     /*
      * If write_buffer_ isn't null, write_buffer_'s pos == 0, and the need size > write_buffer_ size,
@@ -1044,69 +1025,6 @@ int ObDtlBasicChannel::push_buffer_batch_info()
   return ret;
 }
 
-//----ObDtlRowMsgWriter
-ObDtlRowMsgWriter::ObDtlRowMsgWriter() :
-  type_(CHUNK_ROW_WRITER), row_store_(), block_(nullptr), write_buffer_(nullptr)
-{}
-
-ObDtlRowMsgWriter::~ObDtlRowMsgWriter()
-{
-  reset();
-}
-
-int ObDtlRowMsgWriter::init(ObDtlLinkedBuffer *buffer)
-{
-  int ret = OB_SUCCESS;
-  if (nullptr == buffer) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    reset();
-    row_store_.init(0, common::ObCtxIds::DEFAULT_CTX_ID, "SqlDtlRowMsg");
-    if (OB_FAIL(row_store_.init_block_buffer(static_cast<void *>(buffer->buf()), buffer->size(), block_))) {
-    } else {
-      row_store_.add_block(block_, false);
-      write_buffer_ = buffer;
-    }
-  }
-  return ret;
-}
-
-void ObDtlRowMsgWriter::reset()
-{
-  row_store_.remove_added_blocks();
-  row_store_.reset();
-  block_ = nullptr;
-  write_buffer_ = nullptr;
-}
-
-int ObDtlRowMsgWriter::need_new_buffer(
-  const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(ctx);
-  int64_t serialize_need_size = 0;
-  const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
-  const ObNewRow *row = px_row.get_row();
-  if (nullptr == row) {
-    serialize_need_size = ObChunkRowStore::Block::min_buf_size(0);
-    need_size = serialize_need_size;
-  } else {
-    serialize_need_size = ObChunkRowStore::Block::row_store_size(*row);
-    need_size = ObChunkRowStore::Block::min_buf_size(serialize_need_size);
-  }
-  need_new = nullptr == write_buffer_ || (remain() < serialize_need_size);
-  if(need_new && nullptr != write_buffer_) {
-    write_buffer_->pos() = used();
-  }
-  return ret;
-}
-
-int ObDtlRowMsgWriter::serialize()
-{
-  return block_->unswizzling();
-}
-//-----------------end ObDtlRowMsgWriter----------------
-
 //-----------------start ObDtlDatumMsgWrite-------------
 ObDtlDatumMsgWriter::ObDtlDatumMsgWriter() :
   type_(CHUNK_DATUM_WRITER), write_buffer_(nullptr), block_(nullptr),
@@ -1181,10 +1099,6 @@ void ObDtlDatumMsgWriter::reset()
   }
 }
 
-int ObDtlDatumMsgWriter::serialize()
-{
-  return block_->unswizzling();
-}
 //--------------end ObDtlDatumMsgWriter---------------
 
 
@@ -1193,8 +1107,9 @@ int ObDtlControlMsgWriter::write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const
 {
   int ret = OB_SUCCESS;
   UNUSED(eval_ctx);
+  const ObDtlControlMsg &control_msg = static_cast<const ObDtlControlMsg &>(msg);
   ObDtlMsgHeader header;
-  header.nbody_ = static_cast<int32_t>(msg.get_serialize_size());
+  header.nbody_ = static_cast<int32_t>(control_msg.get_serialize_size());
   header.type_ = static_cast<int16_t>(msg.get_type());
   auto buf = write_buffer_->buf();
   auto size = write_buffer_->size();
@@ -1202,7 +1117,7 @@ int ObDtlControlMsgWriter::write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const
   write_buffer_->set_data_msg(false);
   write_buffer_->is_eof() = is_eof;
   if (OB_FAIL(serialization::encode(buf, size, pos, header))) {
-  } else if (OB_FAIL(serialization::encode(buf, size, pos, msg))) {
+  } else if (OB_FAIL(serialization::encode(buf, size, pos, control_msg))) {
   }
   return ret;
 }

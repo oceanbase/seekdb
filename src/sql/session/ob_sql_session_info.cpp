@@ -124,11 +124,9 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       config_provider_(NULL),
       found_rows_(1),
       affected_rows_(-1),
-      global_sessid_(0),
       read_uncommited_(false),
       trace_recorder_(NULL),
       inner_flag_(false),
-      is_max_availability_mode_(false),
       next_client_ps_stmt_id_(0),
       session_type_(INVALID_TYPE),
       pl_context_(NULL),
@@ -262,11 +260,9 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     config_provider_ = NULL;
     found_rows_ = 1;
     affected_rows_ = -1;
-    global_sessid_ = 0;
     read_uncommited_ = false;
     trace_recorder_ = NULL;
     inner_flag_ = false;
-    is_max_availability_mode_ = false;
     ps_session_info_map_.reuse();
     ps_name_id_map_.reuse();
     in_use_ps_stmt_id_set_.reuse();
@@ -1194,30 +1190,6 @@ int ObSQLSessionInfo::check_read_only_privilege(const bool read_only,
   }
   return ret;
 }
-// In session when trace has been opened once, a buffer is allocated, which will be released only when the session is destructed.
-
-
-OB_DEF_SERIALIZE(ObSQLSessionInfo::ApplicationInfo)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, module_name_, action_name_, client_info_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObSQLSessionInfo::ApplicationInfo)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, module_name_, action_name_, client_info_);
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObSQLSessionInfo::ApplicationInfo)
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, module_name_, action_name_, client_info_);
-  return len;
-}
-
 OB_DEF_SERIALIZE(ObSQLSessionInfo)
 {
   int ret = OB_SUCCESS;
@@ -1227,9 +1199,7 @@ OB_DEF_SERIALIZE(ObSQLSessionInfo)
       user_priv_set_,
       db_priv_set_,
       trans_type_,
-      global_sessid_,
       inner_flag_,
-      is_max_availability_mode_,
       session_type_,
       has_temp_table_flag_,
       enable_role_array_,
@@ -1251,9 +1221,7 @@ OB_DEF_DESERIALIZE(ObSQLSessionInfo)
       user_priv_set_,
       db_priv_set_,
       trans_type_,
-      global_sessid_,
       inner_flag_,
-      is_max_availability_mode_,
       session_type_,
       has_temp_table_flag_,
       enable_role_array_,
@@ -1276,9 +1244,7 @@ OB_DEF_SERIALIZE_SIZE(ObSQLSessionInfo)
       user_priv_set_,
       db_priv_set_,
       trans_type_,
-      global_sessid_,
       inner_flag_,
-      is_max_availability_mode_,
       session_type_,
       has_temp_table_flag_,
       enable_role_array_,

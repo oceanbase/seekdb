@@ -58,7 +58,6 @@ public:
 
 class ObExprOpSubQueryInPl : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprOpSubQueryInPl(common::ObIAllocator &alloc);
   virtual ~ObExprOpSubQueryInPl();

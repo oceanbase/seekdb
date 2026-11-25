@@ -26,13 +26,11 @@ namespace sql
 
 class ObDASSimpleOp : public ObIDASTaskOp
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASSimpleOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASSimpleOp() = default;
   virtual int open_op() = 0;
   virtual int record_task_result_to_rtdef() override { return OB_SUCCESS; }
-  virtual int assign_task_result(ObIDASTaskOp *other) override { return OB_SUCCESS; }
   virtual int release_op() override;
   virtual int init_task_info(uint32_t row_extend_size) override;
 };
@@ -58,7 +56,6 @@ public:
 
 struct ObDASEmptyRtDef : ObDASBaseRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASEmptyRtDef()
     : ObDASBaseRtDef(DAS_OP_INVALID) {}
@@ -66,7 +63,6 @@ public:
 
 class ObDASSplitRangesOp : public ObDASSimpleOp
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASSplitRangesOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASSplitRangesOp() = default;
@@ -86,7 +82,6 @@ private:
 
 class ObDASRangesCostOp : public ObDASSimpleOp
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASRangesCostOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASRangesCostOp() = default;

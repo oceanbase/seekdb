@@ -81,13 +81,11 @@
 #include "sql/engine/dml/ob_table_delete_op.h"
 #include "sql/engine/dml/ob_table_update_op.h"
 #include "sql/engine/dml/ob_table_lock_op.h"
-#include "sql/engine/table/ob_table_row_store_op.h"
 #include "sql/engine/dml/ob_table_insert_up_op.h"
 #include "sql/engine/dml/ob_table_replace_op.h"
 #include "sql/engine/table/ob_row_sample_scan_op.h"
 #include "sql/engine/table/ob_block_sample_scan_op.h"
 #include "sql/engine/table/ob_ddl_block_sample_scan_op.h"
-#include "sql/engine/table/ob_table_scan_with_index_back_op.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
 #include "sql/engine/basic/ob_temp_table_insert_op.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_delete_op.h"
@@ -1755,15 +1753,6 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op,
   return ret;
 }
 
-int ObStaticEngineCG::generate_spec(ObLogicalOperator &op,
-                                    ObTableRowStoreSpec &spec,
-                                    const bool in_root_job)
-{
-  UNUSED(op);
-  UNUSED(spec);
-  UNUSED(in_root_job);
-  return OB_SUCCESS;
-}
 int ObStaticEngineCG::generate_insert_with_das(ObLogInsert &op, ObTableInsertSpec &spec)
 {
   int ret = OB_SUCCESS;
@@ -4492,15 +4481,6 @@ int ObStaticEngineCG::generate_spec(ObLogTableScan &op, ObDDLBlockSampleScanSpec
   return ret;
 }
 
-int ObStaticEngineCG::generate_spec(ObLogTableScan &op, ObTableScanWithIndexBackSpec &spec,
-                                    const bool)
-{
-  int ret = OB_SUCCESS;
-  OZ(generate_normal_tsc(op, spec));
-
-  return ret;
-}
-
 int ObStaticEngineCG::generate_spec(ObLogDelete &op,
                                     ObPxMultiPartDeleteSpec &spec,
                                     const bool in_root_job)
@@ -5836,34 +5816,6 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
     }
   }
 
-  if (OB_SUCC(ret)) {
-    //convert insert row param index map
-    stmt::StmtType stmt_type = stmt::T_NONE;
-    if (OB_FAIL(log_plan.get_stmt_type(stmt_type))) {
-    } else if (IS_INSERT_OR_REPLACE_STMT(stmt_type)) {
-      const ObInsertStmt *insert_stmt = static_cast<const ObInsertStmt *>(log_plan.get_stmt());
-      if (OB_ISNULL(insert_stmt)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED == phy_plan.get_plan_type() &&
-                 !insert_stmt->value_from_select() &&
-                 !insert_stmt->has_global_index()) {
-        RowParamMap row_params;
-        if (OB_FAIL(map_value_param_index(insert_stmt, row_params))) {
-        } else {
-          PhyRowParamMap &phy_row_params = phy_plan.get_row_param_map();
-          if (OB_FAIL(phy_row_params.prepare_allocate(row_params.count()))) {
-          }
-          for (int64_t i = 0; OB_SUCC(ret) && i < row_params.count(); ++i) {
-            phy_row_params.at(i).set_allocator(&phy_plan.get_allocator());
-            if (OB_FAIL(phy_row_params.at(i).init(row_params.at(i).count()))) {
-            } else if (OB_FAIL(phy_row_params.at(i).assign(row_params.at(i)))) {
-            }
-          }
-        }
-      }
-    }
-  }
-
   // assgin subschema ctx
   if (OB_SUCC(ret)
       && (plan_ctx->get_subschema_ctx().is_inited()
@@ -6160,68 +6112,6 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unknown logical operator", K(log_op.get_type()), K(lbt()));
       break;
-  }
-  return ret;
-}
-
-
-int ObStaticEngineCG::map_value_param_index(const ObInsertStmt *insert_stmt,
-                                            RowParamMap &row_params_map)
-{
-  int ret = OB_SUCCESS;
-  int64_t param_cnt = 0;
-  ObArray<ObSEArray<int64_t, 1>> params_row_map;
-  if (OB_ISNULL(insert_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    param_cnt = insert_stmt->get_question_marks_count();
-    ObSEArray<int64_t, 1> row_indexs;
-    if (OB_FAIL(params_row_map.prepare_allocate(param_cnt))) {
-    } else if (OB_FAIL(row_indexs.push_back(OB_INVALID_INDEX))) {
-    }
-    //init to OB_INVALID_INDEX
-    for (int64_t i = 0; OB_SUCC(ret) && i < params_row_map.count(); ++i) {
-      if (OB_FAIL(params_row_map.at(i).assign(row_indexs))) {
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    const ObIArray<ObRawExpr *> &insert_values = insert_stmt->get_values_vector();
-    int64_t insert_column_cnt = insert_stmt->get_values_desc().count();
-    ObSEArray<int64_t, 1> param_idxs;
-    for (int64_t i = 0; OB_SUCC(ret) && i < insert_values.count(); ++i) {
-      param_idxs.reset();
-      if (OB_FAIL(ObRawExprUtils::extract_param_idxs(insert_values.at(i), param_idxs))) {
-      }
-      for (int64_t j = 0; OB_SUCC(ret) && j < param_idxs.count(); ++j) {
-        if (OB_UNLIKELY(param_idxs.at(j) < 0) || OB_UNLIKELY(param_idxs.at(j) >= param_cnt)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("param idx is invalid", K(param_idxs.at(j)), K(param_cnt));
-        } else if (params_row_map.at(param_idxs.at(j)).count() == 1 && params_row_map.at(param_idxs.at(j)).at(0) == OB_INVALID_INDEX) {
-          params_row_map.at(param_idxs.at(j)).at(0) = i / insert_column_cnt;
-        } else if (OB_FAIL(add_var_to_array_no_dup(params_row_map.at(param_idxs.at(j)), i / insert_column_cnt))) {
-        }
-      }
-    }
-  }
-  // According to the obtained param->row map relationship, convert to get the row->param mapping relationship, since there are common params that do not belong to any single row expression, so use index=0 as the slot for the common param
-  // Each line's param starts storing from index=1
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(row_params_map.prepare_allocate(insert_stmt->get_insert_row_count() + 1))) {
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < params_row_map.count(); ++i) {
-      for (int64_t j = 0; OB_SUCC(ret) && j < params_row_map.at(i).count(); ++j) {
-        if (params_row_map.at(i).at(j) == OB_INVALID_INDEX) {
-          // public parameters
-          if (OB_FAIL(row_params_map.at(0).push_back(i))) {
-          }
-        } else {
-          // Specific expression in the line depends on the param
-          if (OB_FAIL(row_params_map.at(params_row_map.at(i).at(j) + 1).push_back(i))) {
-          }
-        }
-      }
-    }
   }
   return ret;
 }

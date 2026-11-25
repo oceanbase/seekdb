@@ -122,7 +122,6 @@ class ObIPLSqlRuntime;
 class ObIPreparedStatementRuntime;
 class ObISqlExecutionIdProvider;
 struct ObEvalCtx;
-typedef  common::ObArray<const common::ObIArray<int64_t> *> ObRowIdListArray;
 struct ColumnContent;
 typedef common::ObFixedArray<ColumnContent, common::ObIAllocator> ColContentFixedArray;
 // Physical operator kit: operator specification, operator, operator input
@@ -533,10 +532,6 @@ public:
 
   ObPartIdRowMapManager& get_part_row_manager() { return part_row_map_manager_; }
 
-  int reset_one_row_id_list(const common::ObIArray<int64_t> *row_id_list);
-  const ObRowIdListArray &get_row_id_list_array() const { return row_id_list_array_; }
-  void reset_row_id_list() { row_id_list_array_.reset(); total_row_count_ = 0;}
-  int64_t get_row_id_list_total_count() const { return total_row_count_; }
   void set_plan_start_time(int64_t t) { phy_plan_ctx_->set_plan_start_time(t); }
   int64_t get_plan_start_time() const { return phy_plan_ctx_->get_plan_start_time(); }
   void set_is_ps_prepare_stage(bool v) { is_ps_prepare_stage_ = v; }
@@ -836,11 +831,6 @@ protected:
   ObIAllocator *pl_expr_allocator_;
 
   ObPartIdRowMapManager part_row_map_manager_;
-  const common::ObIArray<int64_t> *row_id_list_;
-  // for px insert into values
-  ObRowIdListArray row_id_list_array_;
-  // Total number of row IDs stored in row_id_list_array_.
-  int64_t total_row_count_;
   // Interminate result of index building is reusable, reused in build index retry with same snapshot.
   // Reusable intermediate result is not deleted in the close phase, deleted deliberately after
   // execution is completed.

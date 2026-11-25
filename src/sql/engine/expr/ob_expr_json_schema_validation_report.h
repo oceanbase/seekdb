@@ -31,7 +31,6 @@ namespace sql
 
 class ObExprJsonSchemaValidationReport : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprJsonSchemaValidationReport(common::ObIAllocator &alloc);
   virtual ~ObExprJsonSchemaValidationReport();

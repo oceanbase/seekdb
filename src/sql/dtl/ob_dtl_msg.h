@@ -91,19 +91,22 @@ OB_INLINE DEFINE_GET_SERIALIZE_SIZE(ObDtlMsgHeader)
 }
 
 class ObDtlMsg {
-  OB_UNIS_VERSION_PV();
 public:
   virtual ObDtlMsgType get_type() const = 0;
-  inline bool is_data_msg() const { return ObDtlMsgType::PX_NEW_ROW == get_type()
-                                           || ObDtlMsgType::PX_DATUM_ROW == get_type(); }
+  inline bool is_data_msg() const { return ObDtlMsgType::PX_DATUM_ROW == get_type(); }
   inline bool is_drain_msg() const { return ObDtlMsgType::DRAIN_DATA_FLOW == get_type(); }
 protected:
   ~ObDtlMsg() = default;
 };
 
+class ObDtlControlMsg : public ObDtlMsg
+{
+  OB_UNIS_VERSION_PV();
+};
+
 template <ObDtlMsgType TYPE>
 class ObDtlMsgTemp
-    : public ObDtlMsg
+    : public ObDtlControlMsg
 {
 public:
   ObDtlMsgType get_type() const override

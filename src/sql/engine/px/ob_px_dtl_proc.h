@@ -48,18 +48,6 @@ private:
   ObIPxCoordMsgProc &msg_proc_;
 };
 
-class ObPxInitSqcResultP : public dtl::ObDtlPacketProc<ObPxInitSqcResultMsg>
-{
-public:
-  ObPxInitSqcResultP(ObExecContext &ctx, ObIPxCoordMsgProc &msg_proc)
-      : ctx_(ctx), msg_proc_(msg_proc) {}
-  virtual ~ObPxInitSqcResultP() = default;
-  int process(const ObPxInitSqcResultMsg &pkt) override;
-private:
-  ObExecContext &ctx_;
-  ObIPxCoordMsgProc &msg_proc_;
-};
-
 class ObPxQcInterruptedP : public dtl::ObDtlInterruptProc
 {
 public:
@@ -115,7 +103,7 @@ public:
   explicit ObPxReceiveRowP(ObReceiveRowReader *reader) : reader_(reader) {}
   virtual ~ObPxReceiveRowP() = default;
 
-  dtl::ObDtlMsgType get_proc_type() const override { return dtl::PX_NEW_ROW; }
+  dtl::ObDtlMsgType get_proc_type() const override { return dtl::PX_DATUM_ROW; }
   int process(const dtl::ObDtlLinkedBuffer &buffer, bool &transferred) override;
   void set_reader(ObReceiveRowReader *reader) { reader_ = reader; }
   void destroy()

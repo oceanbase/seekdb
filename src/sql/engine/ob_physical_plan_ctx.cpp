@@ -29,7 +29,6 @@ namespace sql
 {
 ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
     : allocator_(allocator),
-      tsc_snapshot_timestamp_(0),
       ts_timeout_us_(0),
       consistency_level_(INVALID_CONSISTENCY),
       param_store_( (ObWrapperAllocator(&allocator_)) ),
@@ -65,13 +64,11 @@ ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
       is_select_into_(false),
       is_result_accurate_(true),
       foreign_key_checks_(true),
-      exec_ctx_(NULL),
       table_row_count_list_(allocator),
       batched_stmt_param_idxs_(allocator),
       implicit_cursor_infos_(allocator),
       cur_stmt_id_(-1),
       is_or_expand_transformed_(false),
-      is_multi_dml_(false),
       field_array_(nullptr),
       is_ps_protocol_(false),
       plan_start_time_(0),
@@ -472,100 +469,17 @@ OB_DEF_DESERIALIZE(ObArrayParamGroup)
 OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
 {
   int ret = OB_SUCCESS;
-  ParamStore empty_param_store;
-  const ParamStore *param_store = NULL;
-  const ObRowIdListArray *row_id_list_array = NULL;
-  int64_t cursor_count = implicit_cursor_infos_.count();
-  // used for function sys_view_bigint_param(idx), @note unused anymore
-  ObSEArray<common::ObObj, 1> sys_view_bigint_params_;
-  char message_[1] = {'\0'}; //error msg buffer, unused anymore
-  if (exec_ctx_ != NULL) {
-    row_id_list_array = &exec_ctx_->get_row_id_list_array();
-  }
-  if ((row_id_list_array != NULL && !row_id_list_array->empty() && phy_plan_ != NULL) ||
-       is_multi_dml_) {
-    param_store = &empty_param_store;
-  } else {
-    param_store = &param_store_;
-  }
-  // Follow the old sequence method
-  OB_UNIS_ENCODE(tsc_snapshot_timestamp_);
+  const int64_t cursor_count = implicit_cursor_infos_.count();
   OB_UNIS_ENCODE(cur_time_);
   OB_UNIS_ENCODE(ts_timeout_us_);
   OB_UNIS_ENCODE(consistency_level_);
-  OB_UNIS_ENCODE(*param_store);
-  OB_UNIS_ENCODE(sys_view_bigint_params_);
+  OB_UNIS_ENCODE(param_store_);
   OB_UNIS_ENCODE(sql_mode_);
   OB_UNIS_ENCODE(autoinc_params_);
   OB_UNIS_ENCODE(tablet_autoinc_param_);
   OB_UNIS_ENCODE(last_insert_id_session_);
-  OB_UNIS_ENCODE(message_);
   OB_UNIS_ENCODE(expr_op_size_);
   OB_UNIS_ENCODE(is_ignore_stmt_);
-  if (OB_SUCC(ret) && row_id_list_array != NULL &&
-      !row_id_list_array->empty() &&
-      phy_plan_ != NULL && !(param_store_.empty())) {
-    // Serialize param store as needed
-    // Serialize param store slots
-    // Need to serialize param store count
-    // Serialize param index
-    // Serialize param value
-    OB_UNIS_ENCODE(param_store_.count());
-    // Serialization is needed to know how many parameter values are serialized, so skip the count position first
-    int64_t seri_param_cnt_pos = pos;
-    int32_t real_param_cnt = 0;
-    pos += serialization::encoded_length_i32(real_param_cnt);
-    const ObIArray<int64_t> *param_idxs = NULL;
-    if (phy_plan_->get_row_param_map().count() <= 0) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("row param map is empty");
-    } else {
-      param_idxs = &(phy_plan_->get_row_param_map().at(0));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < param_idxs->count(); ++i) {
-      ++real_param_cnt;
-      OB_UNIS_ENCODE(param_idxs->at(i));
-      OB_UNIS_ENCODE(param_store_.at(param_idxs->at(i)));
-    }
-    for (int64_t k = 0; OB_SUCC(ret) && k < row_id_list_array->count(); ++k) {
-      auto row_id_list = row_id_list_array->at(k);
-      CK(OB_NOT_NULL(row_id_list));
-      for (int64_t i = 0; OB_SUCC(ret) && i < row_id_list->count(); ++i) {
-        // row_param_map starts from 1, because index=0 is used to store the common param
-        int64_t row_idx = row_id_list->at(i) + 1;
-        if (OB_UNLIKELY(row_idx >= phy_plan_->get_row_param_map().count()) || OB_UNLIKELY(row_idx < 0)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("row index is invalid", K(phy_plan_->get_row_param_map().count()), K(row_idx));
-        } else {
-          param_idxs = &(phy_plan_->get_row_param_map().at(row_idx));
-        }
-        for (int64_t j = 0; OB_SUCC(ret) && j < param_idxs->count(); ++j) {
-          ++real_param_cnt;
-          OB_UNIS_ENCODE(param_idxs->at(j));
-          OB_UNIS_ENCODE(param_store_.at(param_idxs->at(j)));
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(serialization::encode_i32(buf, buf_len, seri_param_cnt_pos, real_param_cnt))) {
-      }
-    }
-  } else {
-    /**
-     * long long ago, param_store_.count() may be serialized or not, depend on if it is 0,
-     * if > 0, param_store_.count() will be serialized,
-     * if = 0, not.
-     * but param_cnt will be always deserialized in deserialize operation, so it will
-     * cause problem if we add other member in serialize and deserialize operation after
-     * param_store_.count(), like foreign_key_checks_. the serialized data of new member
-     * will be deserialized as param_cnt.
-     * why everything goes right before, especially when param_store_.count() is 0 ?
-     * the last member will consume all serialized data before param_cnt, so we get
-     * 0 when try to deserialize param_cnt, and then finish.
-     */
-    int64_t param_cnt = 0;
-    OB_UNIS_ENCODE(param_cnt);
-  }
   OB_UNIS_ENCODE(foreign_key_checks_);
   OB_UNIS_ENCODE(runtime_schema_version_);
   OB_UNIS_ENCODE(cursor_count);
@@ -594,74 +508,17 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
 OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
 {
   int64_t len = 0;
-  ParamStore empty_param_store;
-  const ParamStore *param_store = NULL;
-  const ObRowIdListArray *row_id_list_array = NULL;
-  int64_t cursor_count = implicit_cursor_infos_.count();
-  // used for function sys_view_bigint_param(idx), @note unused anymore
-  ObSEArray<common::ObObj, 1> sys_view_bigint_params_;
-  char message_[1] = {'\0'}; //error msg buffer, unused anymore
-  if (exec_ctx_ != NULL) {
-    row_id_list_array = &exec_ctx_->get_row_id_list_array();
-  }
-  if ((row_id_list_array != NULL && !row_id_list_array->empty() && phy_plan_ != NULL) ||
-       is_multi_dml_) {
-    param_store = &empty_param_store;
-  } else {
-    param_store = &param_store_;
-  }
-  // Follow the old sequence method
-  OB_UNIS_ADD_LEN(tsc_snapshot_timestamp_);
+  const int64_t cursor_count = implicit_cursor_infos_.count();
   OB_UNIS_ADD_LEN(cur_time_);
   OB_UNIS_ADD_LEN(ts_timeout_us_);
   OB_UNIS_ADD_LEN(consistency_level_);
-  OB_UNIS_ADD_LEN(*param_store);
-  OB_UNIS_ADD_LEN(sys_view_bigint_params_);
+  OB_UNIS_ADD_LEN(param_store_);
   OB_UNIS_ADD_LEN(sql_mode_);
   OB_UNIS_ADD_LEN(autoinc_params_);
   OB_UNIS_ADD_LEN(tablet_autoinc_param_);
   OB_UNIS_ADD_LEN(last_insert_id_session_);
-  OB_UNIS_ADD_LEN(message_);
   OB_UNIS_ADD_LEN(expr_op_size_);
   OB_UNIS_ADD_LEN(is_ignore_stmt_);
-  if (row_id_list_array != NULL && !row_id_list_array->empty() &&
-      phy_plan_ != NULL && !(param_store_.empty())) {
-    // Serialize param store as needed
-    // Need to serialize param store count
-    // Serialize param index
-    // Serialize param value
-    OB_UNIS_ADD_LEN(param_store_.count());
-    // Serialization is needed to know how many parameter values are serialized, so skip the count position first
-    int32_t real_param_cnt = 0;
-    len += serialization::encoded_length_i32(real_param_cnt);
-    if (phy_plan_->get_row_param_map().count() > 0) {
-      const ObIArray<int64_t> &param_idxs = phy_plan_->get_row_param_map().at(0);
-      for (int64_t i = 0; i < param_idxs.count(); ++i) {
-        OB_UNIS_ADD_LEN(param_idxs.at(i));
-        OB_UNIS_ADD_LEN(param_store_.at(param_idxs.at(i)));
-      }
-    }
-    for (int64_t k = 0; k < row_id_list_array->count(); ++k) {
-      auto row_id_list = row_id_list_array->at(k);
-      if (OB_NOT_NULL(row_id_list)) {
-        for (int64_t i = 0; i < row_id_list->count(); ++i) {
-          // row_param_map starts from 1, because index=0 is used to store the common param
-          int64_t row_idx = row_id_list->at(i) + 1;
-          if (row_idx < phy_plan_->get_row_param_map().count() && row_idx >= 0) {
-            const ObIArray<int64_t> &param_idxs = phy_plan_->get_row_param_map().at(row_idx);
-            for (int64_t j = 0; j < param_idxs.count(); ++j) {
-              OB_UNIS_ADD_LEN(param_idxs.at(j));
-              OB_UNIS_ADD_LEN(param_store_.at(param_idxs.at(j)));
-            }
-          }
-        }
-      }
-    }
-  } else {
-    // see comment in OB_DEF_SERIALIZE(ObPhysicalPlanCtx).
-    int64_t param_cnt = 0;
-    OB_UNIS_ADD_LEN(param_cnt);
-  }
   OB_UNIS_ADD_LEN(foreign_key_checks_);
   OB_UNIS_ADD_LEN(runtime_schema_version_);
   OB_UNIS_ADD_LEN(cursor_count);
@@ -688,60 +545,26 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
 OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
 {
   int ret = OB_SUCCESS;
-  int64_t param_cnt = 0;
-  int32_t real_param_cnt = 0;
-  int64_t param_idx = OB_INVALID_INDEX;
-  ObObjParam param_obj;
   int64_t cursor_count = 0;
   int64_t local_var_array_cnt = 0;
-  // used for function sys_view_bigint_param(idx), @note unused anymore
-  ObSEArray<common::ObObj, 1> sys_view_bigint_params_;
-  char message_[1] = {'\0'}; //error msg buffer, unused anymore
-  // Follow the old sequence method
-  OB_UNIS_DECODE(tsc_snapshot_timestamp_);
   OB_UNIS_DECODE(cur_time_);
   OB_UNIS_DECODE(ts_timeout_us_);
   OB_UNIS_DECODE(consistency_level_);
   OB_UNIS_DECODE(param_store_);
-  OB_UNIS_DECODE(sys_view_bigint_params_);
   OB_UNIS_DECODE(sql_mode_);
   OB_UNIS_DECODE(autoinc_params_);
   OB_UNIS_DECODE(tablet_autoinc_param_);
   OB_UNIS_DECODE(last_insert_id_session_);
-  OB_UNIS_DECODE(message_);
   OB_UNIS_DECODE(expr_op_size_);
   OB_UNIS_DECODE(is_ignore_stmt_);
-  OB_UNIS_DECODE(param_cnt);
-  if (OB_SUCC(ret) && param_cnt > 0) {
-    if (OB_FAIL(param_store_.prepare_allocate(param_cnt))) {
-    } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &real_param_cnt))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
+    const ObObjParam &param = param_store_.at(i);
+    ObObjParam copy = param;
+    if (OB_FAIL(deep_copy_obj(allocator_, param, copy))) {
+    } else {
+      param_store_.at(i) = copy;
+      param_store_.at(i).set_param_meta();
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < real_param_cnt; ++i) {
-      OB_UNIS_DECODE(param_idx);
-      OB_UNIS_DECODE(param_obj);
-      ObObjParam tmp = param_obj;
-      if (OB_UNLIKELY(param_idx < 0) || OB_UNLIKELY(param_idx >= param_cnt)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid param idx", K(param_idx), K(param_cnt));
-      } else if (OB_FAIL(deep_copy_obj(allocator_, param_obj, tmp))) {
-      } else {
-        param_store_.at(param_idx) = tmp;
-        param_store_.at(param_idx).set_param_meta();
-      }
-    }
-  }
-  if (OB_SUCC(ret) && param_cnt <= 0) {
-    //param count <= 0 not related to on-demand serialization partition param store, directly serialize all param
-    // So need to perform a deep copy on all elements of param store
-  	for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
-  	  const ObObjParam &objpara = param_store_.at(i);
-      ObObjParam tmp = objpara;
-      if (OB_FAIL(deep_copy_obj(allocator_, objpara, tmp))) {
-      } else {
-        param_store_.at(i) = tmp;
-        param_store_.at(i).set_param_meta();
-      }
-  	}
   }
   OB_UNIS_DECODE(foreign_key_checks_);
   OB_UNIS_DECODE(runtime_schema_version_);

@@ -44,7 +44,6 @@ public:
 
 struct ObTopNFilterCompare final
 {
-  OB_UNIS_VERSION_V(1);
 public:
   inline int compare_for_build(
       const ObDatum &l,
@@ -117,7 +116,6 @@ public:
 
 class ObPushDownTopNFilterMsg final : public ObP2PDatahubMsgBase
 {
-  OB_UNIS_VERSION_V(1);
 
 public:
   ObPushDownTopNFilterMsg();

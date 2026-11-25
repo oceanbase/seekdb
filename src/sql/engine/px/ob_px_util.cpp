@@ -945,27 +945,23 @@ int ObPxTreeSerializer::serialize_tree(char *buf,
                                        int64_t buf_len,
                                        int64_t &pos,
                                        const ObOpSpec &root,
-                                       bool is_fulltree,
-                                       ObPhyOpSeriCtx *seri_ctx)
+                                       bool is_fulltree)
 {
   int ret = OB_SUCCESS;
   is_fulltree = is_fulltree || IS_PX_COORD(root.type_);
   int32_t child_cnt = (!is_fulltree && IS_RECEIVE(root.type_)) ? 0 : root.get_child_cnt();
   if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, root.type_))) {
   } else if (OB_FAIL(serialization::encode(buf, buf_len, pos, child_cnt))) {
-  } else if (OB_FAIL((seri_ctx == NULL ? root.serialize(buf, buf_len, pos) :
-      root.serialize(buf, buf_len, pos, *seri_ctx)))) {
+  } else if (OB_FAIL(root.serialize(buf, buf_len, pos))) {
     ObCStringHelper helper;
     LOG_WARN("fail to serialize root", K(ret), "type", root.type_, "root", helper.convert(root));
-  } else if ((PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == root.type_)
-             && OB_FAIL(serialize_sub_plan(buf, buf_len, pos, root))) {
   }
   // Terminate serialization when meet ObReceive, as this op indicates
   for (int32_t i = 0; OB_SUCC(ret) && i < child_cnt; ++i) {
     const ObOpSpec *child_op = root.get_child(i);
     if (OB_ISNULL(child_op)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(serialize_tree(buf, buf_len, pos, *child_op, is_fulltree, seri_ctx))) {
+    } else if (OB_FAIL(serialize_tree(buf, buf_len, pos, *child_op, is_fulltree))) {
     }
   }
   return ret;
@@ -994,8 +990,6 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
         static_cast<ObPhyOperatorType>(phy_operator_type), child_cnt, op, 0))) {
     } else {
       if (OB_FAIL(op->deserialize(buf, data_len, pos))) {
-      } else if ((PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == op->type_)
-                 && OB_FAIL(deserialize_sub_plan(buf, data_len, pos, phy_plan, op))) {
       } else {
         LOG_DEBUG("deserialize phy operator",
                   K(op->type_), "serialize_size",
@@ -1032,36 +1026,6 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
   }
   return ret;
 }
-// Used for full-text index back-table lookup and global index back-table lookup, scenario is op contains sub-plans.
-// Serialization/deserialization should be done together during serialization/deserialization
-int ObPxTreeSerializer::deserialize_sub_plan(const char *buf,
-                                             int64_t data_len,
-                                             int64_t &pos,
-                                             ObPhysicalPlan &phy_plan,
-                                             ObOpSpec *&op)
-{
-  UNUSED(buf);
-  UNUSED(data_len);
-  UNUSED(pos);
-  UNUSED(op);
-  UNUSED(phy_plan);
-  int ret = OB_SUCCESS;
-  if (PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == op->get_type()) {
-    // FIXME: TODO: Improve TableScanWithIndexBack op
-    // ObOpSpec *index_scan_tree = nullptr;
-    // ObTableScanWithIndexBack *table_scan = static_cast<ObTableScanWithIndexBack*>(op);
-    // if (OB_FAIL(deserialize_op(buf, data_len, pos, phy_plan, index_scan_tree))) {
-    //   LOG_WARN("deserialize tree failed", K(ret), K(data_len), K(pos));
-    // } else {
-    //   table_scan->set_index_scan_tree(index_scan_tree);
-    // }
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "deserialize TableScanWithIdexBack");
-  }
-  return ret;
-}
-
-
 
 int ObPxTreeSerializer::deserialize_tree(const char *buf,
                                          int64_t data_len,
@@ -1074,10 +1038,8 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
   ret = deserialize_tree(buf, data_len, pos, phy_plan, root, tsc_ops);
   return ret;
 }
-// Used for full-text index back-table lookup and global index back-table lookup, scenario is op contains sub-plans.
-// Serialization/deserialization should be done together during serialization/deserialization
-int64_t ObPxTreeSerializer::get_tree_serialize_size(const ObOpSpec &root, bool is_fulltree,
-    ObPhyOpSeriCtx *seri_ctx)
+
+int64_t ObPxTreeSerializer::get_tree_serialize_size(const ObOpSpec &root, bool is_fulltree)
 {
   int ret = OB_SUCCESS;
   int64_t len = 0;
@@ -1085,9 +1047,7 @@ int64_t ObPxTreeSerializer::get_tree_serialize_size(const ObOpSpec &root, bool i
   int32_t child_cnt = (!is_fulltree && IS_RECEIVE(root.type_)) ? 0 : root.get_child_cnt();
   len += serialization::encoded_length_vi32(root.get_type());
   len += serialization::encoded_length(child_cnt);
-  len += (NULL == seri_ctx ? root.get_serialize_size() :
-         root.get_serialize_size(*seri_ctx));
-  len += get_sub_plan_serialize_size(root);
+  len += root.get_serialize_size();
 
   // Terminate serialization when meet ObReceive, as this op indicates
   for (int32_t i = 0; OB_SUCC(ret) && i < child_cnt; ++i) {
@@ -1098,39 +1058,12 @@ int64_t ObPxTreeSerializer::get_tree_serialize_size(const ObOpSpec &root, bool i
       // So it is safe
       LOG_ERROR("null child op", K(i), K(root.get_child_cnt()), K(root.get_type()));
     } else {
-      len += get_tree_serialize_size(*child_op, is_fulltree, seri_ctx);
+      len += get_tree_serialize_size(*child_op, is_fulltree);
     }
   }
   return len;
 }
-// Used for full-text index back-table lookup and global index back-table lookup, scenario is op contains sub-plans.
-// Serialization/deserialization should be done together during serialization/deserialization
-int ObPxTreeSerializer::serialize_sub_plan(char *buf,
-                                           int64_t buf_len,
-                                           int64_t &pos,
-                                           const ObOpSpec &root)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(buf);
-  UNUSED(buf_len);
-  UNUSED(pos);
-  if (PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == root.get_type()) {
-    // FIXME: TODO:
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "deserialize TableScanWithIdexBack");
 
-  }
-  return ret;
-}
-
-int64_t ObPxTreeSerializer::get_sub_plan_serialize_size(const ObOpSpec &root)
-{
-  int64_t len = 0;
-  // some op contain inner mini plan
-  if (PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == root.get_type()) {
-  }
-  return len;
-}
 // Here we explain that each ObOpSpen serialization of the task is the same, so recursion is not used here
 // but adopts a flattened approach, which is essentially fine, if there is special logic that needs to be changed here, such as setting certain variables etc
 int ObPxTreeSerializer::deserialize_op_input(
@@ -1182,22 +1115,6 @@ int64_t ObPxTreeSerializer::get_serialize_op_input_size(
 }
 
 
-int64_t ObPxTreeSerializer::get_serialize_op_input_subplan_size(
-  const ObOpSpec &op_spec,
-  ObOpKitStore &op_kit_store,
-  bool is_fulltree)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(is_fulltree);
-  UNUSED(op_spec);
-  UNUSED(op_kit_store);
-  int64_t len = 0;
-  if (OB_SUCC(ret) && PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == op_spec.type_) {
-    // do nothing
-  }
-  return len;
-}
-
 int64_t ObPxTreeSerializer::get_serialize_op_input_tree_size(
   const ObOpSpec &op_spec,
   ObOpKitStore &op_kit_store,
@@ -1216,10 +1133,6 @@ int64_t ObPxTreeSerializer::get_serialize_op_input_tree_size(
     OB_UNIS_ADD_LEN(static_cast<int64_t>(op_spec_input->get_type())); //serialize operator type
     OB_UNIS_ADD_LEN(*op_spec_input); //serialize input parameter
   }
-  if (PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == op_spec.type_) {
-    len += get_serialize_op_input_subplan_size(op_spec, op_kit_store, true/*is_fulltree*/);
-    // do nothing
-  }
   is_fulltree = is_fulltree || IS_PX_COORD(op_spec.type_);
   // Terminate serialization when meet ObReceive, as this op indicates
   bool serialize_child = is_fulltree || (!IS_RECEIVE(op_spec.type_));
@@ -1235,29 +1148,6 @@ int64_t ObPxTreeSerializer::get_serialize_op_input_tree_size(
     }
   }
   return len;
-}
-
-int ObPxTreeSerializer::serialize_op_input_subplan(
-  char *buf,
-  int64_t buf_len,
-  int64_t &pos,
-  const ObOpSpec &op_spec,
-  ObOpKitStore &op_kit_store,
-  bool is_fulltree,
-  int32_t &real_input_count)
-{
-  UNUSED(buf);
-  UNUSED(buf_len);
-  UNUSED(pos);
-  UNUSED(op_spec);
-  UNUSED(op_kit_store);
-  UNUSED(is_fulltree);
-  UNUSED(real_input_count);
-  int ret = OB_SUCCESS;
-  if (OB_SUCC(ret) && PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == op_spec.type_) {
-    // do nothing
-  }
-  return ret;
 }
 
 int ObPxTreeSerializer::serialize_op_input_tree(
@@ -1282,10 +1172,6 @@ int ObPxTreeSerializer::serialize_op_input_tree(
     if (OB_SUCC(ret)) {
       ++real_input_count;
     }
-  }
-  if (OB_SUCC(ret) && (PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == op_spec.type_)
-             && OB_FAIL(serialize_op_input_subplan(
-               buf, buf_len, pos, op_spec, op_kit_store, true/*is_fulltree*/, real_input_count))) {
   }
   // Terminate serialization when meet ObReceive, as this op indicates
   is_fulltree = is_fulltree || IS_PX_COORD(op_spec.type_);

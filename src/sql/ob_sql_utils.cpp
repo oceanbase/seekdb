@@ -2513,15 +2513,6 @@ int ObSQLUtils::update_session_last_schema_version(ObMultiVersionSchemaService &
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObImplicitCursorInfo,
-                    stmt_id_,
-                    affected_rows_,
-                    found_rows_,
-                    matched_rows_,
-                    duplicated_rows_,
-                    deleted_rows_,
-                    last_insert_id_);
-
 int ObImplicitCursorInfo::merge_cursor(const ObImplicitCursorInfo &other)
 {
   int ret = OB_SUCCESS;

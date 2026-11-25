@@ -24,22 +24,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-namespace serialization
-{
-template <>
-struct EnumEncoder<false, const sql::ObDASScanCtDef *> : sql::DASCtRefEncoder<sql::ObDASScanCtDef>
-{
-};
-
-template <>
-struct EnumEncoder<false, sql::ObDASScanRtDef *> : sql::DASRtRefEncoder<sql::ObDASScanRtDef>
-{
-};
-} // end namespace serialization
-} // end namespace common
-
 using namespace storage;
 using namespace transaction;
 namespace sql
@@ -71,78 +55,6 @@ OB_SERIALIZE_MEMBER(ObDASScanCtDef,
                     domain_tids_,
                     pre_range_graph_,
                     semantic_index_info_);
-
-OB_DEF_SERIALIZE(ObDASScanRtDef)
-{
-  int ret = OB_SUCCESS;
-    LST_DO_CODE(OB_UNIS_ENCODE,
-    runtime_schema_version_,
-    limit_param_,
-    need_scn_,
-    frozen_version_,
-    fb_snapshot_,
-    timeout_ts_,
-    tx_lock_timeout_,
-    sql_mode_,
-    scan_flag_,
-    pd_storage_flag_,
-    need_check_output_datum_,
-    is_for_foreign_check_,
-    key_ranges_,
-    scan_op_id_,
-    scan_rows_size_,
-    row_scan_cnt_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObDASScanRtDef)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE,
-    runtime_schema_version_,
-    limit_param_,
-    need_scn_,
-    frozen_version_,
-    fb_snapshot_,
-    timeout_ts_,
-    tx_lock_timeout_,
-    sql_mode_,
-    scan_flag_,
-    pd_storage_flag_,
-    need_check_output_datum_,
-    is_for_foreign_check_,
-    key_ranges_,
-    scan_op_id_,
-    scan_rows_size_,
-    row_scan_cnt_);
-  if (OB_SUCC(ret)) {
-    (void)ObSQLUtils::adjust_time_by_ntp_offset(timeout_ts_);
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObDASScanRtDef)
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN,
-    runtime_schema_version_,
-    limit_param_,
-    need_scn_,
-    frozen_version_,
-    fb_snapshot_,
-    timeout_ts_,
-    tx_lock_timeout_,
-    sql_mode_,
-    scan_flag_,
-    pd_storage_flag_,
-    need_check_output_datum_,
-    is_for_foreign_check_,
-    key_ranges_,
-    scan_op_id_,
-    scan_rows_size_,
-    row_scan_cnt_);
-  return len;
-}
 
 ObDASScanRtDef::~ObDASScanRtDef()
 {
@@ -1068,11 +980,6 @@ int ObDASScanOp::get_index_merge_tablet_ids(common::ObIArray<common::ObTabletID>
   }
   return ret;
 }
-
-OB_SERIALIZE_MEMBER((ObDASScanOp, ObIDASTaskOp),
-                    scan_param_.key_ranges_,
-                    scan_ctdef_,
-                    scan_rtdef_);
 
 ObLocalIndexLookupOp::~ObLocalIndexLookupOp()
 {

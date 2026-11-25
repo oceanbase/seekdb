@@ -472,53 +472,6 @@ int ObPxMsgProc::on_sqc_init_fail(ObDfo &dfo, ObPxSqcMeta &sqc)
   return ret;
 }
 
-int ObPxTerminateMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg &pkt)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(ctx);
-  ObDfo *edge = NULL;
-  ObPxSqcMeta *sqc = NULL;
-  /**
-   * Mark sqc, dfo as already started.
-   */
-  if (pkt.task_count_ <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(coord_info_.dfo_mgr_.find_dfo_edge(pkt.dfo_id_, edge))) {
-  } else if (OB_ISNULL(edge)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(edge->get_sqc(pkt.sqc_id_, sqc))) {
-  } else if (OB_ISNULL(sqc)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    sqc->set_task_count(pkt.task_count_);
-    // Mark sqc has been fully started
-    sqc->set_thread_inited(true);
-
-    if (pkt.rc_ != OB_SUCCESS) {
-    }
-    ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
-        pkt.rc_, pkt.err_msg_);
-  }
-
-  if (OB_SUCC(ret)) {
-    const ObIArray<ObPxSqcMeta> &sqcs = edge->get_sqcs();
-    bool sqc_threads_inited = true;
-    ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
-      const ObPxSqcMeta &sqc = sqcs.at(idx);
-      if (!sqc.is_thread_inited()) {
-        sqc_threads_inited = false;
-        break;
-      }
-    }
-    if (OB_SUCC(ret) && sqc_threads_inited) {
-      // Mark dfo as fully started
-      edge->set_thread_inited(true);
-    }
-  }
-
-  return ret;
-}
-
 int ObPxTerminateMsgProc::on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinishSqcResultMsg &pkt)
 {
   int ret = OB_SUCCESS;

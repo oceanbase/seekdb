@@ -40,7 +40,6 @@ class ObOptimizerStatsGatheringSpec : public ObOpSpec
 public:
 
   ObOptimizerStatsGatheringSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type);
-  int register_to_datahub(ObExecContext &ctx) const;
   inline void set_osg_type(OSG_TYPE type) {type_ = type; };
   inline void set_target_osg_id(uint64_t target_id) { target_osg_id_ = target_id; };
   inline bool is_part_table() const {

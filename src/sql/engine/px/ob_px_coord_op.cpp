@@ -46,13 +46,6 @@ OB_DEF_SERIALIZE(ObPxCoordSpec)
               qc_id_,
               batch_op_info_,
               table_access_plans_);
-  ExprFixedArray sort_exprs;
-  ObSortCollations sort_collations;
-  ObSortFuncs sort_cmp_funs;
-  LST_DO_CODE(OB_UNIS_ENCODE,
-              sort_exprs,
-              sort_collations,
-              sort_cmp_funs);
   return ret;
 }
 
@@ -73,12 +66,6 @@ OB_DEF_DESERIALIZE(ObPxCoordSpec)
       }
     }
   }
-  ExprFixedArray sort_exprs;
-  ObSortCollations sort_collations;
-  ObSortFuncs sort_cmp_funs;
-  OB_UNIS_DECODE(sort_exprs);
-  OB_UNIS_DECODE(sort_collations);
-  OB_UNIS_DECODE(sort_cmp_funs);
   return ret;
 }
 
@@ -91,13 +78,6 @@ OB_DEF_SERIALIZE_SIZE(ObPxCoordSpec)
               qc_id_,
               batch_op_info_,
               table_access_plans_);
-  ExprFixedArray sort_exprs;
-  ObSortCollations sort_collations;
-  ObSortFuncs sort_cmp_funs;
-  LST_DO_CODE(OB_UNIS_ADD_LEN,
-              sort_exprs,
-              sort_collations,
-              sort_cmp_funs);
   return len;
 }
 
@@ -558,7 +538,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
     ObIPxCoordEventListener &listener = get_listenner();
     ObPxTerminateMsgProc terminate_msg_proc(coord_info_, listener);
     ObPxFinishSqcResultP sqc_finish_msg_proc(ctx_, terminate_msg_proc);
-    ObPxInitSqcResultP sqc_init_msg_proc(ctx_, terminate_msg_proc);
     ObPxQcInterruptedP interrupt_proc(ctx_, terminate_msg_proc);
     dtl::ObDtlPacketEmptyProc<ObBarrierPieceMsg>  barrier_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObWinbufPieceMsg> winbuf_piece_msg_proc;
@@ -572,7 +551,6 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
     (void)msg_loop_.clear_all_proc();
     (void)msg_loop_
       .register_processor(sqc_finish_msg_proc)
-      .register_processor(sqc_init_msg_proc)
       .register_processor(px_row_msg_proc_)
       .register_interrupt_processor(interrupt_proc)
       .register_processor(barrier_piece_msg_proc)
@@ -624,8 +602,7 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
          * Do not process any messages, just discard them.
          */
         switch (msg_type) {
-          case ObDtlMsgType::PX_NEW_ROW:
-          case ObDtlMsgType::INIT_SQC_RESULT:
+          case ObDtlMsgType::PX_DATUM_ROW:
           case ObDtlMsgType::FINISH_SQC_RESULT:
           case ObDtlMsgType::DH_BARRIER_PIECE_MSG:
           case ObDtlMsgType::DH_WINBUF_PIECE_MSG:

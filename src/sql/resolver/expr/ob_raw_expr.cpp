@@ -5469,8 +5469,6 @@ int ObWinFunRawExpr::get_order_exprs(ObIArray<ObRawExpr *> &order_exprs) const
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(Bound, type_, is_preceding_, is_nmb_literal_);
-
 int ObPseudoColumnRawExpr::assign(const ObRawExpr &other)
 {
   int ret = OB_SUCCESS;

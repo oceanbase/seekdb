@@ -29,7 +29,6 @@ namespace obcall
 
 struct ObAdminSetConfigItem
 {
-  OB_UNIS_VERSION(2);
 public:
   ObAdminSetConfigItem() : name_(), value_(), comment_(), is_reset_(false) {}
   TO_STRING_KV(K_(name), K_(value), K_(comment), K_(is_reset));

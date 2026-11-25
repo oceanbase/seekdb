@@ -129,8 +129,7 @@ ObPxTransmitOp::ObPxTransmitOp(ObExecContext &exec_ctx, const ObOpSpec &spec, Ob
   sample_stores_(),
   cur_transmit_sampled_rows_(NULL),
   batch_param_remain_(false),
-  receive_channel_ready_(false),
-  data_msg_type_(dtl::ObDtlMsgType::PX_DATUM_ROW)
+  receive_channel_ready_(false)
 {
   MEMSET(rand48_buf_, 0, sizeof(rand48_buf_));
 }
@@ -484,7 +483,7 @@ int ObPxTransmitOp::send_eof_row()
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObTransmitEofAsynSender eof_asyn_sender(task_channels_,
-        phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, data_msg_type_);
+        phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_);
     if (OB_FAIL(eof_asyn_sender.asyn_send())) {
     } else {
       op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
@@ -561,7 +560,7 @@ int ObPxTransmitOp::send_row_normal(int64_t slice_idx,
     if (NULL != spec.tablet_id_expr_) {
       update_row(spec.tablet_id_expr_, tablet_id);
     }
-    ObPxNewRow px_row(get_spec().output_, data_msg_type_);
+    ObPxNewRow px_row(get_spec().output_);
     if (OB_FAIL(ch->send(px_row, phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_))) {
       if (OB_ITER_END != ret) {
       }
@@ -578,8 +577,6 @@ int ObPxTransmitOp::broadcast_eof_row()
           "ch_cnt", task_channels_.count(),
           K(ret));
   ObPxNewRow px_eof_row;
-  px_eof_row.set_eof_row();
-  px_eof_row.set_data_type(data_msg_type_);
   if (OB_FAIL(chs_agent_.broadcast_row(px_eof_row, &eval_ctx_, true))) {
   } else if (OB_FAIL(chs_agent_.flush())) {
   } else {

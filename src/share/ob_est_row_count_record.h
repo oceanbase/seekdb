@@ -32,7 +32,6 @@ struct ObEstRowCountRecord
   int64_t logical_row_count_;
   int64_t physical_row_count_;
   TO_STRING_KV(K_(table_id), K_(table_type), K_(version_range), K_(logical_row_count), K_(physical_row_count));
-  OB_UNIS_VERSION(1);
 };
 
 } // namespace common

@@ -38,7 +38,6 @@ public:
 
   virtual int assign(const ObExprOperator &other);
 
-  virtual int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
 
   virtual int calc_result_typeN(ObExprResType &type,
                                 ObExprResType *types_stack,

@@ -3420,13 +3420,11 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
               process_query_time_,
               show_trace_row_format_);
   }();
-  uint32_t unused_uint32_field = INVALID_SESSID;
   OB_UNIS_ENCODE(ObString(sql_id_));
   OB_UNIS_ENCODE(sys_var_config_hash_val_);
   OB_UNIS_ENCODE(enable_mysql_compatible_dates_);
   OB_UNIS_ENCODE(is_diagnosis_enabled_);
   OB_UNIS_ENCODE(diagnosis_limit_num_);
-  OB_UNIS_ENCODE(unused_uint32_field);
   return ret;
 }
 
@@ -3595,7 +3593,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   tz_info_wrap_.set_tz_info_map(tz_info_map);
   release_to_pool_ = OB_SUCC(ret);
   }();
-  uint32_t unused_uint32_field = INVALID_SESSID;
   ObString sql_id;
   OB_UNIS_DECODE(sql_id);
   if (OB_SUCC(ret)) {
@@ -3605,29 +3602,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   OB_UNIS_DECODE(enable_mysql_compatible_dates_);
   OB_UNIS_DECODE(is_diagnosis_enabled_);
   OB_UNIS_DECODE(diagnosis_limit_num_);
-  OB_UNIS_DECODE(unused_uint32_field);
   return ret;
-}
-
-OB_DEF_SERIALIZE(ObBasicSessionInfo::SysVarIncInfo)
-{
-  int ret = OB_SUCCESS;
-  OB_UNIS_ENCODE(all_sys_var_ids_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObBasicSessionInfo::SysVarIncInfo)
-{
-  int ret = OB_SUCCESS;
-  OB_UNIS_DECODE(all_sys_var_ids_);
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo::SysVarIncInfo)
-{
-  int64_t len = 0;
-  OB_UNIS_ADD_LEN(all_sys_var_ids_);
-  return len;
 }
 
 ObBasicSessionInfo::SysVarIncInfo::SysVarIncInfo()
@@ -3808,7 +3783,6 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
     bool tx_read_only = get_tx_read_only();
     len += serialization::encoded_length_bool(tx_read_only);
   }
-  uint32_t unused_uint32_field = INVALID_SESSID;
   uint64_t sql_scope_flags = sql_scope_flags_.get_flags();
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               sys_vars_cache_.inc_data_,
@@ -3837,7 +3811,6 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
   OB_UNIS_ADD_LEN(enable_mysql_compatible_dates_);
   OB_UNIS_ADD_LEN(is_diagnosis_enabled_);
   OB_UNIS_ADD_LEN(diagnosis_limit_num_);
-  OB_UNIS_ADD_LEN(unused_uint32_field);
   return len;
 }
 

@@ -38,10 +38,9 @@ struct ObEvalCtx;
 namespace common
 {
 class ObIAllocator;
-// Serialized SQL query result.
+// Row container for virtual-table scans.
 class ObScanner
 {
-  OB_UNIS_VERSION(1);
 public:
   static const int64_t DEFAULT_MAX_SERIALIZE_SIZE
     = (OB_MAX_PACKET_LENGTH - OB_MAX_ROW_KEY_LENGTH * 2 - 1024);
@@ -149,7 +148,6 @@ public:
   const common::ObIArray<sql::ObImplicitCursorInfo> &get_implicit_cursors() const
   { return implicit_cursors_; }
   sql::ObExecFeedbackInfo &get_feedback_info() { return fb_info_; }
-  //NEED_SERIALIZE_AND_DESERIALIZE;
   //TODO(yaoying.yyy): set "is_result_accurate" as macro after library is merged
   TO_STRING_KV(N_ROWSTORE, row_store_,
                N_MEM_LIMIT, mem_size_limit_,

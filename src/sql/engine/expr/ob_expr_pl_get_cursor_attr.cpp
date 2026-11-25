@@ -67,8 +67,6 @@ int ObExprPLGetCursorAttr::ExtraInfo::deep_copy(common::ObIAllocator &allocator,
   return ret;
 }
 
-OB_SERIALIZE_MEMBER((ObExprPLGetCursorAttr, ObFuncExprOperator));
-
 ObExprPLGetCursorAttr::ObExprPLGetCursorAttr(ObIAllocator &alloc)
   : ObFuncExprOperator(
       alloc, T_FUN_PL_GET_CURSOR_ATTR, N_PL_GET_CURSOR_ATTR, ZERO_OR_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),

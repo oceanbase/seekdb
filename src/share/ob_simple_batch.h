@@ -73,10 +73,6 @@ struct ObSimpleBatch
     }
     return pos;
   }
-
-  int deserialize(common::ObIAllocator &allocator, const char *buf, const int64_t data_len, int64_t &pos);
-  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
-  int64_t get_serialize_size(void) const;
 };
 
 } // end of namespace common

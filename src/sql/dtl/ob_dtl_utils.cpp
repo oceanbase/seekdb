@@ -117,8 +117,6 @@ int ObTransmitEofAsynSender::action(ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
   ObPxNewRow px_eof_row;
-  px_eof_row.set_eof_row();
-  px_eof_row.set_data_type(type_);
   if (OB_FAIL(ch->send(px_eof_row, timeout_ts_, eval_ctx_, true))) {
   } else if (OB_FAIL(ch->flush(true, false))) {
   }

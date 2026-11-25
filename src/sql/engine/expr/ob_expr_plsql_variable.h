@@ -46,7 +46,6 @@ public:
 };
 class ObExprPLSQLVariable : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprPLSQLVariable(common::ObIAllocator &alloc);
   virtual ~ObExprPLSQLVariable() {}

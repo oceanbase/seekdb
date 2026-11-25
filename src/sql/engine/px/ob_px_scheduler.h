@@ -166,7 +166,6 @@ public:
     ObIPxCoordEventListener &listener)
   : coord_info_(coord_info), listener_(listener) {}
   // msg processor callback
-  int on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg &pkt);
   int on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinishSqcResultMsg &pkt);
   int on_eof_row(ObExecContext &ctx);
   int on_sqc_init_fail(ObDfo &dfo, ObPxSqcMeta &sqc);

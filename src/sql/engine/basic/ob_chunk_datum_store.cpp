@@ -19,8 +19,8 @@
 #include "rust/config.h"
 #include "query/engine/basic/ob_spill_row_store.h"
 #include "ob_chunk_datum_store.h"
+#include "sql/engine/basic/ob_chunk_row_store.h"
 #include "sql/engine/ob_exec_context.h"
-// for ObChunkStoreUtil
 
 namespace oceanbase
 {

@@ -27,8 +27,6 @@ using namespace pl;
 
 namespace sql
 {
-OB_SERIALIZE_MEMBER((ObExprPLSQLCodeSQLErrm, ObFuncExprOperator));
-
 ObExprPLSQLCodeSQLErrm::ObExprPLSQLCodeSQLErrm(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_PL_SQLCODE_SQLERRM, N_PL_GET_SQLCODE_SQLERRM, ZERO_OR_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false)
       , is_sqlcode_(true)

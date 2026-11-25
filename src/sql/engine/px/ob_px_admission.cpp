@@ -142,12 +142,6 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
       }
     }
   }
-  if (stmt::T_EXPLAIN != stmt_type && plan.get_das_dop() > 0) {
-    int64_t parallel_servers_target = OB_PX_TARGET_MONITOR.get_parallel_servers_target();
-    int64_t real_das_dop = std::min(parallel_servers_target, plan.get_das_dop());
-    exec_ctx.get_das_ctx().set_real_das_dop(real_das_dop);
-    LOG_TRACE("real das dop", K(real_das_dop), K(plan.get_das_dop()), K(parallel_servers_target));
-  }
   return ret;
 }
 

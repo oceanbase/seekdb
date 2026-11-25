@@ -26,7 +26,6 @@ namespace sql
 {
 class ObExprPLAssocIndex : public ObExprOperator
 {
-  OB_UNIS_VERSION(1);
 
 public:
   explicit ObExprPLAssocIndex(common::ObIAllocator &alloc);

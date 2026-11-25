@@ -636,43 +636,6 @@ int ObExprLike::is_escape(const ObCollationType cs_type,
   return ret;
 }
 
-OB_DEF_SERIALIZE(ObExprLike)
-{
-  int ret = OB_SUCCESS;
-  BASE_SER((ObExprLike, ObFuncExprOperator));
-  OB_UNIS_ENCODE(is_pattern_literal_);
-  OB_UNIS_ENCODE(is_text_literal_);
-  OB_UNIS_ENCODE(is_escape_literal_);
-  OB_UNIS_ENCODE(like_id_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObExprLike)
-{
-  int ret = OB_SUCCESS;
-  BASE_DESER((ObExprLike, ObFuncExprOperator));
-  is_pattern_literal_ = false;
-  is_text_literal_ = true;
-  is_escape_literal_ = false;
-  like_id_ = -1;
-  OB_UNIS_DECODE(is_pattern_literal_);
-  OB_UNIS_DECODE(is_text_literal_);
-  OB_UNIS_DECODE(is_escape_literal_);
-  OB_UNIS_DECODE(like_id_);
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObExprLike)
-{
-  int64_t len = 0;
-  BASE_ADD_LEN((ObExprLike, ObFuncExprOperator));
-  OB_UNIS_ADD_LEN(is_pattern_literal_);
-  OB_UNIS_ADD_LEN(is_text_literal_);
-  OB_UNIS_ADD_LEN(is_escape_literal_);
-  OB_UNIS_ADD_LEN(like_id_);
-  return len;
-}
-
 int ObExprLike::cg_expr(ObExprCGCtx &op_cg_ctx,
                         const ObRawExpr &raw_expr, ObExpr &rt_expr) const
 {

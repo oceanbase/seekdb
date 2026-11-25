@@ -435,7 +435,6 @@ public:
   ExprFixedArray view_check_exprs_;
   bool is_primary_index_;
   bool is_table_without_pk_;
-  bool reserved_advanced_trigger_;
   ObExpr *trans_info_expr_;
   bool is_vec_hnsw_index_vid_opt_;
 protected:
@@ -454,7 +453,6 @@ protected:
       view_check_exprs_(alloc),
       is_primary_index_(false),
       is_table_without_pk_(false),
-      reserved_advanced_trigger_(false),
       trans_info_expr_(nullptr),
       is_vec_hnsw_index_vid_opt_(false)
   { }
@@ -966,15 +964,13 @@ struct ObDMLRtCtx
       das_task_status_(),
       op_(op),
       exec_ctx_(exec_ctx),
-      das_task_memory_size_(0),
-      das_parallel_task_size_(0)
+      das_task_memory_size_(0)
   { }
 
   void reuse()
   {
     das_ref_.reuse();
     das_task_memory_size_ = 0;
-    das_parallel_task_size_ = 0;
   }
 
   void cleanup()
@@ -993,8 +989,6 @@ struct ObDMLRtCtx
   { return das_task_status_.need_non_sub_full_task(); }
   void add_das_task_memory_size(const int64_t row_size) { das_task_memory_size_ += row_size; }
   int64_t get_das_task_memory_size() const { return das_task_memory_size_; }
-  void add_das_parallel_task_size(const int64_t row_size) { das_parallel_task_size_ += row_size; }
-  int64_t get_das_parallel_task_size() const { return das_parallel_task_size_; }
 
   bool need_submit_all_tasks()
   {
@@ -1004,7 +998,7 @@ struct ObDMLRtCtx
     if (OB_UNLIKELY(simulate_buffer_size > 0)) {
       buffer_size_limit = simulate_buffer_size;
     }
-    if ((das_task_memory_size_ - das_parallel_task_size_) >= buffer_size_limit) {
+    if (das_task_memory_size_ >= buffer_size_limit) {
       bret = true;
     }
     return bret;
@@ -1015,7 +1009,6 @@ struct ObDMLRtCtx
   ObTableModifyOp &op_;
   ObExecContext &exec_ctx_;
   int64_t das_task_memory_size_;
-  int64_t das_parallel_task_size_;
 };
 
 template <typename T>

@@ -93,12 +93,10 @@ class ObWindowFunctionSpec;
 class WinFuncInfo;
 template <int TYPE>
     struct GenSpecHelper;
-class ObTableRowStoreSpec;
 //class ObMultiTableReplaceSpec;
 class ObRowSampleScanSpec;
 class ObBlockSampleScanSpec;
 class ObDDLBlockSampleScanSpec;
-class ObTableScanWithIndexBackSpec;
 class ObPxMultiPartDeleteSpec;
 class ObPxMultiPartInsertSpec;
 class ObPxMultiPartUpdateSpec;
@@ -126,8 +124,6 @@ class HashRollupRTInfo;
 
 
 typedef common::ObList<uint64_t, common::ObIAllocator> DASTableIdList;
-typedef common::ObSEArray<common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true>,
-                          1, common::ModulePageAllocator, true> RowParamMap;
 
 enum JsonAraayaggCGOffset
 {
@@ -320,8 +316,6 @@ private:
 
   int generate_spec(ObLogInsert &op, ObTableInsertSpec &spec, const bool in_root_job);
 
-  int generate_spec(ObLogicalOperator &op, ObTableRowStoreSpec &spec, const bool in_root_job);
-
   // for update && update returning.
   int generate_update_with_das(ObLogUpdate &op, ObTableUpdateSpec &spec);
 
@@ -370,8 +364,6 @@ private:
   int generate_spec(ObLogTableScan &op, ObRowSampleScanSpec &spec, const bool in_root_job);
   int generate_spec(ObLogTableScan &op, ObBlockSampleScanSpec &spec, const bool in_root_job);
   int generate_spec(ObLogTableScan &op, ObDDLBlockSampleScanSpec &spec, const bool);
-
-  int generate_spec(ObLogTableScan &op, ObTableScanWithIndexBackSpec &spec,                                                                                                                                                                                                                                                                                                                                     const bool in_root_job);
 
   // pdml code gen
   int generate_spec(ObLogDelete &op, ObPxMultiPartDeleteSpec &spec, const bool in_root_job);
@@ -476,7 +468,6 @@ private:
 
   int generate_hybrid_hist_expr_operator(ObAggFunRawExpr &raw_expr, ObAggrInfo &aggr_info);
 
-  int map_value_param_index(const ObInsertStmt *insert_stmt, RowParamMap &row_params_map);
   int add_output_datum_check_flag(ObOpSpec &spec);
   int generate_calc_part_id_expr(const ObRawExpr &src, const DASTableAccessMeta *access_meta, ObExpr *&dst);
   int check_only_one_unique_key(const ObLogPlan &log_plan, const ObTableSchema* table_schema, bool& only_one_unique_key);

@@ -12,7 +12,6 @@ SQL_PUBLIC_HEADER_ROOTS = [
     "das/ob_das_factory.h",
     "das/ob_das_insert_op.h",
     "das/ob_das_ir_define.h",
-    "das/ob_das_parallel_handler.h",
     "das/ob_data_access_service.h",
     "dtl/ob_dtl.h",
     "dtl/ob_dtl_basic_channel.h",

@@ -285,8 +285,7 @@ public:
                             int64_t buf_len,
                             int64_t &pos,
                             const ObOpSpec &root,
-                            bool is_fulltree,
-                            ObPhyOpSeriCtx *seri_ctx = NULL);
+                            bool is_fulltree);
   static int deserialize_tree(const char *buf,
                               int64_t data_len,
                               int64_t &pos,
@@ -298,15 +297,6 @@ public:
                               int64_t &pos,
                               ObPhysicalPlan &phy_plan,
                               ObOpSpec *&root);
-  static int serialize_sub_plan(char *buf,
-                                int64_t buf_len,
-                                int64_t &pos,
-                                const ObOpSpec &root);
-  static int deserialize_sub_plan(const char *buf,
-                                  int64_t data_len,
-                                  int64_t &pos,
-                                  ObPhysicalPlan &phy_plan,
-                                  ObOpSpec *&op);
   static int serialize_op_input(char *buf,
                                 int64_t buf_len,
                                 int64_t &pos,
@@ -324,30 +314,15 @@ public:
                               ObOpKitStore &op_kit_store,
                               bool is_fulltree,
                               int32_t &real_input_count);
-  static int serialize_op_input_subplan(
-                              char *buf,
-                              int64_t buf_len,
-                              int64_t &pos,
-                              const ObOpSpec &op_spec,
-                              ObOpKitStore &op_kit_store,
-                              bool is_fulltree,
-                              int32_t &real_input_count);
   static int64_t get_serialize_op_input_size(
                               const ObOpSpec &op_spec,
                               ObOpKitStore &op_kit_store);
-  static int64_t get_serialize_op_input_subplan_size(
-                              const ObOpSpec &op_spec,
-                              ObOpKitStore &op_kit_store,
-                              bool is_fulltree);
   static int64_t get_serialize_op_input_tree_size(
                               const ObOpSpec &op_spec,
                               ObOpKitStore &op_kit_store,
                               bool is_fulltree);
 
-  static int64_t get_sub_plan_serialize_size(const ObOpSpec &root);
-
-  static int64_t get_tree_serialize_size(const ObOpSpec &root, bool is_fulltree,
-      ObPhyOpSeriCtx *seri_ctx = NULL);
+  static int64_t get_tree_serialize_size(const ObOpSpec &root, bool is_fulltree);
 
   template <bool SERIALIZE_PLAN_PART>
   static int serialize_expr_frame_info(char *buf,

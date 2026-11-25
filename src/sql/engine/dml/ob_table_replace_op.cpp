@@ -100,12 +100,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableReplaceSpec)
   return len;
 }
 
-ObDasParallelType ObTableReplaceOp::check_das_parallel_type()
-{
-  return DAS_SERIALIZATION;
-}
-
-
 int ObTableReplaceOp::check_need_exec_single_row()
 {
   int ret = OB_SUCCESS;
@@ -189,13 +183,6 @@ OB_INLINE int ObTableReplaceOp::inner_open_with_das()
     mem_attr.label_ = "SqlReplaceInto";
     replace_rtctx_.das_ref_.set_expr_frame_info(expr_frame_info);
     replace_rtctx_.das_ref_.set_mem_attr(mem_attr);
-    ObDasParallelType type = ObTableModifyOp::check_das_parallel_type();
-    if (DAS_SERIALIZATION != type) {
-      type = DAS_BLOCKING_PARALLEL;
-      LOG_TRACE("this sql use das parallel submit for replace", K(check_das_parallel_type()));
-    }
-    replace_rtctx_.das_ref_.get_das_parallel_ctx().set_das_parallel_type(type);
-    replace_rtctx_.das_ref_.get_das_parallel_ctx().set_das_dop(ctx_.get_das_ctx().get_real_das_dop());
   }
   return ret;
 }
@@ -333,10 +320,7 @@ OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end,
   int64_t row_cnt = 0;
   ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
   int64_t simulate_batch_count = - EVENT_CALL(EventTable::EN_TABLE_REPLACE_BATCH_ROW_COUNT);
-  int64_t default_row_store_mem_limit = OB_DEFAULT_REPLACE_MEMORY_LIMIT;
-  if (replace_rtctx_.das_ref_.get_parallel_type() != DAS_SERIALIZATION) {
-    default_row_store_mem_limit = OB_DEFAULT_REPLACE_MEMORY_LIMIT * 5; // 10M
-  }
+  const int64_t default_row_store_mem_limit = OB_DEFAULT_REPLACE_MEMORY_LIMIT;
   NG_TRACE_TIMES(2, replace_start_load_row);
 
   while (OB_SUCC(ret) && !reach_mem_limit) {
@@ -347,7 +331,7 @@ OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end,
       if (OB_ITER_END != ret) {
       }
     } else if (MY_SPEC.plan_->contain_pl_udf_or_trigger() && OB_FAIL(eval_replace_input())) {
-    // Trial inserts only buffer DAS_SERIALIZATION tasks until loading finishes.
+    // Trial inserts buffer DAS tasks until loading finishes.
     // Advance past every input UDF's writes, including later rows in this batch.
     // Writing triggers already force single-row execution, so their effects
     // remain after the savepoint and are undone before the conflict retry.

@@ -43,6 +43,20 @@ ObPxSQCProxy::~ObPxSQCProxy()
   sample_msg_.reset();
 }
 
+int ObPxSQCProxy::send_dh_piece_msg(const ObDtlControlMsg &piece, int64_t timeout_ts)
+{
+  int ret = OB_SUCCESS;
+  ObLockGuard<ObSpinLock> lock_guard(dtl_lock_);
+  ObDtlChannel *ch = sqc_arg_.sqc_.get_sqc_channel();
+  if (OB_ISNULL(ch)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_LOG(WARN, "empty channel", K(ret));
+  } else if (OB_FAIL(ch->send(piece, timeout_ts))) {
+  } else if (OB_FAIL(ch->flush())) {
+  }
+  return ret;
+}
+
 int ObPxSQCProxy::init()
 {
   int ret = OB_SUCCESS;
@@ -87,7 +101,6 @@ int ObPxSQCProxy::setup_loop_proc(ObSqcCtx &sqc_ctx)
         .register_processor(sqc_ctx.rd_wf_whole_msg_proc_)
         .register_processor(sqc_ctx.init_channel_whole_msg_proc_)
         .register_processor(sqc_ctx.reporting_wf_piece_msg_proc_)
-        .register_processor(sqc_ctx.opt_stats_gather_whole_msg_proc_)
         .register_processor(sqc_ctx.join_filter_count_row_whole_msg_proc_)
         .register_interrupt_processor(sqc_ctx.interrupt_proc_);
   }

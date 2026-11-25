@@ -25,7 +25,6 @@ namespace sql
 {
 class ObDASDeleteOp : public ObIDASTaskOp
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASDeleteOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASDeleteOp() = default;
@@ -33,7 +32,6 @@ public:
   virtual int open_op() override;
   virtual int release_op() override;
   virtual int record_task_result_to_rtdef() override;
-  virtual int assign_task_result(ObIDASTaskOp *other) override;
   virtual int init_task_info(uint32_t row_extend_size) override;
   virtual const ObDASBaseCtDef *get_ctdef() const override { return del_ctdef_; }
   virtual ObDASBaseRtDef *get_rtdef() override { return del_rtdef_; }

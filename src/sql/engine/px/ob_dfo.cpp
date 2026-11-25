@@ -70,14 +70,6 @@ OB_SERIALIZE_MEMBER(ObPxTask,
                     px_int_id_,
                     is_fulltree_,
                     branch_id_);
-OB_SERIALIZE_MEMBER(ObPxInitTaskResponse,
-                    task_co_id_);
-
-OB_SERIALIZE_MEMBER(ObPxInitSqcResponse,
-                    rc_,
-                    reserved_thread_count_,
-                    partitions_info_,
-                    sqc_order_gi_tasks_);
 OB_SERIALIZE_MEMBER(SqcTabletAccessKey,
                     table_ref_id_,
                     ref_table_id_,
@@ -322,8 +314,6 @@ int ObDfo::get_dfo_ch_info(int64_t sqc_idx, ObDtlChTotalInfo *&ch_info)
 int ObPxInitSqcArgs::serialize_common_parts_1(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-  ObPhyOpSeriCtx seri_ctx;
-  seri_ctx.exec_ctx_ = exec_ctx_;
   ObSqcSerializeCache &ser_cache = const_cast<ObSqcSerializeCache &>(ser_cache_);
   if (ser_cache.cache_serialized_) {
     if (pos + ser_cache.len1_ > buf_len) {
@@ -355,8 +345,6 @@ int ObPxInitSqcArgs::serialize_common_parts_2(
     char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-  ObPhyOpSeriCtx seri_ctx;
-  seri_ctx.exec_ctx_ = exec_ctx_;
   ObSqcSerializeCache &ser_cache = const_cast<ObSqcSerializeCache &>(ser_cache_);
   if (ser_cache.cache_serialized_) {
     if (pos + ser_cache.len2_ > buf_len) {
@@ -381,7 +369,7 @@ int ObPxInitSqcArgs::serialize_common_parts_2(
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
                 buf, buf_len, pos, *exec_ctx_, *frame_info))) {
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_tree(
-                buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */, &seri_ctx))) {
+                buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */))) {
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
                 buf, buf_len, pos, *op_spec_root_, exec_ctx_->get_kit_store()))) {
     }
@@ -442,8 +430,6 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitSqcArgs)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("task not init", K_(exec_ctx), K_(ser_phy_plan), K(ret));
   } else {
-    ObPhyOpSeriCtx seri_ctx;
-    seri_ctx.exec_ctx_ = exec_ctx_;
     ObSqcSerializeCache &ser_cache = const_cast<ObSqcSerializeCache &>(ser_cache_);
     if (ser_cache.cache_serialized_) {
       len += ser_cache.slen_;
@@ -457,7 +443,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitSqcArgs)
         const ObExprFrameInfo *frame_info = static_cast<ObPxTransmitSpec *>(op_spec_root_)->dfo_expr_frame_info_;
         frame_info = NULL == frame_info ? &ser_phy_plan_->get_expr_frame_info() : frame_info;
         len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(*exec_ctx_, *frame_info);
-        len += ObPxTreeSerializer::get_tree_serialize_size(*op_spec_root_, false /* is_fulltree */, &seri_ctx);
+        len += ObPxTreeSerializer::get_tree_serialize_size(*op_spec_root_, false /* is_fulltree */);
         len += ObPxTreeSerializer::get_serialize_op_input_size(
             *op_spec_root_, exec_ctx_->get_kit_store());
       }

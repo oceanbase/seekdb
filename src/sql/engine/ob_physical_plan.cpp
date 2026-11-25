@@ -68,7 +68,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     session_id_(0),
     table_access_plans_(allocator_),
     das_table_access_plans_(allocator_),
-    row_param_map_(allocator_),
     is_update_uniq_index_(false),
     has_index_access_plan_(false),
     base_constraints_(allocator_),
@@ -97,7 +96,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     ddl_execution_id_(-1),
     ddl_task_id_(0),
     is_packed_(false),
-    reserved_advanced_trigger_(false),
     need_record_plan_info_(false),
     logical_plan_(),
     subschema_ctx_(allocator_),
@@ -178,7 +176,6 @@ void ObPhysicalPlan::reset()
   batch_size_ = 0;
   contain_pl_udf_or_trigger_ = false;
   is_packed_ = false;
-  reserved_advanced_trigger_ = false;
   need_record_plan_info_ = false;
   logical_plan_.reset();
   subschema_ctx_.reset();
@@ -636,7 +633,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     need_serial_exec_,
                     contain_pl_udf_or_trigger_,
                     is_packed_,
-                    reserved_advanced_trigger_,
                     is_plain_insert_,
                     ddl_execution_id_,
                     ddl_task_id_,

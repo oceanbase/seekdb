@@ -494,7 +494,5 @@ int ObExprRegexContext::check_binary_compatible(const ObExprResType *types, int6
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObExprRegexpSessionVariables, regexp_stack_limit_, regexp_time_limit_);
-
 }
 }

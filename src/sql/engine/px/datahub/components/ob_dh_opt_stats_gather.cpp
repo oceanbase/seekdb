@@ -90,8 +90,6 @@ OB_DEF_SERIALIZE_SIZE(ObOptStatsGatherPieceMsg)
   return len;
 }
 
-OB_SERIALIZE_MEMBER((ObOptStatsGatherWholeMsg, ObDatahubWholeMsg), ready_state_);
-
 int ObOptStatsGatherPieceMsgListener::on_message(
   ObOptStatsGatherPieceMsgCtx &piece_ctx,
   common::ObIArray<ObPxSqcMeta> &sqcs,

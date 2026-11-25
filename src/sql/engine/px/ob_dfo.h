@@ -1028,22 +1028,8 @@ public:
   ObPxSqcHandler *sqc_handler_; // point to SQC Handler memory
 };
 
-struct ObPxInitTaskResponse
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObPxInitTaskResponse()
-      : task_co_id_(0)
-  {}
-  TO_STRING_KV(K_(task_co_id));
-public:
-  uint64_t task_co_id_;
-};
-
 struct ObPxInitSqcResponse
 {
-  OB_UNIS_VERSION(1);
-public:
   ObPxInitSqcResponse()
       : rc_(common::OB_NOT_INIT),
         reserved_thread_count_(0),
@@ -1051,7 +1037,6 @@ public:
         sqc_order_gi_tasks_(false)
   {}
   TO_STRING_KV(K_(rc), K_(reserved_thread_count));
-public:
   int rc_;
   int64_t reserved_thread_count_;
   ObSEArray<ObPxTabletInfo, 8> partitions_info_;

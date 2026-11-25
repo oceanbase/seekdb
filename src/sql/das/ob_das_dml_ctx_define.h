@@ -121,7 +121,6 @@ typedef common::ObFixedArray<ObDASDMLBaseCtDef*, common::ObIAllocator> DASDMLCtD
 typedef common::ObArrayWrap<ObDASDMLBaseRtDef*> DASDMLRtDefArray;
 struct ObDASDMLBaseRtDef : ObDASBaseRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   INHERIT_TO_STRING_KV("ObDASBaseRtDef", ObDASBaseRtDef,
                        K_(timeout_ts),
@@ -176,7 +175,6 @@ typedef DASDMLCtDefArray DASInsCtDefArray;
 
 struct ObDASInsRtDef : ObDASDMLBaseRtDef
 {
-  OB_UNIS_VERSION(1);
 
 public:
   ObDASInsRtDef()
@@ -258,7 +256,6 @@ public:
 
 struct ObDASLockRtDef : ObDASDMLBaseRtDef
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDASLockRtDef()
     : ObDASDMLBaseRtDef(DAS_OP_TABLE_LOCK),
@@ -371,7 +368,6 @@ public:
     blocksstable::ObDatumRow *cur_new_row_;
   };
 
-  OB_UNIS_VERSION(1);
   friend class Iterator;
   friend class NewRowIterator;
 
@@ -446,9 +442,6 @@ private:
   int add_row_to_store(const ObChunkDatumStore::ShadowStoredRow &sr,
                        ObChunkDatumStore::StoredRow **stored_sr);
   static DmlRow *get_next_dml_row(DmlRow *cur_row);
-  int serialize_buffer_list(char *buf, const int64_t buf_len, int64_t &pos) const;
-  int64_t get_buffer_list_serialize_size() const;
-  int deserialize_buffer_list(const char *buf, const int64_t data_len, int64_t &pos);
   int init_dml_shadow_row(int64_t column_cnt, bool strip_lob_locator);
 public:
   const static uint32_t DAS_ROW_DEFAULT_EXTEND_SIZE = 16;

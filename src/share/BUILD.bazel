@@ -148,27 +148,15 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-_EST_ROW_COUNT_RECORD_UNITY_GROUP = select_unity_sources(
-    SHARE_UNITY_GROUPS,
-    "est_row_count_record",
-    ["src/share/ob_est_row_count_record.cpp"],
-)
-
-grouped_unity_cc_library(
+cc_library(
     name = "est_row_count_record",
-    unity_groups = [_EST_ROW_COUNT_RECORD_UNITY_GROUP],
-    public_hdrs = ["ob_est_row_count_record.h"],
-    deps = [
-        "//src/oblib:oblib_foundation",
-    ],
+    hdrs = ["ob_est_row_count_record.h"],
+    deps = ["//src/oblib:oblib_common"],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = [
         "//src:__subpackages__",
         "//unittest:__subpackages__",
-    ],
-    implementation_deps = [
-        "//src/oblib:oblib_common",
     ],
 )
 
@@ -1516,7 +1504,6 @@ filegroup(
 _SHARE_NATIVE_UNITY_SOURCES = unity_group_sources(
     [
         _VECTOR_UNITY_GROUP,
-        _EST_ROW_COUNT_RECORD_UNITY_GROUP,
     ] +
     _TRANSACTION_ID_UNITY_GROUP +
     _LOG_PROTOCOL_UNITY_GROUP +

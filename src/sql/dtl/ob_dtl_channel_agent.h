@@ -23,9 +23,6 @@
 #include "sql/dtl/ob_dtl_local_channel.h"
 
 namespace oceanbase {
-namespace common {
-class ObNewRow;
-}
 namespace sql {
 namespace dtl {
 
@@ -51,15 +48,8 @@ public:
   {
     msg_writer_->reset();
   }
-  int serialize() {
-    int ret = OB_SUCCESS;
-    if (CHUNK_DATUM_WRITER != msg_writer_->type()) {
-      ret = msg_writer_->serialize();
-    }
-    if (OB_SUCC(ret)) {
-      buffer_->pos() = msg_writer_->used();
-    }
-    return ret;
+  void finalize_buffer() {
+    buffer_->pos() = msg_writer_->used();
   }
   void write_msg_type(ObDtlLinkedBuffer* buffer)
   { msg_writer_->write_msg_type(buffer); }
@@ -67,7 +57,6 @@ public:
 private:
   ObDtlLinkedBuffer *buffer_;
   ObDtlControlMsgWriter ctl_msg_writer_;
-  ObDtlRowMsgWriter row_msg_writer_;
   ObDtlDatumMsgWriter datum_msg_writer_;
   ObDtlChannelEncoder *msg_writer_;
 };

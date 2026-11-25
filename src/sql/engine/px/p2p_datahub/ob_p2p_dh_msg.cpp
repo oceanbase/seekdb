@@ -26,11 +26,6 @@ using namespace sql;
 DEFINE_ENUM_FUNC(ObP2PDatahubMsgBase::ObP2PDatahubMsgType, p2p_datahub_msg_type,
                  P2P_DATAHUB_MSG_TYPE, ObP2PDatahubMsgBase::);
 
-OB_SERIALIZE_MEMBER(ObP2PDatahubMsgBase,
-    trace_id_, p2p_datahub_id_, px_sequence_id_,
-    task_id_, timeout_ts_, msg_type_,
-    is_active_, is_empty_);
-
 int ObP2PDatahubMsgBase::init(int64_t p2p_dh_id,
     int64_t px_sequence_id, int64_t task_id, int64_t timeout_ts)
 {

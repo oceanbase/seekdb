@@ -23,12 +23,6 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-OB_SERIALIZE_MEMBER((ObExprPLAssocIndex, ObExprOperator),
-                    info_.for_write_,
-                    info_.out_of_range_set_err_,
-                    info_.parent_expr_type_,
-                    info_.is_index_by_varchar_);
-
 ObExprPLAssocIndex::ObExprPLAssocIndex(ObIAllocator &alloc)
   : ObExprOperator(alloc, T_FUN_PL_ASSOCIATIVE_INDEX, N_PL_ASSOCIATIVE_INDEX, 2, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
     info_()

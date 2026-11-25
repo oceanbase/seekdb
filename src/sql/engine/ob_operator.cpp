@@ -28,7 +28,6 @@ namespace sql
 {
 
 OB_SERIALIZE_MEMBER(ObDynamicParamSetter, param_idx_, src_, dst_);
-OB_SERIALIZE_MEMBER(ObOpSchemaObj, obj_type_, is_not_null_, order_type_);
 
 int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx) const
 {

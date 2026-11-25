@@ -25,7 +25,6 @@ namespace sql
 {
 class ObExprPLSQLCodeSQLErrm : public ObFuncExprOperator
 {
-  OB_UNIS_VERSION(1);
 public:
   explicit ObExprPLSQLCodeSQLErrm(common::ObIAllocator &alloc);
   virtual ~ObExprPLSQLCodeSQLErrm();

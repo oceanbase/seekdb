@@ -146,7 +146,6 @@ public:
 
 class ObLoadRuntimeTableSchemaArg
 {
-  OB_UNIS_VERSION(1);
 public:
   int init(const uint64_t table_id, const ObIArray<share::ObLoadInnerTableSchemaInfo> *schema_infos,
       const ObIArray<int64_t> &insert_idx, const uint64_t data_version);
@@ -174,7 +173,6 @@ private:
 
 struct ObModifySysVarArg : public ObDDLArg
 {
-  OB_UNIS_VERSION(1);
 public:
   ObModifySysVarArg() : ObDDLArg(), is_inner_(false)
     { }
@@ -269,8 +267,6 @@ struct ObCreateForeignKeyArg;//Forward declaration
 
 struct ObCreateTableRes
 {
-  OB_UNIS_VERSION(1);
-
 public:
   ObCreateTableRes() :
       table_id_(OB_INVALID_ID),
@@ -294,8 +290,6 @@ public:
 
 struct ObDropTableRes
 {
-  OB_UNIS_VERSION(1);
-
 public:
   ObDropTableRes() :
     schema_version_(OB_INVALID_VERSION),
@@ -438,7 +432,6 @@ public:
 
 struct ObUpdateStatCacheArg : public ObDDLArg
 {
-  OB_UNIS_VERSION_V(1);
 public:
   ObUpdateStatCacheArg()
     : table_id_(common::OB_INVALID_ID),
@@ -585,7 +578,6 @@ public:
 
 struct ObDropIndexRes final
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDropIndexRes()
     : index_table_id_(common::OB_INVALID_ID), schema_version_(0), task_id_(0)
@@ -2070,7 +2062,6 @@ using ObClearTabletAutoincSeqCacheArg = ObBatchRemoveTabletArg;
 
 struct ObCalcColumnChecksumRequestArg final
 {
-  OB_UNIS_VERSION(1);
 public:
   ObCalcColumnChecksumRequestArg() { reset(); }
   ~ObCalcColumnChecksumRequestArg() = default;
@@ -2081,7 +2072,6 @@ public:
       K_(snapshot_version), K_(source_table_id), K_(task_id), K_(calc_items), K_(user_parallelism));
   struct SingleItem final
   {
-    OB_UNIS_VERSION(2);
   public:
     SingleItem() { reset(); }
     ~SingleItem() = default;
@@ -2108,14 +2098,12 @@ private:
 
 struct ObCalcColumnChecksumRequestRes final
 {
-  OB_UNIS_VERSION(1);
 public:
   common::ObSEArray<int, 10> ret_codes_;
 };
 
 struct ObCalcColumnChecksumResponseArg
 {
-  OB_UNIS_VERSION(2);
 public:
   ObCalcColumnChecksumResponseArg() { reset(); }
   ~ObCalcColumnChecksumResponseArg() = default;
@@ -2156,31 +2144,6 @@ private:
 //----Structs for managing privileges----
 
 
-struct ObSwitchSchemaArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  explicit ObSwitchSchemaArg()
-    : schema_info_(),
-      force_refresh_(false),
-      is_async_(false) {}
-  explicit ObSwitchSchemaArg(
-       const share::schema::ObRefreshSchemaInfo &schema_info,
-       const bool force_refresh,
-       const bool is_async)
-    : schema_info_(schema_info),
-      force_refresh_(force_refresh),
-      is_async_(is_async) {}
-  ~ObSwitchSchemaArg() {}
-  bool is_valid() const { return schema_info_.is_valid(); }
-
-  DECLARE_TO_STRING;
-
-  share::schema::ObRefreshSchemaInfo schema_info_;
-  bool force_refresh_;
-  bool is_async_;
-};
-
 struct ObTabletPair final
 {
   OB_UNIS_VERSION(1);
@@ -2213,7 +2176,6 @@ public:
 
 struct ObDDLCheckTabletMergeStatusArg final
 {
-  OB_UNIS_VERSION(2);
 public:
   ObDDLCheckTabletMergeStatusArg()
     : tablet_ids_(), snapshot_version_()
@@ -2263,7 +2225,6 @@ public:
 
 struct ObDDLCheckTabletMergeStatusResult
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDDLCheckTabletMergeStatusResult()
     : merge_status_() {}
@@ -2747,7 +2708,6 @@ public:
 
 struct ObAdminSetConfigArg
 {
-  OB_UNIS_VERSION(1);
 public:
   ObAdminSetConfigArg() : items_(), is_inner_(false) {}
   ~ObAdminSetConfigArg() {}
@@ -3280,8 +3240,6 @@ struct ObEstPartArgElement
   ObEstPartArgElement() : batch_(), scan_flag_(),
     index_id_(common::OB_INVALID_ID), range_columns_count_(0), tablet_id_(), tx_id_()
   {}
-  // Essentially, we can use ObIArray<ObNewRange> here
-  // For compatibility reason, we still use ObSimpleBatch
   common::ObSimpleBatch batch_;
   common::ObQueryFlag scan_flag_;
   int64_t index_id_;
@@ -3297,25 +3255,15 @@ struct ObEstPartArgElement
       K(range_columns_count_),
       K(tablet_id_),
       K(tx_id_));
-  int64_t get_serialize_size(void) const;
-  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
-  int deserialize(common::ObIAllocator &allocator,
-                  const char *buf,
-                  const int64_t data_len,
-                  int64_t &pos);
 };
 
 struct ObEstPartArg
 {
-  //Deserialization use
-  common::ObArenaAllocator allocator_;
-
   int64_t schema_version_;
   common::ObSEArray<ObEstPartArgElement, 4, common::ModulePageAllocator, true> index_params_;
 
   ObEstPartArg()
-      : allocator_(common::ObModIds::OB_SQL_QUERY_RANGE),
-        schema_version_(0),
+      : schema_version_(0),
         index_params_()
   {}
   ~ObEstPartArg() { reset(); }
@@ -3324,8 +3272,6 @@ struct ObEstPartArg
 
   TO_STRING_KV(K_(schema_version),
                K_(index_params));
-
-  OB_UNIS_VERSION(1);
 };
 
 struct ObEstPartResElement
@@ -3353,7 +3299,6 @@ struct ObEstPartResElement
   }
 
   TO_STRING_KV(K(logical_row_count_), K(physical_row_count_), K(reliable_), K(est_records_));
-  OB_UNIS_VERSION(1);
 };
 
 struct ObEstPartRes
@@ -3364,8 +3309,6 @@ struct ObEstPartRes
   {}
 
   TO_STRING_KV(K(index_param_res_));
-
-  OB_UNIS_VERSION(1);
 };
 
 struct ObGetWRSArg
@@ -3475,7 +3418,6 @@ public:
 
 struct ObParallelDDLRes
 {
-  OB_UNIS_VERSION(1);
 public:
   ObParallelDDLRes():
   schema_version_(common::OB_INVALID_VERSION)
@@ -3534,7 +3476,6 @@ public:
 
 struct ObDropDatabaseRes final
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDropDatabaseRes()
     : ddl_res_(),
@@ -3628,7 +3569,6 @@ enum TransToolCmd
 
 struct ObDDLLocalBuildResponse final
 {
-  OB_UNIS_VERSION(2);
 public:
   ObDDLLocalBuildResponse()
     : tablet_id_(),
@@ -3734,7 +3674,6 @@ public:
 
 struct ObFlushOptStatArg
 {
-  OB_UNIS_VERSION(1);
 public:
   ObFlushOptStatArg() : is_flush_col_usage_(false), is_flush_dml_stat_(false) {}
   ObFlushOptStatArg(const bool is_flush_col_usage,
@@ -3765,7 +3704,6 @@ private:
 
 struct ObEstBlockArgElement
 {
-  OB_UNIS_VERSION(1);
 public:
   ObEstBlockArgElement() : tablet_id_() {}
   bool is_valid() const { return tablet_id_.is_valid(); }
@@ -3777,7 +3715,6 @@ public:
 
 struct ObEstBlockArg
 {
-  OB_UNIS_VERSION(1);
 public:
   common::ObSEArray<ObEstBlockArgElement, 4> tablet_params_arg_;
   bool is_valid() const;
@@ -3787,7 +3724,6 @@ public:
 
 struct ObEstBlockResElement
 {
-  OB_UNIS_VERSION(1);
 public:
   int64_t macro_block_count_;
   int64_t micro_block_count_;
@@ -3802,7 +3738,6 @@ public:
 
 struct ObEstBlockRes
 {
-  OB_UNIS_VERSION(1);
 public:
   common::ObSEArray<ObEstBlockResElement, 4> tablet_params_res_;
   bool is_valid() const { return true; }
@@ -3939,7 +3874,6 @@ public:
 
 struct ObCancelGatherStatsArg
 {
-  OB_UNIS_VERSION(1);
 public:
   ObCancelGatherStatsArg() : task_id_() {}
   bool is_valid() const { return true; }

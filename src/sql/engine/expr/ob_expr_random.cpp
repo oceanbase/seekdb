@@ -23,8 +23,6 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-OB_SERIALIZE_MEMBER((ObExprRandom, ObFuncExprOperator), is_seed_const_);
-
 ObExprRandom::ObExprRandomCtx::ObExprRandomCtx()
 	: gen_()
 {

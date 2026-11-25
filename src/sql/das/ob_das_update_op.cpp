@@ -26,22 +26,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-namespace serialization
-{
-template <>
-struct EnumEncoder<false, const sql::ObDASUpdCtDef *> : sql::DASCtRefEncoder<sql::ObDASUpdCtDef>
-{
-};
-
-template <>
-struct EnumEncoder<false, sql::ObDASUpdRtDef *> : sql::DASRtRefEncoder<sql::ObDASUpdRtDef>
-{
-};
-} // end namespace serialization
-} // end namespace common
-
 using namespace common;
 using namespace storage;
 using namespace share;
@@ -461,18 +445,6 @@ int ObDASUpdateOp::release_op()
   return ret;
 }
 
-int ObDASUpdateOp::assign_task_result(ObIDASTaskOp *other)
-{
-  int ret = OB_SUCCESS;
-  if (other->get_type() != get_type()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObDASUpdateOp *upd_op = static_cast<ObDASUpdateOp *>(other);
-    affected_rows_ = upd_op->get_affected_rows();
-  }
-  return ret;
-}
-
 int ObDASUpdateOp::record_task_result_to_rtdef()
 {
   int ret = OB_SUCCESS;
@@ -500,11 +472,6 @@ int ObDASUpdateOp::write_row(const ExprFixedArray &row,
   }
   return ret;
 }
-
-OB_SERIALIZE_MEMBER((ObDASUpdateOp, ObIDASTaskOp),
-                    upd_ctdef_,
-                    upd_rtdef_,
-                    write_buffer_);
 
 }  // namespace sql
 }  // namespace oceanbase

@@ -28,8 +28,6 @@ using namespace pl;
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER((ObExprPLSQLVariable, ObFuncExprOperator), plsql_line_, plsql_variable_);
-
 ObExprPLSQLVariable::ObExprPLSQLVariable(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_PLSQL_VARIABLE, N_PLSQL_VARIABLE, 0, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
       plsql_line_(OB_INVALID_INDEX),

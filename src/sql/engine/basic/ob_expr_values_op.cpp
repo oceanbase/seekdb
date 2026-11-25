@@ -26,74 +26,6 @@ using namespace common;
 namespace sql
 {
 
-int ObExprValuesSpec::serialize(char *buf,
-                                int64_t buf_len,
-                                int64_t &pos,
-                                ObPhyOpSeriCtx &seri_ctx) const
-{
-  int ret = OB_SUCCESS;
-  int64_t len = get_serialize_size_(seri_ctx);
-  OB_UNIS_ENCODE(UNIS_VERSION);
-  OB_UNIS_ENCODE(len);
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObOpSpec::serialize(buf, buf_len, pos))) {
-    } else {
-      const ObIArray<int64_t> *row_id_list = static_cast<const ObIArray<int64_t> *>(
-                                                             seri_ctx.row_id_list_);
-      int64_t col_num = get_output_count();
-      if (row_id_list != NULL) {
-        int64_t value_count = col_num * row_id_list->count();
-        OB_UNIS_ENCODE(value_count);
-        if (OB_SUCC(ret)) {
-          ARRAY_FOREACH(*row_id_list, idx) {
-            int64_t start_idx = row_id_list->at(idx) * col_num;
-            int64_t end_idx = start_idx + col_num;
-            for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; ++i) {
-              OB_UNIS_ENCODE(values_.at(i));
-            }
-          }
-        }
-      } else if (OB_NOT_NULL(seri_ctx.exec_ctx_) &&
-            !seri_ctx.exec_ctx_->get_row_id_list_array().empty()) {
-        int64_t value_count = seri_ctx.exec_ctx_->get_row_id_list_total_count() * col_num;
-        OB_UNIS_ENCODE(value_count);
-        for (int array_idx = 0; OB_SUCC(ret) &&
-             array_idx < seri_ctx.exec_ctx_->get_row_id_list_array().count();
-              ++array_idx) {
-          if (OB_ISNULL(row_id_list = seri_ctx.exec_ctx_->get_row_id_list_array().at(array_idx))) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            ARRAY_FOREACH(*row_id_list, idx) {
-              int64_t start_idx = row_id_list->at(idx) * col_num;
-              int64_t end_idx = start_idx + col_num;
-              for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; ++i) {
-                OB_UNIS_ENCODE(values_.at(i));
-              }
-            }
-          }
-        }
-      } else {
-        OB_UNIS_ENCODE(values_);
-      }
-      OB_UNIS_ENCODE(str_values_array_);
-      OB_UNIS_ENCODE(contain_ab_param_);
-      OB_UNIS_ENCODE(ins_values_batch_opt_);
-      OB_UNIS_ENCODE(column_names_);
-      OB_UNIS_ENCODE(array_group_idx_);
-    }
-  }
-
-  return ret;
-}
-
-int64_t ObExprValuesSpec::get_serialize_size(const ObPhyOpSeriCtx &seri_ctx) const
-{
-  int64_t len = get_serialize_size_(seri_ctx);
-  OB_UNIS_ADD_LEN(len);
-  OB_UNIS_ADD_LEN(UNIS_VERSION);
-  return len;
-}
-
 OB_DEF_SERIALIZE_SIZE(ObExprValuesSpec)
 {
   int64_t len = 0;
@@ -131,53 +63,6 @@ OB_DEF_DESERIALIZE(ObExprValuesSpec)
   OB_UNIS_DECODE(column_names_);
   OB_UNIS_DECODE(array_group_idx_);
   return ret;
-}
-
-int64_t ObExprValuesSpec::get_serialize_size_(const ObPhyOpSeriCtx &seri_ctx) const
-{
-  int64_t len = 0;
-  const ObIArray<int64_t> *row_id_list = static_cast<const ObIArray<int64_t> *>(
-                                                          seri_ctx.row_id_list_);
-  len += ObOpSpec::get_serialize_size();
-  int64_t col_num = get_output_count();
-  if (row_id_list != NULL) {
-    int64_t value_size = col_num * row_id_list->count();
-    OB_UNIS_ADD_LEN(value_size);
-    ARRAY_FOREACH_NORET(*row_id_list, idx) {
-      int64_t start_idx = row_id_list->at(idx) * col_num;
-      int64_t end_idx = start_idx + col_num;
-      for (int64_t i = start_idx; i < end_idx; ++i) {
-        OB_UNIS_ADD_LEN(values_.at(i));
-      }
-    }
-  } else if (OB_NOT_NULL(seri_ctx.exec_ctx_) &&
-        !seri_ctx.exec_ctx_->get_row_id_list_array().empty()) {
-    int64_t value_count = seri_ctx.exec_ctx_->get_row_id_list_total_count() * col_num;
-    OB_UNIS_ADD_LEN(value_count);
-    for (int array_idx = 0;
-         array_idx < seri_ctx.exec_ctx_->get_row_id_list_array().count();
-         ++array_idx) {
-      if (OB_ISNULL(row_id_list = seri_ctx.exec_ctx_->get_row_id_list_array().at(array_idx))) {
-        LOG_WARN_RET(OB_ERR_UNEXPECTED, "row id list is null");
-      } else {
-        for (int idx = 0; idx < row_id_list->count(); ++idx) {
-          int64_t start_idx = row_id_list->at(idx) * col_num;
-          int64_t end_idx = start_idx + col_num;
-          for (int64_t i = start_idx; i < end_idx; ++i) {
-            OB_UNIS_ADD_LEN(values_.at(i));
-          }
-        }
-      }
-    }
-  } else {
-    OB_UNIS_ADD_LEN(values_);
-  }
-  OB_UNIS_ADD_LEN(str_values_array_);
-  OB_UNIS_ADD_LEN(contain_ab_param_);
-  OB_UNIS_ADD_LEN(ins_values_batch_opt_);
-  OB_UNIS_ADD_LEN(column_names_);
-  OB_UNIS_ADD_LEN(array_group_idx_);
-  return len;
 }
 
 ObExprValuesOp::ObExprValuesOp(ObExecContext &exec_ctx,

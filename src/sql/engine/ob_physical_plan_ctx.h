@@ -39,7 +39,6 @@ namespace sql
 class ObResultSet;
 class ObSQLSessionInfo;
 class ObPhysicalPlan;
-class ObExecContext;
 struct ObPxDmlRowInfo;
 
 struct PartParamIdxArray
@@ -138,15 +137,6 @@ public:
       }
     }
     return (ts_timeout_us > 0 && now > ts_timeout_us);
-  }
-  // snapshot timestamp used for transaction set consistency check
-  inline int64_t get_tsc_timestamp() const
-  {
-    return tsc_snapshot_timestamp_;
-  }
-  inline void set_tsc_timestamp(int64_t ts)
-  {
-    tsc_snapshot_timestamp_ = ts;
   }
   inline void set_consistency_level(const common::ObConsistencyLevel consistency)
   {
@@ -393,7 +383,6 @@ public:
     row_deleted_count_ = 0;
     warning_count_ = 0;
   }
-  inline void set_exec_ctx(const ObExecContext *exec_ctx) { exec_ctx_ = exec_ctx; }
   void set_error_ignored(bool ignored) { is_error_ignored_ = ignored; }
   bool is_error_ignored() const { return is_error_ignored_; }
   void set_select_into(bool is_select_into) { is_select_into_  = is_select_into; }
@@ -430,7 +419,6 @@ public:
   void set_table_row_count_list_capacity(uint32_t capacity)
   { table_row_count_list_.set_capacity(capacity); }
   ObIArray<ObTableRowCount> &get_table_row_count_list() { return table_row_count_list_; }
-  inline bool &get_is_multi_dml() { return is_multi_dml_; }
   inline const BatchParamIdxArray &get_batched_stmt_param_idxs() const
   { return batched_stmt_param_idxs_; }
   inline int create_implicit_cursor_infos(int64_t cursor_count)
@@ -518,8 +506,6 @@ private:
    * @note these member need serialize
    */
   
-  // used for TRANSACTION SET CONSISTENCY check
-  int64_t tsc_snapshot_timestamp_;
   // only used when the sql contains fun like current_time
   common::ObObj cur_time_;//used for session
   // execution timeout for this round of execution
@@ -593,7 +579,6 @@ private:
   bool is_select_into_;
   bool is_result_accurate_;
   bool foreign_key_checks_;
-  const ObExecContext *exec_ctx_;
   ObTableScanStat table_scan_stat_;
   common::ObFixedArray<ObTableRowCount, common::ObIAllocator> table_row_count_list_; // (table_id, table_row_count) pairs
   // batched_stmt_param_idxs_ stores each partition id corresponding param index
@@ -607,13 +592,6 @@ private:
   int64_t cur_stmt_id_;
 
   bool is_or_expand_transformed_;
-  /*
-  ** This variable is used for performance optimization of multi_dml, for the multi_dml plan,
-  ** serialization accounts for a large proportion, analysis of the flame graph found that the ParamStore structure occupies the largest portion (mainly insert), but for
-  ** multi_dml, ParamStore does not need to be serialized, so this variable controls the serialization behavior of ParamStore
-  */
-  bool is_multi_dml_;
-
   //used for expr output pack, do encode according to its field
   const common::ObIArray<ObField> *field_array_;
   //used for expr output pack, do binary encode or text encode

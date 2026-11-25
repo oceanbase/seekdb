@@ -54,9 +54,6 @@ int ObExprPLIntegerChecker::ExtraInfo::assign(const ExtraInfo &other)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER((ObExprPLIntegerChecker, ObFuncExprOperator),
-                    info_.pl_integer_type_, info_.pl_integer_range_.range_);
-
 ObExprPLIntegerChecker::ObExprPLIntegerChecker(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_PL_INTEGER_CHECKER, N_PL_INTEGER_CHECKER, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
       info_(alloc, T_FUN_PL_INTEGER_CHECKER) {}

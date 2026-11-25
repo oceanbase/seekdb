@@ -609,11 +609,6 @@ int64_t ObServer::current_query_start_time() const
   return OB_ISNULL(worker) ? 0 : worker->get_query_start_time();
 }
 
-int ObServer::submit_current_tenant_request(rpc::ObRequest &request) const
-{
-  return server_runtime_controller_.recv_request(request);
-}
-
 int ObServer::submit_px_task(
     int64_t group_id,
     const std::function<void(bool)> &task) const

@@ -42,7 +42,6 @@ typedef common::ObSEArray<uint64_t, 128> ObPxBFHashArray;
 
 class ObPxBloomFilter
 {
-OB_UNIS_VERSION_V(1);
 public:
   ObPxBloomFilter();
   virtual ~ObPxBloomFilter() {};

@@ -28,10 +28,6 @@ using namespace common;
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER(
-    (ObExprOpSubQueryInPl, ObFuncExprOperator),
-    type_, route_sql_, result_type_, is_ignore_fail_, ps_sql_, type_info_);
-
 
 ObExprOpSubQueryInPl::ObExprOpSubQueryInPl(common::ObIAllocator &alloc)
     : ObFuncExprOperator(

@@ -28,7 +28,6 @@ namespace sql
 {
 class ObExprInterval: public ObExprOperator
 {
-  OB_UNIS_VERSION_V(1);
 public:
 	explicit ObExprInterval(common::ObIAllocator &alloc);
 

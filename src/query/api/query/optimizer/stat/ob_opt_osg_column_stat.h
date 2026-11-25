@@ -65,7 +65,6 @@ struct ObMinMaxValEval {
 
 class ObOptOSGColumnStat
 {
-  OB_UNIS_VERSION_V(1);
 public:
   ObOptOSGColumnStat():
     col_stat_(NULL),
@@ -129,7 +128,6 @@ private:
 
 struct ObOptOSGSampleHelper
 {
-  OB_UNIS_VERSION(1);
 public:
   ObOptOSGSampleHelper() :
     sample_value_(0),

@@ -30,7 +30,6 @@ class ObKillStmt;
 
 class ObKillSessionArg
 {
-  OB_UNIS_VERSION(1);
 public:
   ObKillSessionArg()
       : sess_id_(0),
