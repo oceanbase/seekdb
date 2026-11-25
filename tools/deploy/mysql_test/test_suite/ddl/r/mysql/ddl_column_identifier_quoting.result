@@ -1,0 +1,45 @@
+DROP TABLE IF EXISTS ddl_identifier_enum_set;
+DROP TABLE IF EXISTS ddl_identifier_partitioned;
+CREATE TABLE ddl_identifier_enum_set (
+`id``key` INT PRIMARY KEY,
+`e``kind` ENUM('a', 'b'),
+`s``kind` SET('x', 'y'));
+INSERT INTO ddl_identifier_enum_set VALUES
+(1, 'a', 'x'), (2, 'b', 'y'), (3, NULL, NULL), (4, NULL, NULL);
+CREATE UNIQUE INDEX enum_idx ON ddl_identifier_enum_set (`e``kind`);
+CREATE UNIQUE INDEX set_idx ON ddl_identifier_enum_set (`s``kind`);
+SELECT COUNT(DISTINCT INDEX_NAME) AS unique_index_count FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ddl_identifier_enum_set'
+    AND INDEX_NAME IN ('enum_idx', 'set_idx');
+unique_index_count
+2
+INSERT INTO ddl_identifier_enum_set VALUES (5, 'a', NULL);
+ERROR 23000: Duplicate entry '1' for key 'enum_idx'
+INSERT INTO ddl_identifier_enum_set VALUES (5, NULL, 'x');
+ERROR 23000: Duplicate entry '1' for key 'set_idx'
+SELECT `id``key`, `e``kind`, `s``kind` FROM ddl_identifier_enum_set ORDER BY `id``key`;
+id`key	e`kind	s`kind
+1	a	x
+2	b	y
+3	NULL	NULL
+4	NULL	NULL
+CREATE TABLE ddl_identifier_partitioned (
+id INT PRIMARY KEY,
+```edge````` INT,
+`plain` INT) PARTITION BY HASH(id) PARTITIONS 2;
+INSERT INTO ddl_identifier_partitioned VALUES (1, 10, 100), (2, 20, 200);
+CREATE INDEX edge_idx ON ddl_identifier_partitioned (```edge`````);
+CREATE INDEX plain_idx ON ddl_identifier_partitioned (`plain`);
+SELECT id, ```edge````` AS edge_value FROM ddl_identifier_partitioned FORCE INDEX (edge_idx)
+WHERE ```edge````` = 20 ORDER BY id;
+id	edge_value
+2	20
+SELECT id, `plain` FROM ddl_identifier_partitioned FORCE INDEX (plain_idx)
+WHERE `plain` = 100 ORDER BY id;
+id	plain
+1	100
+SELECT COUNT(*) AS row_count FROM ddl_identifier_partitioned;
+row_count
+2
+DROP TABLE ddl_identifier_enum_set;
+DROP TABLE ddl_identifier_partitioned;
