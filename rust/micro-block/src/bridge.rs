@@ -30,21 +30,37 @@ mod ffi {
         Frozen,
     }
 
+    enum InputKind {
+        Bytes,
+        Null,
+        Nop,
+        UInt,
+        Outrow,
+    }
+
+    enum CellKind {
+        Borrowed,
+        Null,
+        Nop,
+        UInt,
+        Decoded,
+        Outrow,
+    }
+
     struct BridgeColumn {
         obj_type: u8,
         fixed_length: u32,
-        enable_bit_packing: bool,
     }
 
     struct InputCell {
-        kind: u8,
+        kind: InputKind,
         pointer: usize,
         length: u32,
         value: u64,
     }
 
     struct CellDesc {
-        kind: u8,
+        kind: CellKind,
         offset: u64,
         length: u32,
         value: u64,
@@ -67,13 +83,13 @@ mod ffi {
         max_merged_trans_version: i64,
     }
 
-    struct FlatAppendResult {
+    struct AppendResult {
         code: Code,
         accepted_rows: usize,
         is_full: bool,
     }
 
-    struct FlatStatsResult {
+    struct WriterStatsResult {
         code: Code,
         block_size: u64,
         original_size: u64,
@@ -112,7 +128,37 @@ mod ffi {
     }
 
     extern "Rust" {
+        type PaxWriter;
         type FlatWriter;
+
+        fn new_pax_writer() -> Box<PaxWriter>;
+
+        fn init_pax_writer(
+            writer: &mut PaxWriter,
+            columns: Vec<BridgeColumn>,
+            rowkey_column_count: u32,
+            row_store_type: u8,
+            need_column_checksums: bool,
+            block_size_limit: u64,
+            minimum_rows: u64,
+        ) -> Code;
+
+        /// Cells borrow C++ datum storage only for this call. Rust copies an
+        /// accepted row before returning.
+        unsafe fn append_pax_row(
+            writer: &mut PaxWriter,
+            cells: &[InputCell],
+            block_size_upper_bound: u64,
+        ) -> AppendResult;
+
+        fn finish_pax_writer(
+            writer: &mut PaxWriter,
+            column_checksums: &[u64],
+            all_lob_in_row: bool,
+            max_merged_trans_version: i64,
+        ) -> BuildResult;
+
+        fn pax_writer_stats(writer: &PaxWriter, expand_percent: u64) -> WriterStatsResult;
 
         fn new_flat_writer() -> Box<FlatWriter>;
 
@@ -134,7 +180,7 @@ mod ffi {
             rowkey_column_count: u32,
             hash_index_size: usize,
             block_size_upper_bound: u64,
-        ) -> FlatAppendResult;
+        ) -> AppendResult;
 
         /// The returned block owns its storage. C++ keeps it alive until the
         /// macro writer finishes consuming the block.
@@ -145,22 +191,7 @@ mod ffi {
             hash_index: &[u8],
         ) -> BuildResult;
 
-        fn flat_writer_stats(writer: &FlatWriter, hash_index_size: usize) -> FlatStatsResult;
-
-        /// Every non-null pointer references `length` readable bytes for the
-        /// duration of this call. Cells are row-major and owned by Rust for
-        /// the duration of this call.
-        unsafe fn build_pax_block(
-            columns: Vec<BridgeColumn>,
-            cells: Vec<InputCell>,
-            rowkey_column_count: u32,
-            row_store_type: u8,
-            need_column_checksums: bool,
-            column_checksums: &[u64],
-            all_lob_in_row: bool,
-            original_size: u64,
-            max_merged_trans_version: i64,
-        ) -> BuildResult;
+        fn flat_writer_stats(writer: &FlatWriter, hash_index_size: usize) -> WriterStatsResult;
 
         /// Output offsets are relative to `block`, whose allocation and cache
         /// pin must remain valid while C++ uses the returned descriptors.
@@ -193,6 +224,153 @@ mod ffi {
             range_start: u32,
             range_end: u32,
         ) -> LocateResult;
+    }
+}
+
+struct PaxWriter {
+    writer: Option<BlockWriter>,
+}
+
+fn new_pax_writer() -> Box<PaxWriter> {
+    Box::new(PaxWriter { writer: None })
+}
+
+fn init_pax_writer(
+    writer: &mut PaxWriter,
+    columns: Vec<ffi::BridgeColumn>,
+    rowkey_column_count: u32,
+    row_store_type: u8,
+    need_column_checksums: bool,
+    block_size_limit: u64,
+    minimum_rows: u64,
+) -> ffi::Code {
+    let result = (|| {
+        let row_store_type = crate::RowStoreType::try_from(row_store_type)?;
+        let specs = columns
+            .iter()
+            .map(|column| ColumnSpec {
+                obj_type: column.obj_type,
+                fixed_length: (column.fixed_length != 0).then_some(column.fixed_length as usize),
+                enable_bit_packing: row_store_type == crate::RowStoreType::Encoding,
+            })
+            .collect();
+        let mut config = WriterConfig::new(specs, rowkey_column_count as usize);
+        config.row_store_type = row_store_type;
+        config.need_column_checksums = need_column_checksums;
+        config.block_size_limit =
+            usize::try_from(block_size_limit).map_err(|_| Error::SizeOverflow)?;
+        config.minimum_rows = usize::try_from(minimum_rows).map_err(|_| Error::SizeOverflow)?;
+        BlockWriter::new(config)
+    })();
+    match result {
+        Ok(new_writer) => {
+            writer.writer = Some(new_writer);
+            ffi::Code::Ok
+        }
+        Err(error) => {
+            writer.writer = None;
+            code(error)
+        }
+    }
+}
+
+unsafe fn append_pax_row(
+    writer: &mut PaxWriter,
+    cells: &[ffi::InputCell],
+    block_size_upper_bound: u64,
+) -> ffi::AppendResult {
+    let Some(writer) = writer.writer.as_mut() else {
+        return ffi::AppendResult {
+            code: ffi::Code::InvalidArgument,
+            accepted_rows: 0,
+            is_full: false,
+        };
+    };
+    let result = (|| {
+        writer.set_block_size_upper_bound(
+            usize::try_from(block_size_upper_bound).map_err(|_| Error::SizeOverflow)?,
+        );
+        let mut row = Vec::new();
+        row.try_reserve_exact(cells.len())
+            .map_err(|_| Error::SizeOverflow)?;
+        for cell in cells {
+            let bytes = || {
+                if cell.length > 0 && cell.pointer == 0 {
+                    return Err(Error::InvalidArgument);
+                }
+                Ok(if cell.length == 0 {
+                    &[][..]
+                } else {
+                    std::slice::from_raw_parts(cell.pointer as *const u8, cell.length as usize)
+                })
+            };
+            row.push(match cell.kind {
+                ffi::InputKind::Bytes => OwnedDatum::Bytes(bytes()?.to_vec()),
+                ffi::InputKind::Null => OwnedDatum::Null,
+                ffi::InputKind::Nop => OwnedDatum::Nop,
+                ffi::InputKind::UInt => OwnedDatum::UInt(cell.value),
+                _ => return Err(Error::InvalidArgument),
+            });
+        }
+        writer.append_row(&row)
+    })();
+    match result {
+        Ok(outcome) => ffi::AppendResult {
+            code: ffi::Code::Ok,
+            accepted_rows: outcome.accepted_rows,
+            is_full: outcome.is_full,
+        },
+        Err(error) => ffi::AppendResult {
+            code: code(error),
+            accepted_rows: writer.row_count(),
+            is_full: false,
+        },
+    }
+}
+
+fn finish_pax_writer(
+    writer: &mut PaxWriter,
+    column_checksums: &[u64],
+    all_lob_in_row: bool,
+    max_merged_trans_version: i64,
+) -> ffi::BuildResult {
+    let result = (|| {
+        let writer = writer.writer.as_mut().ok_or(Error::InvalidArgument)?;
+        writer.set_finish_options(all_lob_in_row, max_merged_trans_version);
+        let accepted_rows = writer.row_count();
+        let block = writer.finish_with_column_checksums(column_checksums)?;
+        Block::new(&block)?;
+        Ok(BuildSuccess {
+            block,
+            accepted_rows,
+        })
+    })();
+    build_result(result)
+}
+
+fn pax_writer_stats(writer: &PaxWriter, expand_percent: u64) -> ffi::WriterStatsResult {
+    let result = (|| {
+        let writer = writer.writer.as_ref().ok_or(Error::InvalidArgument)?;
+        let expand_percent = usize::try_from(expand_percent).map_err(|_| Error::SizeOverflow)?;
+        Ok((
+            writer.estimated_block_size(expand_percent)?,
+            writer.original_size(),
+            writer.row_count(),
+        ))
+    })();
+    match result {
+        Ok((block_size, original_size, row_count)) => ffi::WriterStatsResult {
+            code: ffi::Code::Ok,
+            block_size: block_size as u64,
+            original_size: original_size as u64,
+            row_count: row_count as u64,
+        },
+        Err(error) => ffi::WriterStatsResult {
+            code: code(error),
+            block_size: 0,
+            original_size: 0,
+            row_count: 0,
+        },
     }
 }
 
@@ -235,7 +413,7 @@ unsafe fn append_flat_row(
     rowkey_column_count: u32,
     hash_index_size: usize,
     block_size_upper_bound: u64,
-) -> ffi::FlatAppendResult {
+) -> ffi::AppendResult {
     let result = (|| {
         writer.set_block_size_upper_bound(
             usize::try_from(block_size_upper_bound).map_err(|_| Error::SizeOverflow)?,
@@ -256,10 +434,10 @@ unsafe fn append_flat_row(
                 })
             };
             let datum = match cell.kind {
-                0 => FlatDatum::Bytes(bytes()?),
-                1 => FlatDatum::Null,
-                2 => FlatDatum::Nop,
-                4 => FlatDatum::Outrow(bytes()?),
+                ffi::InputKind::Bytes => FlatDatum::Bytes(bytes()?),
+                ffi::InputKind::Null => FlatDatum::Null,
+                ffi::InputKind::Nop => FlatDatum::Nop,
+                ffi::InputKind::Outrow => FlatDatum::Outrow(bytes()?),
                 _ => return Err(Error::InvalidArgument),
             };
             datums.push(datum);
@@ -277,12 +455,12 @@ unsafe fn append_flat_row(
         )
     })();
     match result {
-        Ok(outcome) => ffi::FlatAppendResult {
+        Ok(outcome) => ffi::AppendResult {
             code: ffi::Code::Ok,
             accepted_rows: outcome.accepted_rows,
             is_full: outcome.is_full,
         },
-        Err(error) => ffi::FlatAppendResult {
+        Err(error) => ffi::AppendResult {
             code: code(error),
             accepted_rows: writer.row_count(),
             is_full: false,
@@ -321,19 +499,19 @@ fn finish_flat_writer(
     }
 }
 
-fn flat_writer_stats(writer: &FlatWriter, hash_index_size: usize) -> ffi::FlatStatsResult {
+fn flat_writer_stats(writer: &FlatWriter, hash_index_size: usize) -> ffi::WriterStatsResult {
     match writer.block_size(hash_index_size).and_then(|block_size| {
         writer
             .original_size(hash_index_size)
             .map(|original_size| (block_size, original_size))
     }) {
-        Ok((block_size, original_size)) => ffi::FlatStatsResult {
+        Ok((block_size, original_size)) => ffi::WriterStatsResult {
             code: ffi::Code::Ok,
             block_size: block_size as u64,
             original_size: original_size as u64,
             row_count: writer.row_count() as u64,
         },
-        Err(error) => ffi::FlatStatsResult {
+        Err(error) => ffi::WriterStatsResult {
             code: code(error),
             block_size: 0,
             original_size: 0,
@@ -374,102 +552,6 @@ struct BuildSuccess {
     accepted_rows: usize,
 }
 
-unsafe fn build_pax_block(
-    columns: Vec<ffi::BridgeColumn>,
-    cells: Vec<ffi::InputCell>,
-    rowkey_column_count: u32,
-    row_store_type: u8,
-    need_column_checksums: bool,
-    column_checksums: &[u64],
-    all_lob_in_row: bool,
-    original_size: u64,
-    max_merged_trans_version: i64,
-) -> ffi::BuildResult {
-    build_result(build_pax_block_impl(
-        &columns,
-        &cells,
-        rowkey_column_count,
-        row_store_type,
-        need_column_checksums,
-        column_checksums,
-        all_lob_in_row,
-        original_size,
-        max_merged_trans_version,
-    ))
-}
-
-unsafe fn build_pax_block_impl(
-    columns: &[ffi::BridgeColumn],
-    cells: &[ffi::InputCell],
-    rowkey_column_count: u32,
-    row_store_type: u8,
-    need_column_checksums: bool,
-    column_checksums: &[u64],
-    all_lob_in_row: bool,
-    original_size: u64,
-    max_merged_trans_version: i64,
-) -> Result<BuildSuccess> {
-    if columns.is_empty() || cells.len() % columns.len() != 0 {
-        return Err(Error::InvalidArgument);
-    }
-    let specs = columns
-        .iter()
-        .map(|column| ColumnSpec {
-            obj_type: column.obj_type,
-            fixed_length: (column.fixed_length != 0).then_some(column.fixed_length as usize),
-            enable_bit_packing: column.enable_bit_packing,
-        })
-        .collect();
-    let mut config = WriterConfig::new(specs, rowkey_column_count as usize);
-    config.row_store_type = crate::RowStoreType::try_from(row_store_type)?;
-    config.need_column_checksums = need_column_checksums;
-    config.all_lob_in_row = all_lob_in_row;
-    config.max_merged_trans_version = max_merged_trans_version;
-    config.original_size_override =
-        Some(usize::try_from(original_size).map_err(|_| Error::SizeOverflow)?);
-    config.block_size_limit = usize::MAX;
-    let mut writer = BlockWriter::new(config)?;
-    for input_row in cells.chunks_exact(columns.len()) {
-        let mut row = Vec::new();
-        row.try_reserve_exact(columns.len())
-            .map_err(|_| Error::SizeOverflow)?;
-        for (cell, column) in input_row.iter().zip(columns) {
-            let datum = match cell.kind {
-                0 => {
-                    if cell.length > 0 && cell.pointer == 0 {
-                        return Err(Error::InvalidArgument);
-                    }
-                    let bytes = if cell.length == 0 {
-                        &[][..]
-                    } else {
-                        std::slice::from_raw_parts(cell.pointer as *const u8, cell.length as usize)
-                    };
-                    OwnedDatum::Bytes(bytes.to_vec())
-                }
-                1 => OwnedDatum::Null,
-                2 => OwnedDatum::Nop,
-                3 => OwnedDatum::UInt(cell.value),
-                _ => return Err(Error::InvalidArgument),
-            };
-            if column.fixed_length == 0 && matches!(datum, OwnedDatum::UInt(_)) {
-                return Err(Error::InvalidArgument);
-            }
-            row.push(datum);
-        }
-        let outcome = writer.append_row(&row)?;
-        if outcome.is_full {
-            return Err(Error::OutputTooSmall);
-        }
-    }
-    let accepted_rows = writer.row_count();
-    let block = writer.finish_with_column_checksums(column_checksums)?;
-    Block::new(&block)?;
-    Ok(BuildSuccess {
-        block,
-        accepted_rows,
-    })
-}
-
 fn batch_result(result: Result<(Vec<u32>, Vec<ffi::CellDesc>, Vec<u8>)>) -> ffi::BatchResult {
     match result {
         Ok((rows, cells, data)) => ffi::BatchResult {
@@ -499,38 +581,38 @@ fn describe_cells(
         .map(|cell| match cell {
             crate::read::ProjectionCell::Borrowed(cell) => match cell {
                 Cell::Null => ffi::CellDesc {
-                    kind: 1,
+                    kind: ffi::CellKind::Null,
                     offset: 0,
                     length: 0,
                     value: 0,
                 },
                 Cell::Nop => ffi::CellDesc {
-                    kind: 2,
+                    kind: ffi::CellKind::Nop,
                     offset: 0,
                     length: 0,
                     value: 0,
                 },
                 Cell::Bytes(bytes) => ffi::CellDesc {
-                    kind: 0,
+                    kind: ffi::CellKind::Borrowed,
                     offset: (bytes.as_ptr() as usize - block.as_ptr() as usize) as u64,
                     length: bytes.len() as u32,
                     value: 0,
                 },
                 Cell::Outrow(bytes) => ffi::CellDesc {
-                    kind: 5,
+                    kind: ffi::CellKind::Outrow,
                     offset: (bytes.as_ptr() as usize - block.as_ptr() as usize) as u64,
                     length: bytes.len() as u32,
                     value: 0,
                 },
                 Cell::UInt(value) => ffi::CellDesc {
-                    kind: 3,
+                    kind: ffi::CellKind::UInt,
                     offset: 0,
                     length: 0,
                     value: *value,
                 },
             },
             crate::read::ProjectionCell::Decoded { offset, length } => ffi::CellDesc {
-                kind: 4,
+                kind: ffi::CellKind::Decoded,
                 offset: *offset as u64,
                 length: *length as u32,
                 value: 0,
@@ -681,12 +763,15 @@ fn locate_rowkey(
         for (cell, kind) in keys.iter().zip(key_kinds) {
             let value = match kind {
                 0 => {
-                    if cell.kind != 0 || cell.pointer == 0 {
+                    if cell.kind != ffi::InputKind::Bytes || cell.pointer == 0 {
                         return Err(Error::InvalidArgument);
                     }
                     crate::RowkeyValue::Bytes(unsafe {
                         core::slice::from_raw_parts(cell.pointer as *const u8, cell.length as usize)
                     })
+                }
+                1 | 2 if cell.kind != ffi::InputKind::UInt => {
+                    return Err(Error::InvalidArgument);
                 }
                 1 => crate::RowkeyValue::Int(cell.value as i64),
                 2 => crate::RowkeyValue::UInt(cell.value),

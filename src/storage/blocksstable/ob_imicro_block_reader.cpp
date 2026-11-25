@@ -66,9 +66,9 @@ int try_locate_rowkey_bound(
       rust_eligible = false;
       break;
     }
-    micro_block::InputCell key = {0, 0, 0, 0};
+    micro_block::InputCell key = {micro_block::InputKind::Bytes, 0, 0, 0};
     if (desc.col_type_.is_integer_type() && sizeof(int64_t) == datums[i].len_) {
-      key.kind = 3;
+      key.kind = micro_block::InputKind::UInt;
       if (desc.col_type_.is_unsigned_integer()) {
         key.value = datums[i].get_uint64();
         rust_key_kinds.push_back(2);

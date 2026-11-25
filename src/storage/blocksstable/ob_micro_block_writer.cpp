@@ -233,12 +233,15 @@ int ObMicroBlockWriter::append_row(const ObDatumRow &row)
     for (int64_t i = 0; OB_SUCC(ret) && i < row.get_column_count(); ++i) {
       const ObStorageDatum &datum = row.storage_datums_[i];
       micro_block::InputCell cell;
-      cell.kind = datum.is_null() ? 1 : (datum.is_nop() ? 2 : (datum.is_outrow() ? 4 : 0));
+      cell.kind = datum.is_null() ? micro_block::InputKind::Null
+          : (datum.is_nop() ? micro_block::InputKind::Nop
+          : (datum.is_outrow() ? micro_block::InputKind::Outrow : micro_block::InputKind::Bytes));
       cell.value = 0;
       if (OB_UNLIKELY(datum.len_ < 0)) {
         ret = OB_INVALID_DATA;
       } else {
-        cell.length = 0 == cell.kind || 4 == cell.kind ? datum.len_ : 0;
+        cell.length = micro_block::InputKind::Bytes == cell.kind
+                || micro_block::InputKind::Outrow == cell.kind ? datum.len_ : 0;
         cell.pointer = 0 == cell.length ? 0 : reinterpret_cast<std::size_t>(datum.ptr_);
         if (OB_UNLIKELY(cell.length > 0 && 0 == cell.pointer)) {
           ret = OB_INVALID_DATA;
@@ -256,7 +259,7 @@ int ObMicroBlockWriter::append_row(const ObDatumRow &row)
     const std::size_t hash_index_size = hash_index_builder_.is_valid()
         ? hash_index_builder_.estimate_size(true) : 0;
     const rust::Slice<const micro_block::InputCell> input(cells.begin(), cells.count());
-    micro_block::FlatAppendResult result = micro_block::append_flat_row(
+    micro_block::AppendResult result = micro_block::append_flat_row(
         *rust_block_->writer, input, row_meta,
         static_cast<uint32_t>(rowkey_column_count_), hash_index_size,
         static_cast<uint64_t>(block_size_upper_bound_));
@@ -386,7 +389,7 @@ int64_t ObMicroBlockWriter::get_block_size() const
     const std::size_t hash_index_size = index_buffer_.length() > 0
         ? index_buffer_.length()
         : (hash_index_builder_.is_valid() ? hash_index_builder_.estimate_size() : 0);
-    const micro_block::FlatStatsResult stats = micro_block::flat_writer_stats(
+    const micro_block::WriterStatsResult stats = micro_block::flat_writer_stats(
         *rust_block_->writer, hash_index_size);
     if (micro_block::Code::Ok == stats.code && stats.block_size <= static_cast<uint64_t>(INT64_MAX)) {
       size = stats.block_size;
@@ -402,7 +405,7 @@ int64_t ObMicroBlockWriter::get_original_size() const
     const std::size_t hash_index_size = index_buffer_.length() > 0
         ? index_buffer_.length()
         : (hash_index_builder_.is_valid() ? hash_index_builder_.estimate_size() : 0);
-    const micro_block::FlatStatsResult stats = micro_block::flat_writer_stats(
+    const micro_block::WriterStatsResult stats = micro_block::flat_writer_stats(
         *rust_block_->writer, hash_index_size);
     if (micro_block::Code::Ok == stats.code && stats.original_size <= static_cast<uint64_t>(INT64_MAX)) {
       size = stats.original_size;

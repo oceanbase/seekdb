@@ -33,6 +33,80 @@ using namespace common;
 using namespace storage;
 namespace blocksstable
 {
+enum class RustNopMode
+{
+  AS_NULL,
+  AS_EXTENDED,
+};
+
+static int materialize_rust_cell(
+    const micro_block::CellDesc &cell,
+    const rust::Vec<uint8_t> &decoded_data,
+    const char *block_data,
+    const int64_t block_size,
+    const ObObjType obj_type,
+    const int64_t borrowed_integer_mask,
+    const int64_t decoded_integer_mask,
+    const RustNopMode nop_mode,
+    common::ObIAllocator &allocator,
+    ObDatum &datum)
+{
+  int ret = OB_SUCCESS;
+  switch (cell.kind) {
+    case micro_block::CellKind::Null:
+      datum.set_null();
+      break;
+    case micro_block::CellKind::Nop:
+      if (RustNopMode::AS_EXTENDED == nop_mode) {
+        datum.set_ext();
+        const_cast<ObObj *>(datum.extend_obj_)->set_ext(ObActionFlag::OP_NOP);
+      } else {
+        datum.set_null();
+      }
+      break;
+    case micro_block::CellKind::UInt: {
+      uint32_t datum_len = 0;
+      if (OB_FAIL(get_uint_data_datum_len(
+              common::ObDatum::get_obj_datum_map_type(obj_type), datum_len))) {
+      } else {
+        datum.pack_ = datum_len;
+        MEMCPY(const_cast<char *>(datum.ptr_), &cell.value, datum_len);
+      }
+      break;
+    }
+    case micro_block::CellKind::Decoded: {
+      if (cell.offset > decoded_data.size()
+          || cell.length > decoded_data.size() - cell.offset) {
+        ret = OB_INVALID_DATA;
+      } else {
+        char *decoded = static_cast<char *>(allocator.alloc(std::max<uint64_t>(cell.length, 1)));
+        if (OB_ISNULL(decoded)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          if (cell.length > 0) {
+            MEMCPY(decoded, decoded_data.data() + cell.offset, cell.length);
+          }
+          ret = load_data_to_datum(
+              obj_type, decoded, cell.length, decoded_integer_mask, datum);
+        }
+      }
+      break;
+    }
+    case micro_block::CellKind::Borrowed:
+      if (cell.offset > static_cast<uint64_t>(block_size)
+          || cell.length > static_cast<uint64_t>(block_size) - cell.offset) {
+        ret = OB_INVALID_DATA;
+      } else {
+        ret = load_data_to_datum(
+            obj_type, block_data + cell.offset, cell.length, borrowed_integer_mask, datum);
+      }
+      break;
+    default:
+      ret = OB_INVALID_DATA;
+  }
+  return ret;
+}
+
 //////////////////////////ObIEncodeBlockGetReader/////////////////////////
 ObIEncodeBlockReader::ObIEncodeBlockReader()
   : request_cnt_(0),
@@ -278,45 +352,18 @@ int ObEncodeBlockGetReader::get_columns_rust(
     const uint32_t result_column = result_columns[i];
     const micro_block::CellDesc &cell = result.cells[result_column];
     ObStorageDatum &datum = datums[i];
+    const ObObjType obj_type = col_header_[columns[result_column]].get_store_obj_type();
+    int64_t integer_mask = 0;
+    if (ObIntTC == ob_obj_type_class(obj_type)) {
+      integer_mask = ~INTEGER_MASK_TABLE[get_type_size_map()[obj_type]];
+    }
     datum.reuse();
-    if (1 == cell.kind) {
-      datum.set_null();
-    } else if (2 == cell.kind) {
+    if (micro_block::CellKind::Nop == cell.kind) {
       datum.set_nop();
-    } else if (3 == cell.kind) {
-      const ObObjType obj_type = col_header_[columns[result_column]].get_store_obj_type();
-      uint32_t datum_len = 0;
-      const uint64_t value = cell.value;
-      if (OB_FAIL(get_uint_data_datum_len(
-              common::ObDatum::get_obj_datum_map_type(obj_type), datum_len))) {
-      } else {
-        datum.pack_ = datum_len;
-        MEMCPY(const_cast<char *>(datum.ptr_), &value, datum_len);
-      }
-    } else if (4 == cell.kind) {
-      if (cell.offset > result.data.size()
-          || cell.length > result.data.size() - cell.offset) {
-        ret = OB_INVALID_DATA;
-      } else {
-        char *decoded = static_cast<char *>(decoder_allocator_.alloc(std::max<uint64_t>(cell.length, 1)));
-        if (OB_ISNULL(decoded)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          MEMCPY(decoded, result.data.data() + cell.offset, cell.length);
-          const ObObjType obj_type = col_header_[columns[result_column]].get_store_obj_type();
-          ret = load_data_to_datum(obj_type, decoded, cell.length, 0, datum);
-        }
-      }
-    } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size_)
-               || cell.length > static_cast<uint64_t>(block_size_) - cell.offset) {
-      ret = OB_INVALID_DATA;
     } else {
-      const ObObjType obj_type = col_header_[columns[result_column]].get_store_obj_type();
-      int64_t integer_mask = 0;
-      if (ObIntTC == ob_obj_type_class(obj_type)) {
-        integer_mask = ~INTEGER_MASK_TABLE[get_type_size_map()[obj_type]];
-      }
-      ret = load_data_to_datum(obj_type, block_data_ + cell.offset, cell.length, integer_mask, datum);
+      ret = materialize_rust_cell(
+          cell, result.data, block_data_, block_size_, obj_type, integer_mask, 0,
+          RustNopMode::AS_NULL, decoder_allocator_, datum);
     }
   }
   return ret;
@@ -1115,44 +1162,10 @@ int ObMicroBlockDecoder::try_get_rows_rust(
         const micro_block::CellDesc &cell =
             result.cells[row_idx * rust_columns.size() + rust_result_columns[col_idx]];
         common::ObDatum &datum = datums[row_idx];
-        if (1 == cell.kind || 2 == cell.kind) {
-          if (preserve_nop && 2 == cell.kind) {
-            datum.set_ext();
-            const_cast<ObObj *>(datum.extend_obj_)->set_ext(ObActionFlag::OP_NOP);
-          } else {
-            datum.set_null();
-          }
-        } else if (3 == cell.kind) {
-          uint32_t datum_len = 0;
-          const uint64_t value = cell.value;
-          if (OB_FAIL(get_uint_data_datum_len(
-                  common::ObDatum::get_obj_datum_map_type(obj_type), datum_len))) {
-          } else {
-            datum.pack_ = datum_len;
-            MEMCPY(const_cast<char *>(datum.ptr_), &value, datum_len);
-          }
-        } else if (4 == cell.kind) {
-          if (cell.offset > result.data.size()
-              || cell.length > result.data.size() - cell.offset) {
-            ret = OB_INVALID_DATA;
-          } else {
-            char *decoded = static_cast<char *>(decoder_allocator_.get_inner_allocator().alloc(
-                std::max<uint64_t>(cell.length, 1)));
-            if (OB_ISNULL(decoded)) {
-              ret = OB_ALLOCATE_MEMORY_FAILED;
-            } else {
-              MEMCPY(decoded, result.data.data() + cell.offset, cell.length);
-              ret = load_data_to_datum(obj_type, decoded, cell.length, integer_mask, datum);
-            }
-          }
-        } else if (0 != cell.kind || cell.offset > static_cast<uint64_t>(block_size_)
-                   || cell.length > static_cast<uint64_t>(block_size_) - cell.offset) {
-          ret = OB_INVALID_DATA;
-        } else {
-          const char *data = block_data_ + cell.offset;
-          if (OB_FAIL(load_data_to_datum(obj_type, data, cell.length, integer_mask, datum))) {
-          }
-        }
+        ret = materialize_rust_cell(
+            cell, result.data, block_data_, block_size_, obj_type, integer_mask, integer_mask,
+            preserve_nop ? RustNopMode::AS_EXTENDED : RustNopMode::AS_NULL,
+            decoder_allocator_.get_inner_allocator(), datum);
       }
       if (OB_SUCC(ret) && reverse_trans_version && header_->is_trans_version_column_idx(
               static_cast<int64_t>(rust_columns[rust_result_columns[col_idx]]))) {

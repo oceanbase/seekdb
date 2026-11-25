@@ -980,19 +980,20 @@ int ObIMicroBlockFlatReader::read_rust_cell(
   const micro_block::CellDesc &cell =
       batch.result->cells[row_idx * batch.columns.size() + col_idx];
   datum.reuse();
-  if (1 == cell.kind) {
+  if (micro_block::CellKind::Null == cell.kind) {
     datum.set_null();
-  } else if (2 == cell.kind) {
+  } else if (micro_block::CellKind::Nop == cell.kind) {
     datum.set_nop();
-  } else if (3 == cell.kind) {
+  } else if (micro_block::CellKind::UInt == cell.kind) {
     datum.set_uint(cell.value);
-  } else if ((0 != cell.kind && 5 != cell.kind)
+  } else if ((micro_block::CellKind::Borrowed != cell.kind
+              && micro_block::CellKind::Outrow != cell.kind)
              || cell.offset > static_cast<uint64_t>(block_size)
              || cell.length > static_cast<uint64_t>(block_size) - cell.offset) {
     ret = OB_INVALID_DATA;
   } else if (OB_FAIL(datum.from_buf_enhance(
       reinterpret_cast<const char *>(header_) + cell.offset, cell.length))) {
-  } else if (5 == cell.kind) {
+  } else if (micro_block::CellKind::Outrow == cell.kind) {
     datum.set_outrow();
   }
   return ret;

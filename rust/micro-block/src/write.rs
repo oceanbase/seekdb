@@ -107,6 +107,8 @@ pub struct WriterConfig {
     pub rowkey_column_count: usize,
     pub row_store_type: RowStoreType,
     pub block_size_limit: usize,
+    pub block_size_upper_bound: usize,
+    pub minimum_rows: usize,
     pub need_column_checksums: bool,
     pub all_lob_in_row: bool,
     pub max_merged_trans_version: i64,
@@ -120,6 +122,8 @@ impl WriterConfig {
             rowkey_column_count,
             row_store_type: RowStoreType::Encoding,
             block_size_limit: 2 * 1024 * 1024,
+            block_size_upper_bound: usize::MAX,
+            minimum_rows: 1,
             need_column_checksums: false,
             all_lob_in_row: true,
             max_merged_trans_version: 0,
@@ -450,6 +454,31 @@ impl BlockWriter {
         self.rows.len()
     }
 
+    pub fn original_size(&self) -> usize {
+        self.original_size
+    }
+
+    pub fn estimated_block_size(&self, expand_percent: usize) -> Result<usize> {
+        if expand_percent == 0 {
+            return Err(Error::InvalidArgument);
+        }
+        let header_size = self.total_header_size()?;
+        self.original_size
+            .checked_mul(100)
+            .map(|size| size / expand_percent)
+            .and_then(|size| size.checked_add(header_size))
+            .ok_or(Error::SizeOverflow)
+    }
+
+    pub fn set_block_size_upper_bound(&mut self, limit: usize) {
+        self.config.block_size_upper_bound = limit;
+    }
+
+    pub fn set_finish_options(&mut self, all_lob_in_row: bool, max_merged_trans_version: i64) {
+        self.config.all_lob_in_row = all_lob_in_row;
+        self.config.max_merged_trans_version = max_merged_trans_version;
+    }
+
     pub fn append_row(&mut self, row: &[OwnedDatum]) -> Result<AppendOutcome> {
         if self.frozen {
             return Err(Error::Frozen);
@@ -460,21 +489,24 @@ impl BlockWriter {
         let mut row_size = 0usize;
         for (datum, column) in row.iter().zip(&self.config.columns) {
             self.validate_datum(datum, column)?;
-            let datum_size = datum_len(datum, column)?;
+            let datum_size = original_datum_len(datum, column)?;
             row_size = row_size
                 .checked_add(datum_size)
                 .ok_or(Error::SizeOverflow)?;
-            if column.fixed_length.is_none() {
-                row_size = row_size.checked_add(8).ok_or(Error::SizeOverflow)?;
-            }
         }
         let header_size = self.total_header_size()?;
         let would_exceed = header_size
             .checked_add(self.original_size)
             .and_then(|size| size.checked_add(row_size))
             .ok_or(Error::SizeOverflow)?
-            > self.config.block_size_limit;
-        if !self.rows.is_empty() && would_exceed {
+            >= self.config.block_size_limit;
+        let would_exceed_upper_bound = header_size
+            .checked_add(self.original_size)
+            .and_then(|size| size.checked_add(row_size))
+            .ok_or(Error::SizeOverflow)?
+            > self.config.block_size_upper_bound;
+        if would_exceed_upper_bound || (self.rows.len() >= self.config.minimum_rows && would_exceed)
+        {
             return Ok(AppendOutcome {
                 accepted_rows: self.rows.len(),
                 is_full: true,
@@ -2445,6 +2477,27 @@ fn datum_len(datum: &OwnedDatum, spec: &ColumnSpec) -> Result<usize> {
     }
 }
 
+fn original_datum_len(datum: &OwnedDatum, spec: &ColumnSpec) -> Result<usize> {
+    match datum {
+        OwnedDatum::Null => Ok(8),
+        OwnedDatum::Nop => Ok(0),
+        OwnedDatum::UInt(_) if integer_store_size(spec.obj_type).is_some() => Ok(8),
+        OwnedDatum::UInt(_) => Err(Error::InvalidArgument),
+        OwnedDatum::Bytes(bytes) => {
+            datum_len(datum, spec)?;
+            let mut size = if integer_store_size(spec.obj_type).is_some() {
+                8
+            } else {
+                bytes.len()
+            };
+            if spec.fixed_length.is_none() {
+                size = size.checked_add(8).ok_or(Error::SizeOverflow)?;
+            }
+            Ok(size)
+        }
+    }
+}
+
 fn hex_var_len(datum: &OwnedDatum) -> Result<usize> {
     match datum {
         OwnedDatum::Null | OwnedDatum::Nop => Ok(0),
@@ -2839,6 +2892,73 @@ mod tests {
             1
         );
         assert_eq!(writer.finish().unwrap_err(), Error::Frozen);
+    }
+
+    #[test]
+    fn minimum_rows_can_exceed_the_estimated_size_limit() {
+        let mut config = WriterConfig::new(vec![ColumnSpec::fixed(5, 8)], 1);
+        config.block_size_limit = 0;
+        config.minimum_rows = 2;
+        let mut writer = BlockWriter::new(config).unwrap();
+        for value in 0..2 {
+            let outcome = writer.append_row(&[OwnedDatum::UInt(value)]).unwrap();
+            assert_eq!(outcome.accepted_rows, value as usize + 1);
+            assert!(!outcome.is_full);
+        }
+        assert_eq!(
+            writer.append_row(&[OwnedDatum::UInt(2)]).unwrap(),
+            AppendOutcome {
+                accepted_rows: 2,
+                is_full: true,
+            }
+        );
+        assert_eq!(
+            Block::new(&writer.finish().unwrap()).unwrap().row_count(),
+            2
+        );
+    }
+
+    #[test]
+    fn dynamic_upper_bound_rejection_is_transactional() {
+        let config = WriterConfig::new(vec![ColumnSpec::fixed(5, 8)], 1);
+        let mut writer = BlockWriter::new(config).unwrap();
+        let header_size = writer.estimated_block_size(100).unwrap();
+        writer.set_block_size_upper_bound(header_size + 8);
+        assert!(!writer.append_row(&[OwnedDatum::UInt(1)]).unwrap().is_full);
+        assert_eq!(
+            writer.append_row(&[OwnedDatum::UInt(2)]).unwrap(),
+            AppendOutcome {
+                accepted_rows: 1,
+                is_full: true,
+            }
+        );
+        writer.set_block_size_upper_bound(usize::MAX);
+        let outcome = writer.append_row(&[OwnedDatum::UInt(2)]).unwrap();
+        assert_eq!(outcome.accepted_rows, 2);
+        assert!(!outcome.is_full);
+    }
+
+    #[test]
+    fn original_size_matches_cpp_datum_estimation() {
+        let config = WriterConfig::new(
+            vec![
+                ColumnSpec::fixed(5, 8),
+                ColumnSpec::variable(22),
+                ColumnSpec::variable(22),
+                ColumnSpec::variable(22),
+            ],
+            1,
+        );
+        let mut writer = BlockWriter::new(config).unwrap();
+        writer
+            .append_row(&[
+                OwnedDatum::UInt(7),
+                OwnedDatum::Null,
+                OwnedDatum::Nop,
+                OwnedDatum::Bytes(b"abc".to_vec()),
+            ])
+            .unwrap();
+        assert_eq!(writer.original_size(), 27);
     }
 
     #[test]
