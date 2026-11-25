@@ -10975,5 +10975,18 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""
+  },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Controls whether SQL can query local files with FILE_SCAN, FILE_LIST, and FILE_SCHEMA.",
+    "flags": "SESSION | GLOBAL | NEED_SERIALIZE | INFLUENCE_PLAN",
+    "publish_version": "1.0.0.0",
+    "info_cn": "控制是否允许使用 FILE_SCAN、FILE_LIST 和 FILE_SCHEMA 访问本地文件",
+    "background_cn": "本地文件访问能力默认关闭，启用后仍受 secure_file_priv 限制",
+    "ref_url": ""
   }
 }
