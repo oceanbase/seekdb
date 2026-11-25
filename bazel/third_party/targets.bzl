@@ -38,11 +38,6 @@ SDK_HEADERS = {
 SDK_IMPORTS = {
     "roaring": {"static_library": "lib/libroaring.a"},
     "gtest_archive": {"static_library": "lib/libgtest.a"},
-    "libaio": {
-        "static_library": "lib/libaio.a",
-        "hdrs": ["include/libaio.h"],
-        "includes": ["include"],
-    },
     "libcrypto": {
         "static_library": "lib/libcrypto.a",
         "hdrs": ["include/openssl/*.h"],

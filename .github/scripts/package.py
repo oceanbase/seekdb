@@ -51,19 +51,18 @@ def matrix():
         for baseline in (("2.17", "2.28") if glibc == "both" else (glibc,)):
             targets.append(dict(id="linux-" + arch + "-glibc" + baseline, os="linux", arch=arch,
                                 platform="linux-" + arch, runner=runner, glibc=baseline,
-                                profile="el7" if baseline == "2.17" else "el8",
                                 conda_spec=CONFIG["linux_sysroots"][arch][baseline]["spec"],
                                 micromamba=CONFIG["micromamba"]))
     targets += [
-        dict(id="macos15-arm64", platform="macos-arm64", os="macos", arch="arm64", runner="macos-15", glibc="", profile=""),
-        dict(id="windows-x86_64-md", platform="windows-x86_64", os="windows", arch="x86_64", runner="windows-2022", glibc="", profile=""),
-        dict(id="android-arm64-api26", platform="android-arm64", os="android", arch="aarch64", runner="ubuntu-24.04", glibc="", profile=""),
+        dict(id="macos15-arm64", platform="macos-arm64", os="macos", arch="arm64", runner="macos-15", glibc=""),
+        dict(id="windows-x86_64-md", platform="windows-x86_64", os="windows", arch="x86_64", runner="windows-2022", glibc=""),
+        dict(id="android-arm64-api26", platform="android-arm64", os="android", arch="aarch64", runner="ubuntu-24.04", glibc=""),
     ]
     for sdk, platform, variant in (("iphoneos", "ios-arm64", ""),
                                    ("iphonesimulator", "ios-simulator-arm64", "-simulator")):
         targets.append(dict(id="ios" + CONFIG["ios_minimum_os"] + variant + "-arm64",
                             platform=platform, os="ios", arch="arm64", runner="macos-15",
-                            glibc="", profile="", sdk=sdk))
+                            glibc="", sdk=sdk))
     targets = [target for target in targets if selected == "all" or target["platform"] == selected
                or (selected == "ios" and target["os"] == "ios")]
     if not targets:
@@ -110,17 +109,10 @@ def matrix():
 def environment():
     CACHE.mkdir(parents=True, exist_ok=True)
     target = os.environ["PACKAGE_OS"]
-    arch = os.environ["PACKAGE_ARCH"]
-    if target == "linux":
-        profiles = ["oceanbase.%s.%s.deps" % (os.environ["LINUX_PROFILE"], arch)]
-    elif target == "ios":
-        profiles = []
-    elif target == "macos":
-        profiles = ["oceanbase.macos15.arm64.deps"]
-    elif target == "windows":
-        profiles = ["oceanbase.windows.x86_64.deps"]
-    else:
-        profiles = ["oceanbase.el9.x86_64.deps"]
+    profiles = {
+        "macos": ["oceanbase.macos15.arm64.deps"],
+        "windows": ["oceanbase.windows.x86_64.deps"],
+    }.get(target, [])
     sdk = hashlib.sha256((ROOT / "deps/init/prepare.py").read_bytes())
     sdk.update((ROOT / "deps.lock.json").read_bytes())
     for name in profiles:
@@ -178,8 +170,6 @@ def initialize():
                                None, "iOSSimulator" if simulator else "iOSDevice", "arm64")
         return
     arguments = [sys.executable, "build.py", "init"]
-    if os.environ["PACKAGE_OS"] == "linux":
-        arguments += ["--linux-profile", os.environ["LINUX_PROFILE"]]
     if os.environ["PACKAGE_OS"] == "android":
         sdk = Path(os.environ["ANDROID_HOME"])
         manager = sdk / "cmdline-tools/latest/bin/sdkmanager"
@@ -253,7 +243,7 @@ def export():
             bundle, _ = binary_distribution.load(archives[0], Path(temporary) / "binary", os.environ["PACKAGE_VERSION"])
             run([bundle / "bin/seekdb", "--version"])
     if os.environ["PACKAGE_OS"] == "linux":
-        helper = ROOT / "deps/3rd/home/admin/oceanbase/bin/obshell"
+        helper = ROOT / "deps/prebuilt/native/bin/obshell"
         staged = CACHE / "obshell"
         staged.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(helper, staged / helper.name)

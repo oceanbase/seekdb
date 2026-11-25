@@ -86,7 +86,6 @@ jobs:
       PACKAGE_OS: ${{ matrix.os }}
       PACKAGE_ARCH: ${{ matrix.arch }}
       PACKAGE_GLIBC: ${{ matrix.glibc }}
-      LINUX_PROFILE: ${{ matrix.profile }}
       PACKAGE_APPLE_SDK: ${{ matrix.sdk }}
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
       PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
@@ -111,21 +110,8 @@ jobs:
       - name: Install Linux build utilities
         if: runner.os == 'Linux'
         run: |
-          packages=(rpm2cpio cpio make binutils patchelf)
-          if [[ "$LINUX_PROFILE" == el7 ]]; then
-            # EL7 Clang needs libtinfo.so.5, which Ubuntu 24 no longer ships.
-            archive=https://archive.ubuntu.com/ubuntu
-            if [[ "$RUNNER_ARCH" == ARM64 ]]; then archive=https://ports.ubuntu.com/ubuntu-ports; fi
-            for suite in jammy jammy-updates jammy-security; do
-              echo "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] $archive $suite universe"
-            done | sudo tee /etc/apt/sources.list.d/seekdb-compat.list >/dev/null
-            # Allow only libtinfo5 from the older release.
-            printf 'Package: *\nPin: release n=jammy\nPin-Priority: -1\n\nPackage: libtinfo5\nPin: release n=jammy\nPin-Priority: 500\n' |
-              sudo tee /etc/apt/preferences.d/seekdb-compat >/dev/null
-            packages+=(libtinfo5)
-          fi
           sudo apt-get update -qq
-          sudo apt-get install -y "${packages[@]}"
+          sudo apt-get install -y make binutils patchelf
       - name: Set up Conda sysroot
         id: conda
         if: matrix.os == 'linux'

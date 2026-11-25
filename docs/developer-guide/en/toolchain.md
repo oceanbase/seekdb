@@ -33,14 +33,8 @@ The build script downloads locked Cargo dependencies through the RsProxy sparse 
 
 ## Host detection and supported architectures
 
-The current dependency initialization script recognizes the following host families. Recognition means that a dependency profile can be selected; it does not by itself guarantee that every generated package is certified for production on that host.
-
-| Architecture | Recognized Linux families |
-| --- | --- |
-| x86_64 | RHEL, CentOS, AlmaLinux, Rocky Linux, Alibaba Cloud Linux/AliOS, Anolis OS, TencentOS, Ubuntu, Debian, Fedora, Kylin, openEuler, openSUSE Leap, SLES, and UOS |
-| aarch64 | RHEL, CentOS, AlmaLinux, Rocky Linux, Alibaba Cloud Linux/AliOS, Anolis OS, Ubuntu, Debian, Kylin, and openEuler |
-
-Do not infer aarch64 support for Fedora, openSUSE/SLES, UOS, or TencentOS from the x86_64 list; those hosts are not selected by the current aarch64 dependency branch.
+On Linux, `build.py init` selects dependencies from `deps.lock.json` by CPU architecture
+and glibc version. The x86_64 and aarch64 profiles require glibc 2.17 or later.
 
 The compatibility build also recognizes macOS 13 or later on both `arm64` and `x86_64`. Apple Silicon is the primary tested development platform; accepting an Intel host in the build scripts does not constitute a production-support guarantee.
 

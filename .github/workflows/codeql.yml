@@ -22,7 +22,7 @@ jobs:
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update
-        sudo apt-get install -y git wget rpm rpm2cpio cpio make build-essential binutils m4 libtool-bin libncurses5
+        sudo apt-get install -y git wget make build-essential binutils m4 libtool-bin libncurses5
 
     - uses: actions/checkout@v3
 
@@ -32,8 +32,8 @@ jobs:
       env:
         cache-name: cache-deps
       with:
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-el9.x86_64-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
-        path: deps/3rd
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('deps.lock.json', 'deps/init/prepare.py') }}
+        path: deps/prebuilt
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v2
@@ -47,7 +47,6 @@ jobs:
           source ~/.bashrc
         fi
         ./build.py init
-        export PATH="$PWD/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
         python3 ./build.py build --batch --jobs=3 --spawn_strategy=local --lockfile_mode=error \
           --nouse_action_cache --noremote_accept_cached --noremote_upload_local_results --disk_cache= //src/observer:seekdb
         test -x build/bin/src/observer/seekdb

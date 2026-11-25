@@ -10,7 +10,11 @@ mkdir -p "bin${VER:-}" lib tools etc debug admin
 install -m 0755 "$artifacts/src/observer/seekdb" "bin${VER:-}/seekdb"
 install -m 0644 "$artifacts"/src/share/inner_table/sys_package/bazel_generated/syspack_release/*.sql admin/
 install -m 0644 "$source_dir/tools/default_srs_data_mysql.sql" etc/
-obshell="$source_dir/deps/3rd/home/admin/oceanbase/bin/obshell"
+if [[ "$(uname -s)" == "Linux" ]]; then
+  obshell="$source_dir/deps/prebuilt/native/bin/obshell"
+else
+  obshell="$source_dir/deps/3rd/home/admin/oceanbase/bin/obshell"
+fi
 if [[ -f "$obshell" ]]; then
   install -m 0755 "$obshell" "bin${VER:-}/obshell"
 fi
