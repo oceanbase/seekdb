@@ -1984,10 +1984,31 @@ int ObTransformPredicateMoveAround::pushdown_through_groupby(
 {
   int ret = OB_SUCCESS;
   bool is_valid = false;
+  bool can_pushdown = true;
   ObSEArray<ObRawExpr *, 4> new_having_exprs;
   output_predicates.reuse();
   OPT_TRACE("try to pushdown having conditions into where");
-  for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_having_expr_size(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && can_pushdown && i < stmt.get_order_item_size(); ++i) {
+    ObRawExpr *order_expr = stmt.get_order_item(i).expr_;
+    if (OB_ISNULL(order_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (order_expr->is_static_scalar_const_expr()) {
+      // Constant order expressions are independent of group-by pushdown.
+    } else if (order_expr->has_flag(CNT_AGG)) {
+      // Aggregate order expressions remain available after group by.
+    } else if (OB_FAIL(ObOptimizerUtil::expr_calculable_by_exprs(order_expr,
+                                                                 stmt.get_group_exprs(),
+                                                                 true,
+                                                                 true,
+                                                                 can_pushdown))) {
+    } else if (!can_pushdown) {
+      OPT_TRACE(order_expr, "can not pushdown having through groupby because order by expr is not grouped");
+    }
+  }
+  if (OB_SUCC(ret) && !can_pushdown &&
+      OB_FAIL(new_having_exprs.assign(stmt.get_having_exprs()))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && can_pushdown && i < stmt.get_having_expr_size(); ++i) {
     ObRawExpr *pred = NULL;
     ObSEArray<ObRawExpr *, 4> generalized_columns;
     bool pushed = false;
