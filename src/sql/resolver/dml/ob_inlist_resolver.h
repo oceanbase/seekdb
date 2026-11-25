@@ -77,6 +77,14 @@ public:
   ObInListResolver(ObDMLResolver *cur_resolver)
     : cur_resolver_(cur_resolver) {}
   virtual ~ObInListResolver() {}
+  // Compact only scalar, homogeneous integer lists which then stay below the
+  // VALUES rewrite threshold. Unknown/batch parameters keep their original AST.
+  static int try_deduplicate_inlist(ObExprResolveContext &resolve_ctx,
+                                    const ObItemType op_type,
+                                    const ObRawExpr &left_expr,
+                                    const bool is_root_condition,
+                                    const ParseNode *in_list,
+                                    const ParseNode *&ret_node);
   static int check_inlist_rewrite_enable(const ParseNode &in_list,
                                          const ObItemType op_type,
                                          const ObRawExpr &left_expr,

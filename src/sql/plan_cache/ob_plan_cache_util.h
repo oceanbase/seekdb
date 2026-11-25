@@ -292,6 +292,17 @@ struct ObPCParamEqualInfo
   bool use_abs_cmp_;
   TO_STRING_KV(K_(first_param_idx), K_(second_param_idx), K_(use_abs_cmp));
   ObPCParamEqualInfo():use_abs_cmp_(false) {}
+  int hash(uint64_t &hash_val) const
+  {
+    // Equality is symmetric in the parameter indices, but not in the mode.
+    const int64_t key[] = {
+      first_param_idx_ < second_param_idx_ ? first_param_idx_ : second_param_idx_,
+      first_param_idx_ < second_param_idx_ ? second_param_idx_ : first_param_idx_,
+      use_abs_cmp_ ? 1 : 0
+    };
+    hash_val = common::murmurhash(key, sizeof(key), 0);
+    return common::OB_SUCCESS;
+  }
   inline bool operator==(const ObPCParamEqualInfo &other) const
   {
     bool cmp_ret = (first_param_idx_ == other.first_param_idx_ &&

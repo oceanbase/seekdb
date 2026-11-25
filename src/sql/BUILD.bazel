@@ -205,6 +205,14 @@ cc_library(
     visibility = ["//src/sql:__subpackages__"],
 )
 
+# Resolver regression headers remain private to their dedicated test package.
+cc_library(
+    name = "inlist_dedup_test_headers",
+    testonly = True,
+    deps = [":sql_runtime_internal_headers"],
+    visibility = ["//unittest/sql/resolver:__pkg__"],
+)
+
 _SQL_RUNTIME_UNITY_GROUPS = groups_without(
     SQL_UNITY_GROUPS,
     OPTIMIZER_GROUP_NAMES,
