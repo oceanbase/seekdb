@@ -16,85 +16,30 @@ import tempfile
 from rust import prepare as prepare_rust_std
 
 
-def header_variant(patch, digest, fields):
-    # Native bundles for different hosts may carry differently packaged copies.
-    for variant in [patch] + patch.get("variants", []):
-        if digest in (variant[name] for name in fields):
-            return variant
-    return None
-
-
-def copy_headers(source, prefix, manifest):
-    include = prefix / "include"
-    patches = [manifest["boost_mpl_backport"]]
-    patches += manifest["boost_numeric_backport"]["headers"]
-    patches += manifest["boost_geometry_math"]["headers"]
-    patched = {patch["path"]: patch for patch in patches}
-    trees = [("boost", "boost")]
-    for source_tree, target_tree in trees:
-        tree = source / source_tree
-        if not tree.is_dir():
-            raise SystemExit(f"Missing source headers: {tree}")
-        for src in tree.rglob("*"):
-            if not src.is_file():
-                continue
-            relative = Path(target_tree) / src.relative_to(tree)
-            dst = include / relative
-            patch = patched.get(relative.as_posix())
-            if patch:
-                variant = header_variant(patch, hashlib.sha256(src.read_bytes()).hexdigest(),
-                                         ("input_sha256", "output_sha256"))
-                if not variant:
-                    raise SystemExit(f"Unverified source header: {src}")
-                if dst.exists() and hashlib.sha256(dst.read_bytes()).hexdigest() == variant["output_sha256"]:
-                    continue
-            elif dst.exists():
-                src_stat, dst_stat = src.stat(), dst.stat()
-                if src_stat.st_size == dst_stat.st_size:
-                    if src_stat.st_mtime_ns == dst_stat.st_mtime_ns or src.read_bytes() == dst.read_bytes():
-                        continue
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-
-
-def apply_header(include, patch, replacements):
-    header = include / patch["path"]
-    data = header.read_bytes()
-    digest = hashlib.sha256(data).hexdigest()
-    if header_variant(patch, digest, ("output_sha256",)):
-        return
-    variant = header_variant(patch, digest, ("input_sha256",))
-    if not variant:
-        raise SystemExit(f"Unverified dependency header {header}: {digest}; update the dependency adaptation explicitly")
-    updated = data
-    for old, new in replacements:
-        if old not in updated:
-            raise SystemExit(f"Unexpected header adaptation context: {header}")
-        updated = updated.replace(old, new)
-    if hashlib.sha256(updated).hexdigest() != variant["output_sha256"]:
-        raise SystemExit(f"Unexpected header adaptation result: {header}")
-    header.write_bytes(updated)
-
-
 def prepare_headers(source, prefix, manifest):
     include = prefix / "include"
-    copy_headers(source, prefix, manifest)
-    # https://github.com/boostorg/mpl/pull/77
-    apply_header(include, manifest["boost_mpl_backport"], [(
-        b"#if BOOST_WORKAROUND(__EDG_VERSION__, <= 243)\n",
-        b"#if BOOST_WORKAROUND(__EDG_VERSION__, <= 243) || __cplusplus >= 201103L\n")])
-    # Boost numeric_conversion commit 50a1eae: these enum constants do not
-    # need MPL's next/prior, which instantiate out-of-range enum values.
-    for patch in manifest["boost_numeric_backport"]["headers"]:
-        apply_header(include, patch, [
-            (b'"boost/mpl/integral_c.hpp"', b'"boost/type_traits/integral_constant.hpp"'),
-            (b"mpl::integral_c<", b"boost::integral_constant<"),
-        ])
-
-    for patch in manifest["boost_geometry_math"]["headers"]:
-        apply_header(include, patch, [
-            (old.encode(), new.encode()) for old, new in patch["replacements"]
-        ])
+    include.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="boost.", dir=include) as temporary:
+        staging = Path(temporary)
+        shutil.copytree(source / "boost", staging / "boost")
+        for patch in manifest["boost_geometry_math"]["headers"]:
+            header = staging / patch["path"]
+            data = header.read_bytes()
+            if hashlib.sha256(data).hexdigest() != patch["input_sha256"]:
+                raise SystemExit(f"Unverified dependency header: {header}")
+            for old, new in patch["replacements"]:
+                if old.encode() not in data:
+                    raise SystemExit(f"Unexpected header adaptation context: {header}")
+                data = data.replace(old.encode(), new.encode())
+            if hashlib.sha256(data).hexdigest() != patch["output_sha256"]:
+                raise SystemExit(f"Unexpected header adaptation result: {header}")
+            header.write_bytes(data)
+        destination = include / "boost"
+        if destination.is_symlink():
+            destination.unlink()
+        elif destination.exists():
+            shutil.rmtree(destination)
+        (staging / "boost").rename(destination)
 
 
 def main():
@@ -124,7 +69,7 @@ def main():
     prefix.mkdir(parents=True, exist_ok=True)
     os.environ["EM_CACHE"] = str(prefix / "em-cache")
     dependencies = json.loads(Path(__file__).with_name("dependencies.json").read_text())
-    prepare_headers(repo / "deps/3rd/usr/local/oceanbase/deps/devel/include", prefix, dependencies)
+    prepare_headers(repo / "deps/prebuilt/wasm/include", prefix, dependencies)
 
     # Bazel consumes this prepared thread/exception ABI cache read-only.
     with tempfile.TemporaryDirectory(prefix="sysroot.", dir=prefix) as temporary:

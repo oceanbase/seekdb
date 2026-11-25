@@ -349,10 +349,17 @@ def install(profile, destination, cache_directory):
     print("Dependencies ready: " + str(destination), flush=True)
 
 
-def install_locked(lock_file, destination, cache_directory, system, architecture):
+def install_locked(lock_file, destination, cache_directory, system, architecture, *, package_names=None):
     packages = locked_packages(lock_file, system, architecture)
+    if package_names is not None:
+        packages = [package for package in packages if package["name"] in package_names]
+        missing = set(package_names) - {package["name"] for package in packages}
+        if missing:
+            raise ValueError("Missing locked dependencies: " + ", ".join(sorted(missing)))
     names = {package["name"] for package in packages}
-    if system == "Linux" and not {"llvm", "ob-sanity"} <= names:
+    toolchain_names = {"llvm", "ob-sanity"}
+    validate_toolchain = system == "Linux" and (package_names is None or bool(names & toolchain_names))
+    if validate_toolchain and not toolchain_names <= names:
         raise ValueError("Linux locked dependencies must include LLVM and ob-sanity together")
     layout = {"version": 2, "packages": packages}
     key = hashlib.sha256(json.dumps(layout, sort_keys=True).encode("utf-8")).hexdigest()
@@ -367,8 +374,8 @@ def install_locked(lock_file, destination, cache_directory, system, architecture
         stage.mkdir()
         for package in packages:
             prefix = stage
-            if package["name"] in ("gcc", "llvm", "ob-sanity"):
-                # Keep toolchain headers and runtimes outside the library SDK.
+            if package["name"] in ("bison-flex", "gcc", "llvm", "ob-sanity"):
+                # Keep host tools and their files outside the library SDK.
                 prefix = stage / package["name"]
                 prefix.mkdir()
             archive = locked_archive(package, archive_directory)
@@ -380,7 +387,7 @@ def install_locked(lock_file, destination, cache_directory, system, architecture
                 manifests = stage / "manifests"
                 manifests.mkdir(exist_ok=True)
                 manifest.rename(manifests / (package["name"] + ".json"))
-        if system == "Linux":
+        if validate_toolchain:
             llvm = json.loads((stage / "llvm/manifest.json").read_text(encoding="utf-8"))
             sanity = json.loads((stage / "ob-sanity/manifest.json").read_text(encoding="utf-8"))
             llvm_version = llvm["version"]
@@ -470,22 +477,16 @@ def main(arguments):
     install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/native", cache_directory,
                    system, architecture)
     if options.wasm:
-        subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
         install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/wasm", cache_directory,
                        "Wasm", "wasm32")
+        subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
     if options.android:
-        install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android", None)
         install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/android", cache_directory,
                        "Android", "arm64")
     if options.ios:
         install_locked(ROOT / "deps.lock.json",
                        ROOT / "deps/prebuilt" / ("ios_simulator" if options.simulator else "ios"),
                        cache_directory, "iOSSimulator" if options.simulator else "iOSDevice", "arm64")
-        subprocess.run([
-            sys.executable, str(ROOT / "build.py"), "build",
-            "--config=" + ("ios-simulator" if options.simulator else "ios"),
-            "//bazel/sdk_sources:source_sdk",
-        ], cwd=ROOT, check=True)
 
 
 if __name__ == "__main__":

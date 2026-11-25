@@ -166,14 +166,6 @@ use_repo(
 
 register_toolchains("@local_config_cc_toolchains//:all")
 
-sdk_sources = use_extension("//bazel/sdk_sources:repositories.bzl", "sdk_sources")
-
-use_repo(
-    sdk_sources,
-    "sdk_roaring",
-    "sdk_boost",
-)
-
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 http_archive(
     name = "pyyaml",

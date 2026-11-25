@@ -20,7 +20,6 @@
 #include <inttypes.h>
 #include "lib/utility/ob_printf.h"
 #include "lib/alloc/alloc_func.h"
-#include "dirent.h"
 #ifndef __EMSCRIPTEN__
 #include "rust/crypto.h"
 #include <limits>

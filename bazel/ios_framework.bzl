@@ -32,7 +32,7 @@ def ios_framework():
         name = "_ios_framework_link",
         direct_object_deps = [":_ios_entry", ":in_process_api"],
         group_deps = [":observer_embedded_runtime"],
-        sdk_deps = ["//bazel/sdk_sources:source_sdk", "//bazel/third_party:base_libraries"],
+        sdk_deps = ["//bazel/third_party:prebuilt_sdk", "//bazel/third_party:base_libraries"],
         ordered_link_files = [
             "//rust:archive",
         ],
@@ -78,8 +78,6 @@ def ios_framework():
             "//:Cargo.lock",
             "//package/ios:rust_licenses",
             "//package/ios:rust_license_files",
-            "//bazel/sdk_sources:ios_source_metadata",
-            "//bazel/sdk_sources:ios_licenses",
             "//bazel/third_party:ios_locked_metadata",
             "//bazel/third_party:ios_locked_licenses",
         ],
@@ -97,10 +95,8 @@ def ios_framework():
               ' --link-inputs "$(location :_ios_framework_link_manifest)"' +
               ' --rust-lock "$(location //:Cargo.lock)"' +
               ' --rust-licenses "$(location //package/ios:rust_licenses)"' +
-              ' --source-metadata $(locations //bazel/sdk_sources:ios_source_metadata)' +
-              ' $(locations //bazel/third_party:ios_locked_metadata)' +
-              ' --licenses $(location //:LICENSE) $(locations //bazel/sdk_sources:ios_licenses)' +
-              ' $(locations //bazel/third_party:ios_locked_licenses)' +
+              ' --source-metadata $(locations //bazel/third_party:ios_locked_metadata)' +
+              ' --licenses $(location //:LICENSE) $(locations //bazel/third_party:ios_locked_licenses)' +
               ' --output "$(@D)/framework/SeekDB.framework" --platform ' + select({
                   "//bazel:ios_simulator": "IOSSIMULATOR",
                   "//conditions:default": "IOS",

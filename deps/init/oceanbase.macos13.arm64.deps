@@ -8,15 +8,5 @@ os=macos
 arch=arm64
 repo=https://mirrors.oceanbase.com/oceanbase/development-kit/darwin/13/arm64
 
-[deps]
-devdeps-boost-1.74.0-20260126.tar.gz
-devdeps-roaringbitmap-croaring-3.0.0-20260126.tar.gz
-
-[tools]
-obdevtools-bison-2.4.1-20260122.tar.gz
-obdevtools-flex-2.5.35-20260126.tar.gz
-
 [tools-deps]
 obshell-4.4.1.1-20260325.tgz
-
-[test-utils]
