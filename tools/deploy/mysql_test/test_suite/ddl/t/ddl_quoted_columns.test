@@ -1,0 +1,28 @@
+# Backticks must be doubled in the shared DDL projection and insert lists.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS ddl_quoted_columns;
+--enable_warnings
+CREATE TABLE ddl_quoted_columns (
+  id INT NOT NULL PRIMARY KEY,
+  `a``b` INT,
+  `e``f` ENUM('red', 'blue'),
+  `s``t` SET('x', 'y')
+);
+INSERT INTO ddl_quoted_columns VALUES
+  (1, 11, 'red', 'x,y'), (2, 22, 'blue', 'y');
+ALTER TABLE ddl_quoted_columns MODIFY COLUMN `a``b` BIGINT;
+ALTER TABLE ddl_quoted_columns ADD UNIQUE KEY quoted_idx (`a``b`);
+--enable_query_log
+SELECT id, `a``b` AS n, `e``f` AS e, `s``t` AS s
+FROM ddl_quoted_columns ORDER BY id;
+SELECT `a``b` AS n FROM ddl_quoted_columns FORCE INDEX (quoted_idx)
+WHERE `a``b` = 22;
+--disable_query_log
+ALTER TABLE ddl_quoted_columns DROP PRIMARY KEY, ADD PRIMARY KEY (`a``b`);
+--enable_query_log
+SELECT id, `a``b` AS n, `e``f` + 0 AS e, `s``t` + 0 AS s
+FROM ddl_quoted_columns ORDER BY id;
+--disable_query_log
+DROP TABLE ddl_quoted_columns;
+--enable_query_log
