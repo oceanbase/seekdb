@@ -1,0 +1,17 @@
+{
+  "name": "OpenSSL 3",
+  "version": "3.6.1 (windows)",
+  "source": "https://github.com/openssl/openssl/tree/openssl-3.6.1",
+  "packaged_as": "Shared libcrypto-3-x64.dll and libssl-3-x64.dll on Windows x86_64 (development-kit package devdeps-openssl-20260414)",
+  "license": "Apache-2.0",
+  "modified": "No seekdb patch; third-party Win64 build repackaged in the development kit",
+  "license_files": [
+    "LICENSE.txt",
+    "AUTHORS.txt"
+  ],
+  "redistribution": "Retain the Apache-2.0 text and the AUTHORS list shipped with the binaries.",
+  "evidence": "deps/init/oceanbase.windows.x86_64.deps; bazel/third_party/repositories.bzl maps openssl/bin to openssl_bin; bazel/third_party/targets.bzl _WINDOWS_SHARED libcrypto and libssl; include/openssl/opensslv.h OPENSSL_VERSION_TEXT \"OpenSSL 3.6.1 27 Jan 2026\"; libcrypto-3-x64.dll string \"OpenSSL 3.6.1 27 Jan 2026\"; licenses/openssl-3/LICENSE.txt and AUTHORS.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

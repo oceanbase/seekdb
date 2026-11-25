@@ -30,6 +30,13 @@
 
 - Unless a task explicitly states otherwise, all features target newly deployed clusters and do not require backward compatibility with previous product versions. This applies to persisted data and indexes, storage formats, interfaces, protocols, configuration, and observable behavior. Do not preserve legacy designs solely for compatibility or treat the absence of backward compatibility alone as a defect or migration blocker; evaluate new designs on their own correctness, simplicity, and maintainability.
 
+## Third-party Dependencies and Licenses
+
+- When a change adds, upgrades, removes, vendors, or changes how a third-party dependency is built, linked, or packaged, review the license and redistribution impact in addition to build and runtime behavior.
+- Check the exact component version and source, whether it is shipped, build-only, or separately installed, its license and notice text, modification status, and any attribution, source, relink, or replacement obligations.
+- If the change affects a shipped dependency, update the applicable component record and license bundle. Do not rely only on build success, package metadata, or an SBOM to prove compliance.
+- If a license is unknown or incompatible, a required notice or source/relink material is missing, or the final package inventory is inaccurate, stop and ask the license owner or legal reviewer before merge.
+
 ## Code Review
 
 - For pull request or diff review tasks, read and follow `.agents/skills/code-review/SKILL.md`.

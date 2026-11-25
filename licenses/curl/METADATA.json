@@ -1,0 +1,17 @@
+{
+  "name": "curl",
+  "version": "8.12.1 (el8, macos); 8.18.0 (windows)",
+  "source": "https://github.com/curl/curl/tree/curl-8_12_1",
+  "packaged_as": "Static native library on Linux and macOS; shared libcurl.dll on Windows x86_64 (vcpkg port 8.18.0#1, development-kit package devdeps-curl-20260506)",
+  "license": "curl; ISC (inet_ntop.c and inet_pton.c fallbacks in the Windows build)",
+  "modified": "No seekdb patch; the Windows vcpkg port applies a build-system patch (dependencies.patch)",
+  "license_files": [
+    "curl-COPYING.txt",
+    "curl-inet_ntop-ISC-notice.txt"
+  ],
+  "redistribution": "Retain the curl copyright and permission notice; review any bundled documentation and third-party notices for the exact build.",
+  "evidence": "deps/init/oceanbase.el8.x86_64.deps; deps/init/oceanbase.windows.x86_64.deps; share/curl/vcpkg.spdx.json curl:x64-windows@8.18.0#1; bazel/third_party/targets.bzl; licenses/curl/curl-COPYING.txt and curl-inet_ntop-ISC-notice.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

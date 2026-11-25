@@ -1,0 +1,16 @@
+{
+  "name": "aho-corasick",
+  "version": "1.1.5",
+  "source": "https://github.com/BurntSushi/aho-corasick",
+  "license": "Unlicense OR MIT",
+  "license_files": [
+    "rust-aho-corasick-1.1.5.txt"
+  ],
+  "redistribution": "Retain the MIT text and the Unlicense notice; the component is dual licensed.",
+  "packaged_as": "Rust crate linked into the engine through fancy-regex",
+  "modified": "No local patch recorded",
+  "evidence": "Cargo.lock; fancy-regex 0.20.0 dependency graph; licenses/aho-corasick/rust-aho-corasick-1.1.5.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

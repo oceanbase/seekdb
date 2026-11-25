@@ -1,0 +1,16 @@
+{
+  "name": "Abseil",
+  "version": "20211102.0 (el8, macos); 20250814.1 (windows, abseil_dll.dll)",
+  "source": "https://github.com/abseil/abseil-cpp/tree/20211102.0",
+  "packaged_as": "Native libraries/headers in the server dependency graph; shared abseil_dll.dll on Windows x86_64 (vcpkg port 20250814.1, development-kit package devdeps-abseil-20260506)",
+  "license": "Apache-2.0",
+  "modified": "Source-build Bazel metadata only; el8 binary unspecified; the Windows vcpkg port applies build patches (001-mingw-dll, 002-string-view, 003-force-cxx-17)",
+  "license_files": [
+    "abseil-LICENSE.txt"
+  ],
+  "redistribution": "Retain the license and applicable notices; mark any modified files.",
+  "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; deps/init/oceanbase.windows.x86_64.deps; share/abseil/vcpkg.spdx.json abseil:x64-windows@20250814.1; licenses/abseil-cpp/abseil-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

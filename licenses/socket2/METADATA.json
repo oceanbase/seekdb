@@ -1,0 +1,16 @@
+{
+  "name": "socket2",
+  "version": "0.6.5",
+  "source": "https://github.com/rust-lang/socket2",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT OR Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-socket2-0.6.5.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
+  "evidence": "Cargo.lock; licenses/socket2/rust-socket2-0.6.5.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

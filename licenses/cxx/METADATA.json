@@ -1,0 +1,16 @@
+{
+  "name": "cxx",
+  "version": "1.0.202",
+  "source": "https://github.com/dtolnay/cxx",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT OR Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-cxx-1.0.202.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
+  "evidence": "Cargo.lock; licenses/cxx/rust-cxx-1.0.202.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

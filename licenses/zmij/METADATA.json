@@ -1,0 +1,16 @@
+{
+  "name": "zmij",
+  "version": "1.0.23",
+  "source": "https://crates.io/crates/zmij/1.0.23",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "zmij.txt"
+  ],
+  "redistribution": "Retain the supplied copyright and permission notice; no source or relink offer is required for unmodified binaries.",
+  "evidence": "Cargo.lock; licenses/zmij/zmij.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

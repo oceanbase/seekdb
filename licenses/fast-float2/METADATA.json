@@ -1,0 +1,16 @@
+{
+  "name": "fast-float2",
+  "version": "0.2.4",
+  "source": "https://github.com/Alexhuszagh/fast-float-rust",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT OR Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-fast-float2-0.2.4.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
+  "evidence": "Cargo.lock; licenses/fast-float2/rust-fast-float2-0.2.4.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

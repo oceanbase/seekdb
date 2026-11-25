@@ -1,0 +1,16 @@
+{
+  "name": "cpuinfo",
+  "version": "ca678952a9a8eaa6de112d154e8e104b22f9ab3f",
+  "source": "https://github.com/pytorch/cpuinfo",
+  "packaged_as": "Static native library linked into the engine",
+  "license": "BSD-2-Clause",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "cpuinfo-LICENSE.txt"
+  ],
+  "redistribution": "Retain the copyright, conditions, and disclaimer.",
+  "evidence": "src/observer/observer_link_deps.bzl; vsag 0.16.20 extern/cpuinfo/cpuinfo.cmake (commit-pinned, no release tag); deps.lock.json",
+  "shipped_in": [
+    "engine"
+  ]
+}

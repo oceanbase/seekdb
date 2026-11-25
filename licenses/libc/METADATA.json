@@ -1,0 +1,16 @@
+{
+  "name": "libc",
+  "version": "0.2.189",
+  "source": "https://github.com/rust-lang/libc",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT OR Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-libc-0.2.189.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
+  "evidence": "Cargo.lock; licenses/libc/rust-libc-0.2.189.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

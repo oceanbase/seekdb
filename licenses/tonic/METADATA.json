@@ -1,0 +1,16 @@
+{
+  "name": "tonic",
+  "version": "0.14.6",
+  "source": "https://github.com/hyperium/tonic",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-tonic-0.14.6.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
+  "evidence": "Cargo.lock; licenses/tonic/rust-tonic-0.14.6.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

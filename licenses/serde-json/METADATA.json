@@ -1,0 +1,16 @@
+{
+  "name": "serde_json",
+  "version": "1.0.151",
+  "source": "https://github.com/serde-rs/json",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "serde_json.txt"
+  ],
+  "redistribution": "Retain the supplied copyright and permission notice; no source or relink offer is required for unmodified binaries.",
+  "evidence": "Cargo.lock; licenses/serde-json/serde_json.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

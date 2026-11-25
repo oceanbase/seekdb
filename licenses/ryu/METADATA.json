@@ -1,0 +1,16 @@
+{
+  "name": "ryu",
+  "version": "1.0.23",
+  "source": "https://github.com/dtolnay/ryu",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "Apache-2.0 OR BSL-1.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-ryu-1.0.23.txt"
+  ],
+  "redistribution": "Retain the supplied alternative-license texts and applicable notices.",
+  "evidence": "Cargo.lock; licenses/ryu/rust-ryu-1.0.23.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

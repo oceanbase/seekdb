@@ -1,0 +1,16 @@
+{
+  "name": "getrandom",
+  "version": "0.4.3",
+  "source": "https://github.com/rust-random/getrandom",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT OR Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-getrandom-0.4.3.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts and any applicable notices. Only the version with a staged text is listed here.",
+  "evidence": "Cargo.lock; licenses/getrandom/rust-getrandom-0.4.3.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

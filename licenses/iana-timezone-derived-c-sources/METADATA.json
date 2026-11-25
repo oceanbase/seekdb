@@ -1,0 +1,16 @@
+{
+  "name": "IANA timezone-derived C sources",
+  "version": "unspecified",
+  "source": "https://www.iana.org/time-zones",
+  "packaged_as": "Compiled timezone support in src/oblib/common/timezone",
+  "license": "unspecified (public-domain dedication)",
+  "modified": "unspecified",
+  "license_files": [
+    "timezone-public-domain.txt"
+  ],
+  "redistribution": "Preserve the public-domain and contributor notices; no SPDX identifier is asserted for this dedication.",
+  "evidence": "licenses/iana-timezone-derived-c-sources/timezone-public-domain.txt; src/oblib/common/timezone/localtime.c, private.h, and tzfile.h",
+  "shipped_in": [
+    "engine"
+  ]
+}

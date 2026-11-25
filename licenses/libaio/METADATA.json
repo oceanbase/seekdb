@@ -1,0 +1,17 @@
+{
+  "name": "libaio",
+  "version": "0.3.112",
+  "source": "https://pagure.io/libaio",
+  "packaged_as": "Static server link input and shared libraries in the libs component",
+  "license": "LGPL-2.1-or-later",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "libaio-COPYING.txt"
+  ],
+  "redistribution": "Retain the LGPL-2.1 text. Provide the corresponding libaio source, any patches, and a verified relink/replacement mechanism when bundling the library; see SOURCE-OFFER.txt.",
+  "evidence": "el8 manifest; package/package.py; bazel/third_party/targets.bzl; upstream 0.3.112 src/libaio.h and COPYING",
+  "shipped_in": [
+    "engine"
+  ],
+  "source_offer": "libaio 0.3.112 source: https://pagure.io/libaio/archive/libaio-0.3.112/libaio-0.3.112.tar.xz. No local patches are recorded. Provide the exact source archive and relink instructions with any distribution that bundles this library."
+}

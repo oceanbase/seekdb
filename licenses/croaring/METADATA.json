@@ -1,0 +1,16 @@
+{
+  "name": "CRoaring",
+  "version": "3.0.0 (el8, macos); 4.5.0 (windows, roaring.dll)",
+  "source": "https://github.com/RoaringBitmap/CRoaring/tree/v3.0.0",
+  "packaged_as": "Native library/headers in the server dependency graph; shared roaring.dll on Windows x86_64 (vcpkg port 4.5.0, development-kit package devdeps-roaring-20260506)",
+  "license": "Apache-2.0 OR MIT",
+  "modified": "No source patch recorded",
+  "license_files": [
+    "croaring-LICENSE.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license text and copyrights; no source or relink offer is required for unmodified binaries.",
+  "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; deps/init/oceanbase.windows.x86_64.deps; share/roaring/vcpkg.spdx.json roaring:x64-windows@4.5.0; licenses/croaring/croaring-LICENSE.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

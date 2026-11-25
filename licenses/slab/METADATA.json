@@ -1,0 +1,16 @@
+{
+  "name": "slab",
+  "version": "0.4.12",
+  "source": "https://github.com/tokio-rs/slab",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-slab-0.4.12.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
+  "evidence": "Cargo.lock; licenses/slab/rust-slab-0.4.12.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

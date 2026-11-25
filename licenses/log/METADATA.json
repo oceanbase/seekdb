@@ -1,0 +1,16 @@
+{
+  "name": "log",
+  "version": "0.4.34",
+  "source": "https://github.com/rust-lang/log",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT OR Apache-2.0",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-log-0.4.34.txt"
+  ],
+  "redistribution": "Retain the supplied dual-license texts and any applicable notices.",
+  "evidence": "Cargo.lock; licenses/log/rust-log-0.4.34.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

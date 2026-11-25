@@ -1,0 +1,16 @@
+{
+  "name": "mio",
+  "version": "1.2.3",
+  "source": "https://github.com/tokio-rs/mio",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "MIT",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-mio-1.2.3.txt"
+  ],
+  "redistribution": "Retain the copyright and permission notice; no source or relink offer is required for unmodified binaries.",
+  "evidence": "Cargo.lock; licenses/mio/rust-mio-1.2.3.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}

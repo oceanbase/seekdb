@@ -1,0 +1,16 @@
+{
+  "name": "zlib-rs",
+  "version": "0.6.8",
+  "source": "https://github.com/trifectatechfoundation/zlib-rs",
+  "packaged_as": "Rust crate linked into native engine artifacts",
+  "license": "Zlib",
+  "modified": "No local patch recorded",
+  "license_files": [
+    "rust-zlib-rs-0.6.8.txt"
+  ],
+  "redistribution": "Retain the notice, do not misrepresent origin, and mark altered source versions.",
+  "evidence": "Cargo.lock; licenses/zlib-rs/rust-zlib-rs-0.6.8.txt",
+  "shipped_in": [
+    "engine"
+  ]
+}
