@@ -167,6 +167,15 @@ int ObTableLockService::ObTableLockCtx::set_by_lock_req(const ObLockRequest &arg
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(set_by_lock_req_common_part(arg))) {
+  } else if (is_obj_lock_task()) {
+    for (int64_t i = 0; i < obj_list_.count(); ++i) {
+      if (ObLockOBJType::OBJ_TYPE_RUNTIME == obj_list_.at(i).obj_type_) {
+        // Waiting serial DDL must not be bypassed by later parallel DDL.
+        is_enable_lock_priority_ = true;
+        lock_priority_ = ObTableLockPriority::NORMAL;
+        break;
+      }
+    }
   }
   return ret;
 }

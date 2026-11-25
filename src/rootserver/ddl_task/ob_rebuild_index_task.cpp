@@ -18,7 +18,7 @@
 
 #include "ob_rebuild_index_task.h"
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -105,6 +105,7 @@ int ObRebuildIndexTask::init(
     parent_task_id_ = task_record.parent_task_id_;
     task_version_ = task_record.task_version_;
     ret_code_ = task_record.ret_code_;
+    task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     
     dst_schema_version_ = schema_version_;
     task_type_ = task_record.ddl_type_;
@@ -173,7 +174,7 @@ int ObRebuildIndexTask::drop_index_impl()
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
     } else if (OB_UNLIKELY(ERRSIM_DROP_INDEX_IMPL_ERROR)) {
       ret = OB_EAGAIN;
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
     } else {
       index_drop_task_id_ = drop_index_res.task_id_;
       LOG_INFO("success to submit drop vector index task", K(ret), 
@@ -299,7 +300,7 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                      *GCTX.schema_service_, target_object_id_, ddl_rpc_timeout))) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_index(create_index_arg, res); }))) {
+      } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_index(create_index_arg, res); }))) {
       } else {
         index_build_task_id_ = res.task_id_;  // create vector index task ID
         new_index_id_ = res.index_table_id_;  // new table 3 index ID
@@ -414,7 +415,7 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
                      *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
       } else if (OB_UNLIKELY(ERRSIM_SWITCH_INDEX_NAME_ERROR)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->execute_ddl_task(alter_table_arg, unused_ids); }))) {
+      } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->execute_ddl_task(alter_table_arg, unused_ids); }))) {
       } else {
         LOG_INFO("success to switch index name", K(ret), K(origin_table_name), K(alter_table_arg));
       }

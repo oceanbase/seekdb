@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_opt_stat_sql_service.h"
+#include "lib/compress/ob_compress_util.h"
 #include <inttypes.h>
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "share/ob_dml_sql_splicer.h"
@@ -823,7 +824,7 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
   } else if (stat.get_llc_bitmap_size() <= 0) {
     // do nothing
   } else if (OB_FAIL(get_compressed_llc_bitmap(allocator,
-                                               bitmap_compress_lib_name[ObOptStatCompressType::ZSTD_1_3_8_COMPRESS],
+                                               bitmap_compress_lib_name[ObOptStatCompressType::ZSTD_COMPRESS],
                                                stat.get_llc_bitmap(),
                                                stat.get_llc_bitmap_size(),
                                                llc_comp_buf,
@@ -858,7 +859,7 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
         OB_FAIL(dml_splicer.add_column("histogram_type", stat.get_histogram().get_type())) ||
         OB_FAIL(dml_splicer.add_column("global_stats", 0)) ||
         OB_FAIL(dml_splicer.add_column("user_stats", 0)) ||
-        OB_FAIL(dml_splicer.add_column("spare1", ObOptStatCompressType::ZSTD_1_3_8_COMPRESS))) {
+        OB_FAIL(dml_splicer.add_column("spare1", ObOptStatCompressType::ZSTD_COMPRESS))) {
     } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
     } else { /*do nothing*/ }
   }
@@ -1181,7 +1182,7 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           char *bitmap_buf = NULL;
           if (OB_SUCC(ret) && llc_bitmap_size > 0) {
             int64_t compress_type = ObOptStatCompressType::MAX_COMPRESS;
-            EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "compress_type", compress_type, int64_t, true, false, ObOptStatCompressType::ZSTD_1_3_8_COMPRESS);
+            EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "compress_type", compress_type, int64_t, true, false, ObOptStatCompressType::ZSTD_COMPRESS);
             if (OB_SUCC(ret)) {
               if (OB_UNLIKELY(compress_type < 0 || compress_type >= ObOptStatCompressType::MAX_COMPRESS)) {
                 ret = OB_ERR_UNEXPECTED;
@@ -1238,29 +1239,30 @@ int ObOptStatSqlService::get_compressed_llc_bitmap(ObIAllocator &allocator,
                                                    int64_t &comp_size)
 {
   int ret = OB_SUCCESS;
-  ObCompressor *compressor  = NULL;
+  ObCompressorType compressor_type = INVALID_COMPRESSOR;
   int64_t max_comp_size = 0;
   if (NULL == bitmap_buf || bitmap_size <= 0 || bitmap_compress_name == NULL) {
     ret = common::OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arguments.", KP(bitmap_buf), K(bitmap_size), K(bitmap_compress_name), K(ret));
-  } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(
-      bitmap_compress_name, compressor))) {
-  } else if (NULL == compressor) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "compressor is NULL, do not compress data.",
-               K(bitmap_compress_name), K(ret));
-  } else if (OB_FAIL(compressor->get_max_overflow_size(bitmap_size, max_comp_size))) {
+  } else if (OB_FAIL(get_compressor_type(bitmap_compress_name, compressor_type))) {
+  } else if (compressor_type == NONE_COMPRESSOR) {
+    comp_buf = const_cast<char*>(bitmap_buf);
+    comp_size = bitmap_size;
   } else {
-    max_comp_size += bitmap_size;
-    if (NULL == (comp_buf = static_cast<char*>(allocator.alloc(max_comp_size)))) {
+    const auto bound = compression::compress_bound(
+        static_cast<uint8_t>(compressor_type), bitmap_size);
+    if (OB_FAIL(compression_error_code(bound.code))) {
+    } else if (FALSE_IT(max_comp_size = static_cast<int64_t>(bound.size))) {
+    } else if (NULL == (comp_buf = static_cast<char*>(allocator.alloc(max_comp_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       COMMON_LOG(ERROR, "cannot allocate compressed buffer.",
                  K(max_comp_size), K(ret));
-    } else if (OB_FAIL(compressor->compress(bitmap_buf,
-                                            bitmap_size,
-                                            comp_buf,
-                                            max_comp_size,
-                                            comp_size))) {
+    } else if (const auto result = compression::compress(
+                   static_cast<uint8_t>(compressor_type),
+                   reinterpret_cast<const uint8_t *>(bitmap_buf), bitmap_size,
+                   reinterpret_cast<uint8_t *>(comp_buf), max_comp_size);
+               OB_FAIL(compression_error_code(result.code))) {
+    } else if (FALSE_IT(comp_size = static_cast<int64_t>(result.size))) {
     } else if (comp_size >= bitmap_size) {
       // compress is not work, just use original data.
       comp_buf = const_cast<char*>(bitmap_buf);
@@ -1279,7 +1281,7 @@ int ObOptStatSqlService::get_decompressed_llc_bitmap(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   const int64_t max_bitmap_size = ObOptColumnStat::NUM_LLC_BUCKET; // max size of uncompressed buffer.
-  ObCompressor* compressor = NULL;
+  ObCompressorType compressor_type = INVALID_COMPRESSOR;
 
   if (OB_ISNULL(bitmap_compress_name)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1290,15 +1292,14 @@ int ObOptStatSqlService::get_decompressed_llc_bitmap(ObIAllocator &allocator,
   } else if (NULL == (bitmap_buf = static_cast<char*>(allocator.alloc(max_bitmap_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory for uncompressed data failed.", K(max_bitmap_size), K(ret));
-  } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(
-      bitmap_compress_name, compressor)))  {
-  } else if (NULL == compressor) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(compressor->decompress(comp_buf,
-                                            comp_size,
-                                            bitmap_buf,
-                                            max_bitmap_size,
-                                            bitmap_size))) {
+  } else if (OB_FAIL(get_compressor_type(bitmap_compress_name, compressor_type))) {
+  } else if (const auto result = compression::decompress(
+                 static_cast<uint8_t>(compressor_type),
+                 reinterpret_cast<const uint8_t *>(comp_buf), comp_size,
+                 reinterpret_cast<uint8_t *>(bitmap_buf), max_bitmap_size);
+             OB_FAIL(compression_error_code(result.code))) {
+  } else {
+    bitmap_size = static_cast<int64_t>(result.size);
   }
   return ret;
 }

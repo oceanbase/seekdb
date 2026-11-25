@@ -365,19 +365,6 @@ int ObSSTableCopyFinishTask::add_sstable(ObTableHandleV2 &table_handle)
   return ret;
 }
 
-int ObSSTableCopyFinishTask::add_sstable(ObTableHandleV2 &table_handle, const int64_t last_meta_macro_seq)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("sstable copy finish task do not init", K(ret));
-  } else if (OB_FAIL(tablet_copy_finish_task_->add_sstable(table_handle, last_meta_macro_seq))) {
-    LOG_WARN("failed to add sstable", K(ret), K(table_handle), K(last_meta_macro_seq));
-  }
-
-  return ret;
-}
-
 int ObSSTableCopyFinishTask::get_copy_macro_range_array(const common::ObArray<ObCopyMacroRangeInfo> *&macro_range_array) const
 {
   int ret = OB_SUCCESS;

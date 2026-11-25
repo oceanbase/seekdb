@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_log_table_scan.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_log_join.h"
 #include "data_plane/access/ob_tablet_split_type.h"
 #include "query/vector/ob_vector_index_util.h"
@@ -1411,7 +1412,7 @@ int ObLogTableScan::get_plan_item_info(PlanText &plan_text,
     } else if (OB_FAIL(print_stats_version(*table_meta, buf, buf_len, pos))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF("dynamic sampling level:%ld", table_meta->get_ds_level()))) {
+    } else if (OB_FAIL(BUF_PRINTF("dynamic sampling level:%" PRId64 "", table_meta->get_ds_level()))) {
     } else if (OB_NOT_NULL(est_cost_info_) &&
                OB_FAIL(print_est_method(est_cost_info_->est_method_, buf, buf_len, pos))) {
     }
@@ -1694,27 +1695,27 @@ int ObLogTableScan::explain_index_selection_info(char *buf,
     } else if (OB_FAIL(BUF_PRINTF("  %.*s:", table_name_.length(), table_name_.ptr()))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF("table_rows:%ld",
+    } else if (OB_FAIL(BUF_PRINTF("table_rows:%" PRId64 "",
                             static_cast<int64_t>(get_table_row_count())))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF("physical_range_rows:%ld",
+    } else if (OB_FAIL(BUF_PRINTF("physical_range_rows:%" PRId64 "",
                             static_cast<int64_t>(get_phy_query_range_row_count())))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF("logical_range_rows:%ld",
+    } else if (OB_FAIL(BUF_PRINTF("logical_range_rows:%" PRId64 "",
                             static_cast<int64_t>(get_logical_query_range_row_count())))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF("index_back_rows:%ld",
+    } else if (OB_FAIL(BUF_PRINTF("index_back_rows:%" PRId64 "",
                             static_cast<int64_t>(get_index_back_row_count())))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF("output_rows:%ld",
+    } else if (OB_FAIL(BUF_PRINTF("output_rows:%" PRId64 "",
                             static_cast<int64_t>(get_output_row_count())))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-    } else if (OB_FAIL(BUF_PRINTF("table_dop:%ld", get_parallel()))) {
+    } else if (OB_FAIL(BUF_PRINTF("table_dop:%" PRId64 "", get_parallel()))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
     } else if (OB_FAIL(BUF_PRINTF("dop_method:%.*s", op_parallel_rule_name.length(),

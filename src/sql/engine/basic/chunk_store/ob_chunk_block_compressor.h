@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_BASIC_OB_CHUNK_BLOCK_COMPRESSOR_H_
 #define OCEANBASE_BASIC_OB_CHUNK_BLOCK_COMPRESSOR_H_
 
-#include "lib/compress/ob_compressor_pool.h"
+#include "lib/compress/ob_compress_util.h"
 
 namespace oceanbase
 {
@@ -40,7 +40,6 @@ public:
   int calc_need_size(int64_t in_size, int64_t &need_size);
 private:
   common::ObCompressorType compressor_type_;
-  common::ObCompressor *compressor_;
 };
 
 } // end namespace sql

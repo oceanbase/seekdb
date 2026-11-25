@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_JSON_SCHEMA_VALIDATION_REPORT_H_
 #define OCEANBASE_SQL_OB_EXPR_JSON_SCHEMA_VALIDATION_REPORT_H_
 
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_bin.h"
 #include "common/json_type/ob_json_schema.h"
 #include "sql/engine/expr/ob_expr_operator.h"
@@ -44,8 +44,6 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                     ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
-  static int raise_validation_report(ObIAllocator &allocator, ObJsonSchemaValidator& validator, 
-                                    const bool& is_valid, ObIJsonBase*& validation_report);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprJsonSchemaValidationReport);
   const static uint8_t OB_JSON_SCHEMA_EXPR_ARG_NUM = 2;

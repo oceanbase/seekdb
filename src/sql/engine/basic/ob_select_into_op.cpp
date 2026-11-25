@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "lib/file/path_operations.h"
 #include <cmath>
+#include <inttypes.h>
 #include <memory>
 
 #include "ob_select_into_op.h"
@@ -336,6 +338,8 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
                                 int64_t &pos)
 {
   int ret = OB_SUCCESS;
+  ObObjPrintParams dump_params;
+  dump_params.use_memcpy_ = true;
   const ObObj &field_str = field_str_;
   char closed_cht = char_enclose_;
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
@@ -356,7 +360,7 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
       ObDatum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
       } else if (OB_FAIL(datum->to_obj(cell, expr->obj_meta_))) {
-      } else if (OB_FAIL(cell.print_plain_str_literal(buf, buf_len, pos))) {
+      } else if (OB_FAIL(cell.print_plain_str_literal(buf, buf_len, pos, dump_params))) {
       } else if (0 != closed_cht && (!is_optional_ || ob_is_string_type(expr->datum_meta_.type_))) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%c", closed_cht))) {
         }
@@ -391,7 +395,7 @@ int ObSelectIntoOp::calc_first_file_path(ObString &path)
       OZ(file_name_with_suffix.append_fmt("%.*s", input_file_name.length(), input_file_name.ptr()));
     }
     if (MY_SPEC.parallel_ > 1) {
-      OZ(file_name_with_suffix.append_fmt("_%ld_%ld_%d", input->sqc_id_, input->task_id_, 0));
+      OZ(file_name_with_suffix.append_fmt("_%" PRId64 "_%" PRId64 "_%d", input->sqc_id_, input->task_id_, 0));
     } else {
       OZ(file_name_with_suffix.append_fmt("_%d", 0));
     }
@@ -422,7 +426,7 @@ int ObSelectIntoOp::calc_next_file_path(ObExternalFileWriter &data_writer)
   } else {
     file_path = data_writer.url_.split_on(data_writer.url_.reverse_find('_'));
     if (OB_FAIL(url_with_suffix.assign(file_path))) {
-    } else if (OB_FAIL(url_with_suffix.append_fmt("_%ld", data_writer.split_file_id_))) {
+    } else if (OB_FAIL(url_with_suffix.append_fmt("_%" PRId64 "", data_writer.split_file_id_))) {
     }
     ObString file_extension;
     OZ(external_properties_.get_format_file_extension(format_type_, file_extension));
@@ -490,9 +494,13 @@ int ObSelectIntoOp::check_csv_file_size(ObCsvFileWriter &data_writer)
       }
     }
     if (has_compress_ && has_split) {
-      data_writer.get_compress_stream_writer()->reuse();
+      if (OB_FAIL(data_writer.get_compress_stream_writer()->reuse())) {
+        LOG_WARN("failed to reset outfile compression", K(ret));
+      }
     }
-    data_writer.update_last_line_pos();
+    if (OB_SUCC(ret)) {
+      data_writer.update_last_line_pos();
+    }
   }
   return ret;
 }
@@ -1059,7 +1067,7 @@ int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(data_writer->file_appender_.append(buf, pos, false))) {
+    if (OB_FAIL(data_writer->file_appender_.append(buf, pos))) {
     } else {
       //do nothing
     }
@@ -1202,23 +1210,19 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 {
   int ret = OB_SUCCESS;
   ObString file_path = file_name.split_on(file_name.reverse_find('/'));
-  char full_path_buf[PATH_MAX+1];
-  char *actual_path = nullptr;
+  char full_path_buf[common::MAX_PATH_SIZE] = {0};
   ObSqlString sql_str;
   ObString secure_file_priv;
   
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
-#ifdef _WIN32
-  } else if (OB_ISNULL(actual_path = _fullpath(full_path_buf, sql_str.ptr(), PATH_MAX))) {
-#else
-  } else if (OB_ISNULL(actual_path = realpath(sql_str.ptr(), full_path_buf))) {
-#endif
+  } else if (OB_SUCCESS != path_operations::resolve_path(sql_str.ptr(), full_path_buf,
+                                                         sizeof(full_path_buf))) {
     ret = OB_FILE_NOT_EXIST;
   } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
                                                                 SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
-  } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
+  } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, full_path_buf))) {
     if (OB_ERR_NO_PRIVILEGE == ret) {
       ret = OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS;
       LOG_ERROR("failed to check secure path", K(ret), K(secure_file_priv));

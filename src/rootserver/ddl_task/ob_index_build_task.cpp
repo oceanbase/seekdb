@@ -17,10 +17,11 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_checksum.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_ddl_sim_point.h"
@@ -182,7 +183,7 @@ int ObIndexSSTableBuildTask::process()
 void ObIndexSSTableBuildTask::add_event_info(const int ret, const ObString &ddl_event_stmt)
 {
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, dest_table_id:%ld",
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%" PRIu64 ", dest_table_id:%" PRIu64,
             data_table_id_, dest_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
     "ret", ret,
@@ -1341,7 +1342,7 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
     } else {
       const bool is_parallel = create_index_arg_.is_parallel_;
       if (!is_parallel) {
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
+        if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
         }
       } else {
         obcall::ObParallelDDLRes res;
@@ -1452,7 +1453,7 @@ int ObIndexBuildTask::clean_on_failed()
           drop_index_arg.is_inner_          = true;
           drop_index_arg.task_id_ = task_id_;
           if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
+          } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
           }
           LOG_INFO("drop index when build failed", K(ret), K(drop_index_arg));
           wait_trans_ctx_.reset();
@@ -1511,7 +1512,7 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %" PRId64 ", ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(databuff_printf(stat_info_.message_,
@@ -1526,14 +1527,14 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %ld",
+                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %" PRId64 "",
                                     snapshot_version_))) {
         }
       } else {
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %ld",
+                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %" PRId64 "",
                                     wait_trans_ctx_.get_pending_tx_id().get_id()))) {
         }
       }

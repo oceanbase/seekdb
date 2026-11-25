@@ -14,16 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_XML_PARSER_H_
-#define OCEANBASE_XML_PARSER_H_
+#pragma once
 #include "common/xml/ob_xml_tree.h"
 #include "lib/string/ob_string_buffer.h"
 
-struct _xmlParserCtxt;
-struct _xmlSAXHandler;
-
 namespace oceanbase {
 namespace common {
+
+struct XmlAttributeView;
 
 enum ObXmlParserOption {
     OB_XML_PARSE_RECOVER	= 1<<1,	/* continue parse whenever some error occur */
@@ -35,8 +33,7 @@ enum ObXmlParserOption {
 };
 
 
-// ObXmlParserBase currently used for constructing xml tree and some common functions.
-// If having same complex logic, please first add to ObLibXml2SaxParser
+// ObXmlParserBase constructs the XML tree used by XPath and update expressions.
 class ObXmlParserBase {
 public:
   static constexpr int OB_XML_PARSER_MAX_DEPTH = 1000;
@@ -151,18 +148,13 @@ protected:
 };
 
 
-// should use ObXmlParser, not this class
-// the impl of ObLibXml2SaxParser is in ob_libxml2_sax_handler.cpp
-// to aviod importing to much libxml2 header files
-class ObLibXml2SaxParser : public ObXmlParserBase {
+class ObXmlParser : public ObXmlParserBase {
 public:
-
-  ObLibXml2SaxParser(ObMulModeMemCtx* ctx):
+  ObXmlParser(ObMulModeMemCtx* ctx):
                      ObXmlParserBase(ctx),
-                     ctxt_(nullptr),
                      ns_cnt_stack_(),
                      ns_stack_() {}
-  virtual ~ObLibXml2SaxParser();
+  virtual ~ObXmlParser() = default;
 
   virtual int parse_document(const ObString& xml_text);
   virtual int parse_content(const ObString& xml_text);
@@ -170,38 +162,25 @@ public:
   int add_text_node(ObMulModeNodeType type, const char* value, int len);
 
   int start_document();
-  int start_element(const char* name, const char** attrs);
-  int end_element();
+  int end_document();
+  int start_element(const ObString& name, const XmlAttributeView* attrs, size_t attr_count, bool empty);
+  int end_element(bool empty);
   int characters(const char *ch, int len);
   int processing_instruction(const ObString& target, const ObString& value);
-
-  // for error handling
-  void stop_parse(int code);
-  void set_stop_parse(bool val) {stop_parse_ = val;}
-  bool is_stop_parse() {return stop_parse_;}
-  int on_error(int code);
-  void set_errno(int code) {errno_ = code;}
-  int get_last_errno() {return errno_;}
-
-  _xmlParserCtxt* get_libxml2_ctxt() {return ctxt_;}
+  int set_xml_decl(const ObString& xml_decl_str);
 
 private:
-  int init(const ObString& xml_text, bool skip_start_blank);
-  int init_parse_context();
-  int init_xml_text(const ObString& xml_text, bool skip_start_blank);
   int check();
 
   int alloc_text_node(ObMulModeNodeType type, 
                       const char* src_value, 
                       int len, 
                       ObXmlText*& node);
-  int escape_xml_text(const ObString &src_attr_value, ObString &dst_attr_value);
   int construct_text_value(const ObString &src_attr_value, ObString &attr_value);
 
   // helper method
-  int set_xml_decl(const ObString& xml_decl_str);
-  int set_element_name(ObXmlElement& element, const char* src_name);
-  int add_element_attr(ObXmlElement& element, const char* src_attr_name, const char* src_attr_value);
+  int set_element_name(ObXmlElement& element, const ObString& src_name);
+  int add_element_attr(ObXmlElement& element, const ObString& src_attr_name, const ObString& src_attr_value);
 
   // for namespace
   int push_namespace(ObXmlAttribute* ns);
@@ -209,26 +188,13 @@ private:
   int get_namespace(const ObString& name, bool use_default_ns, ObXmlAttribute*& ns);
   int set_element_namespace(ObXmlElement& element);
 
-  int to_ob_xml_errno(int code);
-
-  int get_parse_byte_num();
-  bool is_parsed_all_input();
-
 private:
-  int errno_ = 0;
-  bool stop_parse_ = false;
-
-  ObString xml_text_;
-
-  _xmlParserCtxt* ctxt_ = nullptr;
-  _xmlSAXHandler* old_sax_ = nullptr;
+  bool content_parse_ = false;
 
   ObArray<int> ns_cnt_stack_;
   ObArray<ObXmlAttribute*> ns_stack_;
-  DISALLOW_COPY_AND_ASSIGN(ObLibXml2SaxParser);
+  DISALLOW_COPY_AND_ASSIGN(ObXmlParser);
 };
-// use ObXmlParser for parser
-typedef ObLibXml2SaxParser ObXmlParser;
 
 
 class ObXmlParserUtils {
@@ -261,7 +227,6 @@ public:
   static int get_xml_escape_str_length(const ObString &str);
 
   // just set ptr, no content copy
-  static int check_local_name_legality(const ObString& localname);
   static int get_prefix_and_localname(const ObString& qname, ObString& prefix, ObString& localname);
   static bool is_namespace_attribute(ObXmlAttribute* attr);
   static bool is_entity_ref(ObString &input_str, int64_t index, ObString &ref, int64_t &ref_len);
@@ -269,5 +234,3 @@ public:
 
 } // namespace common
 } // namespace oceanbase
-
-#endif  //OCEANBASE_XML_PARSER_H_

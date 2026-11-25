@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 #include "rootserver/ob_domain_index_builder_util.h"
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_local_management_service.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
@@ -83,7 +83,7 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
       } else if (OB_FAIL(arg.create_index_arg_.assign(index_arg))) {
           ret = OB_ERR_UNEXPECTED;
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version)) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
+      } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
       } else if (res.schema_generated_) {
         task_submitted = true;
         aux_table_id = res.aux_table_id_;

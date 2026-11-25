@@ -42,9 +42,6 @@ typedef enum {
 #define easy_debug_log(format, args...) easy_common_log(EASY_LOG_DEBUG, format, ## args)
 #define easy_trace_log(format, args...) easy_common_log(EASY_LOG_TRACE, format, ## args)
 #define SYS_ERROR(format...) easy_error_log(format)
-// print backtrace
-#define EASY_PRINT_BT(format, args...) \
-  {easy_log_format(EASY_LOG_OFF, __FILE__, __LINE__, __FUNCTION__, "%s" format, easy_lbt(), ## args);}
 
 extern easy_log_level_t easy_log_level;
 extern easy_log_format_pt easy_log_format;

@@ -77,7 +77,7 @@ int ObSimplifiedSSTableMacroBlockHeader::init(const ObSSTableMacroBlockHeader &m
     rowkey_column_count_ = macro_header.fixed_header_.rowkey_column_count_;
     micro_block_count_ = macro_header.fixed_header_.micro_block_count_;
     row_store_type_ = static_cast<common::ObRowStoreType>(macro_header.fixed_header_.row_store_type_);
-    compressor_type_ = macro_header.fixed_header_.compressor_type_;
+    compressor_type_ = macro_header.get_compressor_type();
     is_inited_ = true;
   }
   return ret;

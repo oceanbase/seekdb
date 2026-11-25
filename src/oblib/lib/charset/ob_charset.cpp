@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB_CHARSET
 #include <climits>
+#include <inttypes.h>
 #include "ob_charset.h"
 #include "lib/worker.h"
 
@@ -2161,7 +2162,7 @@ inline bool ObCharset::is_argument_valid(const ObCharsetInfo *cs, const char *st
     const ObFatalErrExtraInfoGuard *extra_info = ObFatalErrExtraInfoGuard::get_thd_local_val_ptr();
     ObCStringHelper helper;
     BACKTRACE_RET(WARN, OB_INVALID_ARGUMENT, true,
-        "invalid argument. charset info = %p, str = %p, str_len = %ld, extra_info=(%s), lbt=(%s)",
+        "invalid argument. charset info = %p, str = %p, str_len = %" PRId64 ", extra_info=(%s), lbt=(%s)",
         cs, str, str_len, (NULL == extra_info) ? NULL : helper.convert(*extra_info), lbt());
   }
   return is_arg_valid;
@@ -2186,9 +2187,9 @@ inline bool ObCharset::is_argument_valid(const ObCollationType &collation_type, 
     BACKTRACE_RET(WARN, OB_INVALID_ARGUMENT, true, "invalid argument."
         "collation_type = %d,"
         "str1 = %p,"
-        "str1_len = %ld,"
+        "str1_len = %" PRId64 ","
         "str2 = %p,"
-        "str2_len = %ld,"
+        "str2_len = %" PRId64 ","
         "extra_info=(%s),"
         "lbt=(%s)", collation_type, str1, str_len1, str2, str_len2,
         (NULL == extra_info) ? NULL : helper.convert(*extra_info), lbt());

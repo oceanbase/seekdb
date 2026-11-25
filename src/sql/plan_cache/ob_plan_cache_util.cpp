@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_PC
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 using namespace oceanbase::share;
@@ -245,7 +246,7 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_distributed_das_scan_))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                              "%ld,", enable_das_batch_rescan_flag_))) {
+                              "%" PRId64 ",", enable_das_batch_rescan_flag_))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_topn_runtime_filter_))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", min_const_integer_precision_))) {

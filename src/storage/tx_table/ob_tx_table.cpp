@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_tx_table.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_table/ob_tx_data_cache.h"
@@ -1038,7 +1039,7 @@ int ObTxTable::dump_single_tx_data_2_text(const int64_t tx_id_int, const char *f
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "fanme is NULL");
   } else if (snprintf(
-                 real_fname, sizeof(real_fname), "%s.%ld", fname, ::oceanbase::common::ObTimeUtility::current_time()) >=
+                 real_fname, sizeof(real_fname), "%s.%" PRId64 "", fname, ::oceanbase::common::ObTimeUtility::current_time()) >=
              (int64_t)sizeof(real_fname)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "fname too long", K(fname));

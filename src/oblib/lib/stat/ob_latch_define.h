@@ -132,7 +132,6 @@ LATCH_DEF(ALLOC_MEM_DUMP_TASK_LOCK, 210, "alloc memory dump task lock", LATCH_FI
 LATCH_DEF(ALLOC_ESS_LOCK, 211, "alloc expand, shrink and segment lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(OB_AREAN_ALLOCATOR_LOCK, 214, "arena allocator lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(OB_CACHED_ALLOCATOR_LOCK, 215, "cached allocator lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(OB_DELAY_FREE_ALLOCATOR_LOCK, 216, "delay free allocator lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(OB_FIFO_ALLOCATOR_LOCK, 217, "FIFO allocator lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SIMPLE_FIFO_ALLOCATOR_LOCK, 219, "simple FIFO allocator lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(OB_DLIST_LOCK, 220, "DList lock", LATCH_FIFO, 2000, 0, true)

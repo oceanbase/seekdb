@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_range.h"
+#include <inttypes.h>
 #include "common/ob_store_range.h"
 
 
@@ -64,7 +65,7 @@ int64_t ObNewRange::to_simple_string(char *buffer, const int64_t length) const
   if (NULL == buffer || 0 >= length) {
   } else {
     if (table_id_ != OB_INVALID_ID) {
-      databuff_printf(buffer, length, pos, "table_id:%ld,", table_id_);
+      databuff_printf(buffer, length, pos, "table_id:%" PRId64 ",", table_id_);
     } else {
       databuff_printf(buffer, length, pos, "table_id:null,");
     }

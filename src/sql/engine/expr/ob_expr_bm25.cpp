@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_bm25.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
+#include "share/ob_math_compat.h"
 
 namespace oceanbase
 {
@@ -156,7 +157,7 @@ double ObExprBM25::query_token_weight(const int64_t doc_freq, const int64_t doc_
   // Since we might use approximate count statistic for total doc cnt, possibilities there are
   //   document frequencies larger than total doc cnt
   const double diff = (len - df) > 0 ? (len - df) : 0;
-  const double idf = std::log((diff + 0.5) / (df + 0.5));
+  const double idf = math_compat::log((diff + 0.5) / (df + 0.5));
   return MAX(p_epsilon, idf) * (1.0 + p_k1);
 }
 

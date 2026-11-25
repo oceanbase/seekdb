@@ -61,7 +61,12 @@ int ObTsMgr::get_gts_sync(const int64_t timeout_us, SCN &scn)
     if (ObClockGenerator::getClock() >= expire_ts) {
       ret = OB_TIMEOUT;
     } else if (OB_EAGAIN == (ret = get_gts(scn))) {
-      ob_usleep(RETRY_INTERVAL_US);
+      const int64_t remaining_us = expire_ts - ObClockGenerator::getClock();
+      if (remaining_us <= 0) {
+        ret = OB_TIMEOUT;
+      } else {
+        ob_usleep(remaining_us < RETRY_INTERVAL_US ? remaining_us : RETRY_INTERVAL_US);
+      }
     }
   }
   return ret;

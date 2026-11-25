@@ -40,6 +40,10 @@ public:
     return sqc_level_sync_cond_.init(common::ObWaitEventIds::DH_LOCAL_SYNC_COND_WAIT);
   }
   virtual void reset() {}
+  // Providers live in the SQC handler arena: the arena frees their storage
+  // without running destructors, so every provider-owned OS resource has to be
+  // released through this explicit hook before the arena is destroyed.
+  virtual void destroy() { sqc_level_sync_cond_.destroy(); }
   TO_STRING_KV(K_(op_id), K_(msg_type));
   uint64_t op_id_; // Register this provider's operator id, used for addressing the corresponding provider in the provider array
   dtl::ObDtlMsgType msg_type_;

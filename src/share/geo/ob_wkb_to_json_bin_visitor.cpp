@@ -20,6 +20,7 @@
 #include "ob_wkb_to_json_bin_visitor.h"
 #include "share/geo/ob_geo_func_register.h"
 #include "share/geo/ob_wkb_to_json_visitor.h"
+#include "rust/json.h"
 
 namespace oceanbase {
 namespace common {
@@ -64,12 +65,25 @@ const ObString key_name_table[]
   "properties",
   "name"
 };
+namespace {
+int binary_writer_status(int status)
+{
+  return status == 0 ? OB_SUCCESS : status == 1 ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
+}
+}
+
+struct ObWkbToJsonBinVisitor::WriterState
+{
+  WriterState() : native_(json::new_binary_writer()) {}
+  rust::Box<json::BinaryWriter> native_;
+};
+
 ObWkbToJsonBinVisitor::ObWkbToJsonBinVisitor(
     ObIAllocator *allocator,
     uint32_t max_dec_digits,
     uint8_t flag,
     const ObGeoSrid srid)
-    : json_buf_(allocator),
+    : writer_(nullptr),
       flag_(flag),
       srid_(srid),
       allocator_(allocator),
@@ -222,42 +236,31 @@ int ObWkbToJsonBinVisitor::visit(ObIWkbGeomCollection *geo)
 
 int ObWkbToJsonBinVisitor::to_jsonbin(ObGeometry *geo, ObString &geojsonbin)
 {
-  INIT_SUCC(ret);
-  json_buf_.reset();
-  if (OB_FAIL(json_buf_.reserve(geo->length() * 2))) {
-  } else if (OB_FAIL(ObJsonBin::add_doc_header_v0(json_buf_))) {
-  } else if (OB_FAIL(geo->do_visit(*this))) {
-  } else if (OB_FAIL(ObJsonBin::set_doc_header_v0(json_buf_, json_buf_.length(), false/*use_lexicographical_order*/))) {
-  } else if (OB_FAIL(json_buf_.get_result_string(geojsonbin))) {
+  int ret = OB_SUCCESS;
+  WriterState state;
+  writer_ = &state;
+  if (OB_FAIL(geo->do_visit(*this))) {
+  } else {
+    const json::WriterFinishResult result = json::writer_finish(std::move(state.native_));
+    if (OB_FAIL(binary_writer_status(result.status))) {
+    } else {
+      ret = ob_write_string(*allocator_, ObString(result.binary.size(),
+          reinterpret_cast<const char *>(result.binary.data())), geojsonbin);
+    }
   }
+  writer_ = nullptr;
   return ret;
 }
 
-int ObWkbToJsonBinVisitor:: appendCoordinatePoint(
-    double x,
-    double y,
-    ObJsonBin &bin,
-    uint64_t start_pos,
-    uint64_t &val_idx)
+int ObWkbToJsonBinVisitor::appendCoordinatePoint(double x, double y)
 {
-  INIT_SUCC(ret);
-  uint64_t value_offset = json_buf_.length() - start_pos;
-  uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_ARRAY);
-  if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
+  int ret = OB_SUCCESS;
+  uint64_t array = 0;
+  if (OB_FAIL(beginContainer(array, 1, 2, 0))) {
+  } else if (OB_FAIL(appendDouble(x))) {
+  } else if (OB_FAIL(appendDouble(y))) {
   } else {
-    uint64_t array_pos = 0;
-    ObJsonBin array_bin;
-    uint64_t array_idx = 0;
-    if (OB_FAIL(appendMeta(array_bin, array_pos, 1, 2, 0))) {
-    } else if (OB_FAIL(appendDouble(x, array_bin, array_pos, array_idx))) {
-    } else if (OB_FAIL(appendDouble(y, array_bin, array_pos, array_idx))) {
-    } else if (OB_FAIL(fillHeaderSize(array_bin, array_pos))) {
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-  } else {
-    val_idx++;
+    ret = endContainer(array);
   }
   return ret;
 }
@@ -265,62 +268,40 @@ int ObWkbToJsonBinVisitor:: appendCoordinatePoint(
 template<typename T_IBIN>
 int ObWkbToJsonBinVisitor::appendPointObj(T_IBIN *geo, const ObString &type_name)
 {
-  // { "type": "Point", "coordinates": [x, y] }
-  INIT_SUCC(ret);
-  ObJsonBin bin;
-  uint64_t start_pos = 0;
-  uint64_t val_idx = 0;
-  if (OB_FAIL(appendJsonCommon(type_name, geo, bin, start_pos, val_idx))) {
-  } else if (OB_FAIL(appendCoordinatePoint(geo->x(), geo->y(), bin, start_pos, val_idx))) {
-  } else if (OB_FAIL(fillHeaderSize(bin, start_pos))) {
+  int ret = OB_SUCCESS;
+  uint64_t object = 0;
+  if (OB_FAIL(appendJsonCommon(type_name, geo, object))) {
+  } else if (OB_FAIL(appendCoordinatePoint(geo->x(), geo->y()))) {
+  } else {
+    ret = endContainer(object);
   }
   return ret;
 }
 
 template<typename T_BIN>
-int ObWkbToJsonBinVisitor::appendLine(const T_BIN *line, ObJsonBin &bin, uint64_t &start_pos, uint64_t &val_idx)
+int ObWkbToJsonBinVisitor::appendLine(const T_BIN *line)
 {
-  INIT_SUCC(ret);
-  typename T_BIN::iterator iter = line->begin();
-  uint64_t line_size = line->iter_idx_max();
-  ObJsonBin line_bin;
-  uint64_t line_val_idx = 0;
-  uint64_t line_start_pos = 0;
-  if (OB_FAIL(appendArrayHeader(bin, start_pos, val_idx, line_size, line_bin, line_start_pos))) {
+  int ret = OB_SUCCESS;
+  uint64_t array = 0;
+  if (OB_FAIL(beginContainer(array, 1, line->iter_idx_max()))) {
   } else {
-    for (; OB_SUCC(ret) && iter != line->end(); iter++) {
-      if(OB_FAIL(appendCoordinatePoint(
-                    iter->template get<0>(),
-                    iter->template get<1>(),
-                    line_bin,
-                    line_start_pos,
-                    line_val_idx))) {
-      }
+    for (auto point = line->begin(); OB_SUCC(ret) && point != line->end(); ++point) {
+      ret = appendCoordinatePoint(point->template get<0>(), point->template get<1>());
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(fillHeaderSize(line_bin, line_start_pos))) {
-    }
+    if (OB_SUCC(ret)) { ret = endContainer(array); }
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-  } else {
-    val_idx++;
-  }
-  
   return ret;
 }
 
 template<typename T_IBIN, typename T_BIN>
 int ObWkbToJsonBinVisitor::appendLineObj(T_IBIN *geo, const ObString &type_name)
 {
-  INIT_SUCC(ret);
-  ObJsonBin bin;
-  uint64_t start_pos = 0;
-  uint64_t val_idx = 0;
-  const T_BIN *line = reinterpret_cast<const T_BIN *>(geo->val());
-  if (OB_FAIL(appendJsonCommon(type_name, geo, bin, start_pos, val_idx))) {
-  } else if (OB_FAIL(appendLine<T_BIN>(line, bin, start_pos, val_idx))) {
-  } else if (OB_FAIL(fillHeaderSize(bin, start_pos))) {
+  int ret = OB_SUCCESS;
+  uint64_t object = 0;
+  if (OB_FAIL(appendJsonCommon(type_name, geo, object))) {
+  } else if (OB_FAIL(appendLine(reinterpret_cast<const T_BIN *>(geo->val())))) {
+  } else {
+    ret = endContainer(object);
   }
   return ret;
 }
@@ -328,127 +309,66 @@ int ObWkbToJsonBinVisitor::appendLineObj(T_IBIN *geo, const ObString &type_name)
 template<typename T_IBIN, typename T_BIN, typename T_BIN_LINE>
 int ObWkbToJsonBinVisitor::appendMultiLineObj(T_IBIN *geo, const ObString &type_name)
 {
-  INIT_SUCC(ret);
-  ObJsonBin bin;
-  uint64_t start_pos = 0;
-  uint64_t val_idx = 0;
-  if (OB_FAIL(appendJsonCommon(type_name, geo, bin, start_pos, val_idx))) {
+  int ret = OB_SUCCESS;
+  uint64_t object = 0;
+  uint64_t array = 0;
+  const T_BIN *lines = reinterpret_cast<const T_BIN *>(geo->val());
+  if (OB_FAIL(appendJsonCommon(type_name, geo, object))) {
+  } else if (OB_FAIL(beginContainer(array, 1, lines->iter_idx_max()))) {
   } else {
-    const T_BIN *multi_line = reinterpret_cast<const T_BIN *>(geo->val());
-    typename T_BIN::iterator line = multi_line->begin();
-    uint64_t multi_size = multi_line->iter_idx_max();
-    ObJsonBin multi_bin;
-    uint64_t multi_val_idx = 0;
-    uint64_t multi_start_pos = 0;
-    if (OB_FAIL(appendArrayHeader(bin, start_pos, val_idx, multi_size, multi_bin, multi_start_pos))) {
-    } else {
-      for (; OB_SUCC(ret) && line != multi_line->end(); line++) {
-        if (OB_FAIL(appendLine<T_BIN_LINE>(&(*line), multi_bin, multi_start_pos, multi_val_idx))) {
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(fillHeaderSize(multi_bin, multi_start_pos))) {
-      }
+    for (auto line = lines->begin(); OB_SUCC(ret) && line != lines->end(); ++line) {
+      ret = appendLine<T_BIN_LINE>(&(*line));
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(fillHeaderSize(bin, start_pos))) {
+    if (OB_SUCC(ret) && OB_SUCC(ret = endContainer(array))) { ret = endContainer(object); }
   }
   return ret;
 }
 
 template<typename T_BIN, typename T_BIN_RING, typename T_BIN_INNER_RING>
-int ObWkbToJsonBinVisitor::appendPolygon(const T_BIN *poly, ObJsonBin &bin, uint64_t &start_pos, uint64_t &val_idx)
+int ObWkbToJsonBinVisitor::appendPolygon(const T_BIN *poly)
 {
-  INIT_SUCC(ret);
-  uint64_t poly_size = poly->size();
-  const T_BIN_RING& exterior = poly->exterior_ring();
-  const T_BIN_INNER_RING &inner_rings = poly->inner_rings();
-  ObJsonBin poly_bin;
-  uint64_t poly_val_idx = 0;
-  uint64_t poly_start_pos = 0;
-  if (OB_FAIL(appendArrayHeader(bin, start_pos, val_idx, poly_size, poly_bin, poly_start_pos))) {
+  int ret = OB_SUCCESS;
+  uint64_t array = 0;
+  if (OB_FAIL(beginContainer(array, 1, poly->size()))) {
   } else {
-    if (poly_size > 0) {
-      // exterior poly
-      if (OB_FAIL(appendLine<T_BIN_RING>(&exterior, poly_bin, poly_start_pos, poly_val_idx))) {
-      }
+    if (poly->size() > 0) { ret = appendLine<T_BIN_RING>(&poly->exterior_ring()); }
+    const T_BIN_INNER_RING &rings = poly->inner_rings();
+    for (auto ring = rings.begin(); OB_SUCC(ret) && ring != rings.end(); ++ring) {
+      ret = appendLine<T_BIN_RING>(&(*ring));
     }
-    // interior poly
-    typename T_BIN_INNER_RING::iterator iterInnerRing = inner_rings.begin();
-    for (; OB_SUCC(ret) && iterInnerRing != inner_rings.end(); iterInnerRing++) {
-      if (OB_FAIL(appendLine<T_BIN_RING>(&(*iterInnerRing), poly_bin, poly_start_pos, poly_val_idx))) {
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(fillHeaderSize(poly_bin, poly_start_pos))) {
-    }
+    if (OB_SUCC(ret)) { ret = endContainer(array); }
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-  } else {
-    val_idx++;
-  }
-
   return ret;
 }
 
 template<typename T_IBIN, typename T_BIN, typename T_BIN_RING, typename T_BIN_INNER_RING>
 int ObWkbToJsonBinVisitor::appendPolygonObj(T_IBIN *geo, const ObString &type_name)
 {
-  INIT_SUCC(ret);
-  ObJsonBin bin;
-  uint64_t start_pos = 0;
-  uint64_t val_idx = 0;
-  const T_BIN *poly = reinterpret_cast<const T_BIN *>(geo->val());
-  if (OB_FAIL(appendJsonCommon(type_name, geo, bin, start_pos, val_idx))) {
-  } else if (OB_FAIL((appendPolygon<
-                        T_BIN,
-                        T_BIN_RING,
-                        T_BIN_INNER_RING>(poly, bin, start_pos, val_idx)))) {
-  } else if (OB_FAIL(fillHeaderSize(bin, start_pos))) {
+  int ret = OB_SUCCESS;
+  uint64_t object = 0;
+  if (OB_FAIL(appendJsonCommon(type_name, geo, object))) {
+  } else if (OB_FAIL((appendPolygon<T_BIN, T_BIN_RING, T_BIN_INNER_RING>(
+      reinterpret_cast<const T_BIN *>(geo->val()))))) {
+  } else {
+    ret = endContainer(object);
   }
   return ret;
 }
 
-template<typename T_IBIN,
-         typename T_BIN,
-         typename T_BIN_POLY,
-         typename T_BIN_RING,
-         typename T_BIN_INNER_RING>
+template<typename T_IBIN, typename T_BIN, typename T_BIN_POLY, typename T_BIN_RING, typename T_BIN_INNER_RING>
 int ObWkbToJsonBinVisitor::appendMultiPolygonObj(T_IBIN *geo, const ObString &type_name)
 {
-  INIT_SUCC(ret);
-  ObJsonBin bin;
-  uint64_t start_pos = 0;
-  uint64_t val_idx = 0;
-  if (OB_FAIL(appendJsonCommon(type_name, geo, bin, start_pos, val_idx))) {
+  int ret = OB_SUCCESS;
+  uint64_t object = 0;
+  uint64_t array = 0;
+  const T_BIN *polys = reinterpret_cast<const T_BIN *>(geo->val());
+  if (OB_FAIL(appendJsonCommon(type_name, geo, object))) {
+  } else if (OB_FAIL(beginContainer(array, 1, polys->iter_idx_max()))) {
   } else {
-    const T_BIN *multi_poly = reinterpret_cast<const T_BIN *>(geo->val());
-    typename T_BIN::iterator poly = multi_poly->begin();
-    uint64_t multi_size = multi_poly->iter_idx_max();
-    ObJsonBin multi_bin;
-    uint64_t multi_val_idx = 0;
-    uint64_t multi_start_pos = 0;
-    if (OB_FAIL(appendArrayHeader(bin, start_pos, val_idx, multi_size, multi_bin, multi_start_pos))) {
-    } else {
-      for (; OB_SUCC(ret) && poly != multi_poly->end(); poly++) {
-        if (OB_FAIL((appendPolygon<T_BIN_POLY, T_BIN_RING, T_BIN_INNER_RING>(&(*poly), multi_bin, multi_start_pos, multi_val_idx)))) {
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(fillHeaderSize(multi_bin, multi_start_pos))) {
-      }
+    for (auto poly = polys->begin(); OB_SUCC(ret) && poly != polys->end(); ++poly) {
+      ret = appendPolygon<T_BIN_POLY, T_BIN_RING, T_BIN_INNER_RING>(&(*poly));
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(fillHeaderSize(bin, start_pos))) {
+    if (OB_SUCC(ret) && OB_SUCC(ret = endContainer(array))) { ret = endContainer(object); }
   }
   return ret;
 }
@@ -470,18 +390,10 @@ template<typename T_IPOINT,
           typename T_MULTIPOLY,
           typename T_COLLC>
 int ObWkbToJsonBinVisitor::appendCollectionSub(
-    typename T_COLLC::const_pointer sub_ptr,
-    const T_COLLC *collection,
-    ObJsonBin &bin,
-    uint64_t &start_pos,
-    uint64_t &val_idx)
+    typename T_COLLC::const_pointer sub_ptr, const T_COLLC *collection)
 {
-  INIT_SUCC(ret);
+  int ret = OB_SUCCESS;
   ObGeoType sub_type = collection->get_sub_type(sub_ptr);
-  uint64_t value_offset = json_buf_.length() - start_pos;
-  uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_OBJECT);
-  if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
-  } else {
     switch (sub_type) {
       case ObGeoType::POINT : {
         const T_POINT* geo = reinterpret_cast<const T_POINT*>(sub_ptr);
@@ -562,404 +474,187 @@ int ObWkbToJsonBinVisitor::appendCollectionSub(
         ret = OB_INVALID_ARGUMENT;
         break;
       }
-    } // switch end
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-  } else {
-    val_idx++;
-  }
-  return ret;
-}
-
-int ObWkbToJsonBinVisitor::appendCollectionSubWrapper(
-      ObWkbGeogCollection::const_pointer sub_ptr,
-      const ObWkbGeogCollection *collection,
-      ObJsonBin &bin,
-      uint64_t &start_pos,
-      uint64_t &val_idx)
-{
-  INIT_SUCC(ret);
-  if (OB_FAIL((appendCollectionSub<
-                ObIWkbGeogPoint,
-                ObIWkbGeogMultiPoint,
-                ObIWkbGeogLineString,
-                ObIWkbGeogMultiLineString,
-                ObIWkbGeogPolygon,
-                ObIWkbGeogMultiPolygon,
-                ObIWkbGeogCollection,
-                ObWkbGeogPoint,
-                ObWkbGeogMultiPoint,
-                ObWkbGeogLineString,
-                ObWkbGeogMultiLineString,
-                ObWkbGeogPolygon,
-                ObWkbGeogLinearRing,
-                ObWkbGeogPolygonInnerRings,
-                ObWkbGeogMultiPolygon,
-                ObWkbGeogCollection>(
-                    sub_ptr,
-                    collection,
-                    bin,
-                    start_pos,
-                    val_idx)))) {
     }
   return ret;
 }
 
 int ObWkbToJsonBinVisitor::appendCollectionSubWrapper(
-      ObWkbGeomCollection::const_pointer sub_ptr,
-      const ObWkbGeomCollection *collection,
-      ObJsonBin &bin,
-      uint64_t &start_pos,
-      uint64_t &val_idx)
+    ObWkbGeogCollection::const_pointer sub_ptr, const ObWkbGeogCollection *collection)
 {
-  INIT_SUCC(ret);
-  if (OB_FAIL((appendCollectionSub<
-                ObIWkbGeomPoint,
-                ObIWkbGeomMultiPoint,
-                ObIWkbGeomLineString,
-                ObIWkbGeomMultiLineString,
-                ObIWkbGeomPolygon,
-                ObIWkbGeomMultiPolygon,
-                ObIWkbGeomCollection,
-                ObWkbGeomPoint,
-                ObWkbGeomMultiPoint,
-                ObWkbGeomLineString,
-                ObWkbGeomMultiLineString,
-                ObWkbGeomPolygon,
-                ObWkbGeomLinearRing,
-                ObWkbGeomPolygonInnerRings,
-                ObWkbGeomMultiPolygon,
-                ObWkbGeomCollection>(
-                    sub_ptr,
-                    collection,
-                    bin,
-                    start_pos,
-                    val_idx)))) {
-    }
-  return ret;
+  return appendCollectionSub<
+      ObIWkbGeogPoint,
+      ObIWkbGeogMultiPoint,
+      ObIWkbGeogLineString,
+      ObIWkbGeogMultiLineString,
+      ObIWkbGeogPolygon,
+      ObIWkbGeogMultiPolygon,
+      ObIWkbGeogCollection,
+      ObWkbGeogPoint,
+      ObWkbGeogMultiPoint,
+      ObWkbGeogLineString,
+      ObWkbGeogMultiLineString,
+      ObWkbGeogPolygon,
+      ObWkbGeogLinearRing,
+      ObWkbGeogPolygonInnerRings,
+      ObWkbGeogMultiPolygon,
+      ObWkbGeogCollection>(sub_ptr, collection);
+}
+
+int ObWkbToJsonBinVisitor::appendCollectionSubWrapper(
+    ObWkbGeomCollection::const_pointer sub_ptr, const ObWkbGeomCollection *collection)
+{
+  return appendCollectionSub<
+      ObIWkbGeomPoint,
+      ObIWkbGeomMultiPoint,
+      ObIWkbGeomLineString,
+      ObIWkbGeomMultiLineString,
+      ObIWkbGeomPolygon,
+      ObIWkbGeomMultiPolygon,
+      ObIWkbGeomCollection,
+      ObWkbGeomPoint,
+      ObWkbGeomMultiPoint,
+      ObWkbGeomLineString,
+      ObWkbGeomMultiLineString,
+      ObWkbGeomPolygon,
+      ObWkbGeomLinearRing,
+      ObWkbGeomPolygonInnerRings,
+      ObWkbGeomMultiPolygon,
+      ObWkbGeomCollection>(sub_ptr, collection);
 }
 
 template<typename T_IBIN, typename T_BIN>
 int ObWkbToJsonBinVisitor::appendCollectionObj(T_IBIN *geo, const ObString &type_name)
 {
-  INIT_SUCC(ret);
-  ObJsonBin bin;
-  uint64_t start_pos = 0;
-  uint64_t val_idx = 0;
-  if (OB_FAIL(appendJsonCommon(type_name, geo, bin, start_pos, val_idx))) {
+  int ret = OB_SUCCESS;
+  uint64_t object = 0;
+  uint64_t array = 0;
+  const T_BIN *collection = reinterpret_cast<const T_BIN *>(geo->val());
+  if (OB_FAIL(appendJsonCommon(type_name, geo, object))) {
+  } else if (OB_FAIL(beginContainer(array, 1, collection->iter_idx_max()))) {
   } else {
-    const T_BIN *collection = reinterpret_cast<const T_BIN *>(geo->val());
-    typename T_BIN::iterator collection_iter = collection->begin();
-    uint64_t collection_size = collection->iter_idx_max();
-    ObJsonBin collection_bin;
-    uint64_t collection_val_idx = 0;
-    uint64_t collection_start_pos = 0;
-    if (OB_FAIL(appendArrayHeader(
-                    bin,
-                    start_pos,
-                    val_idx,
-                    collection_size,
-                    collection_bin,
-                    collection_start_pos))) {
-    } else {
-      for (; OB_SUCC(ret) && collection_iter != collection->end(); collection_iter++) {
-        typename T_BIN::const_pointer sub_ptr = collection_iter.operator->();
-        if (OB_FAIL(appendCollectionSubWrapper(
-                        sub_ptr,
-                        collection,
-                        collection_bin,
-                        collection_start_pos,
-                        collection_val_idx))) {
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(fillHeaderSize(collection_bin, collection_start_pos))) {
-      }
+    for (auto child = collection->begin(); OB_SUCC(ret) && child != collection->end(); ++child) {
+      ret = appendCollectionSubWrapper(child.operator->(), collection);
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(fillHeaderSize(bin, start_pos))) {
+    if (OB_SUCC(ret) && OB_SUCC(ret = endContainer(array))) { ret = endContainer(object); }
   }
   return ret;
 }
 
-int ObWkbToJsonBinVisitor::appendJsonCommon(
-    const ObString type_name,
-    ObGeometry *geo,
-    ObJsonBin &bin,
-    uint64_t &start_pos,
-    uint64_t &val_idx)
+int ObWkbToJsonBinVisitor::appendJsonCommon(const ObString type_name, ObGeometry *geo, uint64_t &object)
 {
-  INIT_SUCC(ret);
-  uint64_t key_count = 2; // minimun count is 2
-  int key_idx = 0;
-  ObGeoType type = geo->type();
-  if (type <= ObGeoType::GEOMETRY || type >= ObGeoType::GEOTYPEMAX) {
-    int ret = OB_ERR_GIS_INVALID_DATA;
-  }
-  // append obj meta
-  if (OB_FAIL(ret)) {
-  } else if (!is_appendCrs && srid_ != 0 
-        && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID))) {
-    key_count++;
-  }
-  if (OB_FAIL(ret)) {
-  } else if (flag_ & ObGeoJsonFormat::BBOX && !geo->is_empty()) {
-    key_count++;
-  }
-  // append obj key
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(appendMeta(bin, start_pos, 0, key_count))) {
-  } else if (!is_appendCrs && srid_ != 0 
-                && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID))
-                && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::crs], bin, start_pos, key_idx))) {
-  } else if (flag_ & ObGeoJsonFormat::BBOX && !geo->is_empty()
-                && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::bbox], bin, start_pos, key_idx))) {
-  } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::type], bin, start_pos, key_idx))) {
-  } else if (geo->type() == ObGeoType::GEOMETRYCOLLECTION
-                && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::geometries], bin, start_pos, key_idx))) {
-  } else if (geo->type() != ObGeoType::GEOMETRYCOLLECTION
-                && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::coordinates], bin, start_pos, key_idx))) {
-  }
-  // append obj value
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(appendCrs(bin, start_pos, val_idx))) {
-  } else if (OB_FAIL(appendBbox(geo, bin, start_pos, val_idx))) {
-  } else if (OB_FAIL(appendString(type_name, bin, start_pos, val_idx))) {
-  }
-  return ret;
-}
-
-int ObWkbToJsonBinVisitor::appendObjKey(const ObString key_str, ObJsonBin &bin, uint64_t &start_pos, int &key_idx)
-{
-  INIT_SUCC(ret);
-  uint64_t key_offset = json_buf_.length() - start_pos;
-  uint64_t key_len = key_str.length();
-  if (OB_FAIL(bin.set_key_entry(key_idx, key_offset, key_len, false))) {
-  } else if (OB_FAIL(json_buf_.append(key_str, 0))) {
-  } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
+  int ret = OB_SUCCESS;
+  const bool crs = !is_appendCrs && srid_ != 0
+      && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID));
+  const bool bbox = (flag_ & ObGeoJsonFormat::BBOX) && !geo->is_empty();
+  if (geo->type() <= ObGeoType::GEOMETRY || geo->type() >= ObGeoType::GEOTYPEMAX) {
+    ret = OB_ERR_GIS_INVALID_DATA;
+  } else if (OB_FAIL(beginContainer(object, 0, 2 + crs + bbox))) {
+  } else if (crs && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::crs]))) {
+  } else if (bbox && OB_FAIL(appendObjKey(key_name_table[KeyNameMap::bbox]))) {
+  } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::type]))) {
+  } else if (OB_FAIL(appendObjKey(key_name_table[geo->type() == ObGeoType::GEOMETRYCOLLECTION
+      ? KeyNameMap::geometries : KeyNameMap::coordinates]))) {
+  } else if (OB_FAIL(appendCrs())) {
+  } else if (OB_FAIL(appendBbox(geo))) {
   } else {
-    key_idx++;
+    ret = appendString(type_name);
   }
   return ret;
 }
 
-
-int ObWkbToJsonBinVisitor::appendMeta(ObJsonBin &bin, uint64_t &start_pos, int type_flag, uint64_t element_count, uint64_t size_size)
+int ObWkbToJsonBinVisitor::beginContainer(uint64_t &handle, int type_flag, uint64_t count, uint8_t width)
 {
-  INIT_SUCC(ret);
-  ObJsonBinMeta meta;
-  ObJBVerType vertype = J_NULL_V0;
-  if (type_flag == 0) {
-    vertype = ObJsonBin::get_object_vertype();
-  } else if (type_flag == 1) {
-    vertype = ObJsonBin::get_array_vertype();
-  }
-  start_pos = json_buf_.length();
-  meta.set_type(vertype, false);
-  meta.set_element_count(element_count);
-  meta.set_element_count_var_type(ObJsonVar::get_var_type(element_count));
-  meta.set_obj_size_var_type(size_size);
-  meta.set_entry_var_type(meta.obj_size_var_type());
-  meta.set_is_continuous(true);
-  meta.calc_entry_array();
-  if (OB_FAIL(meta.to_header(json_buf_))) {
-  } else if (OB_FAIL(bin.reset(json_buf_.string(), start_pos, nullptr))) {
+  const json::WriterBeginResult result = writer_->native_->writer_begin(type_flag == 0, count, width);
+  handle = result.handle;
+  return binary_writer_status(result.status);
+}
+
+int ObWkbToJsonBinVisitor::appendObjKey(const ObString key)
+{
+  return binary_writer_status(writer_->native_->writer_key(rust::Slice<const uint8_t>(
+      reinterpret_cast<const uint8_t *>(key.ptr()), key.length())));
+}
+
+int ObWkbToJsonBinVisitor::endContainer(uint64_t handle)
+{
+  return binary_writer_status(writer_->native_->writer_end(handle));
+}
+
+int ObWkbToJsonBinVisitor::appendCrs()
+{
+  int ret = OB_SUCCESS;
+  if (!is_appendCrs && srid_ != 0
+      && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID))) {
+    uint64_t object = 0;
+    if (OB_FAIL(beginContainer(object, 0, 2, 0))) {
+    } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::type]))) {
+    } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::properties]))) {
+    } else if (OB_FAIL(appendString(key_name_table[KeyNameMap::name]))) {
+    } else if (OB_FAIL(appendCrsProp())) {
+    } else if (OB_FAIL(endContainer(object))) {
+    } else { is_appendCrs = true; }
   }
   return ret;
 }
 
-int ObWkbToJsonBinVisitor::fillHeaderSize(ObJsonBin &bin, uint64_t start_pos)
+int ObWkbToJsonBinVisitor::appendCrsProp()
 {
-  INIT_SUCC(ret);
-  uint64_t real_obj_size = static_cast<uint64_t>(json_buf_.length() - start_pos);
-  if (OB_FAIL(bin.set_obj_size(real_obj_size))) {
-  }
+  int ret = OB_SUCCESS;
+  uint64_t object = 0;
+  char srid_buf[ObFastFormatInt::MAX_DIGITS10_STR_SIZE] = {0};
+  const uint64_t srid_len = ObFastFormatInt::format_signed(srid_, srid_buf);
+  ObStringBuffer value(allocator_);
+  if (OB_FAIL(value.append((flag_ & ObGeoJsonFormat::LONG_SRID) ? "urn:ogc:def:crs:EPSG::" : "EPSG:"))) {
+  } else if (OB_FAIL(value.append(srid_buf, srid_len, 0))) {
+  } else if (OB_FAIL(beginContainer(object, 0, 1, 0))) {
+  } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::name]))) {
+  } else if (OB_FAIL(appendString(value.string()))) {
+  } else { ret = endContainer(object); }
   return ret;
 }
 
-int ObWkbToJsonBinVisitor::appendCrs(ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx)
+int ObWkbToJsonBinVisitor::appendBbox(ObGeometry *geo)
 {
-  INIT_SUCC(ret);
-  if (!is_appendCrs && srid_ != 0 && ((flag_ & ObGeoJsonFormat::SHORT_SRID) || (flag_ & ObGeoJsonFormat::LONG_SRID))) {
-    uint64_t value_offset = json_buf_.length() - start_pos;
-    uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_OBJECT);
-    if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
-    } else {
-      // {"crs": {"type": "name", "properties": {"name": "EPSG:4269"}}
-      // {"crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::4269"}}
-      ObJsonBin crs_bin;
-      uint64_t crs_pos = 0;
-      uint64_t crs_idx = 0;
-      int key_idx = 0;
-      if (OB_FAIL(appendMeta(crs_bin, crs_pos, 0, 2, 0))) {
-      } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::type], crs_bin, crs_pos, key_idx))) {
-      } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::properties], crs_bin, crs_pos, key_idx))) {
-      } else if (OB_FAIL(appendString(key_name_table[KeyNameMap::name], crs_bin, crs_pos, crs_idx))) {
-      } else if (OB_FAIL(appendCrsProp(crs_bin, crs_pos, crs_idx))){
-      } else if (OB_FAIL(fillHeaderSize(crs_bin, crs_pos))) {
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-    } else {
-      val_idx++;
-      is_appendCrs = true;
-    }
-  }
-  return ret;
-}
-
-int ObWkbToJsonBinVisitor::appendCrsProp(
-    ObJsonBin &bin,
-    uint64_t start_pos,
-    uint64_t &val_idx)
-{
-  INIT_SUCC(ret);
-  uint64_t value_offset = json_buf_.length() - start_pos;
-  uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_OBJECT);
-  if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
-  } else {
-    ObJsonBin prop_bin;
-    uint64_t prop_pos = 0;
-    uint64_t prop_idx = 0;
-    int key_idx = 0;
-    char srid_buf[ObFastFormatInt::MAX_DIGITS10_STR_SIZE] = {0};
-    uint64_t srid_len = ObFastFormatInt::format_signed(srid_, srid_buf);
-    ObStringBuffer prop_value_buf(allocator_);
-    ObString prop_value;
-    if (flag_ & ObGeoJsonFormat::LONG_SRID) {
-      // {"name": "urn:ogc:def:crs:EPSG::[SRID]"}
-      if (OB_FAIL(prop_value_buf.append("urn:ogc:def:crs:EPSG::"))) {
-      }
-    } else {
-      // {"name": "EPSG:[SRID]"}
-      if (OB_FAIL(prop_value_buf.append("EPSG:"))) {
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(prop_value_buf.append(srid_buf, srid_len, 0))) {
-    } else if (OB_FAIL(prop_value_buf.get_result_string(prop_value))) {
-    }
-  
-    // append object
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(appendMeta(prop_bin, prop_pos, 0, 1, 0))) {
-    } else if (OB_FAIL(appendObjKey(key_name_table[KeyNameMap::name], prop_bin, prop_pos, key_idx))) {
-    } else if (OB_FAIL(appendString(prop_value, prop_bin, prop_pos, prop_idx))) {
-    } else if (OB_FAIL(fillHeaderSize(prop_bin, prop_pos))) {
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-  } else {
-    val_idx++;
-  }
-  return ret;
-}
-
-int ObWkbToJsonBinVisitor::appendBbox(ObGeometry *geo, ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx)
-{
-  INIT_SUCC(ret);
+  int ret = OB_SUCCESS;
   if ((flag_ & ObGeoJsonFormat::BBOX) && !geo->is_empty()) {
-    // [xmin, ymin, xmax, ymax]
     ObGeogBox *box = nullptr;
     ObArenaAllocator tmp_allocator;
     ObGeometry *box_geo = nullptr;
     if (geo->crs() == ObGeoCRS::Geographic) {
       if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(tmp_allocator, geo->type(), false, true, box_geo, geo->get_srid()))) {
-      } else {
-        box_geo->set_data(geo->val());
-      }
-    } else {
-      box_geo = geo;
-    }
+      } else { box_geo->set_data(geo->val()); }
+    } else { box_geo = geo; }
     CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
       ObGeoEvalCtx geo_ctx(CURRENT_CONTEXT);
       if (OB_FAIL(ret)) {
-        // do nothing
       } else if (OB_FAIL(geo_ctx.append_geo_arg(box_geo))) {
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Box>::geo_func::eval(geo_ctx, box))) {
       } else {
-        // append Bbox
-        uint64_t value_offset = json_buf_.length() - start_pos;
-        uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_ARRAY);
-        if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
-        } else {
-          uint64_t array_pos = 0;
-          ObJsonBin array_bin;
-          uint64_t array_idx = 0;
-          if (OB_FAIL(appendMeta(array_bin, array_pos, 1, 4, 0))) {
-          } else if (OB_FAIL(appendDouble(box->xmin, array_bin, array_pos, array_idx))) {
-          } else if (OB_FAIL(appendDouble(box->ymin, array_bin, array_pos, array_idx))) {
-          } else if (OB_FAIL(appendDouble(box->xmax, array_bin, array_pos, array_idx))) {
-          } else if (OB_FAIL(appendDouble(box->ymax, array_bin, array_pos, array_idx))) {
-          } else if (OB_FAIL(fillHeaderSize(array_bin, array_pos))) {
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-        } else {
-          val_idx++;
-        }
+        uint64_t array = 0;
+        if (OB_FAIL(beginContainer(array, 1, 4, 0))) {
+        } else if (OB_FAIL(appendDouble(box->xmin))) {
+        } else if (OB_FAIL(appendDouble(box->ymin))) {
+        } else if (OB_FAIL(appendDouble(box->xmax))) {
+        } else if (OB_FAIL(appendDouble(box->ymax))) {
+        } else { ret = endContainer(array); }
       }
     }
   }
   return ret;
 }
 
-int ObWkbToJsonBinVisitor::appendString(const ObString &str, ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx)
+int ObWkbToJsonBinVisitor::appendString(const ObString &value)
 {
-  INIT_SUCC(ret);
-  uint64_t value_offset = json_buf_.length() - start_pos;
-  uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_STRING);
-  if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
-  } else if (OB_FAIL(ObJsonBinSerializer::serialize_json_string(ObJBVerType::J_STRING_V0, str, json_buf_))) {
-  } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-  } else {
-    val_idx++;
-  }
-  return ret;
+  return binary_writer_status(writer_->native_->writer_string(rust::Slice<const uint8_t>(
+      reinterpret_cast<const uint8_t *>(value.ptr()), value.length())));
 }
 
-int ObWkbToJsonBinVisitor::appendDouble(double value, ObJsonBin &bin, uint64_t start_pos, uint64_t &val_idx)
+int ObWkbToJsonBinVisitor::appendDouble(double value)
 {
-  INIT_SUCC(ret);
-  double dec_value = value;
-  uint64_t value_offset = json_buf_.length() - start_pos;
-  uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_DOUBLE);
-  if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
-  } else if (max_dec_digits_ < INT_MAX32 
-              && OB_FALSE_IT(dec_value = ObGeoTypeUtil::round_double(value, max_dec_digits_, false))) {
-  } else if (OB_FAIL(ObJsonBinSerializer::serialize_json_double(dec_value, json_buf_))) {
-  } else if (OB_FAIL(bin.set_current(json_buf_.string(), start_pos))) {
-  } else {
-    val_idx++;
-  }
-  return ret;
+  const double rounded = max_dec_digits_ < INT_MAX32
+      ? ObGeoTypeUtil::round_double(value, max_dec_digits_, false) : value;
+  return binary_writer_status(writer_->native_->writer_double(rounded));
 }
-
-int ObWkbToJsonBinVisitor::appendArrayHeader(
-    ObJsonBin &bin,
-    uint64_t start_pos,
-    uint64_t val_idx,
-    uint64_t size,
-    ObJsonBin &array_bin,
-    uint64_t &array_start_pos)
-{
-  INIT_SUCC(ret);
-  uint64_t value_offset = json_buf_.length() - start_pos;
-  uint8_t value_type = static_cast<uint8_t>(ObJsonNodeType::J_ARRAY);
-  if (OB_FAIL(bin.set_value_entry(val_idx, value_offset, value_type, false))) {
-  } else if (OB_FAIL(appendMeta(array_bin, array_start_pos, 1, size))) {
-  }
-  return ret;
-}
-
 
 } // namespace common
 } // namespace oceanbase

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_SESSION
 #include "sql/session/ob_session_val_map.h"
+#include <inttypes.h>
 
 #include "share/schema/ob_schema_struct.h"
 using namespace oceanbase;
@@ -156,7 +157,7 @@ int ObSessionValMap::free_mem()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid internal args", KP(str_buf_[current_buf_index_]));
   } else if (str_buf_[current_buf_index_]->used() > next_free_mem_point_) {
-    _OB_LOG(DEBUG, "string buf[%d] is large[%ld], switch string buf", current_buf_index_,
+    _OB_LOG(DEBUG, "string buf[%d] is large[%" PRId64 "], switch string buf", current_buf_index_,
               str_buf_[current_buf_index_]->used());
     int32_t next_index = (current_buf_index_ == 0 ? 1 : 0);
 

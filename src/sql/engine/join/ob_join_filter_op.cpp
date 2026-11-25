@@ -851,6 +851,11 @@ int ObJoinFilterOp::release_shared_msg()
   if (MY_SPEC.is_shared_join_filter() && !MY_SPEC.is_shuffle_) {
     bool need_release = filter_input->check_release();
     if (need_release) {
+      if (OB_NOT_NULL(filter_input->share_info_.shared_jf_constructor_)) {
+        // Last worker releases the arena-backed constructor (its ObThreadCond
+        // owns an OS condition variable on Windows).
+        filter_input->share_info_.shared_jf_constructor_->destroy();
+      }
       // shared_rf_msgs_ may not init succ, so when close,
       // clear filter_input->share_info_.shared_msgs_ rather than this->shared_rf_msgs_
       ObArray<ObP2PDatahubMsgBase *> *shared_rf_msgs =

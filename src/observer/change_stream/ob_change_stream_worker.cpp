@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/atomic/ob_atomic.h"
@@ -154,6 +155,8 @@ int ObCSExecutor::process_sub_task(ObCSExecSubTask *sub_task)
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx->plugin_cnt_; ++i) {
       ObCSPlugin *plugin = ctx->plugins_[i];
       if (OB_NOT_NULL(plugin) && OB_FAIL(plugin->process(rows, *ctx))) {
+        LOG_WARN("CSWorker: plugin process failed", KR(ret), K(i), K(executor_id_),
+                 K(ctx->batch_sn_), K(ctx->epoch_), K(ctx->schema_version_), K(row_count));
       }
     }
     if (OB_FAIL(ret)) {
@@ -341,7 +344,7 @@ int ObCSWorker::init(int64_t executor_count)
           ret = common::OB_ALLOCATE_MEMORY_FAILED;
           break;
         }
-        (void)snprintf(executors_[i]->get_name(), 64, "CSWorker%ld", i);
+        (void)snprintf(executors_[i]->get_name(), 64, "CSWorker%" PRId64, i);
         if (OB_FAIL(executors_[i]->init(i, 1, CS_EXECUTOR_QUEUE_LIMIT, executors_[i]->get_name()))) {
           break;
         }

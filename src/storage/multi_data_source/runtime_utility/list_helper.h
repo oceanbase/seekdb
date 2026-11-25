@@ -18,6 +18,7 @@
 #define SRC_STORAGE_MULTI_DATA_SOURCE_UTILITY_LIST_HELPER_H
 
 #include "lib/ob_errno.h"
+#include <inttypes.h>
 #include "lib/utility/ob_macro_utils.h"
 #include "common_define.h"
 #include "lib/utility/utility.h"
@@ -119,7 +120,7 @@ struct ListBase// erase List Type
       ++list_len;
       iter = iter->next_;
     }
-    common::databuff_printf(buf, buf_len, pos, "NULL, total_size:%ld", list_len);
+    common::databuff_printf(buf, buf_len, pos, "NULL, total_size:%" PRId64 "", list_len);
     return pos;
   }
   ListBase(const ListBase &) = default;

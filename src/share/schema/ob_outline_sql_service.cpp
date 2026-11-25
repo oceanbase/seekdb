@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_outline_sql_service.h"
+#include <inttypes.h>
 #include "share/ob_dml_sql_splicer.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 
@@ -213,7 +214,7 @@ int ObOutlineSqlService::delete_outline(const uint64_t database_id,
     // insert into __all_table_history
     if (FAILEDx(sql.assign_fmt(
                    "INSERT INTO %s(outline_id,schema_version,is_deleted)"
-                   " VALUES(%lu,%ld,%ld)",
+                   " VALUES(%" PRIu64 ",%" PRId64 ",%" PRId64 ")",
                    OB_ALL_OUTLINE_HISTORY_TNAME,
                    ObSchemaUtils::get_extract_schema_id(outline_id),
                    new_schema_version, IS_DELETED))) {
@@ -223,7 +224,7 @@ int ObOutlineSqlService::delete_outline(const uint64_t database_id,
     } else {/*do nothing*/}
 
     // delete from __all_outline
-    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE outline_id=%lu",
+    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE outline_id=%" PRIu64 "",
                                OB_ALL_OUTLINE_TNAME,
                                ObSchemaUtils::get_extract_schema_id(outline_id)))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
@@ -261,9 +262,9 @@ int ObOutlineSqlService::add_outline(common::ObISQLClient &sql_client,
       continue;
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname[i]))) {
     } else {
-      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(outline_info.get_outline_id()), "outline_id", "%lu");
-      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(outline_info.get_database_id()), "database_id", "%lu");
-      SQL_COL_APPEND_VALUE(sql, values, outline_info.get_schema_version(), "schema_version", "%ld");
+      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(outline_info.get_outline_id()), "outline_id", "%" PRIu64 "");
+      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(outline_info.get_database_id()), "database_id", "%" PRIu64 "");
+      SQL_COL_APPEND_VALUE(sql, values, outline_info.get_schema_version(), "schema_version", "%" PRId64 "");
       SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, outline_info.get_name(),
                                       outline_info.get_name_str().length(), "name");
       SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, outline_info.get_signature(),

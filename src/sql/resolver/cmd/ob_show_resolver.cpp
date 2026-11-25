@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/cmd/ob_show_resolver.h"
+#include <inttypes.h>
 #include "sql/resolver/dcl/ob_grant_resolver.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/cmd/ob_show_table_status_sql.h"
@@ -764,7 +765,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               ParseNode *role_list = parse_tree.children_[1];
               ObGrantResolver dcl_resolver(params_);
               const ObUserInfo *user_info = NULL;
-              OZ (role_list_str.append_fmt("%lu", show_user_id));
+              OZ (role_list_str.append_fmt("%" PRIu64 "", show_user_id));
               OZ (schema_checker_->get_user_info(show_user_id, user_info));
               for (int i = 0; OB_SUCC(ret) && i < role_list->num_child_; i++) {
                 ObString user_name;
@@ -787,7 +788,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                  user_info->get_host_name_str().length(),
                                  user_info->get_host_name_str().ptr());
                 }
-                OZ (role_list_str.append_fmt(",%lu", role_id));
+                OZ (role_list_str.append_fmt(",%" PRIu64 "", role_id));
               }
             }
             if (OB_SUCC(ret)) {
@@ -2302,7 +2303,7 @@ int ObShowResolver::ObSqlStrGenerator::gen_limit_str(int64_t offset, int64_t row
   if (OB_FAIL(databuff_printf(sql_buf_,
                               OB_MAX_SQL_LENGTH,
                               sql_buf_pos_,
-                              " LIMIT %ld, %ld ",
+                              " LIMIT %" PRId64 ", %" PRId64 " ",
                               offset,
                               row_cnt))) {
   }
@@ -2336,22 +2337,22 @@ namespace sql
 DEFINE_SHOW_CLAUSE(SUBQERY_ALIAS, "subquery_alias");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLES,
                        "SELECT table_name AS `Tables_in_%.*s` ",
-                       "SELECT table_name FROM %s.%s WHERE database_id = %ld ORDER BY table_name COLLATE utf8mb4_bin ASC",
+                       "SELECT table_name FROM %s.%s WHERE database_id = %" PRId64 " ORDER BY table_name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "table_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLES_LIKE,
                        "SELECT table_name AS `Tables_in_%.*s (%.*s)` ",
-                       "SELECT table_name FROM %s.%s WHERE database_id = %ld ORDER BY table_name COLLATE utf8mb4_bin ASC",
+                       "SELECT table_name FROM %s.%s WHERE database_id = %" PRId64 " ORDER BY table_name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "table_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_TABLES,
                        "SELECT table_name AS `Tables_in_%.*s`, table_type AS `Table_type` ",
-                       "SELECT table_name, table_type FROM %s.%s WHERE database_id = %ld ORDER BY table_name COLLATE utf8mb4_bin ASC",
+                       "SELECT table_name, table_type FROM %s.%s WHERE database_id = %" PRId64 " ORDER BY table_name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "table_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_TABLES_LIKE,
                        "SELECT table_name AS `Tables_in_%.*s (%.*s)`, table_type AS `Table_type` ",
-                       "SELECT table_name, table_type FROM %s.%s WHERE database_id = %ld ORDER BY table_name COLLATE utf8mb4_bin ASC",
+                       "SELECT table_name, table_type FROM %s.%s WHERE database_id = %" PRId64 " ORDER BY table_name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "table_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_CHARSET,
@@ -2372,52 +2373,52 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_GLOBAL_VARIABLES,
 DEFINE_SHOW_CLAUSE_SET(SHOW_COLUMNS,
                        NULL,
                        "SELECT field AS `Field`, type AS `Type`, `NULL` AS `Null`, `KEY` AS `Key`, `DEFAULT` AS `Default`, extra AS `Extra` \
-                        FROM %s.%s  where table_id = %ld AND is_hidden = False",
+                        FROM %s.%s  where table_id = %" PRId64 " AND is_hidden = False",
                         R"(SELECT "FIELD" AS "FIELD", "TYPE" AS "TYPE", "NULL" AS "NULL", "KEY" AS "KEY", "DEFAULT" AS "DEFAULT", "EXTRA" AS "EXTRA" )"
-                        R"(FROM %s.%s  WHERE TABLE_ID = %ld AND IS_HIDDEN = 0)",
+                        R"(FROM %s.%s  WHERE TABLE_ID = %" PRId64 " AND IS_HIDDEN = 0)",
                        "Field");
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_COLUMNS,
                        NULL,
                        "SELECT field AS `Field`, type AS `Type`, collation AS `Collation`, `NULL` AS `Null`, `KEY` AS `Key`, `DEFAULT` AS `Default`, extra AS `Extra`, `PRIVILEGES` AS `Privileges`, `COMMENT` AS `Comment` \
-                       FROM %s.%s  where table_id = %ld AND is_hidden = False",
+                       FROM %s.%s  where table_id = %" PRId64 " AND is_hidden = False",
                        R"(SELECT "FIELD" AS "FIELD", "TYPE" AS "TYPE", "COLLATION" AS "COLLATION", "NULL" AS "NULL", KEY AS "KEY", "DEFAULT" AS "DEFAULT", EXTRA AS "EXTRA", "PRIVILEGES" AS "PRIVILEGES", "COMMENT" AS "COMMENT" )"
-                       R"(FROM %s.%s  WHERE TABLE_ID = %ld AND IS_HIDDEN = 0)",
+                       R"(FROM %s.%s  WHERE TABLE_ID = %" PRId64 " AND IS_HIDDEN = 0)",
                        "Field");
 DEFINE_SHOW_CLAUSE_SET(SHOW_EXTENDED_COLUMNS,
                        NULL,
                        "SELECT field AS `Field`, type AS `Type`, `NULL` AS `Null`, `KEY` AS `Key`, `DEFAULT` AS `Default`, extra AS `Extra` \
-                        FROM %s.%s  where table_id = %ld",
+                        FROM %s.%s  where table_id = %" PRId64 "",
                         R"(SELECT "FIELD" AS "FIELD", "TYPE" AS "TYPE", "NULL" AS "NULL", "KEY" AS "KEY", "DEFAULT" AS "DEFAULT", "EXTRA" AS "EXTRA" )"
-                        R"(FROM %s.%s  WHERE TABLE_ID = %ld)",
+                        R"(FROM %s.%s  WHERE TABLE_ID = %" PRId64 ")",
                        "Field");
 DEFINE_SHOW_CLAUSE_SET(SHOW_EXTENDED_FULL_COLUMNS,
                        NULL,
                        "SELECT field AS `Field`, type AS `Type`, collation AS `Collation`, `NULL` AS `Null`, `KEY` AS `Key`, `DEFAULT` AS `Default`, extra AS `Extra`, `PRIVILEGES` AS `Privileges`, `COMMENT` AS `Comment` \
-                       FROM %s.%s  where table_id = %ld",
+                       FROM %s.%s  where table_id = %" PRId64 "",
                        R"(SELECT "FIELD" AS "FIELD", "TYPE" AS "TYPE", "COLLATION" AS "COLLATION", "NULL" AS "NULL", KEY AS "KEY", "DEFAULT" AS "DEFAULT", EXTRA AS "EXTRA", "PRIVILEGES" AS "PRIVILEGES", "COMMENT" AS "COMMENT" )"
-                       R"(FROM %s.%s  WHERE TABLE_ID = %ld)",
+                       R"(FROM %s.%s  WHERE TABLE_ID = %" PRId64 ")",
                        "Field");
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_DATABASE,
                        NULL,
-                       "SELECT `database_name` AS `Database`, create_database AS `Create Database` FROM %s.%s  WHERE database_id = %ld",
+                       "SELECT `database_name` AS `Database`, create_database AS `Create Database` FROM %s.%s  WHERE database_id = %" PRId64 "",
                        NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_DATABASE_EXISTS,
                        NULL,
-                       "SELECT `database_name` AS `Database`, create_database_with_if_not_exists AS `Create Database` FROM %s.%s WHERE database_id = %ld",
+                       "SELECT `database_name` AS `Database`, create_database_with_if_not_exists AS `Create Database` FROM %s.%s WHERE database_id = %" PRId64 "",
                        NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_INDEXES,
                        NULL,
-                       "SELECT `TABLE` AS `Table`, NON_UNIQUE AS Non_unique, KEY_NAME AS Key_name, SEQ_IN_INDEX AS Seq_in_index, COLUMN_NAME AS Column_name, COLLATION AS Collation, CARDINALITY AS Cardinality, SUB_PART AS Sub_part, PACKED AS Packed, `NULL` AS `Null`, INDEX_TYPE AS Index_type, `COMMENT` AS `Comment`, INDEX_COMMENT AS Index_comment, IS_VISIBLE AS Visible, EXPRESSION AS Expression FROM %s.%s  where table_id = %ld AND is_column_visible = true",
+                       "SELECT `TABLE` AS `Table`, NON_UNIQUE AS Non_unique, KEY_NAME AS Key_name, SEQ_IN_INDEX AS Seq_in_index, COLUMN_NAME AS Column_name, COLLATION AS Collation, CARDINALITY AS Cardinality, SUB_PART AS Sub_part, PACKED AS Packed, `NULL` AS `Null`, INDEX_TYPE AS Index_type, `COMMENT` AS `Comment`, INDEX_COMMENT AS Index_comment, IS_VISIBLE AS Visible, EXPRESSION AS Expression FROM %s.%s  where table_id = %" PRId64 " AND is_column_visible = true",
                        R"(SELECT "TABLE" AS "TABLE", "NON_UNIQUE" AS "NON_UNIQUE", "KEY_NAME" AS "KEY_NAME", "SEQ_IN_INDEX" AS "SEQ_IN_INDEX", "COLUMN_NAME" AS "COLUMN_NAME", "COLLATION" AS "COLLATION", "CARDINALITY" AS "CARDINALITY", "SUB_PART" AS "SUB_PART", "PACKED" AS "PACKED", "NULL" AS "NULL", "INDEX_TYPE" AS "INDEX_TYPE", "COMMENT" AS "COMMENT", )"
-                       R"(INDEX_COMMENT" AS "INDEX_COMMENT", "IS_VISIBLE" AS "VISIBLE", "EXPRESSION" AS "EXPRESSION" FROM %s.%s  WHERE TABLE_ID = %ld AND IS_COLUMN_VISIBLE = 1")",
+                       R"(INDEX_COMMENT" AS "INDEX_COMMENT", "IS_VISIBLE" AS "VISIBLE", "EXPRESSION" AS "EXPRESSION" FROM %s.%s  WHERE TABLE_ID = %" PRId64 " AND IS_COLUMN_VISIBLE = 1")",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_EXTENDED_INDEXES,
                        NULL,
-                       "SELECT `TABLE` AS `Table`, NON_UNIQUE AS Non_unique, KEY_NAME AS Key_name, SEQ_IN_INDEX AS Seq_in_index, COLUMN_NAME AS Column_name, COLLATION AS Collation, CARDINALITY AS Cardinality, SUB_PART AS Sub_part, PACKED AS Packed, `NULL` AS `Null`, INDEX_TYPE AS Index_type, `COMMENT` AS `Comment`, INDEX_COMMENT AS Index_comment, IS_VISIBLE AS Visible, EXPRESSION AS Expression FROM %s.%s  where table_id = %ld",
+                       "SELECT `TABLE` AS `Table`, NON_UNIQUE AS Non_unique, KEY_NAME AS Key_name, SEQ_IN_INDEX AS Seq_in_index, COLUMN_NAME AS Column_name, COLLATION AS Collation, CARDINALITY AS Cardinality, SUB_PART AS Sub_part, PACKED AS Packed, `NULL` AS `Null`, INDEX_TYPE AS Index_type, `COMMENT` AS `Comment`, INDEX_COMMENT AS Index_comment, IS_VISIBLE AS Visible, EXPRESSION AS Expression FROM %s.%s  where table_id = %" PRId64 "",
                        R"(SELECT "TABLE" AS "TABLE", "NON_UNIQUE" AS "NON_UNIQUE", "KEY_NAME" AS "KEY_NAME", "SEQ_IN_INDEX" AS "SEQ_IN_INDEX", "COLUMN_NAME" AS "COLUMN_NAME", "COLLATION" AS "COLLATION", "CARDINALITY" AS "CARDINALITY", "SUB_PART" AS "SUB_PART", "PACKED" AS "PACKED", "NULL" AS "NULL", "INDEX_TYPE" AS "INDEX_TYPE", "COMMENT" AS "COMMENT", )"
-                       R"(INDEX_COMMENT" AS "INDEX_COMMENT", "IS_VISIBLE" AS "VISIBLE", "EXPRESSION" AS "EXPRESSION" FROM %s.%s  WHERE TABLE_ID = %ld")",
+                       R"(INDEX_COMMENT" AS "INDEX_COMMENT", "IS_VISIBLE" AS "VISIBLE", "EXPRESSION" AS "EXPRESSION" FROM %s.%s  WHERE TABLE_ID = %" PRId64 "")",
                        NULL);
 
 DEFINE_SHOW_CLAUSE_SET(SHOW_TRACE,
@@ -2468,8 +2469,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_COLLATION,
                        "Collation");
 DEFINE_SHOW_CLAUSE_SET(SHOW_GRANTS,
                        "SELECT grants AS `Grants for %.*s@%.*s` ",
-                       "SELECT grants FROM %s.%s WHERE user_id = %ld",
-                       R"(SELECT "GRANTS" AS "GRANTS" FROM %s.%s WHERE USER_ID = %ld)",
+                       "SELECT grants FROM %s.%s WHERE user_id = %" PRId64 "",
+                       R"(SELECT "GRANTS" AS "GRANTS" FROM %s.%s WHERE USER_ID = %" PRId64 ")",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_GRANTS_USING_ROLES,
                        "SELECT grants AS `Grants for %.*s@%.*s` ",
@@ -2478,13 +2479,13 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_GRANTS_USING_ROLES,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_PROCESSLIST,
                        NULL,
-                       "SELECT id AS `Id`, user AS `User`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE %ld>=0",
-                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE %ld>=0)",
+                       "SELECT id AS `Id`, user AS `User`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE %" PRId64 ">=0",
+                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE %" PRId64 ">=0)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_PROCESSLIST,
                        NULL,
-                       "SELECT id AS `Id`, user AS `User`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE %ld>=0",
-                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE %ld>=0)",
+                       "SELECT id AS `Id`, user AS `User`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE %" PRId64 ">=0",
+                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE %" PRId64 ">=0)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_SYS_PROCESSLIST,
                        NULL,
@@ -2498,22 +2499,22 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_SYS_FULL_PROCESSLIST,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLE_STATUS,
                        NULL,
-                        "SELECT table_name AS `Name`, engine as `Engine`, version as `Version`, row_format as `Row_format`, `ROWS` as `Rows`, avg_row_length as `Avg_row_length`, data_length as `Data_length`, max_data_length as `Max_data_length`, index_length as `Index_length`, data_free as `Data_free`, auto_increment as `Auto_increment`, create_time as `Create_time`, update_time as `Update_time`, check_time as `Check_time`, collation as `Collation`, checksum as `Checksum`, create_options as `Create_options`, `COMMENT` as `Comment` FROM (%s) WHERE database_id = %ld ORDER BY name COLLATE utf8mb4_bin ASC",
-                       R"(SELECT "TABLE_NAME" AS "NAME", "ENGINE", "VERSION", "ROW_FORMAT", "ROWS" AS "ROWS", "AVG_ROW_LENGTH", "DATA_LENGTH", "MAX_DATA_LENGTH", "INDEX_LENGTH", "DATA_FREE", "AUTO_INCREMENT", "CREATE_TIME", "UPDATE_TIME", "CHECK_TIME", "COLLATION", "CHECKSUM", "CREATE_OPTIONS", "COMMENT" AS "COMMENT" FROM (%s) WHERE DATABASE_ID = %ld ORDER BY NAME COLLATE UTF8MB4_BIN ASC)",
+                        "SELECT table_name AS `Name`, engine as `Engine`, version as `Version`, row_format as `Row_format`, `ROWS` as `Rows`, avg_row_length as `Avg_row_length`, data_length as `Data_length`, max_data_length as `Max_data_length`, index_length as `Index_length`, data_free as `Data_free`, auto_increment as `Auto_increment`, create_time as `Create_time`, update_time as `Update_time`, check_time as `Check_time`, collation as `Collation`, checksum as `Checksum`, create_options as `Create_options`, `COMMENT` as `Comment` FROM (%s) WHERE database_id = %" PRId64 " ORDER BY name COLLATE utf8mb4_bin ASC",
+                       R"(SELECT "TABLE_NAME" AS "NAME", "ENGINE", "VERSION", "ROW_FORMAT", "ROWS" AS "ROWS", "AVG_ROW_LENGTH", "DATA_LENGTH", "MAX_DATA_LENGTH", "INDEX_LENGTH", "DATA_FREE", "AUTO_INCREMENT", "CREATE_TIME", "UPDATE_TIME", "CHECK_TIME", "COLLATION", "CHECKSUM", "CREATE_OPTIONS", "COMMENT" AS "COMMENT" FROM (%s) WHERE DATABASE_ID = %" PRId64 " ORDER BY NAME COLLATE UTF8MB4_BIN ASC)",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PROCEDURE_STATUS,
                        NULL,
-                       "select database_name AS `Db`, routine_name AS `Name`, c.type AS `Type`, c.definer AS `Definer`, p.gmt_modified AS `Modified`, p.gmt_create AS `Created`, c.security_type AS `Security_type`, p.comment AS `Comment`, character_set_client, collation_connection, db_collation AS `Database Collation`from %s.%s p, %s.%s d, %s.%s c where p.database_id = d.database_id and d.database_name = c.db and p.routine_name = c.name and (case c.type when 'PROCEDURE' then 1 when 'FUNCTION' then 2 else 0 end) = p.routine_type and d.database_id = %ld and p.routine_type = %ld and (0 = sys_privilege_check('routine_acc') or 0 = sys_privilege_check('routine_acc', d.database_name, p.routine_name, p.routine_type)) ORDER BY name COLLATE utf8mb4_bin ASC",
+                       "select database_name AS `Db`, routine_name AS `Name`, c.type AS `Type`, c.definer AS `Definer`, p.gmt_modified AS `Modified`, p.gmt_create AS `Created`, c.security_type AS `Security_type`, p.comment AS `Comment`, character_set_client, collation_connection, db_collation AS `Database Collation`from %s.%s p, %s.%s d, %s.%s c where p.database_id = d.database_id and d.database_name = c.db and p.routine_name = c.name and (case c.type when 'PROCEDURE' then 1 when 'FUNCTION' then 2 else 0 end) = p.routine_type and d.database_id = %" PRId64 " and p.routine_type = %" PRId64 " and (0 = sys_privilege_check('routine_acc') or 0 = sys_privilege_check('routine_acc', d.database_name, p.routine_name, p.routine_type)) ORDER BY name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TRIGGERS,
                        NULL,
-                       "select t.trigger_name as `Trigger`, t.event_manipulation as `Event`, t.event_object_table as `Table`, t.action_statement as `Statement`, t.action_timing as `Timing`, t.created as `Created`, t.sql_mode as `sql_mode`, t.definer as `Definer`, t.character_set_client as `character_set_client`, t.collation_connection as `collation_connection`, t.database_collation as `Database Collation` from %s.%s t, %s.%s d where t.event_object_schema = d.database_name and d.database_id = %ld ",
+                       "select t.trigger_name as `Trigger`, t.event_manipulation as `Event`, t.event_object_table as `Table`, t.action_statement as `Statement`, t.action_timing as `Timing`, t.created as `Created`, t.sql_mode as `sql_mode`, t.definer as `Definer`, t.character_set_client as `character_set_client`, t.collation_connection as `collation_connection`, t.database_collation as `Database Collation` from %s.%s t, %s.%s d where t.event_object_schema = d.database_name and d.database_id = %" PRId64 " ",
                        NULL,
                        "Trigger");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TRIGGERS_LIKE,
                        NULL,
-                       "select t.trigger_name as `Trigger`, t.event_manipulation as `Event`, t.event_object_table as `Table`, t.action_statement as `Statement`, t.action_timing as `Timing`, t.created as `Created`, t.sql_mode as `sql_mode`, t.definer as `Definer`, t.character_set_client as `character_set_client`, t.collation_connection as `collation_connection`, t.database_collation as `Database Collation` from %s.%s t, %s.%s d where t.event_object_schema = d.database_name and d.database_id = %ld ",
+                       "select t.trigger_name as `Trigger`, t.event_manipulation as `Event`, t.event_object_table as `Table`, t.action_statement as `Statement`, t.action_timing as `Timing`, t.created as `Created`, t.sql_mode as `sql_mode`, t.definer as `Definer`, t.character_set_client as `character_set_client`, t.collation_connection as `collation_connection`, t.database_collation as `Database Collation` from %s.%s t, %s.%s d where t.event_object_schema = d.database_name and d.database_id = %" PRId64 " ",
                        NULL,
                        "Table");
 DEFINE_SHOW_CLAUSE_SET(SHOW_WARNINGS,
@@ -2588,28 +2589,28 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES_STATUS_LIKE,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_TABLE,
                        NULL,
-                       "SELECT table_name AS `Table`, create_table AS `Create Table` FROM %s.%s  WHERE table_id = %ld",
-                       R"(SELECT "TABLE_NAME" AS "TABLE", "CREATE_TABLE" AS "CREATE TABLE" FROM %s.%s  WHERE TABLE_ID = %ld)",
+                       "SELECT table_name AS `Table`, create_table AS `Create Table` FROM %s.%s  WHERE table_id = %" PRId64 "",
+                       R"(SELECT "TABLE_NAME" AS "TABLE", "CREATE_TABLE" AS "CREATE TABLE" FROM %s.%s  WHERE TABLE_ID = %" PRId64 ")",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_VIEW,
                        NULL,
-                       "SELECT table_name AS `View`, create_table AS `Create View` , character_set_client, collation_connection FROM %s.%s WHERE table_id = %ld",
-                       R"(SELECT "TABLE_NAME" AS "VIEW", "CREATE_TABLE" AS "CREATE VIEW" , "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION" FROM %s.%s WHERE TABLE_ID = %ld)",
+                       "SELECT table_name AS `View`, create_table AS `Create View` , character_set_client, collation_connection FROM %s.%s WHERE table_id = %" PRId64 "",
+                       R"(SELECT "TABLE_NAME" AS "VIEW", "CREATE_TABLE" AS "CREATE VIEW" , "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION" FROM %s.%s WHERE TABLE_ID = %" PRId64 ")",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_PROCEDURE,
                        NULL,
-                       "SELECT routine_name AS `Procedure`, sql_mode, create_routine AS `Create Procedure`, character_set_client, collation_connection, collation_database AS `Database Collation` FROM %s.%s  WHERE routine_id = %ld and proc_type = %ld",
-                       R"(SELECT "ROUTINE_NAME" AS "PROCEDURE", "SQL_MODE", "CREATE_ROUTINE" AS "CREATE PROCEDURE", "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION", "COLLATION_DATABASE" AS "DATABASE COLLATION" FROM %s.%s  WHERE ROUTINE_ID = %ld AND PROC_TYPE = %ld)",
+                       "SELECT routine_name AS `Procedure`, sql_mode, create_routine AS `Create Procedure`, character_set_client, collation_connection, collation_database AS `Database Collation` FROM %s.%s  WHERE routine_id = %" PRId64 " and proc_type = %" PRId64 "",
+                       R"(SELECT "ROUTINE_NAME" AS "PROCEDURE", "SQL_MODE", "CREATE_ROUTINE" AS "CREATE PROCEDURE", "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION", "COLLATION_DATABASE" AS "DATABASE COLLATION" FROM %s.%s  WHERE ROUTINE_ID = %" PRId64 " AND PROC_TYPE = %" PRId64 ")",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_FUNCTION,
                        NULL,
-                       "SELECT routine_name AS `Function`, sql_mode, create_routine AS `Create Function`, character_set_client, collation_connection, collation_database AS `Database Collation` FROM %s.%s  WHERE routine_id = %ld and proc_type = %ld",
-                       R"(SELECT "ROUTINE_NAME" AS "FUNCTION", "SQL_MODE", "CREATE_ROUTINE" AS "CREATE FUNCTION", "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION", "COLLATION_DATABASE" AS "DATABASE COLLATION" FROM %s.%s  WHERE ROUTINE_ID = %ld AND PROC_TYPE = %ld)",
+                       "SELECT routine_name AS `Function`, sql_mode, create_routine AS `Create Function`, character_set_client, collation_connection, collation_database AS `Database Collation` FROM %s.%s  WHERE routine_id = %" PRId64 " and proc_type = %" PRId64 "",
+                       R"(SELECT "ROUTINE_NAME" AS "FUNCTION", "SQL_MODE", "CREATE_ROUTINE" AS "CREATE FUNCTION", "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION", "COLLATION_DATABASE" AS "DATABASE COLLATION" FROM %s.%s  WHERE ROUTINE_ID = %" PRId64 " AND PROC_TYPE = %" PRId64 ")",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_TRIGGER,
                        NULL,
-                       "SELECT trigger_name AS `Trigger`, sql_mode, create_trigger AS `SQL Original Statement`, character_set_client, collation_connection, collation_database AS `Database Collation` FROM %s.%s  WHERE trigger_id = %ld",
-                       R"(SELECT trigger_name AS "TRIGGER", "SQL_MODE", "CREATE_TRIGGER", "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION", "COLLATION_DATABASE" FROM %s.%s  WHERE trigger_id = %ld)",
+                       "SELECT trigger_name AS `Trigger`, sql_mode, create_trigger AS `SQL Original Statement`, character_set_client, collation_connection, collation_database AS `Database Collation` FROM %s.%s  WHERE trigger_id = %" PRId64 "",
+                       R"(SELECT trigger_name AS "TRIGGER", "SQL_MODE", "CREATE_TRIGGER", "CHARACTER_SET_CLIENT", "COLLATION_CONNECTION", "COLLATION_DATABASE" FROM %s.%s  WHERE trigger_id = %" PRId64 ")",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_RECYCLEBIN,
                        "SELECT OBJECT_NAME, ORIGINAL_NAME, TYPE, CREATETIME",

@@ -140,8 +140,8 @@ public:
   int get_server_resource_info(share::ObServerResourceInfo &resource_info);
   static int get_build_version(share::ObBuildVersion &build_version);
   int get_build_version(char *buf, int64_t buf_len) override;
+  int ensure_system_packages();
   int load_all_special_system_packages() override;
-  int wait_system_package_ready(const common::ObTimeoutCtx &ctx) override;
   int load_leader_cluster_login_info();
   // ObCallSetDebugSyncActionP @RS::admin to set debug sync action
   int set_ds_action(const obcall::ObDebugSyncActionArg &arg) override;
@@ -157,8 +157,7 @@ public:
   int submit_async_refresh_schema_task(const int64_t schema_version);
   int check_server_empty(bool &server_empty) override;
   int wait_until_change_stream_refreshed(
-      common::ObMySQLProxy &mysql_proxy,
-      int64_t timeout_us) override;
+      int64_t abs_timeout_us) override;
 
 private:
   int inner_fill_tablet_info_(

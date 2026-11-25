@@ -76,8 +76,7 @@ int ObExprJsonPretty::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta
   } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                  ctx.exec_ctx_, *allocator, data, meta, has_lob_header, j_str))) {
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type,
-                                                      j_in_type, j_base, 0,
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type, j_base, 0,
                                                       ObJsonExprHelper::get_json_max_depth_config()))) {
     if (ret == OB_ERR_INVALID_JSON_TEXT) {
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;

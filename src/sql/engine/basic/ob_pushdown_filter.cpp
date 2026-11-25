@@ -1245,9 +1245,12 @@ int ObPushdownFilterExecutor::find_evaluated_datums(
     ObExpr *expr, const ObIArray<ObExpr*> &calc_exprs, ObIArray<ObExpr*> &eval_exprs)
 {
   int ret = OB_SUCCESS;
-  if (is_contain(calc_exprs, expr)) {
+  const bool is_calc_expr = is_contain(calc_exprs, expr);
+  if (is_calc_expr) {
     if (OB_FAIL(eval_exprs.push_back(expr))) {
     }
+  }
+  if (OB_SUCC(ret) && (is_calc_expr || T_OP_ROW == expr->type_)) {
     for (uint32_t i = 0; i < expr->arg_cnt_ && OB_SUCC(ret); ++i) {
       if (OB_FAIL(find_evaluated_datums(expr->args_[i], calc_exprs, eval_exprs))) {
       }
@@ -2258,9 +2261,14 @@ extern void mark_filtered_datums_simd(const ObDatum *datums,
 
 MarkFilterdDatumsFunc get_mark_filterd_datums_func()
 {
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
   return data_plane::is_avx512_supported()
       ? mark_filtered_datums_simd
       : mark_filtered_datums;
+#else
+  // Match the build guard of mark_filtered_datums_simd before CPU dispatch.
+  return mark_filtered_datums;
+#endif
 }
 
 MarkFilterdDatumsFunc mark_filtered_datums_func = get_mark_filterd_datums_func();

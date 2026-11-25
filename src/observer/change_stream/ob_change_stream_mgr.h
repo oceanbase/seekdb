@@ -62,10 +62,9 @@ public:
 
   /// Capture one schema-consistent GTS target and prove all relevant async-index
   /// work is complete before publishing refresh_scn_.
-  /// Can be called from any node (RS / observer) as long as sql_client is valid.
+  /// All retries use the caller's absolute deadline.
   static int wait_refresh_scn(
-      common::ObISQLClient &sql_client,
-      const int64_t timeout_us);
+      const int64_t abs_timeout_us);
 
   int64_t get_refresh_scn() const { return ATOMIC_LOAD(&refresh_scn_); }
   int update_refresh_scn(const int64_t refresh_scn);

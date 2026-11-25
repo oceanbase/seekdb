@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_degrees.h"
+#include "share/ob_math_compat.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -24,7 +25,7 @@ namespace oceanbase
 namespace sql
 {
 
-const double ObExprDegrees::degrees_ratio_ = 180.0/std::acos(-1);
+const double ObExprDegrees::degrees_ratio_ = 180.0/math_compat::acos(-1.0);
 
 ObExprDegrees::ObExprDegrees(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_DEGREES, N_DEGREES, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)

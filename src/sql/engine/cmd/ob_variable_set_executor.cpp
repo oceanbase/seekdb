@@ -17,9 +17,10 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "sql/engine/ob_physical_plan.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_server_struct.h"
@@ -566,7 +567,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().modify_system_variable(arg); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().modify_system_variable(arg); }))) {
     } else {}
   }
   return ret;
@@ -724,7 +725,7 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
     } else if (0 != autocommit && 1 != autocommit) {
       char autocommit_str[32] = {'\0'};
       int64_t pos = 0;
-      (void)databuff_printf(autocommit_str, sizeof(autocommit_str), pos, "%ld", autocommit);
+      (void)databuff_printf(autocommit_str, sizeof(autocommit_str), pos, "%" PRId64 "", autocommit);
       ret = OB_ERR_WRONG_VALUE_FOR_VAR;
       LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, (int)strlen(OB_SV_AUTOCOMMIT), OB_SV_AUTOCOMMIT,
                      (int)strlen(autocommit_str), autocommit_str);
@@ -755,7 +756,7 @@ int ObVariableSetExecutor::process_auto_increment_hook(const ObSQLMode sql_mode,
       if (auto_increment <= 0 || auto_increment > UINT16_MAX) {
         char auto_increment_str[OB_CAST_TO_VARCHAR_MAX_LENGTH];
         int length = snprintf(auto_increment_str, OB_CAST_TO_VARCHAR_MAX_LENGTH,
-                                  "%lu", auto_increment);
+                                  "%" PRIu64 "", auto_increment);
         if (length < 0 || length >= OB_CAST_TO_VARCHAR_MAX_LENGTH) {
           length = OB_CAST_TO_VARCHAR_MAX_LENGTH - 1;
           auto_increment_str[length] = '\0';
@@ -797,7 +798,7 @@ int ObVariableSetExecutor::process_last_insert_id_hook(ObPhysicalPlanCtx *plan_c
     if (SMO_STRICT_ALL_TABLES & sql_mode) {
       if (value < 0) {
         char auto_increment_str[OB_CAST_TO_VARCHAR_MAX_LENGTH];
-        int32_t length = snprintf(auto_increment_str, OB_CAST_TO_VARCHAR_MAX_LENGTH, "%ld", value);
+        int32_t length = snprintf(auto_increment_str, OB_CAST_TO_VARCHAR_MAX_LENGTH, "%" PRId64, value);
         if (length < 0 || length >= OB_CAST_TO_VARCHAR_MAX_LENGTH) {
           length = OB_CAST_TO_VARCHAR_MAX_LENGTH - 1;
           auto_increment_str[length] = '\0';

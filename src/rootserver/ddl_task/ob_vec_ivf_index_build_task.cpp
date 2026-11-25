@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/ddl_task/ob_vec_ivf_index_build_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -1306,7 +1307,7 @@ int ObVecIVFIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %" PRId64 ", ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(databuff_printf(stat_info_.message_,
@@ -1560,7 +1561,7 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
     drop_index_arg.is_hidden_         = create_index_arg_.is_offline_rebuild_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(data_table_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
     } else {
       drop_index_task_submitted_ = true;
       drop_index_task_id_ = drop_index_res.task_id_;

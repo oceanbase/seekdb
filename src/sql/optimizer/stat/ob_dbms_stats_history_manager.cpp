@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
+#include <inttypes.h>
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_opt_stat_service.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -27,37 +28,37 @@ namespace common {
 #define FETCH_TAB_STATS_HISTROY "SELECT table_id, partition_id, object_type, row_cnt row_count, \
                                  avg_row_len avg_row_size, macro_blk_cnt macro_block_num,\
                                  micro_blk_cnt micro_block_num, stattype_locked,last_analyzed FROM \
-                                 %s T WHERE table_id = %ld and \
+                                 %s T WHERE table_id = %" PRId64 " and \
                                  partition_id in %s and savtime in (SELECT min(savtime) From \
                                  %s TF where TF.table_id = T.table_id and TF.partition_id = T.partition_id \
-                                 and savtime >= usec_to_time('%ld'));"
+                                 and savtime >= usec_to_time('%" PRId64 "'));"
 
 #define FETCH_COL_STATS_HISTROY "SELECT table_id, partition_id, column_id, object_type stat_level,\
                                  distinct_cnt num_distinct, null_cnt num_null, b_max_value,\
                                  b_min_value, avg_len, distinct_cnt_synopsis, distinct_cnt_synopsis_size,\
                                  histogram_type, sample_size, bucket_cnt, density, last_analyzed, spare1 as compress_type \
-                                 FROM %s T WHERE table_id = %ld \
+                                 FROM %s T WHERE table_id = %" PRId64 " \
                                  and partition_id in %s and savtime in (SELECT min(savtime) From \
                                  %s TF where TF.table_id = T.table_id and TF.partition_id = T.partition_id \
-                                 and savtime >= usec_to_time('%ld'));"
+                                 and savtime >= usec_to_time('%" PRId64 "'));"
 
 #define FETCH_HISTOGRAM_HISTROY "SELECT endpoint_num, b_endpoint_value, endpoint_repeat_cnt\
                                  FROM %s T WHERE \
-                                 table_id=%ld and partition_id = %ld and column_id = %ld and \
+                                 table_id=%" PRId64 " and partition_id = %" PRId64 " and column_id = %" PRId64 " and \
                                  savtime in (SELECT min(savtime) From %s \
                                  TF where TF.table_id = T.table_id \
                                  and TF.partition_id = T.partition_id and savtime >= \
-                                 usec_to_time('%ld')) ORDER BY ENDPOINT_NUM;"
+                                 usec_to_time('%" PRId64 "')) ORDER BY ENDPOINT_NUM;"
 
 #define FETCH_STATS_HISTROY_RETENTION "SELECT sval1 retention FROM %s WHERE\
                                        sname = 'STATS_RETENTION';"
 
 #define FETCH_STATS_HISTROY_AVAILABILITY "SELECT min(savtime) FROM %s;"
 
-#define UPDATE_STATS_HISTROY_RETENTION "UPDATE %s SET sval1 = %ld, \
+#define UPDATE_STATS_HISTROY_RETENTION "UPDATE %s SET sval1 = %" PRId64 ", \
                                         sval2 = CURRENT_TIMESTAMP  where sname = 'STATS_RETENTION';"
 
-#define DELETE_STAT_HISTORY "DELETE /*+QUERY_TIMEOUT(%ld)*/FROM %s %s LIMIT %ld;"
+#define DELETE_STAT_HISTORY "DELETE /*+QUERY_TIMEOUT(%" PRId64 ")*/FROM %s %s LIMIT %" PRId64 ";"
 
 #define INSERT_TABLE_STAT_HISTORY "INSERT INTO %s(table_id,            \
                                                   partition_id,        \
@@ -79,7 +80,7 @@ namespace common {
 
 #define SELECT_TABLE_STAT                "SELECT table_id,            \
                                                   partition_id,        \
-                                                  usec_to_time(%ld),   \
+                                                  usec_to_time(%" PRId64 "),   \
                                                   object_type,         \
                                                   0,                   \
                                                   last_analyzed,       \
@@ -95,9 +96,9 @@ namespace common {
                                                   stattype_locked,     \
                                                   spare1               \
                                              FROM %s                   \
-                                             WHERE table_id = %lu %s"
+                                             WHERE table_id = %" PRIu64 " %s"
 
-#define TABLE_STAT_MOCK_VALUE_PATTERN "(%lu, %ld, usec_to_time(%ld), 0, 0, 0, 0, -1, -1, 0, 0, -1, 0, 0, 0, 0, 0)"
+#define TABLE_STAT_MOCK_VALUE_PATTERN "(%" PRIu64 ", %" PRId64 ", usec_to_time(%" PRId64 "), 0, 0, 0, 0, -1, -1, 0, 0, -1, 0, 0, 0, 0, 0)"
 
 #define INSERT_COLUMN_STAT_HISTORY "INSERT INTO %s(table_id,                  \
                                                    partition_id,              \
@@ -124,7 +125,7 @@ namespace common {
 #define SELECT_COLUMN_STAT               "SELECT   table_id,                  \
                                                    partition_id,              \
                                                    column_id,                 \
-                                                   usec_to_time(%ld),         \
+                                                   usec_to_time(%" PRId64 "),         \
                                                    object_type,               \
                                                    0,                         \
                                                    last_analyzed,             \
@@ -145,7 +146,7 @@ namespace common {
                                              FROM %s                          \
                                              WHERE %s"
 
-#define COLUMN_STAT_MOCK_VALUE_PATTERN "(%lu, %ld, %lu, usec_to_time(%ld), 0, 0, usec_to_time(%ld), 0, 0, \
+#define COLUMN_STAT_MOCK_VALUE_PATTERN "(%" PRIu64 ", %" PRId64 ", %" PRIu64 ", usec_to_time(%" PRId64 "), 0, 0, usec_to_time(%" PRId64 "), 0, 0, \
                                          %s, '%.*s', %s, '%.*s', 0, '', 0, -1, 0.000000, 0, 0, NULL)"
 
 #define INSERT_HISTOGRAM_STAT_HISTORY "INSERT INTO %s(table_id,                 \
@@ -162,7 +163,7 @@ namespace common {
                                                       partition_id,             \
                                                       column_id,                \
                                                       endpoint_num,             \
-                                                      usec_to_time(%ld),        \
+                                                      usec_to_time(%" PRId64 "),        \
                                                       object_type,              \
                                                       endpoint_normalized_value,\
                                                       endpoint_value,           \
@@ -171,9 +172,9 @@ namespace common {
                                                 FROM %s                         \
                                                 WHERE %s"
 
-#define CHECK_TABLE_STAT "SELECT partition_id FROM %s WHERE table_id = %lu %s"
+#define CHECK_TABLE_STAT "SELECT partition_id FROM %s WHERE table_id = %" PRIu64 " %s"
 
-#define CHECK_COLUMN_STAT "SELECT partition_id, column_id FROM %s WHERE table_id = %lu %s"
+#define CHECK_COLUMN_STAT "SELECT partition_id, column_id FROM %s WHERE table_id = %" PRIu64 " %s"
 
 int ObDbmsStatsHistoryManager::backup_opt_stats(ObExecContext &ctx,
                                                 ObMySQLTransaction &trans,
@@ -507,7 +508,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
     bool need_backup = true;
     if (OB_LIKELY(having_stat_part_col_map.size() == partition_ids.count() * column_ids.count())) {
       if (!is_specify_gather) {
-        if (OB_FAIL(where_str.append_fmt(" table_id = %lu",
+        if (OB_FAIL(where_str.append_fmt(" table_id = %" PRIu64 "",
                                          share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
         }
       } else {
@@ -515,7 +516,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
         ObSqlString column_list;
         if (OB_FAIL(gen_partition_list(partition_ids, partition_list))) {
         } else if (OB_FAIL(gen_column_list(column_ids, column_list))) {
-        } else if (OB_FAIL(where_str.append_fmt(" table_id = %lu and partition_id in %s and column_id in %s",
+        } else if (OB_FAIL(where_str.append_fmt(" table_id = %" PRIu64 " and partition_id in %s and column_id in %s",
                                                 share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
                                                 partition_list.ptr(),
                                                 column_list.ptr()))) {
@@ -540,7 +541,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
               all_get = false;
             } else {
             }
-          } else if (OB_FAIL(tmp_part_col_list.append_fmt("%s(%ld, %lu)", is_first ? " " : ", ",
+          } else if (OB_FAIL(tmp_part_col_list.append_fmt("%s(%" PRId64 ", %" PRIu64 ")", is_first ? " " : ", ",
                                                           partition_ids.at(i),
                                                           column_ids.at(j)))) {
           } else {
@@ -549,7 +550,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
         }
         if (OB_SUCC(ret)) {
           if (all_get) {
-            if (OB_FAIL(partition_list.append_fmt("%s%ld",
+            if (OB_FAIL(partition_list.append_fmt("%s%" PRId64 "",
                                                   is_first_part_list ? " " : ", ",
                                                   partition_ids.at(i)))) {
             } else {
@@ -579,7 +580,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
                                                        part_col_list.ptr()))) {
         } else if (part_col_where1.empty() && part_col_where2.empty()) {
           need_backup = false;
-        } else if (OB_FAIL(where_str.append_fmt(" table_id = %lu and (%s %s %s)",
+        } else if (OB_FAIL(where_str.append_fmt(" table_id = %" PRIu64 " and (%s %s %s)",
                                                 share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
                                                 part_col_where1.empty() ? " " : part_col_where1.ptr(),
                                                 !part_col_where1.empty() && !part_col_where2.empty() ? "or" : " ",
@@ -719,7 +720,7 @@ int ObDbmsStatsHistoryManager::backup_histogram_stats(ObMySQLTransaction &trans,
                OB_FAIL(extra_where_str.append_fmt("%s%s",
                                                   is_specify_partition ? extra_partition_str.ptr() : " ",
                                                   is_specify_column ? extra_column_str.ptr() : " "))) {
-    } else if (OB_FAIL(where_str.append_fmt(" table_id = %lu %s",
+    } else if (OB_FAIL(where_str.append_fmt(" table_id = %" PRIu64 " %s",
                                             share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
                                             (is_specify_partition || is_specify_column) ? extra_where_str.ptr() : " "))) {
     } else if (OB_FAIL(raw_sql.append_fmt(INSERT_HISTOGRAM_STAT_HISTORY,
@@ -752,7 +753,7 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
     int64_t retention_val = 0;
     if (OB_FAIL(get_stats_history_retention(ctx, retention_val))) {
     } else if (OB_FAIL(time_str.append_fmt("WHERE savtime < "\
-                                           "date_sub(CURRENT_TIMESTAMP, interval %ld day)",
+                                           "date_sub(CURRENT_TIMESTAMP, interval %" PRId64 " day)",
                                            retention_val))) {
     } else {/*do nothing*/}
   //Attempt to delete all opt stats at once. Since this is a synchronous operation,
@@ -763,7 +764,7 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
     } else {
       only_delete_one_batch = true;
     }
-  } else if (OB_FAIL(time_str.append_fmt("WHERE savtime < usec_to_time(%ld)", specify_time))) {
+  } else if (OB_FAIL(time_str.append_fmt("WHERE savtime < usec_to_time(%" PRId64 ")", specify_time))) {
   } else {/*do nothing*/}
   if (OB_SUCC(ret)) {
     
@@ -1155,7 +1156,7 @@ int ObDbmsStatsHistoryManager::fill_column_stat_history(const ObTableStatParam &
     char *bitmap_buf = NULL;
     if (OB_SUCC(ret) && llc_bitmap_size > 0) {
       int64_t compress_type = ObOptStatCompressType::MAX_COMPRESS;
-      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "compress_type", compress_type, int64_t, true, false, ObOptStatCompressType::ZSTD_1_3_8_COMPRESS);
+      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "compress_type", compress_type, int64_t, true, false, ObOptStatCompressType::ZSTD_COMPRESS);
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY(compress_type < 0 || compress_type >= ObOptStatCompressType::MAX_COMPRESS)) {
           ret = OB_ERR_UNEXPECTED;
@@ -1331,7 +1332,7 @@ int ObDbmsStatsHistoryManager::gen_partition_list(const ObIArray<int64_t> &parti
   for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); i++) {
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == partition_ids.count() - 1 ? ')' : ',');
-    if (OB_FAIL(partition_list.append_fmt("%c%ld%c", prefix, partition_ids.at(i), suffix))) {
+    if (OB_FAIL(partition_list.append_fmt("%c%" PRId64 "%c", prefix, partition_ids.at(i), suffix))) {
     } else {/*do nothing*/}
   }
   return ret;
@@ -1344,7 +1345,7 @@ int ObDbmsStatsHistoryManager::gen_column_list(const ObIArray<uint64_t> &column_
   for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); i++) {
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == column_ids.count() - 1 ? ')' : ',');
-    if (OB_FAIL(column_list.append_fmt("%c%lu%c", prefix, column_ids.at(i), suffix))) {
+    if (OB_FAIL(column_list.append_fmt("%c%" PRIu64 "%c", prefix, column_ids.at(i), suffix))) {
     } else {/*do nothing*/}
   }
   return ret;
@@ -1365,10 +1366,10 @@ int ObDbmsStatsHistoryManager::remove_useless_column_stats(ObMySQLTransaction &t
     if (OB_FAIL(ObDbmsStatsUtils::get_valid_duration_time(start_time,
                                                           max_duration_time,
                                                           query_timeout))) {
-    } else if (OB_FAIL(delete_col_stat_sql.append_fmt("DELETE /*+QUERY_TIMEOUT(%ld)*/ FROM %s c WHERE (NOT EXISTS (SELECT 1 " \
+    } else if (OB_FAIL(delete_col_stat_sql.append_fmt("DELETE /*+QUERY_TIMEOUT(%" PRId64 ")*/ FROM %s c WHERE (NOT EXISTS (SELECT 1 " \
                                                       "FROM %s t, %s db WHERE t.database_id = db.database_id "\
                                                       "AND t.table_id = c.table_id AND db.database_name != '__recyclebin')) "\
-                                                      "AND table_id > %ld limit %ld;",
+                                                      "AND table_id > %" PRId64 " limit %" PRId64 ";",
                                                       query_timeout,
                                                       share::OB_ALL_COLUMN_STAT_TNAME,
                                                       share::OB_ALL_TABLE_TNAME,
@@ -1384,10 +1385,10 @@ int ObDbmsStatsHistoryManager::remove_useless_column_stats(ObMySQLTransaction &t
     if (OB_FAIL(ObDbmsStatsUtils::get_valid_duration_time(start_time,
                                                           max_duration_time,
                                                           query_timeout))) {
-    } else if (OB_FAIL(delete_hist_stat_sql.append_fmt("DELETE /*+QUERY_TIMEOUT(%ld)*/ FROM %s hist WHERE (NOT EXISTS (SELECT 1 " \
+    } else if (OB_FAIL(delete_hist_stat_sql.append_fmt("DELETE /*+QUERY_TIMEOUT(%" PRId64 ")*/ FROM %s hist WHERE (NOT EXISTS (SELECT 1 " \
                                                        "FROM %s t, %s db WHERE t.database_id = db.database_id "\
                                                        "AND t.table_id = hist.table_id AND db.database_name != '__recyclebin')) "\
-                                                       "AND table_id > %ld limit %ld;",
+                                                       "AND table_id > %" PRId64 " limit %" PRId64 ";",
                                                        query_timeout,
                                                        share::OB_ALL_HISTOGRAM_STAT_TNAME,
                                                        share::OB_ALL_TABLE_TNAME,

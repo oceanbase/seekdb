@@ -15,6 +15,7 @@
  */
 
 #include "lib/allocator/ob_hazard_ref.h"
+#include <inttypes.h>
 #include "lib/oblog/ob_log.h"
 
 using namespace oceanbase;
@@ -35,7 +36,7 @@ uint64_t *HazardRef::acquire_ref()
   }
   if (debug_) {
     if (NULL != ref) {
-      _OB_LOG(INFO, "acquire_ref: ref=%p ver=%ld %s", ref, *ref, lbt());
+      _OB_LOG(INFO, "acquire_ref: ref=%p ver=%" PRId64 " %s", ref, *ref, lbt());
     } else {
       _OB_LOG(INFO, "acquire_ref fail: ref=NULL %s", lbt());
     }
@@ -47,7 +48,7 @@ void HazardRef::release_ref(uint64_t *ref)
 {
   if (NULL != ref) {
     if (debug_) {
-      _OB_LOG(INFO, "release_ref: ref=%p ver=%ld %s", ref, *ref, lbt());
+      _OB_LOG(INFO, "release_ref: ref=%p ver=%" PRId64 " %s", ref, *ref, lbt());
     }
     *ref = INVALID_VERSION;
   }

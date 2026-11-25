@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 #include "ob_prepare_stmt_struct.h"
+#include <inttypes.h>
 #include "sql/plan_cache/ob_ps_sql_utils.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
@@ -168,7 +169,7 @@ void ObPsStmtItem::dec_ref_count()
       allocator->free(ps_item);
     }
   } else if (ref_count < 0) {
-    BACKTRACE(ERROR, true, "ObPsStmtItem %p ref count < 0, ref_count = %ld", this, ref_count);
+    BACKTRACE(ERROR, true, "ObPsStmtItem %p ref count < 0, ref_count = %" PRId64 "", this, ref_count);
   }
 }
 
@@ -581,7 +582,7 @@ void ObPsStmtInfo::dec_ref_count()
     }
     ATOMIC_DEC(&ref_count_);
   } else {
-    BACKTRACE_RET(ERROR, OB_ERR_UNEXPECTED, true, "ObPsStmtInfo %p, cur_ref_count = %ld", this, cur_ref_count);
+    BACKTRACE_RET(ERROR, OB_ERR_UNEXPECTED, true, "ObPsStmtInfo %p, cur_ref_count = %" PRId64 "", this, cur_ref_count);
   }
   return;
 }

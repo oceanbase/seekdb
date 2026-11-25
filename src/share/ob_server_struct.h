@@ -86,7 +86,6 @@ struct ObGlobalContext
   share::ObSchemaStatusProxy *schema_status_proxy_;
   int64_t ssl_key_expired_time_;
   bool in_bootstrap_;
-  bool sys_package_ready_;
   // Process-wide primary/standby mode.
   share::ObServerRole::Role server_role_;
   

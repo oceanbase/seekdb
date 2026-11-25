@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_virtual_open_cursor_table.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_runtime_access.h"
@@ -232,7 +233,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
       case SADDR: {
         ObSqlString addr;
         ObString tmp_saddr;
-        addr.append_fmt("%lx", reinterpret_cast<uint64_t>(&sess_info));
+        addr.append_fmt("%" PRIx64 "", reinterpret_cast<uint64_t>(&sess_info));
         OZ (ob_write_string(*allocator_, addr.string(), tmp_saddr));
         if (OB_SUCC(ret)) {
           // Get the last 8 characters for compatible SADDR formatting.
@@ -343,7 +344,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
       case SADDR: {
         ObSqlString addr;
         ObString tmp_saddr;
-        addr.append_fmt("%lx", reinterpret_cast<uint64_t>(&sess_info));
+        addr.append_fmt("%" PRIx64 "", reinterpret_cast<uint64_t>(&sess_info));
         OZ (ob_write_string(*allocator_, addr.string(), tmp_saddr));
         // Get the last 8 characters for compatible SADDR formatting.
         int64_t offset = tmp_saddr.length() > 8 ? tmp_saddr.length() - 8 : 0;

@@ -106,7 +106,7 @@ int ObDASInsertOp::insert_rows()
   int64_t affected_rows = 0;
   ObDASDMLIterator dml_iter(
       ins_ctdef_, insert_buffer_, op_alloc_, srs_provider_,
-      lob_read_options_);
+      lob_read_options_, get_vec_datum_kind() == DAS_VEC_DATUM_TEXT);
   ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator> ins_adaptor;
   ins_adaptor.tx_desc_ = trans_desc_;
   ins_adaptor.snapshot_ = snapshot_;
@@ -191,7 +191,7 @@ int ObDASInsertOp::insert_row_with_fetch()
   data_plane::ObDmlExecution execution;
   ObDASDMLIterator dml_iter(
       ins_ctdef_, insert_buffer_, op_alloc_, srs_provider_,
-      lob_read_options_);
+      lob_read_options_, get_vec_datum_kind() == DAS_VEC_DATUM_TEXT);
   data_plane::ObWriteContext write_context;
   concurrent_control::ObWriteFlag write_flag;
   transaction::ObTxReadSnapshot *snapshot = snapshot_;

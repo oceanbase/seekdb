@@ -80,11 +80,11 @@ struct ObOptKeyColumnStat
 
 enum ObOptStatCompressType
 {
-  ZSTD_1_3_8_COMPRESS         = 0,
+  ZSTD_COMPRESS         = 0,
   MAX_COMPRESS                = 1
 };
 
-static const char *bitmap_compress_lib_name[ObOptStatCompressType::MAX_COMPRESS] = {"zstd_1.3.8"};
+static const char *bitmap_compress_lib_name[ObOptStatCompressType::MAX_COMPRESS] = {"zstd"};
 /**
  * SQL Service for fetching/updating table level statistics and column level statistics
  */

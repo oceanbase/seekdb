@@ -683,7 +683,7 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
   } else if (0 == ObString::make_string("none").case_compare(codec_str)) {
     compress_type = NONE_COMPRESSOR;
   } else if (0 == ObString::make_string("zstd").case_compare(codec_str)) {
-    compress_type = ZSTD_1_3_8_COMPRESSOR;
+    compress_type = ZSTD_COMPRESSOR;
   } else {
     ret = OB_ERR_UNEXPECTED;
   }
@@ -720,6 +720,7 @@ int ObStaticEngineCG::generate_calc_exprs(
       if (!(raw_expr->is_column_ref_expr())
           && !(raw_expr->is_column_ref_expr()
                && !need_flatten_gen_col)
+          && T_OP_ROW != raw_expr->get_expr_type()
           && !raw_expr->is_op_pseudo_column_expr()
           && !has_exist_in_array(dep_exprs, flattened_cur_exprs_arr.at(i))
           && (raw_expr->has_flag(CNT_VOLATILE_CONST)

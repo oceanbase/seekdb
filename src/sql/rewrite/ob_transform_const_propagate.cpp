@@ -705,12 +705,10 @@ int ObTransformConstPropagate::collect_equal_pair_from_pullup(ObDMLStmt *stmt,
               equal_info.const_expr_->is_static_scalar_const_expr()) {
             ObObj result;
             bool got_result = false;
-            if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
-                                                                  equal_info.const_expr_,
-                                                                  result,
-                                                                  got_result,
-                                                                  *ctx_->allocator_))) {
-            } else if (got_result && !result.is_ext() && (result.is_null())) {
+            bool has_warning = false;
+            if (OB_FAIL(ObTransformUtils::calc_const_expr_result(equal_info.const_expr_, ctx_,
+                                                                 result, got_result, &has_warning))) {
+            } else if (got_result && !has_warning && result.is_null()) {
               is_valid = true;
               if (!equal_info.const_expr_ -> is_const_raw_expr()) {
                 equal_info.need_add_constraint_ = PRE_CALC_RESULT_NULL;

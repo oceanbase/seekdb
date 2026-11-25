@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_stat_define.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -359,9 +360,9 @@ DEF_TO_STRING(BasicStatAuditItem)
         ++part_span;
       } else {
         if (part_span > 0) {
-          BUF_PRINTF("%lu-%lu", start_part, start_part + part_span);
+          BUF_PRINTF("%" PRIu64 "-%" PRIu64 "", start_part, start_part + part_span);
         } else {
-          BUF_PRINTF("%lu", start_part);
+          BUF_PRINTF("%" PRIu64 "", start_part);
         }
         J_COMMA();
         start_part = part_ids_.at(i);
@@ -370,9 +371,9 @@ DEF_TO_STRING(BasicStatAuditItem)
     }
     if (pos < buf_len && part_span != -1) {
       if (part_span > 0) {
-        BUF_PRINTF("%lu-%lu", start_part, start_part + part_span);
+        BUF_PRINTF("%" PRIu64 "-%" PRIu64 "", start_part, start_part + part_span);
       } else {
-        BUF_PRINTF("%lu", start_part);
+        BUF_PRINTF("%" PRIu64 "", start_part);
       }
     }
     J_ARRAY_END();

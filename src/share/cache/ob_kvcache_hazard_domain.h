@@ -18,6 +18,7 @@
 #define OCEANBASE_COMMON_OB_KVCACHE_HAZARD_DOMAIN_H_
 
 #include "lib/container/ob_bit_set.h"
+#include <inttypes.h>
 #include "lib/lock/ob_mutex.h"
 #include "lib/ob_define.h"
 #include "lib/ob_errno.h"
@@ -279,7 +280,7 @@ char* FixedTinyAllocator<T>::print_info(char* buffer, int64_t len) const
 {
   return buffer + snprintf(buffer,
                       len,
-                      "blocks size: %ld, free list size: %ld, memory_efficiency: %lf",
+                      "blocks size: %" PRId64 ", free list size: %" PRId64 ", memory_efficiency: %lf",
                       blocks_.get_size_ts(),
                       avai_list_.get_size_ts(),
                       memory_efficiency_);

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "ob_request_base.h"
+#include <inttypes.h>
 #include "lib/utility/utility.h"
 #define IS_LOGICAL_OPERATOR(type) ((type) == T_OP_AND || (type) == T_OP_OR || (type) == T_OP_XOR)
 #define IS_SIMPLIFIABLE_OPERATOR(type) (IS_LOGICAL_OPERATOR(type) || \
@@ -752,14 +753,14 @@ int ObReqConstExpr::set_numeric(ObIAllocator &alloc, double numeric_value, ObObj
       case ObMediumIntType:
       case ObInt32Type:
       case ObIntType:
-        len = snprintf(buf, sizeof(buf), "%ld", static_cast<int64_t>(numeric_value));
+        len = snprintf(buf, sizeof(buf), "%" PRId64, static_cast<int64_t>(numeric_value));
         break;
       case ObUTinyIntType:
       case ObUSmallIntType:
       case ObUMediumIntType:
       case ObUInt32Type:
       case ObUInt64Type:
-        len = snprintf(buf, sizeof(buf), "%lu", static_cast<uint64_t>(numeric_value));
+        len = snprintf(buf, sizeof(buf), "%" PRIu64, static_cast<uint64_t>(numeric_value));
         break;
       case ObFloatType:
         len = snprintf(buf, sizeof(buf), "%.7g", numeric_value);

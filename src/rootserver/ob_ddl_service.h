@@ -18,6 +18,7 @@
 #define _OCEANBASE_ROOTSERVER_OB_DDL_SERVICE_H_
 
 #include "lib/ob_define.h"
+#include <inttypes.h>
 #include "share/ob_define.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/string/ob_string.h"
@@ -1005,6 +1006,7 @@ int check_will_be_having_domain_index_operation(
               const share::schema::ObDatabaseSchema &dst_db_schema,
               const common::ObString &dst_table_name,
               const int64_t fork_snapshot_version,
+              const int64_t fork_snapshot_schema_version,
               const uint64_t session_id,
               const common::ObString &ddl_stmt_str,
               share::schema::ObSchemaGetterGuard &schema_guard,
@@ -2141,7 +2143,7 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
       // Process each partition with an empty partition name
       char part_name[OB_MAX_PARTITION_NAME_LENGTH];
       int64_t pos = 0;
-      if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH, pos, "P%ld", max_part_id))) {
+      if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH, pos, "P%" PRId64 "", max_part_id))) {
       } else {
         part_name_str.assign(part_name, static_cast<int32_t>(pos));
         bool is_valid = false;

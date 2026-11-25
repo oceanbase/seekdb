@@ -294,15 +294,7 @@ int ObCopyMacroBlockObProducer::init(
           K(table_key), K(data_version), K(backfill_tx_scn), K(copy_macro_range_info));
     }
   }
-  if (OB_SUCC(ret)) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < MAX_PREFETCH_MACRO_BLOCK_NUM; ++i) {
-      if (OB_ISNULL(io_buf_[i] = reinterpret_cast<char*>(allocator_.alloc(OB_STORAGE_OBJECT_MGR.get_macro_block_size())))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        int64_t io_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-        STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(io_size));
-      }
-    }
-  }
+
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(prefetch_())) {
@@ -414,9 +406,7 @@ int ObCopyMacroBlockObProducer::get_read_info_(
     read_info.offset_ = sstable_->is_small_sstable() ? macro_meta.nested_offset_ : sstable_->get_macro_offset();
     read_info.size_ = sstable_->is_small_sstable() ? macro_meta.nested_size_ : sstable_->get_macro_read_size();
     read_info.io_desc_.set_mode(ObIOMode::READ);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_timeout_ms_ = io_timeout_ms_;
-    read_info.buf_ = io_buf_[handle_idx_];
     read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
     if (OB_UNLIKELY(!read_info.is_valid())) {
       ret = OB_INVALID_ARGUMENT;

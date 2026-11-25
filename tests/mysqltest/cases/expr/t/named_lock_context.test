@@ -1,0 +1,30 @@
+--disable_warnings
+DROP TABLE IF EXISTS seek1401_ctas, seek1401_insert, seek1401_update;
+--enable_warnings
+CREATE TABLE seek1401_ctas AS SELECT GET_LOCK('seek1401_ctas', 0) AS g,
+  RELEASE_LOCK('seek1401_ctas') AS r, RELEASE_ALL_LOCKS() AS ra,
+  IS_USED_LOCK('seek1401_ctas') AS isu, IS_FREE_LOCK('seek1401_ctas') AS isf;
+SELECT * FROM seek1401_ctas;
+connect(insert_conn, $OBMYSQL_MS0, root,,test, $OBMYSQL_PORT);
+CREATE TABLE seek1401_insert (v BIGINT);
+INSERT INTO seek1401_insert VALUES (1);
+SELECT GET_LOCK('seek1401_insert', 0);
+SELECT RELEASE_LOCK('seek1401_insert');
+INSERT INTO seek1401_insert SELECT IS_FREE_LOCK('seek1401_insert');
+SELECT * FROM seek1401_insert ORDER BY v;
+disconnect insert_conn;
+connect(update_conn, $OBMYSQL_MS0, root,,test, $OBMYSQL_PORT);
+CREATE TABLE seek1401_update (v BIGINT);
+INSERT INTO seek1401_update VALUES (1);
+SELECT GET_LOCK('seek1401_update', 0);
+SELECT RELEASE_LOCK('seek1401_update');
+UPDATE seek1401_update SET v=IS_FREE_LOCK('seek1401_update');
+SELECT * FROM seek1401_update;
+disconnect update_conn;
+connection default;
+SELECT GET_LOCK('seek1401_held', 0);
+SELECT IS_FREE_LOCK('seek1401_held');
+SELECT RELEASE_LOCK('seek1401_held');
+SELECT IS_FREE_LOCK('seek1401_held');
+SELECT IS_FREE_LOCK('seek1401_fresh');
+DROP TABLE seek1401_ctas, seek1401_insert, seek1401_update;

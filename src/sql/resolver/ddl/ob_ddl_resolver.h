@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_RESOLVER_DDL_OB_DDL_RESOLVER_H_
 #define OCEANBASE_SQL_RESOLVER_DDL_OB_DDL_RESOLVER_H_ 1
 #include "sql/resolver/ob_stmt_resolver.h"
+#include <inttypes.h>
 #include "sql/resolver/ob_resolver_utils.h"
 #include "lib/hash/ob_placement_hashset.h"
 #include "lib/string/ob_sql_string.h"
@@ -905,7 +906,7 @@ int ObDDLResolver::create_name_for_empty_partition(ObIArray<PARTITION> &partitio
       char part_name[OB_MAX_PARTITION_NAME_LENGTH];
       int64_t pos = 0;
       if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH,
-          pos, "P%ld", max_part_id))) {
+          pos, "P%" PRId64 "", max_part_id))) {
       } else if (FALSE_IT(part_name_str.assign(part_name, static_cast<int32_t>(pos)))) {
         // never reach
       } else if (OB_FAIL(check_partition_name_valid(partitions, part_name_str, is_valid))) {

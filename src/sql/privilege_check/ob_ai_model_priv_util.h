@@ -53,12 +53,20 @@ public:
     bool &has_priv);
 
 private:
-  enum ObAIServiceEndpointPrivType {
+  // The privilege bits for AI model operations live at OB_PRIV_GET_TYPE(41..44),
+  // which requires 64 bits. Without an explicit underlying type the compiler may
+  // pick a 4-byte int on Windows, silently truncating every mask to 0 and making
+  // the privilege check pass for ALL users. Pin the width to ObPrivSet.
+  enum ObAIServiceEndpointPrivType : ObPrivSet {
     AI_PRIV_CREATE = OB_PRIV_CREATE_AI_MODEL,
     AI_PRIV_ALTER  = OB_PRIV_ALTER_AI_MODEL,
     AI_PRIV_DROP   = OB_PRIV_DROP_AI_MODEL,
     AI_PRIV_ACCESS = OB_PRIV_ACCESS_AI_MODEL
   };
+  static_assert(sizeof(ObAIServiceEndpointPrivType) == sizeof(ObPrivSet),
+                "AI model privilege masks are 64-bit and must not narrow on any ABI");
+  static_assert(AI_PRIV_ACCESS > 0xFFFFFFFFLL,
+                "AI model privileges use bits above 32; an int-based enum cannot hold them");
 
   int check_ai_model_priv(
     ObIAllocator &allocator,

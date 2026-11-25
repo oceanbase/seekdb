@@ -8,11 +8,15 @@ Keep Rust core modules independent and concentrate cross-language adaptation at 
 
 Use cross-language callbacks or interface injection when needed. Do not add queues, event protocols, or extra threads solely to avoid callbacks. Define ownership and lifetimes for arguments and callback objects, execution threads, reentrancy, lock constraints, error handling, and cancellation and shutdown behavior. For temporary compatibility dependencies, also identify remaining callers and removal conditions.
 
-## 2. Design native interfaces for Rust callers and use CXX for compatibility
+## 2. Make the native Rust API the shared foundation
+
+Treat the native Rust API as the first-class interface for both Rust and C++ consumers. Rust consumers call it directly. C++ consumers use CXX adapters that delegate to the same Rust API. Both paths share the implementation and state ownership.
 
 Design natural Rust types, ownership, and error models first. Then adapt existing C++ types, error codes, and calling conventions. CXX representation constraints should not determine the core interface. Rust callers must be able to use the full capability through native interfaces without constructing bridge objects or following C++ compatibility conventions.
 
 Use the repository's existing CXX bridges and build integration for interoperability in both directions. Keep bridge code with its owning module. Bridges handle representation conversion and compatibility. Native implementations provide the core behavior.
+
+When wrapping an existing C/C++ library or SDK, keep its bindings below the native Rust API as implementation details. This also applies when those internal bindings use CXX to call C++. Consumers use the native Rust API directly or through its CXX adapter.
 
 ## 3. Pass business state explicitly and allow appropriate infrastructure access
 

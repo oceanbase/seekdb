@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_ddl_sql_generator.h"
+#include <inttypes.h>
 #include "share/ob_rpc_struct.h"
 
 namespace oceanbase
@@ -287,8 +288,8 @@ int ObDDLSqlGenerator::gen_set_max_connections_sql(const ObAccountArg &account,
   bool set_max_user_connections = max_user_connections != OB_INVALID_ID;
   const ObString max_connections_per_hour_str = ObString::make_string("MAX_CONNECTIONS_PER_HOUR");
   const ObString max_user_connections_str = ObString::make_string("MAX_USER_CONNECTIONS");
-  char SET_MAX_CONNECTIONS_SQL[] = "SET %.*s FOR `%.*s` = '%lu' ";
-  char NEW_SET_MAX_CONNECTIONS_SQL[] = "SET %.*s FOR `%.*s`@`%.*s` = '%lu' ";
+  char SET_MAX_CONNECTIONS_SQL[] = "SET %.*s FOR `%.*s` = '%" PRIu64 "' ";
+  char NEW_SET_MAX_CONNECTIONS_SQL[] = "SET %.*s FOR `%.*s`@`%.*s` = '%" PRIu64 "' ";
   if (OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else {

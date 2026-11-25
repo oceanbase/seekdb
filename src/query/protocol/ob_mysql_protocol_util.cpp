@@ -23,6 +23,7 @@
 #include "common/json_type/ob_json_bin.h"
 #include "common/timezone/ob_time_convert.h"
 #include "lib/allocator/ob_allocator.h"
+#include "lib/utility/ob_fast_convert.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/geometry/ob_geo_wkb_define.h"
 
@@ -467,7 +468,6 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
         ObJsonBin json_bin(value.ptr(), value.length(), &allocator);
         ObIJsonBase *json_base = &json_bin;
         ObJsonBuffer json_buf(&allocator);
-        json_bin.set_seek_flag(true);
         if (OB_FAIL(json_bin.reset_iter())) {
         } else if (OB_FAIL(json_base->print(json_buf, true, value.length()))) {
         } else {

@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -119,9 +120,9 @@ void ObAllVirtualMemstoreInfo::get_freeze_time_dist(const ObMtStat& mt_stat)
   char rffct_str[32] = {'\0'};
   char fct_str[32] = {'\0'};
   int64_t pos = 0;
-  (void)databuff_printf(rffct_str, sizeof(rffct_str), pos, "%ld", ready_for_flush_cost_time);
+  (void)databuff_printf(rffct_str, sizeof(rffct_str), pos, "%" PRId64 "", ready_for_flush_cost_time);
   pos = 0;
-  (void)databuff_printf(fct_str, sizeof(fct_str), pos, "%ld", flush_cost_time);
+  (void)databuff_printf(fct_str, sizeof(fct_str), pos, "%" PRId64 "", flush_cost_time);
   if (ready_for_flush_cost_time >= 0) {
     strcat(freeze_time_dist_, rffct_str);
 

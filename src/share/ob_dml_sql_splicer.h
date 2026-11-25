@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_OB_DML_SQL_SPLICER_H_
 
 #include "lib/string/ob_sql_string.h"
+#include <inttypes.h>
 #include "lib/container/ob_se_array.h"
 #include "share/ob_core_table_proxy.h"
 namespace oceanbase
@@ -311,7 +312,7 @@ template <typename T>
 int ObDMLSqlSplicer::append_value(const T &obj, bool &is_null, common::TrueType)
 {
   is_null = false;
-  return values_.append_fmt("%ld", static_cast<int64_t>(obj));
+  return values_.append_fmt("%" PRId64 "", static_cast<int64_t>(obj));
 }
 
 template <typename T>

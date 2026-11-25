@@ -20,8 +20,7 @@
 #include "ob_access_service.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/rc/ob_server_runtime.h"
-#include "share/ob_io_device_helper.h" // LOCAL_DEVICE_INSTANCE
-#include "share/io/ob_io_manager.h"
+#include "share/io_request.h"
 #include "storage/ob_tablet_stat_mgr.h"
 #include "storage/ob_query_iterator_factory.h"
 #include "storage/ob_iter_cache.h"
@@ -1236,7 +1235,6 @@ int ObAccessService::get_latest_tablet_row_count_delta(
 }
 
 int ObAccessService::run_io_benchmark(
-    common::ObIAllocator &allocator,
     int64_t &disk_random_read_speed,
     int64_t &disk_sequential_read_speed) const
 {
@@ -1247,18 +1245,11 @@ int ObAccessService::run_io_benchmark(
   int64_t io_count = 0;
   int64_t rt_us = 0;
   int64_t data_size = 0;
-  char *read_buf = nullptr;
-  ObIOInfo io_info;
+  ObIOFlag descriptor;
   ObIOHandle io_handle;
   ObSEArray<blocksstable::ObStorageObjectHandle, 16> block_handles;
 
-  io_info.size_ = load_size;
-  io_info.buf_ = nullptr;
-  io_info.flag_.set_mode(ObIOMode::READ);
-  io_info.flag_.set_sys_module_id(ObIOModule::CALIBRATION_IO);
-  io_info.flag_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-  io_info.flag_.set_unlimited(true);
-  io_info.timeout_us_ = MAX_IO_WAIT_TIME_MS;
+  descriptor.set_sys_module_id(ObIOModule::CALIBRATION_IO);
 
   const double min_free_space_percentage = 0.1;
   const int64_t min_calibration_block_count =
@@ -1279,17 +1270,11 @@ int ObAccessService::run_io_benchmark(
     ret = OB_SERVER_OUTOF_DISK_SPACE;
     STORAGE_LOG(WARN, "out of space", K(ret),
         K(free_block_count), K(total_block_count));
-  } else if (OB_ISNULL(
-                 read_buf = static_cast<char *>(
-                     allocator.alloc(OB_DEFAULT_MACRO_BLOCK_SIZE)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    STORAGE_LOG(WARN, "allocate read memory failed", K(ret));
   } else {
     benchmark_block_count =
         min(benchmark_block_count, max_calibration_block_count);
     benchmark_block_count =
         max(benchmark_block_count, min_calibration_block_count);
-    io_info.user_data_buf_ = read_buf;
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < benchmark_block_count; ++i) {
@@ -1307,15 +1292,11 @@ int ObAccessService::run_io_benchmark(
     const int64_t block_idx =
         ObRandom::rand(benchmark_block_count / 2,
                        benchmark_block_count - 1);
-    io_info.fd_.first_id_ =
-        block_handles[block_idx].get_macro_id().first_id();
-    io_info.fd_.second_id_ =
-        block_handles[block_idx].get_macro_id().second_id();
-    io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
-    io_info.offset_ = ObRandom::rand(0, max_random_read_offset);
-    io_info.size_ = load_size;
+    const int64_t offset = ObRandom::rand(0, max_random_read_offset);
     const int64_t begin_ts = ObTimeUtility::fast_current_time();
-    if (OB_FAIL(OB_IO_MANAGER.read(io_info, io_handle))) {
+    if (OB_FAIL(OB_SERVER_BLOCK_MGR.submit_read(block_handles[block_idx].get_macro_id(), offset, load_size,
+        descriptor, MAX_IO_WAIT_TIME_MS, nullptr, io_handle))) {
+    } else if (OB_FAIL(io_handle.wait())) {
     } else {
       ++io_count;
       rt_us += ObTimeUtility::fast_current_time() - begin_ts;
@@ -1330,20 +1311,15 @@ int ObAccessService::run_io_benchmark(
   io_count = 0;
   rt_us = 0;
   data_size = 0;
-  io_info.offset_ = 0;
   while (OB_SUCC(ret)
          && io_count < 100
          && io_count < benchmark_block_count / 2) {
     io_handle.reset();
     const int64_t block_idx = io_count;
-    io_info.fd_.first_id_ =
-        block_handles[block_idx].get_macro_id().first_id();
-    io_info.fd_.second_id_ =
-        block_handles[block_idx].get_macro_id().second_id();
-    io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
-    io_info.size_ = OB_DEFAULT_MACRO_BLOCK_SIZE;
     const int64_t begin_ts = ObTimeUtility::fast_current_time();
-    if (OB_FAIL(OB_IO_MANAGER.read(io_info, io_handle))) {
+    if (OB_FAIL(OB_SERVER_BLOCK_MGR.submit_read(block_handles[block_idx].get_macro_id(), 0, OB_DEFAULT_MACRO_BLOCK_SIZE,
+        descriptor, MAX_IO_WAIT_TIME_MS, nullptr, io_handle))) {
+    } else if (OB_FAIL(io_handle.wait())) {
     } else {
       ++io_count;
       rt_us += ObTimeUtility::fast_current_time() - begin_ts;
@@ -1353,9 +1329,6 @@ int ObAccessService::run_io_benchmark(
   if (OB_SUCC(ret)) {
     rt_us = max(rt_us, static_cast<int64_t>(1));
     disk_sequential_read_speed = data_size / rt_us;
-  }
-  if (OB_NOT_NULL(read_buf)) {
-    allocator.free(read_buf);
   }
   return ret;
 }

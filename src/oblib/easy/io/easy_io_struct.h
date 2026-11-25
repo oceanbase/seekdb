@@ -2,20 +2,6 @@
 #define EASY_IO_STRUCT_H_
 
 #include "easy_define.h"
-#ifdef __EMSCRIPTEN__
-// Shared address/thread headers only need these opaque pointer types. The
-// browser build does not link easy's native OpenSSL transport implementation.
-typedef struct ssl_st SSL;
-typedef struct ssl_ctx_st SSL_CTX;
-typedef struct ssl_session_st SSL_SESSION;
-#else
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/conf.h>
-#include <openssl/engine.h>
-#include <openssl/evp.h>
-#include <openssl/crypto.h>
-#endif
 
 /**
  * IO structure definition
@@ -87,9 +73,6 @@ EASY_CPP_START
 #define EASY_CONNECT_SEND           0x05
 
 #define EASY_CONNECT_AUTOCONN       0x01
-#define EASY_CONNECT_SSL            0x02
-#define EASY_CONNECT_SSL_OPT_TEST   0x04
-#define EASY_CONNECT_SSL_OB         0x08
 
 enum {
     LEGACY_MAGIC_VERSION = 0,
@@ -170,9 +153,6 @@ typedef struct easy_client_wait_t easy_client_wait_t;
 typedef struct easy_file_task_t easy_file_task_t;
 typedef struct easy_summary_node_t easy_summary_node_t;
 typedef struct easy_summary_t easy_summary_t;
-typedef struct easy_ssl_t easy_ssl_t;
-typedef struct easy_ssl_ctx_t easy_ssl_ctx_t;
-typedef struct easy_ssl_connection_t easy_ssl_connection_t;
 typedef struct easy_ratelimitor_t        easy_ratelimitor_t;
 typedef struct easy_ratelimit_record_t   easy_ratelimit_record_t;
 typedef struct easy_region_ratelimitor_t easy_region_ratelimitor_t;
@@ -189,7 +169,6 @@ typedef void (easy_baseth_on_process_pt)(easy_baseth_t *th);
 typedef void (easy_baseth_on_wakeup_pt)(struct ev_loop *loop, ev_async *w, int revents);
 typedef ssize_t (easy_read_pt)(easy_connection_t *c, char *buf, size_t size, int *pending);
 typedef ssize_t (easy_write_pt)(easy_connection_t *c, easy_list_t *l);
-typedef void (easy_ssl_schandler_pt)(easy_connection_t *c);
 typedef int (easy_io_update_s2r_map_pt)(void *args);
 
 
@@ -213,9 +192,7 @@ struct easy_io_handler_pt {
     int                     (*on_close)(easy_connection_t *c);
     void                    (*set_trace_info)(easy_request_t *r, void *packet);
     void                    *user_data, *user_data2;
-    int8_t                  is_uthread, is_ssl, is_udp;
-    int8_t                  is_ssl_opt;    //if is_ssl_opt is true, create ssl connection_t after first request, check whether need ssl
-    //otherthan create ssl connection_t after connect succ
+    int8_t                  is_uthread, is_udp;
 
 };
 // Thread for handling IO
@@ -262,20 +239,10 @@ struct easy_client_t {
     easy_addr_t             addr;
     easy_connection_t       *c;
     easy_io_handler_pt      *handler;
-    SSL_SESSION             *ssl_session;
     easy_hash_list_t        client_list_node;
     void                    *user_data;
     int                     ref;
     uint32_t                timeout         : 31;
-    uint32_t                is_ssl          : 1;
-    char                    *server_name;
-};
-
-enum SSLStateMachine {
-    SSM_NONE = 0,
-    SSM_BEFORE_FIRST_PKT = 1,
-    SSM_AFTER_FIRST_PKT = 2,
-    SSM_USE_SSL = 3,
 };
 
 struct easy_ratelimit_record_t {
@@ -378,7 +345,6 @@ struct easy_connection_t {
     uint32_t                auto_reconn : 1;
     uint32_t                life_idle : 1;
     uint32_t                slow_request_dumped: 1;
-    uint32_t                ssl_sm_: 2; //instead of is_ssl_req_pkt(true/false)
     uint32_t                doing_request_count;
     uint32_t                destroy_retry_count;
 
@@ -386,7 +352,6 @@ struct easy_connection_t {
     ev_tstamp               wait_client_time, wcs;
 
     easy_summary_node_t     *con_summary;  //add for summary
-    easy_ssl_connection_t   *sc;
     void                    *evdata;
     easy_list_t             client_session_list;
     int64_t                 armed_ack_timeout;
@@ -630,9 +595,6 @@ struct easy_io_t {
 
     ev_tstamp               start_time;
     easy_summary_t          *eio_summary;
-    easy_ssl_t              *ssl;
-    easy_spinrwlock_t       ssl_rwlock_;
-
     int                     keepalive_enabled;
     easy_ratelimitor_t      *easy_rlmtr;
 	uint64_t                magic;
@@ -674,52 +636,6 @@ struct easy_file_task_t {
     int64_t                 count;
     easy_buf_t              *b;
     void                    *args;
-};
-
-struct easy_ssl_ctx_t {
-    easy_pool_t             *pool;
-    SSL_CTX                 *ctx;
-    easy_list_t             list_node;
-    int                     type;//true: client, false for server
-    struct {
-        char                    *file;
-        int                     line;
-        int                     prefer_server_ciphers;
-        uint32_t                verify;
-        uint32_t                verify_depth;
-        int                     session_timeout;
-        int                     session_cache;
-        uint64_t                protocols;
-        char                    *certificate;//server-cert
-        char                    *certificate_key;//server-key
-        char                    *dhparam;
-        char                    *client_certificate;//root ca
-        char                    *crl;
-        char                    *ciphers;
-        char                    *server_name;
-        char                    *pass_phrase_dialog;
-        int                     session_reuse;
-    } conf;
-};
-
-struct easy_ssl_connection_t {
-    SSL                     *connection;
-    easy_ssl_schandler_pt   *handler;
-
-    int                     last;
-    uint32_t                handshaked : 1;
-    uint32_t                renegotiation : 1;
-    uint32_t                session_reuse : 1;
-};
-
-struct easy_ssl_t {
-    easy_list_t             server_list;
-    easy_pool_t             *pool;
-    easy_hash_t             *server_map;
-    easy_hash_t             *client_map;
-
-    easy_ssl_ctx_t          *server_ctx;
-    easy_ssl_ctx_t          *client_ctx;
 };
 
 struct easy_io_threads_pipefd_pool_t{

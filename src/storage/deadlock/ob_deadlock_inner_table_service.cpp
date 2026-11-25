@@ -15,6 +15,7 @@
  */
 
 #include "ob_deadlock_inner_table_service.h"
+#include <inttypes.h>
 #include "share/ob_server_struct.h"
 
 namespace oceanbase
@@ -40,8 +41,8 @@ int ObDeadLockInnerTableService::init()
 
 #define INSERT_DEADLOCK_EVENT_SQL "\
   insert into %s \
-  values (%lu, %lu, '%.*s', %d, %lu, \
-  '%s', %ld, %ld, '%.*s', '%.*s', %lu, '%s', %lu,\
+  values (%" PRIu64 ", %" PRIu64 ", '%.*s', %d, %" PRIu64 ", \
+  '%s', %" PRId64 ", %" PRId64 ", '%.*s', '%.*s', %" PRIu64 ", '%s', %" PRIu64 ",\
   '%.*s', '%.*s', '%.*s',\
   '%.*s', '%.*s', '%.*s', '%.*s', '%.*s', '%.*s')"
 

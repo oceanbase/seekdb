@@ -67,7 +67,7 @@ OptSystemIoBenchmark& OptSystemIoBenchmark::get_instance()
   return benchmark;
 }
 
-int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
+int OptSystemIoBenchmark::run_benchmark()
 {
   int ret = OB_SUCCESS;
   data_plane::ObIOptimizerStorageService *storage_service =
@@ -75,7 +75,7 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
   if (OB_ISNULL(storage_service)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(storage_service->run_io_benchmark(
-                 allocator, disk_rnd_read_speed_, disk_seq_read_speed_))) {
+                 disk_rnd_read_speed_, disk_seq_read_speed_))) {
   } else {
     init_ = true;
   }

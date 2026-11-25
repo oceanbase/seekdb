@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "lib/utility/ob_hang_fatal_error.h"
+#include <inttypes.h>
 #include "lib/utility/ob_smart_call.h"
 #include "lib/json/ob_json.h"
 using namespace oceanbase::common;
@@ -671,7 +672,7 @@ int Tidy::on_number(int level, Type parent, const Number &num)
   char *buf = print_buffer_.get_data();
   const int64_t buf_len = print_buffer_.get_capacity();
   int64_t &pos = print_buffer_.get_position();
-  return BUF_PRINTF("%ld", num);
+  return BUF_PRINTF("%" PRId64 "", num);
 }
 
 int Tidy::on_object_member_start(int level, Type parent, const Pair *kv)

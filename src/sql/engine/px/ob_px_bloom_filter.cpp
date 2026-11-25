@@ -173,10 +173,10 @@ int ObPxBloomFilter::put(uint64_t hash)
     uint64_t block_begin = (hash & block_mask_) << LOG_HASH_COUNT;
     uint32_t hash_high = ((uint32_t)(hash >> 32) & BLOCK_FILTER_HASH_MASK);
     uint8_t *block_hash_vals = (uint8_t *)&hash_high;
-    (void)set(block_begin, 1L << block_hash_vals[0]);
-    (void)set(block_begin + 1, 1L << block_hash_vals[1]);
-    (void)set(block_begin + 2, 1L << block_hash_vals[2]);
-    (void)set(block_begin + 3, 1L << block_hash_vals[3]);
+    (void)set(block_begin, 1ULL << block_hash_vals[0]);
+    (void)set(block_begin + 1, 1ULL << block_hash_vals[1]);
+    (void)set(block_begin + 2, 1ULL << block_hash_vals[2]);
+    (void)set(block_begin + 3, 1ULL << block_hash_vals[3]);
   }
   return ret;
 }
@@ -193,10 +193,10 @@ int ObPxBloomFilter::put_batch(uint64_t *batch_hash_values, const EvalBound &bou
     for (int64_t i = bound.start(); i < bound.end(); ++i) {
       uint64_t block_begin = (batch_hash_values[i] & block_mask_) << LOG_HASH_COUNT;
       hash_high = ((uint32_t)(batch_hash_values[i] >> 32) & BLOCK_FILTER_HASH_MASK);
-      (void)set(block_begin, 1L << block_hash_vals[0]);
-      (void)set(block_begin + 1, 1L << block_hash_vals[1]);
-      (void)set(block_begin + 2, 1L << block_hash_vals[2]);
-      (void)set(block_begin + 3, 1L << block_hash_vals[3]);
+      (void)set(block_begin, 1ULL << block_hash_vals[0]);
+      (void)set(block_begin + 1, 1ULL << block_hash_vals[1]);
+      (void)set(block_begin + 2, 1ULL << block_hash_vals[2]);
+      (void)set(block_begin + 3, 1ULL << block_hash_vals[3]);
     }
     if (is_empty && bound.end() - bound.start() > 0) {
       is_empty = false;
@@ -209,10 +209,10 @@ int ObPxBloomFilter::put_batch(uint64_t *batch_hash_values, const EvalBound &bou
       } else {
         uint64_t block_begin = (batch_hash_values[i] & block_mask_) << LOG_HASH_COUNT;
         hash_high = ((uint32_t)(batch_hash_values[i] >> 32) & BLOCK_FILTER_HASH_MASK);
-        (void)set(block_begin, 1L << block_hash_vals[0]);
-        (void)set(block_begin + 1, 1L << block_hash_vals[1]);
-        (void)set(block_begin + 2, 1L << block_hash_vals[2]);
-        (void)set(block_begin + 3, 1L << block_hash_vals[3]);
+        (void)set(block_begin, 1ULL << block_hash_vals[0]);
+        (void)set(block_begin + 1, 1ULL << block_hash_vals[1]);
+        (void)set(block_begin + 2, 1ULL << block_hash_vals[2]);
+        (void)set(block_begin + 3, 1ULL << block_hash_vals[3]);
         if (is_empty) {
           is_empty = false;
         }
@@ -229,13 +229,13 @@ int ObPxBloomFilter::might_contain_nonsimd(uint64_t hash, bool &is_match)
   uint64_t block_begin = (hash & block_mask_) << LOG_HASH_COUNT;
   uint32_t hash_high = ((uint32_t)(hash >> 32) & BLOCK_FILTER_HASH_MASK);
   uint8_t *block_hash_vals = (uint8_t *)&hash_high;
-  if (!get(block_begin, 1L << block_hash_vals[0])) {
+  if (!get(block_begin, 1ULL << block_hash_vals[0])) {
     is_match = false;
-  } else if (!get(block_begin + 1, 1L << block_hash_vals[1])) {
+  } else if (!get(block_begin + 1, 1ULL << block_hash_vals[1])) {
     is_match = false;
-  } else if (!get(block_begin + 2, 1L << block_hash_vals[2])) {
+  } else if (!get(block_begin + 2, 1ULL << block_hash_vals[2])) {
     is_match = false;
-  } else if (!get(block_begin + 3, 1L << block_hash_vals[3])) {
+  } else if (!get(block_begin + 3, 1ULL << block_hash_vals[3])) {
     is_match = false;
   }
   return ret;

@@ -80,7 +80,8 @@ public:
 
   void destroy();
 
-  int writev(const LSNArray &lsn_array, const LogWriteBufArray &write_buf_array, const SCNArray &scn_array);
+  // A failed batch still reports the input prefix already committed to the log tail.
+  int writev(const LSNArray &lsn_array, const LogWriteBufArray &write_buf_array, const SCNArray &scn_array, int64_t &completed_count);
   int writev(const LSN &lsn, const LogWriteBuf &write_buf, const share::SCN &scn);
 
 

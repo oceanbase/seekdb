@@ -36,8 +36,13 @@ static const int64_t EX_RPC_DEFAULT_TIMEOUT_US = 9L * 1000 * 1000;
 
 // Defined in ob_ex_rpc.cpp: dispatch fn to the caller's ReqWorker (real
 // ObThWorker) carrying timeout_us as the deadline, and WAIT (reproduces the former
-// loopback sync RPC). fn captures by reference -- safe because the caller waits, so
-// no arg serialization is needed.
+// loopback sync RPC). The dispatch goes through ObServerRuntime::recv_request,
+// whose foreground expansion starts a worker when the queue outgrows the idle
+// workers, so the callback always has an executor other than the waiting caller.
+// fn captures by reference -- the caller therefore stays alive until the callback
+// finishes: if the deadline passes while the callback has not started, the call
+// cancels it and returns OB_TIMEOUT; if the callback is already running, the call
+// keeps waiting so the captured references stay valid.
 int sync_call_internal(int64_t timeout_us, std::function<int()> fn);
 
 template<typename F> inline auto sync_call(int64_t timeout_us, F&& fn) -> decltype(fn()) {

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_show_table_status.h"
+#include <inttypes.h>
 #include "sql/printer/ob_schema_printer.h"
 #include "share/ob_autoincrement_service.h"
 #include "share/ob_sql_client_decorator.h"
@@ -58,7 +59,7 @@ namespace observer
                     "and b.database_name != '__recyclebin' " \
                     "and b.in_recyclebin = 0 " \
                     "and 0 = sys_privilege_check('table_acc', b.database_name, a.table_name) " \
-                    "where a.table_id = %ld "
+                    "where a.table_id = %" PRId64 " "
 
 ObShowTableStatus::ObShowTableStatus()
     : ObVirtualTableIterator(),

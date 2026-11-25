@@ -17,6 +17,7 @@
 #ifndef  OCEANBASE_COMMON_HASH_HASHMAP_
 #define  OCEANBASE_COMMON_HASH_HASHMAP_
 #include <stdlib.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <new>
@@ -101,7 +102,7 @@ public:
     template<>
     int obj_to_string<uint64_t>(const uint64_t &obj, char *buf, int64_t len, int64_t &pos)
     {
-      return databuff_printf(buf, len, pos, "%lu", obj);
+      return databuff_printf(buf, len, pos, "%" PRIu64 "", obj);
     }
     int operator()(pair_type &entry)
     {

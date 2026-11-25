@@ -17,8 +17,7 @@
 #ifndef OCEANBASE_BLOCKSSTABLE_OB_BLOCK_MANAGER_H_
 #define OCEANBASE_BLOCKSSTABLE_OB_BLOCK_MANAGER_H_
 
-#include "lib/restore/ob_io_device.h"
-#include "share/io/ob_io_struct.h"
+#include "share/io_request.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_linear_hash_map.h"
@@ -84,31 +83,22 @@ struct ObMacroBlockWriteInfo final
 {
 public:
   ObMacroBlockWriteInfo()
-    : buffer_(NULL), offset_(0), size_(0), io_timeout_ms_(DEFAULT_IO_WAIT_TIME_MS), io_desc_(), io_callback_(NULL),
-      device_handle_(NULL), has_backup_device_handle_(false)
+    : buffer_(NULL), offset_(0), size_(0), io_timeout_ms_(DEFAULT_IO_WAIT_TIME_MS), io_desc_()
   {}
   ~ObMacroBlockWriteInfo() = default;
   OB_INLINE bool is_valid() const
   {
     bool bret = false;
     bret = io_desc_.is_valid() && NULL != buffer_ && offset_ >= 0 && size_ > 0 && io_timeout_ms_ > 0;
-    if (has_backup_device_handle_) {
-      bret = bret && OB_NOT_NULL(device_handle_);
-    } else {
-      bret = bret && OB_ISNULL(device_handle_);
-    }
     return bret;
   }
-  TO_STRING_KV(KP_(buffer), K_(offset), K_(size), K_(io_timeout_ms), K_(io_desc), KP_(io_callback), KP_(device_handle), K_(has_backup_device_handle));
+  TO_STRING_KV(KP_(buffer), K_(offset), K_(size), K_(io_timeout_ms), K_(io_desc));
 public:
   const char *buffer_;
   int64_t offset_;
   int64_t size_;
   int64_t io_timeout_ms_;
   common::ObIOFlag io_desc_;
-  common::ObIOCallback *io_callback_;
-  ObIODevice *device_handle_;
-  bool has_backup_device_handle_;
 };
 
 struct ObMacroBlockReadInfo final
@@ -116,26 +106,23 @@ struct ObMacroBlockReadInfo final
 public:
   ObMacroBlockReadInfo()
     : macro_block_id_(), offset_(), size_(), io_timeout_ms_(DEFAULT_IO_WAIT_TIME_MS),
-    io_desc_(), io_callback_(NULL), buf_(NULL)
+    io_desc_()
   {}
   ~ObMacroBlockReadInfo() = default;
   OB_INLINE bool is_valid() const
   {
     return macro_block_id_.is_valid() && offset_ >= 0 && size_ > 0
-        && io_desc_.is_valid() && (nullptr != io_callback_ || nullptr != buf_);
+        && io_desc_.is_valid();
   }
-  TO_STRING_KV(K_(offset), K_(size), K_(io_timeout_ms), K_(io_desc), KP_(io_callback),
-      KP_(buf), K_(macro_block_id));
+  TO_STRING_KV(K_(offset), K_(size), K_(io_timeout_ms), K_(io_desc),
+      K_(macro_block_id));
 public:
   blocksstable::MacroBlockId macro_block_id_;
   int64_t offset_;
   int64_t size_;
   int64_t io_timeout_ms_;
   common::ObIOFlag io_desc_;
-  common::ObIOCallback *io_callback_;
-  char *buf_;
 };
-
 
 class ObMacroBlockRewriteSeqGenerator final
 {
@@ -167,7 +154,19 @@ public:
   ObBlockManager();
   virtual ~ObBlockManager();
 
-  int init(common::ObIODevice *io_device, const int64_t block_size);
+  int prepare_file(const storage_io::ServiceHandle &service,
+      const char *data_dir, const char *sstable_dir, int64_t block_size,
+      int64_t initial_size, int64_t disk_percentage, size_t worker_threads, size_t max_depth);
+  int init(const int64_t block_size);
+  int close_file();
+  int validate_io_threads(size_t worker_threads) const;
+  int fsync_block();
+  int check_space_full(int64_t required_size, bool alarm_if_space_full = true) const;
+  int submit_read(const MacroBlockId &id, int64_t offset, int64_t size,
+      const common::ObIOFlag &flag, int64_t timeout_us,
+      std::unique_ptr<storage_io::CallbackAdapter> callback, common::ObIOHandle &handle);
+  int submit_write(const MacroBlockId &id, int64_t offset, const char *buffer, int64_t size,
+      const common::ObIOFlag &flag, int64_t timeout_us, common::ObIOHandle &handle);
   int start(const int64_t reserved_size);
   void stop();
   void wait();
@@ -278,7 +277,6 @@ private:
 
   static const int64_t RECYCLE_DELAY_US = 30 * 1000 * 1000; // 30s
   static const int64_t INSPECT_DELAY_US = 1  * 1000 * 1000; // 1s
-  static const int64_t AUTO_EXTEND_LEAST_FREE_BLOCK_CNT = 8; // 16M
 
   typedef common::ObLinearHashMap<MacroBlockId, BlockInfo, common::UniqueMemMgrTag> BlockMap;
   typedef common::ObLinearHashMap<MacroBlockId, bool> MacroBlkIdMap;
@@ -403,29 +401,16 @@ private:
   void update_marker_status(const ObMacroBlockMarkerStatus &tmp_status);
   void disable_mark_sweep() { ATOMIC_SET(&is_mark_sweep_enabled_, false); }
   void enable_mark_sweep() { ATOMIC_SET(&is_mark_sweep_enabled_, true); }
-  bool is_mark_sweep_enabled() { return ATOMIC_LOAD(&is_mark_sweep_enabled_); }
+  bool is_mark_sweep_enabled() const { return ATOMIC_LOAD(&is_mark_sweep_enabled_); }
 
-  int  extend_file_size_if_need();
-  bool check_can_be_extend(
-      const int64_t reserved_size);
-  int inner_alloc_block(ObIODOpts &opts, ObIOFd &io_fd);
+  int extend_file_size_if_need();
+  int inner_alloc_block(uint64_t &index);
+  void release_block(uint64_t index);
+  int open_file(int64_t reserved_size);
+  int make_growth_policy(storage_io::BlockGrowth &policy) const;
+  int64_t get_max_block_size(int64_t reserved_size) const;
 
 private:
-  // not thread-safe, only for first mark device.
-  class BlockMapIterator : public common::ObIBlockIterator
-  {
-  public:
-    BlockMapIterator(BlockMap &blk_map) : iter_(blk_map), max_write_seq_(0) {}
-    virtual ~BlockMapIterator() = default;
-
-    int get_next_block(common::ObIOFd &block_id) override;
-    OB_INLINE uint64_t get_max_write_sequence() const { return max_write_seq_; }
-
-  private:
-    BlockMap::BlurredIterator iter_;
-    uint64_t max_write_seq_;
-  };
-
   class MarkBlockTask : public common::ObTimerTask
   {
   public:
@@ -485,12 +470,12 @@ private:
   lib::ObMutex bad_block_lock_;
   common::ObArray<ObBadBlockInfo> bad_block_infos_;
 
-  common::ObIODevice *io_device_;
+  rust::Box<storage_io::BlockOwner> data_file_;
+  char data_path_[common::OB_MAX_FILE_NAME_LENGTH];
+  int64_t initial_file_size_;
+  int64_t disk_percentage_;
   ObMacroBlockRewriteSeqGenerator blk_seq_generator_;
   int64_t alloc_num_;
-
-  // for resource_isolation
-  uint64_t group_id_;
 
   bool is_inited_;
   bool is_started_;

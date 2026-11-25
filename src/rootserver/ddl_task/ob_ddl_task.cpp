@@ -388,7 +388,7 @@ void ObDDLTask::add_event_info(const ObString &ddl_event_stmt)
 {
   char object_id_buffer[256];
   const char *status_str = ddl_task_status_to_str(task_status_);
-  snprintf(object_id_buffer, sizeof(object_id_buffer), "object_id:%ld, target_object_id:%ld", object_id_, target_object_id_);
+  snprintf(object_id_buffer, sizeof(object_id_buffer), "object_id:%" PRIu64 ", target_object_id:%" PRIu64, object_id_, target_object_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
     "ret", ret_code_,
     K_(trace_id),
@@ -402,7 +402,7 @@ void ObDDLTask::add_event_info(const share::ObDDLTaskStatus status)
 {
   const char *status_str = ddl_task_status_to_str(status);
   char object_id_buffer[256];
-  snprintf(object_id_buffer, sizeof(object_id_buffer), "object_id:%ld, target_object_id:%ld", object_id_, target_object_id_);
+  snprintf(object_id_buffer, sizeof(object_id_buffer), "object_id:%" PRIu64 ", target_object_id:%" PRIu64, object_id_, target_object_id_);
   if (status_str) {
     MANAGEMENT_EVENT_ADD("ddl scheduler", "switch_state",
                           "ret", ret_code_,

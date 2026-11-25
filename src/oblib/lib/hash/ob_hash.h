@@ -18,6 +18,7 @@
 #define OCEANBASE_HASH_OB_HASH_
 
 #include "lib/hash/ob_darray.h"
+#include <inttypes.h>
 namespace oceanbase
 {
 namespace common
@@ -378,7 +379,8 @@ public:
         Node *head = get_head();
         fprintf(fp, "Hash: ");
         while (NULL != head) {
-          fprintf(fp, "%lx[%lx]->", head->hash_, head->key_);
+          fprintf(fp, "%" PRIx64 "[%" PRIx64 "]->", static_cast<uint64_t>(head->hash_),
+              static_cast<uint64_t>(head->key_));
           head = head->next_;
         }
         fprintf(fp, "\n");

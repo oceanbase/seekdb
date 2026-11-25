@@ -16,6 +16,7 @@
 #ifndef OB_STORAGE_COMPACTION_BATCH_EXEC_DAG_H_
 #define OB_STORAGE_COMPACTION_BATCH_EXEC_DAG_H_
 #include "data_plane/scheduler/ob_dag_scheduler.h"
+#include <inttypes.h>
 #include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "lib/lock/ob_mutex.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
@@ -298,7 +299,7 @@ template<typename TASK, typename PARAM>
 int ObBatchExecDag<TASK, PARAM>::fill_dag_key(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_cnt=%ld",
+  if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_cnt=%" PRId64 "",
       param_.tablet_info_array_.count()))) {
   }
   return ret;

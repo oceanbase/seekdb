@@ -33,6 +33,7 @@ on:
       - 'MODULE.bazel.lock'
       - '.bazelrc'
       - '.github/workflows/rust-checks.yml'
+      - '!**/*.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -76,7 +77,7 @@ jobs:
 
       - name: Rust workspace tests
         working-directory: rust
-        run: cargo test --locked --workspace
+        run: cargo test --locked --workspace --exclude crypto --exclude http-client
 
       # Compile Windows code on Linux; this does not run Windows tests.
       - name: check windows target

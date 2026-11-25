@@ -1,0 +1,9 @@
+[package]
+name = "spatial-covering"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+cxx = "=1.0.202"
+s2rst = "=0.5.1"

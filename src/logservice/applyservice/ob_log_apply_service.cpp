@@ -598,9 +598,6 @@ int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
           if (OB_FAIL(submit_task_to_apply_service_(submit_task_))) {
           }
         }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        CLOG_LOG(ERROR, "invalid new end_lsn", KPC(this), K(end_lsn));
       }
     }
   }

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_EXE
 #include "rust/config.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 #include "share/ob_share_util.h"
 
@@ -156,7 +156,7 @@ int ObMaintainObjDepInfoTask::process()
       // do nothing
     } else if (OB_ISNULL(root_command_service_)) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
         [&]{ return root_command_service_->
             maintain_obj_dependency_info(dep_obj_info_arg); }))) {
     }

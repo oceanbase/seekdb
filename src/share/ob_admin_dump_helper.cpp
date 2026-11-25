@@ -15,6 +15,7 @@
  */
 
 #include "share/ob_admin_dump_helper.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -49,14 +50,14 @@ int ObAdminLogNormalDumper::dump_key(const char *key)
 int ObAdminLogNormalDumper::dump_int64(int64_t arg)
 {
   int ret = OB_SUCCESS;
-  fprintf(stdout, " %ld ", arg);
+  fprintf(stdout, " %" PRId64 " ", arg);
   return ret;
 }
 
 int ObAdminLogNormalDumper::dump_uint64(uint64_t arg)
 {
   int ret = OB_SUCCESS;
-  fprintf(stdout, " %lu ", arg);
+  fprintf(stdout, " %" PRIu64 " ", arg);
   return ret;
 }
 
@@ -105,37 +106,6 @@ int ObAdminLogStatDumper::dump_string(const char *str)
   UNUSED(str);
   return OB_SUCCESS;
 }
-
-int ObAdminLogJsonDumper::start_object()
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::StartObject() ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::end_object()
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::EndObject() ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::dump_key(const char *arg)
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::Key(arg) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::dump_int64(int64_t arg)
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::Int64(arg) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::dump_uint64(uint64_t arg)
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::Uint64(arg) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::dump_string(const char *arg)
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::String(arg) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
 
 int ObAdminLogDumpFilter::parse(const char *str)
 {

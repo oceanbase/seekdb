@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 
 #include <limits>
+#include <inttypes.h>
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_iterator.h"
@@ -150,7 +151,7 @@ struct partition_access
   } else {                                                                      \
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {                           \
       if (OB_FAIL(BUF_PRINTF("["))) { /* Do nothing */                          \
-      } else if (OB_FAIL(BUF_PRINTF("%lu", arr.at(i)))) { /* Do nothing */      \
+      } else if (OB_FAIL(BUF_PRINTF("%" PRIu64 "", arr.at(i)))) { /* Do nothing */      \
       } else if (OB_FAIL(BUF_PRINTF("]"))) { /* Do nothing */                   \
       } else if (i < N - 1) {                                                   \
         ret = BUF_PRINTF(", ");                                                 \
@@ -331,7 +332,6 @@ public:
     GIS_NORMAL = 0,
     GIS_IN_PARTITION_WISE,
     GIS_PARTITION_WITH_AFFINITY,
-    GIS_PARTITION,
     GIS_AFFINITY,
   };
 public:
@@ -344,7 +344,8 @@ public:
 		multi_child_op_above_count_in_dfo_(0),
 		partition_count_(0),
     hash_part_(false),
-    is_valid_for_gi_(false)
+    is_valid_for_gi_(false),
+    is_force_partition_(false)
   {
   }
   ~AllocGIContext()
@@ -353,7 +354,6 @@ public:
   bool managed_by_gi();
   bool is_in_partition_wise_state();
   bool is_in_pw_affinity_state();
-  bool is_partition_gi() { return GIS_PARTITION == state_; };
   void set_in_partition_wise_state(ObLogicalOperator *op_ptr);
   bool is_op_set_pw(ObLogicalOperator *op_ptr);
   int set_pw_affinity_state();
@@ -365,8 +365,8 @@ public:
   bool multi_child_op_above() { return 0 != multi_child_op_above_count_in_dfo_; }
   void delete_multi_child_op_count() { multi_child_op_above_count_in_dfo_--; }
   void reset_state() { state_ = GIS_NORMAL; }
-  void set_force_partition() { state_ = GIS_PARTITION; }
-  bool force_partition() { return GIS_PARTITION == state_; }
+  void set_force_partition() { is_force_partition_ = true; }
+  bool is_force_partition() const { return is_force_partition_; }
   // In the MANUAL_TABLE_DOP case, the exchange operator can only be called in alloc_gi_pre
   int push_current_dfo_dop(int64_t dop);
   // In the MANUAL_TABLE_DOP case, the exchange operator can only be called in alloc_gi_post
@@ -387,6 +387,7 @@ public:
   // Recorded whether the current GI direct TSC is a hash/key partition table
   bool hash_part_;
   bool is_valid_for_gi_;
+  bool is_force_partition_;
 };
 
 class ObAllocGIInfo

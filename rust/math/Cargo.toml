@@ -1,0 +1,11 @@
+[package]
+name = "math"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "1"
+# Pinned pure-Rust binary64 implementation shared by every platform.  The
+# `arch` feature is disabled so all targets compile the same portable code.
+libm = { version = "=0.2.16", default-features = false }

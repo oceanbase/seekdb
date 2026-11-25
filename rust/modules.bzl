@@ -1,8 +1,16 @@
 """CXX interfaces exposed to C++ callers; Rust targets live in each crate."""
 
 load("//rust/sql-nio:features.bzl", "FEATURES")
+load("//rust/storage-io:features.bzl", IO_FEATURES = "FEATURES")
 
 MODULES = {
+    "file-io": {"bridge": "src/bridge.rs", "features": IO_FEATURES},
+    "storage-io": {
+        "bridge": "src/bridge.rs",
+        "headers": ["include/callback_adapter.h"],
+        "deps": [":file_io_headers"],
+        "features": IO_FEATURES,
+    },
     "mvt": {"bridge": "src/bridge.rs"},
     "standby-rpc": {
         "bridge": "src/bridge.rs",
@@ -12,6 +20,7 @@ MODULES = {
     "local": {
         "bridge": "src/bridge.rs",
         "headers": ["include/callbacks.h"],
+        "deps": [":file_io_headers"],
     },
     "config": {
         "bridge": "generated_config.rs",
@@ -19,13 +28,35 @@ MODULES = {
         "deps": [":local_headers"],
     },
     "logger": {"bridge": "src/bridge.rs"},
+    "number-parser": {"bridge": "src/bridge.rs"},
     "sql-nio": {
         "bridge": "src/bridge.rs",
         "headers": ["include/callbacks.h"],
         "features": FEATURES,
     },
     "regex-engine": {"bridge": "src/bridge.rs"},
+    "xml-parser": {"bridge": "src/bridge.rs", "headers": ["include/callbacks.h"]},
+    "compression": {"bridge": "src/bridge.rs"},
+    "crypto": {
+        "bridge": "src/bridge.rs",
+        "headers": ["include/sdk.h"],
+        "deps": ["//rust/crypto:sdk_headers"],
+    },
+    "spatial-covering": {"bridge": "src/bridge.rs"},
+    "http-client": {
+        "bridge": "src/bridge.rs",
+        "headers": ["include/sdk.h"],
+        "deps": select({
+            "@platforms//os:emscripten": [],
+            "//conditions:default": ["//rust/http-client:sdk_headers"],
+        }),
+        "exclude_platforms": ["emscripten"],
+    },
+    "json": {"bridge": "src/bridge.rs", "headers": ["include/binary_source.h", "include/schema_pattern.h", "include/read.h"], "deps": ["//rust/json:schema_pattern"]},
     "uuid-generator": {"bridge": "src/bridge.rs"},
+    "math": {"bridge": "src/bridge.rs"},
+    "vector-kernels": {"bridge": "src/bridge.rs"},
+    "path-utils": {"bridge": "src/bridge.rs"},
     "in-process": {
         "bridge": "src/bridge.rs",
         "headers": ["include/in_process_server.h"],

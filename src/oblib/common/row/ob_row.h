@@ -18,6 +18,7 @@
 #define OCEANBASE_COMMON_OB_ROW_
 
 #include "lib/container/ob_array.h"
+#include <inttypes.h>
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/json/ob_yson.h"
 #include "common/row/ob_row_desc.h"
@@ -194,7 +195,7 @@ int ob_write_row(AllocatorT &allocator, const ObNewRow &src, ObNewRow &dst)
     for (int64_t i = 0; OB_SUCC(ret) && i < src.count_; ++i) {
       if (OB_FAIL(ob_write_obj(allocator, src.cells_[i], objs[i]))) {
         ObCStringHelper helper;
-        _OB_LOG(WARN, "copy ObObj error, row=%s, i=%ld, ret=%d",
+        _OB_LOG(WARN, "copy ObObj error, row=%s, i=%" PRId64 ", ret=%d",
             helper.convert(src.cells_[i]), i, ret);
       }
     }

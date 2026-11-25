@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_column_redefinition_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -203,7 +204,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
           if (OB_FAIL(generate_rebuild_index_arg_list(object_id_, schema_guard, alter_table_arg_))) {
           } else if (OB_FAIL(get_orig_all_index_tablet_count(schema_guard, all_tablet_count))) {
           } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_tablet_count, rpc_timeout))) {
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
+          } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
           }
         }
       }
@@ -328,7 +329,7 @@ int ObColumnRedefinitionTask::copy_table_constraints()
         alter_table_arg_.hidden_table_id_ = target_object_id_;
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                 *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
+        } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
         }
       } else {
         LOG_INFO("constraint has already been built");
@@ -370,7 +371,7 @@ int ObColumnRedefinitionTask::copy_table_foreign_keys()
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                 *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
           ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, fk_ids); }))) {
+        } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, fk_ids); }))) {
         }
         DEBUG_SYNC(COLUMN_REDEFINITION_COPY_TABLE_FOREIGN_KEYS);
         if (OB_SUCC(ret)) {
@@ -522,7 +523,7 @@ int ObColumnRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status
     }
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                  *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&] {
                return ::oceanbase::share::server_service<
                    ::oceanbase::rootserver::ObLocalManagementService>()->execute_ddl_task(
                        alter_table_arg_, objs);
@@ -594,7 +595,7 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %" PRId64 ", ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(databuff_printf(stat_info_.message_,
@@ -609,14 +610,14 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %ld",
+                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %" PRId64 "",
                                     snapshot_version_))) {
         }
       } else {
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %ld",
+                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %" PRId64 "",
                                     wait_trans_ctx_.get_pending_tx_id().get_id()))) {
         }
       }
@@ -643,14 +644,14 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: REPLICA BUILD, PARALLELISM: %ld, INITIALIZING",
+                                    "STATUS: REPLICA BUILD, PARALLELISM: %" PRId64 ", INITIALIZING",
                                     ObDDLTaskUtil::get_real_parallelism(parallelism_)))) {
         }
       } else if (OB_FAIL(local_builder_.get_progress(row_inserted, physical_row_count_, percent))) {
       } else if (OB_FAIL(databuff_printf(stat_info_.message_,
                                   MAX_LONG_OPS_MESSAGE_LENGTH,
                                   pos,
-                                  "STATUS: REPLICA BUILD, PARALLELISM: %ld, ESTIMATED_TOTAL_ROWS: %ld, ROW_PROCESSED: %ld, PROGRESS: %0.2lf%%",
+                                  "STATUS: REPLICA BUILD, PARALLELISM: %" PRId64 ", ESTIMATED_TOTAL_ROWS: %" PRId64 ", ROW_PROCESSED: %" PRId64 ", PROGRESS: %0.2lf%%",
                                   ObDDLTaskUtil::get_real_parallelism(parallelism_),
                                   physical_row_count_,
                                   row_inserted,

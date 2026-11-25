@@ -8,10 +8,14 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "package"))
+import debug_symbols
+
 spec = importlib.util.spec_from_file_location("seekdb_package", ROOT / "package/package.py")
 package = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(package)
@@ -75,7 +79,6 @@ def main():
     parser.add_argument("--dll-dir", type=Path, action="append", default=[],
                         help="additional runtime DLL directories for an external configurator")
     parser.add_argument("--configurator", type=Path)
-    parser.add_argument("--timezone-file", type=Path)
     parser.add_argument("--output", type=Path, default=Path.cwd())
     options = parser.parse_args()
     if not re.fullmatch(r"\d+\.\d+\.\d+(?:\.\d+)?", options.version) or options.release < 0:
@@ -86,12 +89,13 @@ def main():
         work = Path(temporary)
         payload = work / "payload"
         package.stage(payload, options.artifacts.resolve(), None, "windows",
-                      options.version, str(options.release), timezone=options.timezone_file)
+                      options.version, str(options.release))
         configurator = options.configurator
         if configurator:
             package.copy(configurator, payload / "bin/seekdbConfigurator.exe", True)
             runtime_dependencies([payload / "bin/seekdbConfigurator.exe"],
                                  [payload / "bin"] + options.dll_dir, payload / "bin")
+        debug_symbols.strip_tree(payload, "windows")
         payload_source(payload, work / "payload.wxs")
         license_text = (ROOT / "LICENSE").read_text().replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
         license_file = work / "LICENSE.rtf"

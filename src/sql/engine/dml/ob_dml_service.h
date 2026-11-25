@@ -118,7 +118,8 @@ public:
                         const DASRuntimeTabletAccess *tablet_access,
                         ObDMLRtCtx &das_rtctx,
                         const ExprFixedArray &new_row,
-                        ObChunkDatumStore::StoredRow *&stored_row);
+                        ObChunkDatumStore::StoredRow *&stored_row,
+                        bool force_text_embedding = false);
   static int delete_row(const ObDelCtDef &del_ctdef,
                         ObDelRtDef &del_rtdef,
                         const DASRuntimeTabletAccess *tablet_access,
@@ -281,7 +282,8 @@ private:
                                  ObDMLRtCtx &dml_rtctx,
                                  const ExprFixedArray &row,
                                  ObExpr *trans_info_expr, // debug info for 4377 defensive check
-                                 ObChunkDatumStore::StoredRow *&stored_row);
+                                 ObChunkDatumStore::StoredRow *&stored_row,
+                                 bool force_text_embedding = false);
   template <typename T>
   static const DASTableAccessMeta *get_table_access_meta(const T *multi_ctdef);
   static int check_nested_sql_legality(ObExecContext &ctx, common::ObTableID ref_table_id);

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_radians.h"
+#include "share/ob_math_compat.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -25,7 +26,7 @@ namespace oceanbase
 namespace sql
 {
 
-const double ObExprRadians::radians_ratio_ = std::acos(-1) / 180;
+const double ObExprRadians::radians_ratio_ = math_compat::acos(-1.0) / 180;
 
 ObExprRadians::ObExprRadians(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_RADIANS, N_RADIANS, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)

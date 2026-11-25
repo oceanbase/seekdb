@@ -15,6 +15,7 @@
  */
 
 #include "share/cache/ob_kvcache_inst_map.h"
+#include <inttypes.h>
 #include "share/cache/ob_kvcache_hazard_domain.h"
 
 
@@ -378,7 +379,7 @@ void ObKVCacheInstMap::print_all_cache_info()
                 ? (total_map_size * inst_kv_cnt) / total_kv_cnt
                 : 0;
             ret = databuff_printf(buf, BUFLEN, ctx_pos,
-                "[CACHE] cache_name=%30s | cache_size=%12ld | cache_store_size=%12ld | cache_retired_size=%12ld | cache_map_size=%12ld | kv_cnt=%8ld\n",
+                "[CACHE] cache_name=%30s | cache_size=%12" PRId64 " | cache_store_size=%12" PRId64 " | cache_retired_size=%12" PRId64 " | cache_map_size=%12" PRId64 " | kv_cnt=%8" PRId64 "\n",
                 iter->second->status_.config_->cache_name_,
                 iter->second->status_.store_size_ + cache_map_size,
                 iter->second->status_.store_size_,
@@ -387,7 +388,7 @@ void ObKVCacheInstMap::print_all_cache_info()
                 iter->second->status_.kv_cnt_);
           }
           ret = databuff_printf(buf, BUFLEN, ctx_pos,
-              "[CACHE] shared_cache_map_size=%12ld | total_kv_cnt=%8ld\n",
+              "[CACHE] shared_cache_map_size=%12" PRId64 " | total_kv_cnt=%8" PRId64 "\n",
               total_map_size, total_kv_cnt);
         }
         _OB_LOG(INFO, "[CACHE] cache memory info: \n%s", buf);

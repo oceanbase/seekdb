@@ -24,10 +24,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-class ObMySQLProxy;
-}
 namespace rootserver
 {
 
@@ -64,8 +60,7 @@ public:
       obcall::ObDDLCheckTabletMergeStatusResult &result) = 0;
   virtual int check_server_empty(bool &is_empty) = 0;
   virtual int wait_until_change_stream_refreshed(
-      common::ObMySQLProxy &mysql_proxy,
-      int64_t timeout_us) = 0;
+      int64_t abs_timeout_us) = 0;
 };
 
 inline ObIRootserverLocalRuntime *rootserver_local_runtime()

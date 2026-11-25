@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_OB_OBJECT_HANDLE_H_
 #define OCEANBASE_STORAGE_BLOCKSSTABLE_OB_OBJECT_HANDLE_H_
 
-#include "share/io/ob_io_define.h"
+#include "share/io_request.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
 namespace oceanbase
 {
@@ -37,7 +37,6 @@ class ObStorageObjectHandle final
   friend class ObObjectManager; // in ObObjectManager::ss_get_object_id
   friend class ObBlockManager; // in ObBlockManager::alloc_object
   friend class storage::ObBloomFilterBuildTask; // keeps the macro block alive while the task is queued
-  friend class blocksstable::ObMacroBlockWriter; // int ObMacroBlockWriter::alloc_block_from_device
 public:
   ObStorageObjectHandle() = default;
   ~ObStorageObjectHandle();
@@ -50,21 +49,32 @@ public:
   bool is_empty() const { return io_handle_.is_empty(); }
   OB_INLINE bool is_finished() const { return io_handle_.is_empty() || io_handle_.is_finished(); }
   const char *get_buffer() { return io_handle_.get_buffer(); }
+  const ObMicroBlockCacheValue *get_micro_block() const
+  {
+    const auto *callback = io_handle_.get_callback_output();
+    return callback != nullptr ? callback->micro_block() : nullptr;
+  }
+  const ObMultiBlockIOResult *get_micro_blocks() const
+  {
+    const auto *callback = io_handle_.get_callback_output();
+    return callback != nullptr ? callback->micro_blocks() : nullptr;
+  }
   const MacroBlockId& get_macro_id() const { return macro_id_; }
   common::ObIOHandle &get_io_handle() { return io_handle_; }
   int64_t get_data_size() const { return io_handle_.get_data_size(); }
-  int async_read(const ObStorageObjectReadInfo &read_info);
+  int async_read(const ObStorageObjectReadInfo &read_info,
+      std::unique_ptr<storage_io::CallbackAdapter> callback = nullptr);
   int async_write(const ObStorageObjectWriteInfo &write_info);
   int wait();
   int get_io_time_us(int64_t &io_time_us) const;
-  int check_is_finished(bool &is_finished);
   TO_STRING_KV(K_(macro_id), K_(io_handle));
 
 private:
   int set_macro_block_id(const MacroBlockId &macro_block_id);
   int report_bad_block() const;
   
-  int sn_async_read(const ObStorageObjectReadInfo &read_info);
+  int sn_async_read(const ObStorageObjectReadInfo &read_info,
+      std::unique_ptr<storage_io::CallbackAdapter> callback);
   int sn_async_write(const ObStorageObjectWriteInfo &write_info);
 
 private:

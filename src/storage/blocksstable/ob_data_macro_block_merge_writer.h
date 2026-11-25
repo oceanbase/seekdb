@@ -23,7 +23,6 @@
 #include "ob_macro_block.h"
 #include "ob_datum_row.h"
 
-
 namespace oceanbase
 {
 namespace blocksstable
@@ -41,8 +40,7 @@ public:
       const blocksstable::ObMacroSeqParam &macro_seq_param,
       const share::ObPreWarmerParam &pre_warm_param,
       ObIMacroBlockFlushCallback *callback = nullptr,
-      ObIMacroBlockValidator *validator = nullptr,
-      ObIODevice *device_handle = nullptr) override;
+      ObIMacroBlockValidator *validator = nullptr) override;
   virtual int append_row(const ObDatumRow &row, const ObMacroBlockDesc *curr_macro_desc = nullptr) override;
   virtual int append_micro_block(const ObMicroBlock &micro_block, const ObMacroBlockDesc *curr_macro_desc = nullptr) override;
   virtual int append_macro_block(

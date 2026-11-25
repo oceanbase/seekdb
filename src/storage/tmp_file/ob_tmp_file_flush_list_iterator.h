@@ -38,7 +38,7 @@ public:
   int clear();
   int reset();
   void destroy();
-  int next(const FlushCtxState iter_stage, ObITmpFileHandle &file_handle);
+  int next(const FlushCtxState iter_stage, ObSNTmpFileHandle &file_handle);
 
   TO_STRING_KV(K(is_inited_), K(cur_caching_list_idx_), K(cur_caching_list_is_meta_),
                K(cur_iter_dir_idx_), K(cur_iter_file_idx_), K(cached_file_num_), K(cached_dir_num_))
@@ -50,11 +50,11 @@ private:
   int acquire_final_list_of_flush_stage_(const FlushCtxState iter_stage,
                                          FileList &list_idx);
   int cache_files_(const FlushCtxState iter_stage);
-  int build_file_wrappers_(const ObArray<ObITmpFileHandle> &file_handles);
+  int build_file_wrappers_(const ObArray<ObSNTmpFileHandle> &file_handles);
   int build_dir_wrappers_();
-  int cache_big_files_(const ObArray<ObITmpFileHandle> &file_handles);
-  int cache_small_files_(const ObArray<ObITmpFileHandle> &file_handles);
-  int get_flushing_file_dirty_page_num_(const ObITmpFile &file, int64_t &page_num);
+  int cache_big_files_(const ObArray<ObSNTmpFileHandle> &file_handles);
+  int cache_small_files_(const ObArray<ObSNTmpFileHandle> &file_handles);
+  int get_flushing_file_dirty_page_num_(const ObSharedNothingTmpFile &file, int64_t &page_num);
   int check_cur_idx_status_();
   int advance_big_file_idx_();
   int advance_small_file_idx_();
@@ -65,14 +65,14 @@ private:
   {
     ObFlushingTmpFileWrapper() : is_inited_(false), is_meta_(false), file_handle_() {}
     ~ObFlushingTmpFileWrapper() { reset(); };
-    int init(const bool is_meta, const ObITmpFileHandle &file_handle);
+    int init(const bool is_meta, const ObSNTmpFileHandle &file_handle);
     void reset();
     bool operator <(const ObFlushingTmpFileWrapper &other);
     TO_STRING_KV(K(is_inited_), K(is_meta_), K(file_handle_));
 
     bool is_inited_;
     bool is_meta_;
-    ObITmpFileHandle file_handle_;
+    ObSNTmpFileHandle file_handle_;
   };
 
   struct ObFlushingTmpFileDirWrapper

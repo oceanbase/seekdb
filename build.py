@@ -21,6 +21,19 @@ class BuildError(RuntimeError):
     """The seekdb build environment could not be prepared."""
 
 
+def _check_windows_toolset() -> None:
+    # Released Windows dependencies were built with MSVC 14.44; linking needs
+    # the same or a newer compatible toolset.
+    version = os.environ.get("VCToolsVersion", "")
+    match = re.fullmatch(r"14\.(\d+)\.\d+", version)
+    if match is None or int(match.group(1)) < 44:
+        raise BuildError(
+            "Windows builds require MSVC 14.44 or newer compatible 14.x tools; "
+            "initialize the x64 developer environment with a supported toolset "
+            "(found %s)" % (version or "no active MSVC toolset")
+        )
+
+
 def _host_platform() -> str:
     system = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}.get(
         platform.system()
@@ -168,7 +181,7 @@ def _route_options(
                 remote_config = True
     defaults = []
     if (
-        command in ("build", "test", "run", "coverage")
+        command in ("build", "test", "run")
         and re.fullmatch(r"[0-9]+", jobs)
         and not remote_executor
         and not remote_config
@@ -177,10 +190,27 @@ def _route_options(
     return startup, forwarded, defaults
 
 
+def _normalize_cxxbridge_lockfile_paths(root: Path, output_base: Path) -> None:
+    """Keep watched-file labels independent of an output base inside the workspace."""
+    try:
+        output_directory = output_base.relative_to(root).as_posix()
+    except ValueError:
+        return
+    repository = "+cxxbridge_repository+cxxbridge_source"
+    local_prefix = ("FILE:@@//%s/external/%s/" % (output_directory, repository)).encode()
+    canonical_prefix = ("FILE:@@%s//" % repository).encode()
+    lockfile = root / "MODULE.bazel.lock"
+    contents = lockfile.read_bytes()
+    normalized = contents.replace(local_prefix, canonical_prefix)
+    if normalized != contents:
+        lockfile.write_bytes(normalized)
+
+
 def main(arguments: List[str]) -> int:
     root = Path(__file__).resolve().parent
-    os.environ.setdefault("RUSTUP_DIST_SERVER", "https://rsproxy.cn")
-    os.environ.setdefault("RUSTUP_UPDATE_ROOT", "https://rsproxy.cn/rustup")
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        os.environ.setdefault("RUSTUP_DIST_SERVER", "https://rsproxy.cn")
+        os.environ.setdefault("RUSTUP_UPDATE_ROOT", "https://rsproxy.cn/rustup")
     cargo_bin = str((Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin").expanduser().resolve())
     path = os.environ.get("PATH", os.defpath)
     if cargo_bin not in path.split(os.pathsep):
@@ -209,6 +239,8 @@ def main(arguments: List[str]) -> int:
     command, *arguments = arguments
     if command.startswith("-"):
         parser.error("put the command before its options, for example: build -o build3 seekdb")
+    if os.name == "nt" and command in ("build", "test", "run"):
+        _check_windows_toolset()
     separator = arguments.index("--") if "--" in arguments else len(arguments)
     options, remaining = bootstrap.parse_known_args(arguments[:separator])
     cache = options.launcher_cache_dir.expanduser().resolve()
@@ -244,9 +276,10 @@ def main(arguments: List[str]) -> int:
         # Starlark can inspect fixed action variables, but not inherited ones.
         # Native build scripts need both the compiler's PATH and shell tools.
         lines.append("build --action_env=" + _quote("PATH=" + os.environ.get("PATH", os.defpath)))
-        lines.append("build --repo_env=" + _quote(
-            "BAZEL_LLVM=" + (root / "deps/3rd/tools/llvm18").resolve().as_posix()
-        ))
+        llvm = root / "deps" / "prebuilt" / "native" / "llvm"
+        if not (llvm / "bin" / "clang-cl.exe").is_file():
+            raise BuildError("Bundled LLVM is missing; run python build.py init")
+        lines.append("build --repo_env=" + _quote("BAZEL_LLVM=" + llvm.resolve().as_posix()))
     descriptor, name = tempfile.mkstemp(prefix="runtime.", suffix=".bazelrc", dir=cache)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
@@ -256,6 +289,7 @@ def main(arguments: List[str]) -> int:
             "--bazelrc=" + name,
         ] + startup_options + bazel_arguments, cwd=root).returncode
     finally:
+        _normalize_cxxbridge_lockfile_paths(root, output_base)
         Path(name).unlink()
 
 

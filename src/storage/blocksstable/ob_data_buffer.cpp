@@ -69,7 +69,6 @@ int ObSelfBufferWriter::clean()
 int ObSelfBufferWriter::ensure_space(int64_t size)
 {
   int ret = OB_SUCCESS;
-  //size = upper_align(size, common::ObLogConstants::LOG_FILE_ALIGN_SIZE);
   if (size <= 0) {
     // do nothing.
   } else if (is_aligned_ && size % BUFFER_ALIGN_SIZE != 0) {

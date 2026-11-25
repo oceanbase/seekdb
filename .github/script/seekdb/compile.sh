@@ -4,7 +4,7 @@ workspace="${GITHUB_WORKSPACE:?}"
 task_dir="${SEEKDB_TASK_DIR:?}"
 cd "$workspace"
 mkdir -p "$task_dir"
-args=(--jobs="${BUILD_JOBS:-32}" --lockfile_mode=error)
+args=(--jobs="${BUILD_JOBS:-32}" --config=O1 --lockfile_mode=error)
 case "${PACKAGE_TYPE:-release}" in
   release) ;;
   sanity) args+=(--sanity) ;;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_dml_stmt_printer.h"
+#include <inttypes.h>
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "sql/ob_sql_context.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
@@ -1203,7 +1204,7 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
         }
         if (table_item->sample_info_->seed_ != -1) {
           DATA_PRINTF(" seed(");
-          DATA_PRINTF(" %ld ", table_item->sample_info_->seed_);
+          DATA_PRINTF(" %" PRId64 " ", table_item->sample_info_->seed_);
           DATA_PRINTF(")");
         }
       }
@@ -1452,7 +1453,7 @@ int ObDMLStmtPrinter::print_limit()
           } else if (!got_result || !result.is_int()) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            DATA_PRINTF("%ld", result.get_int());
+            DATA_PRINTF("%" PRId64 "", result.get_int());
           }
         } else {
           if (OB_FAIL(expr_printer_.do_print(offset_expr, T_NONE_SCOPE))) {
@@ -1478,7 +1479,7 @@ int ObDMLStmtPrinter::print_limit()
           } else if (!got_result || !result.is_int()) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            DATA_PRINTF("%ld", result.get_int());
+            DATA_PRINTF("%" PRId64 "", result.get_int());
           }
         } else {
           if (OB_FAIL(expr_printer_.do_print(limit_expr, T_NONE_SCOPE))) {

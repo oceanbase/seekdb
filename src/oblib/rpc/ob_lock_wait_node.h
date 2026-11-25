@@ -18,6 +18,7 @@
 #define OCEANBASE_RPC_OB_LOCK_WAIT_NODE_
 
 #include "lib/hash/ob_fixed_hash2.h"
+#include <inttypes.h>
 #include "lib/list/ob_dlist.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
@@ -96,7 +97,7 @@ struct RequestLockWaitStat {
   }
   int64_t to_string(char *buffer, const int64_t buffer_len) const {
     int64_t pos = 0;
-    databuff_printf(buffer, buffer_len, pos, "%ld(%s)", (int64_t)state_, stat_to_string(state_));
+    databuff_printf(buffer, buffer_len, pos, "%" PRId64 "(%s)", (int64_t)state_, stat_to_string(state_));
     return pos;
   }
   RequestStat state_;

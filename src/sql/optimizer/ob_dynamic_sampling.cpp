@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_dynamic_sampling.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
@@ -677,11 +678,11 @@ int ObDynamicSampling::add_basic_hint_info(ObSqlString &basic_hint_str,
   int ret = OB_SUCCESS;
   if (OB_FAIL(basic_hint_str.append("/*+ NO_REWRITE"))) {
   } else if (degree <= 1 && OB_FAIL(basic_hint_str.append(" NO_PARALLEL "))) {
-  } else if (degree > 1 && OB_FAIL(basic_hint_str.append_fmt(" PARALLEL(%ld) ", degree))) {
+  } else if (degree > 1 && OB_FAIL(basic_hint_str.append_fmt(" PARALLEL(%" PRId64 ") ", degree))) {
   //Dynamic Sampling SQL shouldn't dynamic sampling
   } else if (OB_FAIL(basic_hint_str.append(" DYNAMIC_SAMPLING(0) "))) {
   } else if (OB_FAIL(basic_hint_str.append(" DBMS_STATS "))) {
-  } else if (OB_FAIL(basic_hint_str.append_fmt(" QUERY_TIMEOUT(%ld) ", query_timeout))) {
+  } else if (OB_FAIL(basic_hint_str.append_fmt(" QUERY_TIMEOUT(%" PRId64 ") ", query_timeout))) {
   } else if (OB_FAIL(basic_hint_str.append(" OPT_PARAM(\'USE_DEFAULT_OPT_STAT\',\'TRUE\') "))) {
   } else if (OB_FAIL(basic_hint_str.append("*/"))) {
   } else {
@@ -890,7 +891,7 @@ int ObDynamicSampling::add_block_sample_info(const double &sample_block_ratio,
   } else if (sample_block_ratio == 100.0) {
     //do nothing
     sample_block_.reset();
-  } else if (seed > 0 && OB_FAIL(seed_str.append_fmt(" SEED(%ld) ", seed))) {
+  } else if (seed > 0 && OB_FAIL(seed_str.append_fmt(" SEED(%" PRId64 ") ", seed))) {
   } else if (OB_FAIL(sample_str.append_fmt(" SAMPLE BLOCK(%lf) %s ",
                                            sample_block_ratio,
                                            seed_str.empty() ? " " : seed_str.ptr()))) {
@@ -1172,7 +1173,7 @@ int ObDynamicSampling::add_table_clause(ObSqlString &table_str)
   int64_t big_table_row = 100000;
   if (OB_UNLIKELY(is_big_table_ && sample_big_table_rown_cnt_ < MAGIC_MAX_AUTO_SAMPLE_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (is_big_table_ && OB_FAIL(table_str.append_fmt("(SELECT * FROM `%.*s`.`%.*s` %.*s %.*s LIMIT %ld) %s%.*s%s" ,
+  } else if (is_big_table_ && OB_FAIL(table_str.append_fmt("(SELECT * FROM `%.*s`.`%.*s` %.*s %.*s LIMIT %" PRId64 ") %s%.*s%s" ,
                                                            db_name_.length(),
                                                            db_name_.ptr(),
                                                            table_name_.length(),

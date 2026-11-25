@@ -288,7 +288,7 @@ void ObTCFactory<T, MAX_CLASS_NUM, LABEL, MEM_LIMIT, MAX_FREE_LIST_LENGTH>::put(
         list_too_long(list, type_id, obj_size);
       } else {}
       if (mem_size_ > mem_limit_) {
-        //_OB_LOG(ERROR, "cache too large, mem_size_=%ld", mem_size_);
+        //_OB_LOG(ERROR, "cache too large, mem_size_=%lld", mem_size_);
         garbage_collect();
       } else {}
       ++put_count_[type_id];

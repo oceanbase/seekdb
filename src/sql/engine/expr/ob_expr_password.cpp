@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include <openssl/sha.h>
 #include "sql/engine/expr/ob_expr_password.h"
 #include "sql/engine/expr/ob_expr_util.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -36,7 +35,7 @@ ObExprPassword::~ObExprPassword()
 {
 }
 
-# define SHA_PASSWORD_CHAR_LENGTH (SHA_DIGEST_LENGTH * 2 + 2)
+# define SHA_PASSWORD_CHAR_LENGTH (SHA1_HASH_SIZE * 2 + 2)
 
 int ObExprPassword::calc_result_type1(ObExprResType &type, ObExprResType &text,
                                       common::ObExprTypeCtx &type_ctx) const

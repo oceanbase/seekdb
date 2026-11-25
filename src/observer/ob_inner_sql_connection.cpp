@@ -26,7 +26,6 @@
 #include "share/rc/ob_server_runtime.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "storage/tx/ob_trans_service.h"
-#include "share/ob_time_utility2.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_runtime_access.h"
 #include "share/ob_structured_event_logger.h"
@@ -58,7 +57,6 @@ public:
   virtual int execute(sql::ObSql &engine, sql::ObSqlCtx &ctx, sql::ObResultSet &res)
   {
     int ret = OB_SUCCESS;
-    SQL_INFO_GUARD(sql_, ObString(OB_MAX_SQL_ID_LENGTH, ctx.sql_id_));
     // Deep copy sql, because sql may be destroyed before result iteration.
     const int64_t alloc_size = sizeof(ObString) + sql_.length() + 1; // 1 for C terminate char
     void *mem = res.get_mem_pool().alloc(alloc_size);
@@ -122,10 +120,6 @@ ObInnerSQLConnection::ObInnerSQLConnection()
       ob_sql_(NULL), vt_iter_creator_(NULL),
       ref_ctx_(NULL),
       sql_modifier_(NULL),
-      init_timestamp_(0),
-      tid_(-1),
-      bt_size_(0),
-      bt_addrs_(),
       execute_start_timestamp_(0),
       execute_end_timestamp_(0),
       is_in_trans_(false),
@@ -259,12 +253,6 @@ int ObInnerSQLConnection::init(ObSql *ob_sql,
     ob_sql_ = ob_sql;
     vt_iter_creator_ = vt_iter_creator;
     sql_modifier_ = sql_modifier;
-    init_timestamp_ = ObTimeUtility::current_time();
-    tid_ = GETTID();
-    if (NULL == extern_session || 0 != EVENT_CALL(EventTable::EN_INNER_SQL_CONN_LEAK_CHECK)) {
-      // Only backtrace internal used connection to avoid performance problems.
-      bt_size_ = ob_backtrace(bt_addrs_, MAX_BT_SIZE);
-    }
     if (OB_FAIL(init_session(extern_session, use_static_engine))) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = destroy_inner_session())) {
@@ -1258,19 +1246,6 @@ int ObInnerSQLConnection::set_session_timeout(int64_t query_timeout, int64_t trx
   }
 
   return ret;
-}
-
-void ObInnerSQLConnection::dump_conn_bt_info()
-{
-  const int64_t BUF_SIZE = (1LL << 10);
-  char buf_bt[BUF_SIZE];
-  buf_bt[0] = '\0';
-  char buf_time[OB_MAX_TIMESTAMP_LENGTH];
-  int64_t pos = 0;
-  (void)ObTimeUtility2::usec_to_str(init_timestamp_, buf_time, OB_MAX_TIMESTAMP_LENGTH, pos);
-  pos = 0;
-  parray(buf_bt, BUF_SIZE, (int64_t*)*&bt_addrs_, bt_size_);
-  LOG_WARN_RET(OB_SUCCESS, "dump inner sql connection backtrace", "tid", tid_, "init time", buf_time, "backtrace", buf_bt);
 }
 
 int ObInnerSQLConnection::get_session_variable(const ObString &name, int64_t &val)

@@ -316,13 +316,13 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
              OB_FAIL(select_sql.append_fmt(
         "select cast(sum(inserts + updates + deletes) - sum(last_inserts + last_updates + " \
         "last_deletes) as signed) as inc_mod_count " \
-        "from %s where table_id = %lu;",
+        "from %s where table_id = %" PRIu64 ";",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
   } else if (!need_inc_modified_count &&
              OB_FAIL(select_sql.append_fmt(
         "select cast(sum(inserts + updates + deletes) as signed) as modified_count " \
-        "from %s where table_id = %lu;",
+        "from %s where table_id = %" PRIu64 ";",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
   } else {
@@ -376,7 +376,7 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
   } else if (OB_FAIL(select_sql.append_fmt(
           "select tablet_id, (inserts + updates + deletes - last_inserts - " \
           "last_updates - last_deletes) as inc_mod_count "\
-          "from %s where table_id = %lu order by 1;",
+          "from %s where table_id = %" PRIu64 " order by 1;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
         share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
   } else {
@@ -559,7 +559,7 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
     // do nothing
   } else if (OB_FAIL(select_sql.append_fmt(
                  "select partition_id, stattype_locked, row_cnt, spare2 from %s where "
-                 "table_id = %lu and (last_analyzed > 0 or spare2 >= 5) order by 1;",
+                 "table_id = %" PRIu64 " and (last_analyzed > 0 or spare2 >= 5) order by 1;",
                  share::OB_ALL_TABLE_STAT_TNAME,
                  share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
   } else {
@@ -728,12 +728,12 @@ int ObBasicStatsEstimator::get_need_stats_tables(ObExecContext &ctx,
   if (OB_FAIL(get_gather_table_type_list(gather_table_type_list))) {
   } else if (OB_FAIL(select_sql.append_fmt("SELECT /*+no_rewrite*/table_id "\
                                            " FROM   %s t "\
-                                           " WHERE  table_id > %ld"
+                                           " WHERE  table_id > %" PRId64 ""
                                            "  AND  table_type IN %s"\
                                            " AND table_id  not in (select distinct table_id from %s "\
-                                           " WHERE table_id > %ld AND spare2 >= 5) "\
+                                           " WHERE table_id > %" PRId64 " AND spare2 >= 5) "\
                                            " ORDER  BY table_id "\
-                                           " LIMIT  %ld;",
+                                           " LIMIT  %" PRId64 ";",
                                            share::OB_ALL_TABLE_TNAME,
                                            last_table_id,
                                            gather_table_type_list.ptr(),
@@ -889,7 +889,7 @@ int ObBasicStatsEstimator::fill_hints(common::ObIAllocator &alloc,
   const char *no_use_plan_cache_hint = " USE_PLAN_CACHE(NONE)";
   if (OB_UNLIKELY(table_name.empty() || gather_vectorize < 0)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(default_hints.append_fmt("NO_REWRITE DBMS_STATS OPT_PARAM('ROWSETS_MAX_ROWS', %ld)",
+  } else if (OB_FAIL(default_hints.append_fmt("NO_REWRITE DBMS_STATS OPT_PARAM('ROWSETS_MAX_ROWS', %" PRId64 ")",
                                                gather_vectorize))) {
   } else if (OB_FAIL(default_hints.append_fmt(use_full_table_hint,
                                               table_name.length(),
@@ -911,7 +911,7 @@ int ObBasicStatsEstimator::get_gather_table_type_list(ObSqlString &gather_table_
   for (int64_t i = 0; OB_SUCC(ret) && i < table_type_cnt; ++i) {
     char prefix = (i == 0 ? '(' : ' ');
     char suffix = (i == table_type_cnt - 1 ? ')' : ',');
-    if (OB_FAIL(gather_table_type_list.append_fmt("%c%lu%c", prefix, table_type_arr[i], suffix))) {
+    if (OB_FAIL(gather_table_type_list.append_fmt("%c%" PRIu64 "%c", prefix, table_type_arr[i], suffix))) {
     } else {/*do nothing*/}
   }
   return ret;
@@ -979,9 +979,9 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
           "    ELSE (m.inserts - m.last_inserts + m.updates - m.last_updates + m.deletes - m.last_deletes) * 1.0 "\
           " / (m.last_inserts-m.last_deletes) END) > cast(coalesce(up.valchar, gp.spare4) as double) "\
           " %.*s "\
-          " AND m.table_id > %lu and m.tablet_id > %lu"\
+          " AND m.table_id > %" PRIu64 " and m.tablet_id > %" PRIu64 ""\
           " )t "\
-          " order by ratio desc,table_id, tablet_id  limit %lu ",
+          " order by ratio desc,table_id, tablet_id  limit %" PRIu64 " ",
           share::OB_ALL_MONITOR_MODIFIED_TNAME,
           static_cast<int>(collectable_candidate_join.length()),
           collectable_candidate_join.empty() ? "" : collectable_candidate_join.ptr(),

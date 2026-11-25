@@ -15,6 +15,7 @@
  */
 
 #include "storage/ddl/ob_ddl_dag_thread_pool.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_insert_dag.h"
 
@@ -53,7 +54,7 @@ void ObDDLDagThreadPool::run1()
   } else {
     worker_context_->bind_current_thread();
     char thread_name[OB_THREAD_NAME_BUF_LEN] = { 0 };
-    snprintf(thread_name, OB_THREAD_NAME_BUF_LEN, "DDL_%ld", ddl_dag_->get_ddl_task_param().ddl_task_id_);
+    snprintf(thread_name, OB_THREAD_NAME_BUF_LEN, "DDL_%" PRId64, ddl_dag_->get_ddl_task_param().ddl_task_id_);
     lib::set_thread_name(thread_name);
     ObCurTraceId::set(ddl_dag_->get_dag_id());
     FLOG_INFO("ddl dag thread start", "thread_idx", get_thread_idx(), KPC(ddl_dag_));

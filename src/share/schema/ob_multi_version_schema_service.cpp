@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_publish_signal.h"
@@ -762,26 +763,12 @@ int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
                 K(schema_status), K(target_version), K(latest_local_version));
       const ObSchemaMgr *src_mgr = NULL;
       ObSchemaMgrHandle src_mgr_handle;
-      bool need_latest = false;
-      // for faster fallback, start from the schema_mgr with the nearest version
-      if (OB_FAIL(schema_mgr_cache->get_nearest(target_version, src_mgr, src_mgr_handle))) {
-        if (OB_ENTRY_NOT_EXIST != ret) {
-        } else {
-          need_latest = true;
-          ret = OB_SUCCESS;
-        }
-      } else if (OB_ISNULL(src_mgr)
-                 || llabs(src_mgr->get_schema_version() - target_version)
-                      > llabs(latest_local_version - target_version)) {
-        // the latest slot is closer to target than the nearest cached one
-        need_latest = true;
-      }
-      if (OB_SUCC(ret) && need_latest) {
-        src_mgr_handle.reset();
-        if (OB_FAIL(schema_mgr_cache->get(latest_local_version, src_mgr, src_mgr_handle))) {
-        } else if (OB_ISNULL(src_mgr)) {
-          ret = OB_SCHEMA_ERROR;
-        }
+      // Temporary core/sys versions can lack user schemas; replay needs a complete base.
+      if (!ObSchemaService::is_formal_version(latest_local_version)) {
+        ret = OB_SCHEMA_EAGAIN;
+      } else if (OB_FAIL(schema_mgr_cache->get(latest_local_version, src_mgr, src_mgr_handle))) {
+      } else if (OB_ISNULL(src_mgr)) {
+        ret = OB_SCHEMA_ERROR;
       }
       if (OB_SUCC(ret)) {
         ObSchemaMgr *new_mgr = NULL;
@@ -2775,7 +2762,7 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
         int64_t idx = tablet_idxs.at(i);
         if (idx < 0 || idx >= tablet_ids.count()) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(tablet_ids_sql.append_fmt("%s%lu",
+        } else if (OB_FAIL(tablet_ids_sql.append_fmt("%s%" PRIu64 "",
                    i == start_idx ? "" : ", ", tablet_ids.at(idx).id()))) {
         }
       } // end for
@@ -2783,7 +2770,7 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
       if (FAILEDx(sql.assign_fmt(
           "SELECT * FROM (SELECT *, row_number() "
           "OVER (PARTITION BY tablet_id ORDER BY schema_version DESC) AS row_num "
-          "FROM %s WHERE tablet_id in (%.*s) AND schema_version <= %ld) "
+          "FROM %s WHERE tablet_id in (%.*s) AND schema_version <= %" PRId64 ") "
           "WHERE row_num = 1",
           OB_ALL_TABLET_TO_TABLE_HISTORY_TNAME,
           tablet_ids_sql.string().length(),

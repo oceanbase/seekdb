@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "lib/thread/ob_balance_filter.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -89,12 +90,12 @@ void ObBalanceFilter::run1()
           && 0 < bucket_nodes_[min_bucket_pos].cnt) {
         migrate(min_bucket_pos, min_thread_pos);
       } else {
-        _OB_LOG(INFO, "thread=%ld cnt=%ld has only one bucket=%ld cnt=%ld, need not rebalance",
+        _OB_LOG(INFO, "thread=%" PRId64 " cnt=%" PRId64 " has only one bucket=%" PRId64 " cnt=%" PRId64 ", need not rebalance",
                   max_thread_pos, thread_nodes_[max_thread_pos].cnt, min_bucket_pos,
                   bucket_nodes_[min_bucket_pos].cnt);
       }
     } else {
-      _OB_LOG(INFO, "max thread=%ld cnt=%ld, min thread=%ld cnt=%ld, need not rebalance",
+      _OB_LOG(INFO, "max thread=%" PRId64 " cnt=%" PRId64 ", min thread=%" PRId64 " cnt=%" PRId64 ", need not rebalance",
                 max_thread_pos, thread_nodes_[max_thread_pos].cnt, min_thread_pos,
                 thread_nodes_[min_thread_pos].cnt);
     }
@@ -117,9 +118,9 @@ void ObBalanceFilter::migrate(const int64_t bucket_pos, const int64_t thread_pos
              || bucket_node_num_ <= bucket_pos
              || 0 > thread_pos
              || thread_node_num_ <= thread_pos) {
-    _OB_LOG_RET(WARN, OB_NOT_INIT, "invalid param, bucket_pos=%ld thread_pos=%ld", bucket_pos, thread_pos);
+    _OB_LOG_RET(WARN, OB_NOT_INIT, "invalid param, bucket_pos=%" PRId64 " thread_pos=%" PRId64 "", bucket_pos, thread_pos);
   } else {
-    _OB_LOG(INFO, "migrate bucket_pos=%ld bucket_cnt=%ld thread_pos from %ld:%ld to %ld:%ld",
+    _OB_LOG(INFO, "migrate bucket_pos=%" PRId64 " bucket_cnt=%" PRId64 " thread_pos from %" PRId64 ":%" PRId64 " to %" PRId64 ":%" PRId64 "",
               bucket_pos, bucket_nodes_[bucket_pos].cnt,
               bucket_nodes_[bucket_pos].thread_pos, thread_nodes_[bucket_nodes_[bucket_pos].thread_pos].cnt,
               thread_pos, thread_nodes_[thread_pos].cnt);

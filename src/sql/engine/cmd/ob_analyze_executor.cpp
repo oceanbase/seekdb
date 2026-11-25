@@ -29,13 +29,13 @@
 //
 //#define COMPUTE_TOP_FREQUENCY_HISTOGRAM
 //   "SELECT /*+NO_USE_PX*/ col, sum(val) over (order by col rows between unbounded preceding and current row) "
-//   "FROM (SELECT * FROM (SELECT %.*s as col, count(*) as val FROM %s WHERE %.*s IS NOT NULL GROUP BY %.*s ORDER BY val LIMIT %ld) temp) temp2;"
+//   "FROM (SELECT * FROM (SELECT %.*s as col, count(*) as val FROM %s WHERE %.*s IS NOT NULL GROUP BY %.*s ORDER BY val LIMIT %lld) temp) temp2;"
 //
 //#define COMPUTE_HEIGHT_BASED_HISTOGRAM
 //   "SELECT /*+NO_USE_PX*/ endpoint_value, sum(endpoint_num) over (order by endpoint_value rows between unbounded preceding and current row) "
 //   "FROM (SELECT endpoint_value, count(*) as endpoint_num "
 //   "FROM (SELECT MAX(col) as endpoint_value "
-//   "FROM (SELECT %.*s as col, ntile(%ld) over (order by %.*s) as bucket FROM %s WHERE %.*s IS NOT NULL) temp GROUP BY bucket) temp2 group by endpoint_value) temp3;"
+//   "FROM (SELECT %.*s as col, ntile(%lld) over (order by %.*s) as bucket FROM %s WHERE %.*s IS NOT NULL) temp GROUP BY bucket) temp2 group by endpoint_value) temp3;"
 
 namespace oceanbase
 {

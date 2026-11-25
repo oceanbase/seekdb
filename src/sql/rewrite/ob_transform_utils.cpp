@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 
 #include "ob_transform_utils.h"
+#include <inttypes.h>
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
 #include "sql/rewrite/ob_equal_analysis.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -838,7 +839,7 @@ int ObTransformUtils::create_select_item(ObIAllocator &allocator,
     if (alias_name.empty()) {
       if (OB_FAIL(select_expr->get_name(name_buf, 64, pos))) {
         ret = OB_SUCCESS;
-        pos = sprintf(name_buf, "SEL_%ld", select_stmt->get_select_item_size() + 1);
+        pos = sprintf(name_buf, "SEL_%" PRId64, select_stmt->get_select_item_size() + 1);
         pos = (pos < 0 || pos >= 64) ? 0 : pos;
       }
       alias_name.assign(name_buf, static_cast<int32_t>(pos));
@@ -875,7 +876,7 @@ int ObTransformUtils::refresh_select_items_name(ObIAllocator &allocator, ObSelec
         if (alias_name.empty()) {
           if (OB_FAIL(expr->get_name(name_buf, 64, pos))) {
             ret = OB_SUCCESS;
-            pos = sprintf(name_buf, "SEL_%ld", i + 1);
+            pos = sprintf(name_buf, "SEL_%" PRId64, i + 1);
             pos = (pos < 0 || pos >= 64) ? 0 : pos;
           }
           alias_name.assign(name_buf, static_cast<int32_t>(pos));
@@ -4147,8 +4148,7 @@ int ObTransformUtils::compute_basic_table_property(const ObDMLStmt *stmt,
   ObSEArray<ObRawExpr*, 8> cur_cond_exprs;
   ObSqlBitSet<> table_set;
   ObSqlSchemaGuard *schema_guard = NULL;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
+  ObSEArray<uint64_t, 16> index_ids;
   if (OB_ISNULL(stmt) || OB_ISNULL(table) || OB_ISNULL(check_helper.alloc_)
       || OB_ISNULL(check_helper.fd_factory_)
       || OB_ISNULL(check_helper.schema_checker_)
@@ -4164,14 +4164,13 @@ int ObTransformUtils::compute_basic_table_property(const ObDMLStmt *stmt,
   } else if (OB_FAIL(ObEqualAnalysis::compute_equal_set(check_helper.alloc_, cur_cond_exprs,
                                                         res_info.equal_sets_))) {
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table->ref_id_,
-                                                            index_tids,
-                                                            index_count,
+                                                            index_ids,
                                                             true  /*global index*/,
                                                             false /*domain index*/))) {
   } else {
-    for (int64_t i = -1; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = -1; OB_SUCC(ret) && i < index_ids.count(); ++i) {
       const ObTableSchema *index_schema = NULL;
-      uint64_t index_id = (i == -1 ? table->ref_id_ : index_tids[i]);
+      uint64_t index_id = (i == -1 ? table->ref_id_ : index_ids.at(i));
       if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema))) {
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -6649,6 +6648,37 @@ int ObTransformUtils::build_case_when_expr(ObTransformerCtx *ctx,
 }
 
 
+// A constant string value cast to a string or text type keeps its bytes unless
+// the target has a different character set (a real conversion) or is shorter
+// than the value (a truncation). When both are excluded the cast only relabels
+// the value, so it cannot raise a conversion warning or error and must not make
+// a rewrite guarded by check_error_free_expr() bail out. Every other cast keeps
+// the conservative result.
+static bool is_relabel_only_string_cast(const ObRawExpr &cast_expr)
+{
+  bool bret = false;
+  const ObRawExpr *src_expr = NULL;
+  if (T_FUN_SYS_CAST != cast_expr.get_expr_type()
+      || !cast_expr.is_const_expr()
+      || 1 > cast_expr.get_param_count()
+      || OB_ISNULL(src_expr = cast_expr.get_param_expr(0))) {
+    // keep the conservative result
+  } else {
+    const ObRawExprResType &src_type = src_expr->get_result_type();
+    const ObRawExprResType &dst_type = cast_expr.get_result_type();
+    const ObObjTypeClass src_tc = src_type.get_type_class();
+    const ObObjTypeClass dst_tc = dst_type.get_type_class();
+    if ((ObStringTC == src_tc || ObTextTC == src_tc)
+        && (ObStringTC == dst_tc || ObTextTC == dst_tc)
+        && src_type.get_collation_type() == dst_type.get_collation_type()
+        && src_type.get_charset_type() == dst_type.get_charset_type()
+        && dst_type.get_accuracy().get_length() >= src_type.get_accuracy().get_length()) {
+      bret = true;
+    }
+  }
+  return bret;
+}
+
 int ObTransformUtils::check_error_free_expr(ObRawExpr *expr, bool &is_error_free)
 {
   int ret = OB_SUCCESS;
@@ -6670,12 +6700,17 @@ int ObTransformUtils::check_error_free_expr(ObRawExpr *expr, bool &is_error_free
   } else if (expr->get_expr_type() == T_FUN_SYS_CAST) {
     // case-by-case determination
     if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(expr, expr))) {
-    } else if (expr->get_expr_type() == T_FUN_SYS_CAST) {
-      is_error_free = false;
-    } else if (OB_FAIL(check_error_free_expr(expr, temp_flag))) {
+    } else if (expr->get_expr_type() != T_FUN_SYS_CAST) {
+      if (OB_FAIL(check_error_free_expr(expr, temp_flag))) {
+      } else {
+        is_error_free &= temp_flag;
+        need_check_child = false; // all child exprs have been checked
+      }
+    } else if (is_relabel_only_string_cast(*expr)) {
+      // The cast only relabels a constant string value; the children are still
+      // checked by the recursive walk below.
     } else {
-      is_error_free &= temp_flag;
-      need_check_child = false; // all child exprs have been checked
+      is_error_free = false;
     }
   } else if (expr->is_column_ref_expr()) {
     ObColumnRefRawExpr *col = static_cast<ObColumnRefRawExpr *>(expr);
@@ -10152,9 +10187,8 @@ int ObTransformUtils::calc_const_expr_result(ObRawExpr * expr,
       if (OB_SUCC(ret)) {
         *has_warning = probe_warning_buf.get_total_warning_count() > 0;
       }
-      if (OB_SUCC(ret) && *has_warning && OB_FAIL(erase_calculable_expr_result(ctx, expr))) {
-        LOG_WARN("failed to erase warning expr result cache", K(ret), KPC(expr));
-      }
+      // The caller decides whether a warning permits folding. Range extraction
+      // still needs the computed value to build and validate plan constraints.
     }
   }
   return ret;
@@ -10504,7 +10538,8 @@ int ObTransformUtils::check_expr_valid_for_stmt_merge(ObIArray<ObRawExpr*> &sele
     } else if (expr->has_flag(IS_CONST) ||
                expr->has_generalized_column()) {
       // do nothing
-    } else if (expr->has_flag(CNT_STATE_FUNC) ||
+    } else if (!expr->is_const_expr() ||
+               expr->has_flag(CNT_STATE_FUNC) ||
                expr->has_flag(CNT_DYNAMIC_USER_VARIABLE) ||
                expr->has_flag(CNT_ALIAS) ||
                expr->has_flag(CNT_VALUES) ||

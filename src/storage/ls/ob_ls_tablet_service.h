@@ -76,7 +76,6 @@ namespace storage
 {
 class ObLS;
 struct ObMetaDiskAddr;
-class ObRowReshape;
 class ObDMLRunningCtx;
 class ObTableHandleV2;
 class ObTableScanIterator;

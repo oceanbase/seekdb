@@ -33,7 +33,6 @@ class ObMultipleGetMerge;
 class ObTableScanIterator;
 class ObQueryRowIterator;
 class ObValueRowIterator;
-class ObColMap;
 class ObStoreRow;
 class ObQueryIteratorFactory
 {
@@ -55,8 +54,6 @@ private:
   static int64_t table_scan_release_count_;
   static int64_t insert_dup_alloc_count_;
   static int64_t insert_dup_release_count_;
-  static int64_t col_map_alloc_count_;
-  static int64_t col_map_release_count_;
   static int64_t work_row_alloc_count_;
   static int64_t work_row_release_count_;
 };

@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_overlaps.h"
+#include <optional>
 #include "ob_expr_json_func_helper.h"
+#include "ob_expr_json_native_path.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -40,61 +42,55 @@ int ObExprJsonOverlaps::calc_result_type2(ObExprResType &type,
                                           ObExprResType &type2,
                                           ObExprTypeCtx &type_ctx) const
 {
-  UNUSED(type_ctx); 
+  UNUSED(type_ctx);
   int ret = OB_SUCCESS;
-  bool is_strict = false;
-
   type.set_int32();
   type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
   type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].scale_);
-
   if (!ob_is_string_type(type1.get_type())) {
   } else if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(type1, 1, N_JSON_OVERLAPS))) {
   }
-  
-  if (OB_FAIL(ret))  {
+  if (OB_FAIL(ret)) {
   } else if (!ob_is_string_type(type2.get_type())) {
   } else if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(type2, 2, N_JSON_OVERLAPS))) {
   }
-  
   return ret;
 }
 
 int ObExprJsonOverlaps::eval_json_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
-  int ret = OB_SUCCESS;
-  ObIJsonBase *json_a = NULL;
-  ObIJsonBase *json_b = NULL;
+  INIT_SUCC(ret);
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-
+  std::optional<rust::Box<common::json::Query>> json_a;
+  std::optional<rust::Box<common::json::Query>> json_b;
   if (!ObJsonExprHelper::is_convertible_to_json(expr.args_[0]->datum_meta_.type_)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 1, N_JSON_OVERLAPS);
   } else if (!ObJsonExprHelper::is_convertible_to_json(expr.args_[1]->datum_meta_.type_)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 2, N_JSON_OVERLAPS);
-  } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, json_a, is_null_result, false))) {
-  } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 1, json_b, is_null_result, false))) {
-  } else {
-    bool is_overlaps = false;
-    if (!is_null_result) {
-      if (OB_FAIL(json_overlaps(json_a, json_b, &is_overlaps))) {
-      }
-
-    }
-
-    // set result
-    if (OB_FAIL(ret)) {
-    } else if (is_null_result) {
-      res.set_null();
+  } else if (OB_FAIL(get_native_json_query(
+                 expr, ctx, temp_allocator, 0, json_a, is_null_result))) {
+  } else if (OB_FAIL(get_native_json_query(
+                 expr, ctx, temp_allocator, 1, json_b, is_null_result))) {
+  } else if (!is_null_result) {
+    common::json::BoolResult comparison = (*json_a)->overlaps(**json_b);
+    if (comparison.platform_error != OB_SUCCESS) {
+      ret = comparison.platform_error;
+    } else if (comparison.status != common::json::Status::Ok) {
+      ret = comparison.status == common::json::Status::NumericOverflow
+                ? OB_NUMERIC_OVERFLOW
+                : comparison.status == common::json::Status::UnsupportedComparison
+                    ? OB_OP_NOT_ALLOW : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
     } else {
-      res.set_int(static_cast<int64_t>(is_overlaps));
+      res.set_int(static_cast<int64_t>(comparison.value));
     }
   }
-
+  if (OB_SUCC(ret) && is_null_result) {
+    res.set_null();
+  }
   return ret;
 }
 
@@ -106,122 +102,6 @@ int ObExprJsonOverlaps::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_json_overlaps;
   return OB_SUCCESS;
-}
-
-int ObExprJsonOverlaps::json_overlaps_object(ObIJsonBase *json_a,
-                                             ObIJsonBase *json_b,
-                                             bool *result)
-{
-  int ret = OB_SUCCESS;
-  if (json_b->json_type() != ObJsonNodeType::J_OBJECT) {
-    *result = false;
-  } else if (json_a->element_count() == 0 && json_b->element_count() == 0) {
-    *result = true;
-  } else {
-    JsonObjectIterator iter_a = json_a->object_iterator();
-    JsonObjectIterator iter_b = json_b->object_iterator();
-    while (!iter_b.end() && OB_SUCC(ret)) {
-      ObString key_b;
-      ObIJsonBase *a_tmp = NULL;
-      ObIJsonBase *b_tmp = NULL;
-      if (OB_FAIL(iter_b.get_key(key_b))) {
-      } else if(OB_FAIL(iter_a.get_value(key_b, a_tmp))) {
-        if (ret == OB_SEARCH_NOT_FOUND) {
-          ret = OB_SUCCESS;
-        } else {
-        }
-      } else if (OB_FAIL(iter_b.get_value(b_tmp))) {
-      } else {
-        int tmp_result;
-        if (OB_FAIL(a_tmp->compare(*b_tmp, tmp_result))) {
-        }
-        if (tmp_result == 0) {
-          *result = true;
-          break;
-        }
-      }
-      iter_b.next();
-    }
-  }
-
-  return ret;
-}
-
-int ObExprJsonOverlaps::json_overlaps_array(ObIJsonBase *json_a,
-                                            ObIJsonBase *json_b,
-                                            bool *result)
-{
-  int ret = OB_SUCCESS;
-  bool ret_tmp = true;
-  
-  ObIAllocator *allocator = json_a->get_allocator();
-  ObJsonArray tmp_arr(allocator);
-  if (json_b->json_type() != ObJsonNodeType::J_ARRAY) {
-    // convert to array if needed
-    ObIJsonBase *jb_node = NULL;
-    if (OB_FAIL(ObJsonBaseFactory::transform(allocator, json_b,
-        ObJsonInType::JSON_TREE, jb_node))) {
-    } else {
-      ObJsonNode *j_node = static_cast<ObJsonNode *>(jb_node);
-      if (OB_FAIL(tmp_arr.array_append(j_node->clone(allocator)))) {
-      } else {
-        json_b = &tmp_arr;
-      }
-    }
-  }
-
-  ObSortedVector<ObIJsonBase *> vec_a;
-  if (OB_SUCC(ret) && OB_FAIL(ObJsonBaseUtil::sort_array_pointer(json_a, vec_a))) {
-  } else {
-    uint64_t b_len = json_b->element_count();
-    for (uint64_t i = 0; i < b_len; i++) {
-      ObIJsonBase *b_tmp = NULL;
-      if (OB_FAIL(json_b->get_array_element(i, b_tmp))) {
-      } else if (ObJsonBaseUtil::binary_search(vec_a, b_tmp)) {
-        *result = true;
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObExprJsonOverlaps::json_overlaps(ObIJsonBase *json_a,
-                                      ObIJsonBase *json_b,
-                                      bool *result)
-{
-  int ret = OB_SUCCESS;
-
-  // make sure json_a is array.
-  if (json_a->json_type() != ObJsonNodeType::J_ARRAY && json_b->json_type() == ObJsonNodeType::J_ARRAY) {
-    std::swap(json_a, json_b);
-  }
-
-  // make sure json_a has bigger size.
-  if (json_a->json_type() == ObJsonNodeType::J_ARRAY
-  && json_b->json_type() == ObJsonNodeType::J_ARRAY
-  && json_a->element_count() < json_b->element_count()) {
-    std::swap(json_a, json_b);
-  }
-  switch (json_a->json_type()) {
-    case ObJsonNodeType::J_ARRAY:
-      if (OB_FAIL( json_overlaps_array(json_a, json_b, result))) {
-      }
-      break;
-
-    case ObJsonNodeType::J_OBJECT:
-      if (OB_FAIL( json_overlaps_object(json_a, json_b, result))) {
-      }
-      break;
-    
-    default:
-      int res_int = -1;
-      if (OB_FAIL( json_a->compare(*json_b, res_int))) {
-      }
-      *result = (res_int == 0);
-  }
-
-  return ret;
 }
 
 }

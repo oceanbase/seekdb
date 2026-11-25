@@ -844,7 +844,6 @@ int ObRARowStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     io.fd_ = fd_;
     io.buf_ = static_cast<char *>(buf);
     io.size_ = size;
-    io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
     io.io_timeout_ms_ = timeout_ms;
     if (OB_FAIL(data_plane::tmp_file_write(io))) {
     }
@@ -874,7 +873,6 @@ int ObRARowStore::read_file(void *buf, const int64_t size, const int64_t offset)
     io.dir_id_ = dir_id_;
     io.buf_ = static_cast<char *>(buf);
     io.size_ = size;
-    io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     io.io_timeout_ms_ = timeout_ms;
     data_plane::ObTmpFileIOHandle handle;
     if (OB_FAIL(data_plane::tmp_file_pread(io, offset, handle))) {

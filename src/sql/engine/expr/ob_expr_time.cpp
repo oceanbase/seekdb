@@ -272,8 +272,8 @@ int ObExprTimeBase::calc(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum
 DEF_SET_LOCAL_SESSION_VARS(ObExprTimeBase, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(2);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
   return ret;
 }
 

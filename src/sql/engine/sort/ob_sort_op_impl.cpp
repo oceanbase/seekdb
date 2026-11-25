@@ -278,9 +278,14 @@ int fast_compare_normal(const unsigned char *s, const unsigned char *t,
 
 CompareByteFunc get_fast_compare_func()
 {
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
   return data_plane::is_avx512_supported()
       ? fast_compare_simd
       : fast_compare_normal;
+#else
+  // Match the build guard of fast_compare_simd before checking CPU support.
+  return fast_compare_normal;
+#endif
 }
 
 CompareByteFunc cmp_byte_func = get_fast_compare_func();

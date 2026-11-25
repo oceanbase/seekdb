@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_logical_operator.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -3348,23 +3349,23 @@ int ObLogicalOperator::explain_print_partitions(
             const int64_t np_id = n_id;
             const int64_t ns_id = part_infos.at(idx + 1).subpart_id_;
             if (p_id == np_id && s_id == ns_id - 1) {
-              ret = BUF_PRINTF("p%lusp[%lu-", p_id, s_id);
+              ret = BUF_PRINTF("p%" PRIu64 "sp[%" PRIu64 "-", p_id, s_id);
               continuous = true;
             } else {
-              ret = BUF_PRINTF("p%lusp%lu", p_id, s_id);
+              ret = BUF_PRINTF("p%" PRIu64 "sp%" PRIu64 "", p_id, s_id);
             }
           } else if (id == n_id -1) {
-            ret = BUF_PRINTF("p[%lu-", id);
+            ret = BUF_PRINTF("p[%" PRIu64 "-", id);
             continuous = true;
           } else {
-            ret = BUF_PRINTF("p%lu", id);
+            ret = BUF_PRINTF("p%" PRIu64 "", id);
           }
         } else if(two_level) {
           const int64_t p_id = id;
           const int64_t s_id = part_infos.at(idx).subpart_id_;
-          ret = BUF_PRINTF("p%lusp%lu", p_id, s_id);
+          ret = BUF_PRINTF("p%" PRIu64 "sp%" PRIu64 "", p_id, s_id);
         } else {
-          ret = BUF_PRINTF("p%lu", id);
+          ret = BUF_PRINTF("p%" PRIu64 "", id);
         }
       } else {
         if (idx >= count -1) {
@@ -3387,9 +3388,9 @@ int ObLogicalOperator::explain_print_partitions(
           cont_flag = true;
         } else if (two_level) {
           const int64_t s_id = part_infos.at(idx).subpart_id_;
-          ret = BUF_PRINTF("%lu]", s_id);
+          ret = BUF_PRINTF("%" PRIu64 "]", s_id);
         } else {
-          ret = BUF_PRINTF("%lu]", id);
+          ret = BUF_PRINTF("%" PRIu64 "]", id);
         }
       }
       if (!cont_flag && !continuous && (idx < count -1)) {
@@ -3694,7 +3695,7 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
 
       if (OB_SUCC(ret)) {
         partition_granule = gi_op->is_partition_gi();
-        if (ctx.force_partition() || partition_granule) {
+        if (ctx.is_force_partition() || partition_granule) {
           gi_op->add_flag(GI_FORCE_PARTITION_GRANULE);
         }
       }
@@ -3738,6 +3739,8 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
 	 * if we forget reset this var, may get some wrong log plan.
 	 * */
   ctx.alloc_gi_ = false;
+  // The force-partition request is local to this GI allocation.
+  ctx.is_force_partition_ = false;
   return ret;
 }
 
@@ -3971,6 +3974,7 @@ void AllocGIContext::reset_info()
   state_ = GIS_NORMAL;
   multi_child_op_above_count_in_dfo_ = 0;
   alloc_gi_ = false;
+  is_force_partition_ = false;
 }
 
 

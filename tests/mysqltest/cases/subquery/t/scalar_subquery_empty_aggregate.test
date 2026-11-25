@@ -1,0 +1,27 @@
+--disable_warnings
+DROP TABLE IF EXISTS sq_cmp_empty_aggregate;
+--enable_warnings
+CREATE TABLE sq_cmp_empty_aggregate(a INT);
+
+# VAR_SAMP over an empty input returns one NULL, not an empty set.
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+  IN (SELECT VAR_SAMP(1) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+
+INSERT INTO sq_cmp_empty_aggregate VALUES (1), (2), (NULL);
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+  IN (SELECT VAR_SAMP(1) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+  NOT IN (SELECT SUM(a) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+  <=> (SELECT VAR_SAMP(1) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+
+# A multi-column left subquery must keep row comparison semantics.
+SELECT (SELECT a, a + 1 FROM sq_cmp_empty_aggregate ORDER BY a LIMIT 1)
+  IN (SELECT SUM(a), COUNT(*) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+
+TRUNCATE TABLE sq_cmp_empty_aggregate;
+INSERT INTO sq_cmp_empty_aggregate VALUES (1), (1), (NULL);
+# COUNT over an empty input returns one zero, so this comparison is true.
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+  IN (SELECT COUNT(*) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+DROP TABLE sq_cmp_empty_aggregate;

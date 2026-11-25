@@ -108,7 +108,7 @@ static int getopt_long(int argc, char *const argv[], const char *short_opts,
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/string/ob_sql_string.h"
-#include "lib/file/file_directory_utils.h"
+#include "lib/file/path_operations.h"
 #include "share/ob_version.h"
 
 #define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
@@ -450,28 +450,28 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
 
   // handle absolute path
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
+  } else if (OB_FAIL(path_operations::create_full_path(opts.base_dir_.ptr()))) {
     MPRINT("Failed to create base dir. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.base_dir_))) {
+  } else if (OB_FAIL(path_operations::to_absolute_path(opts.base_dir_))) {
     MPRINT("Failed to convert base dir to absolute path. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
   } else if (opts.base_dir_.ptr()[opts.base_dir_.length() - 1] != '/' && OB_FAIL(opts.base_dir_.append("/"))) {
     MPRINT("Failed to append '/' to base dir. path='%s'", opts.base_dir_.ptr());
   }
 
   if (OB_FAIL(ret) || opts.data_dir_.empty()) {
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.data_dir_.ptr()))) {
+  } else if (OB_FAIL(path_operations::create_full_path(opts.data_dir_.ptr()))) {
     MPRINT("Failed to create data dir. path='%s', system error=%s", opts.data_dir_.ptr(), strerror(errno));
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.data_dir_))) {
+  } else if (OB_FAIL(path_operations::to_absolute_path(opts.data_dir_))) {
     MPRINT("Failed to convert data dir to absolute path. path='%s', system error=%s", opts.data_dir_.ptr(), strerror(errno));
   }
   if (OB_FAIL(ret) || opts.redo_dir_.empty()) {
 #ifdef _WIN32
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.redo_dir_))) {
+  } else if (OB_FAIL(path_operations::to_absolute_path(opts.redo_dir_))) {
     MPRINT("Failed to convert redo dir to absolute path. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
 #else
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.redo_dir_.ptr()))) {
+  } else if (OB_FAIL(path_operations::create_full_path(opts.redo_dir_.ptr()))) {
     MPRINT("Failed to create redo dir. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.redo_dir_))) {
+  } else if (OB_FAIL(path_operations::to_absolute_path(opts.redo_dir_))) {
     MPRINT("Failed to convert redo dir to absolute path. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
 #endif
   }

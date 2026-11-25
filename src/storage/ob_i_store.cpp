@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_i_store.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -332,14 +333,14 @@ int64_t ObStoreRow::to_string(char *buffer, const int64_t length) const
   if (NULL != buffer && length >= 0) {
 
     pos += flag_.to_string(buffer + pos, length - pos);
-    common::databuff_printf(buffer, length, pos, " capacity_=%ld ", capacity_);
+    common::databuff_printf(buffer, length, pos, " capacity_=%" PRId64 " ", capacity_);
     common::databuff_printf(buffer, length, pos, "is_get=%d ", is_get_);
     common::databuff_printf(buffer, length, pos, "from_base=%d ", from_base_);
-    common::databuff_printf(buffer, length, pos, "trans_id=%ld ", trans_id_.hash());
-    common::databuff_printf(buffer, length, pos, "scan_index=%ld ", scan_index_);
+    common::databuff_printf(buffer, length, pos, "trans_id=%" PRId64 " ", trans_id_.hash());
+    common::databuff_printf(buffer, length, pos, "scan_index=%" PRId64 " ", scan_index_);
     common::databuff_printf(buffer, length, pos, "multi_version_row_flag=%d ", row_type_flag_.flag_);
     pos += row_type_flag_.to_string(buffer + pos, length - pos);
-    common::databuff_printf(buffer, length, pos, " row_val={count=%ld,", row_val_.count_);
+    common::databuff_printf(buffer, length, pos, " row_val={count=%" PRId64 ",", row_val_.count_);
     common::databuff_printf(buffer, length, pos, "cells=[");
     if (NULL != row_val_.cells_) {
       for (int64_t i = 0; i < row_val_.count_; ++i) {
@@ -349,10 +350,10 @@ int64_t ObStoreRow::to_string(char *buffer, const int64_t length) const
     }
     common::databuff_printf(buffer, length, pos, "] ");
     common::databuff_printf(buffer, length, pos, "is_sparse_row=%d ", is_sparse_row_);
-    common::databuff_printf(buffer, length, pos, "snapshot_version=%ld ", snapshot_version_);
+    common::databuff_printf(buffer, length, pos, "snapshot_version=%" PRId64 " ", snapshot_version_);
     common::databuff_printf(buffer, length, pos, "fast_filtered=%d ", fast_filter_skipped_);
-    common::databuff_printf(buffer, length, pos, "group_idx_=%ld ", group_idx_);
-    common::databuff_printf(buffer, length, pos, "last_purge_ts=%ld ", last_purge_ts_);
+    common::databuff_printf(buffer, length, pos, "group_idx_=%" PRId64 " ", group_idx_);
+    common::databuff_printf(buffer, length, pos, "last_purge_ts=%" PRId64 " ", last_purge_ts_);
     if (is_sparse_row_ && NULL != column_ids_) {
       common::databuff_printf(buffer, length, pos, "column_id=[");
       for (int64_t i = 0; i < row_val_.count_; ++i) {

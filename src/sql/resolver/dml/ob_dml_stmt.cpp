@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_dml_stmt.h"
+#include <inttypes.h>
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_logical_operator.h"
 using namespace oceanbase::sql;
@@ -1164,7 +1165,7 @@ int ObDMLStmt::adjust_duplicated_table_name(ObIAllocator &allocator,
       int64_t id = 1;
       for (; find_dup && OB_SUCC(ret) && id <= MAX_TIMES_FOR_GET_NO_DUP_ALIAS_NAME; id++) {
         pos = old_pos;
-        if (OB_FAIL(BUF_PRINTF("%ld", id))) {
+        if (OB_FAIL(BUF_PRINTF("%" PRId64 "", id))) {
         } else {
           find_dup = false;
           for (int64_t i = 0; !find_dup && OB_SUCC(ret) && i < table_items_.count(); ++i) {
@@ -2411,7 +2412,7 @@ int ObDMLStmt::append_id_to_view_name(char *buf, int64_t buf_len, int64_t &pos, 
                    (is_temp ?
                    get_query_ctx()->get_temp_table_id() :
                    get_query_ctx()->get_new_subquery_id());
-      if (OB_FAIL(BUF_PRINTF("%ld", id))) {
+      if (OB_FAIL(BUF_PRINTF("%" PRId64 "", id))) {
       } else {
         bool find_dup = false;
         for (int64_t i = 0; !find_dup && i < table_items_.count(); ++i) {

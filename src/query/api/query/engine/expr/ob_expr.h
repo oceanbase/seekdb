@@ -18,6 +18,7 @@
 #define OCEANBASE_EXPR_OB_EXPR_H_
 
 #include "lib/container/ob_2d_array.h"
+#include <inttypes.h>
 #include "lib/allocator/ob_allocator.h"
 #include "lib/oblog/ob_log.h"
 #include "common/datum/ob_datum.h"
@@ -150,6 +151,9 @@ struct ObEvalInfo
 			uint16_t notnull_:1;
 			// pointer is point to reserved buffer in frame.
 			uint16_t point_to_frame_:1;
+      // The cached datum came from an out-of-range integer conversion and the
+      // diagnostic must be replayed for every row that reuses the datum.
+      uint16_t integer_range_warning_:1;
 		};
 		uint16_t flag_;
 	};
@@ -1148,7 +1152,7 @@ OB_INLINE int64_t VectorizedRowsWrapper::to_string(char *buf, const int64_t buf_
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (nullptr != buf && buf_len > 0) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "vectorized_rows(%ld)=", index_))) {
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "vectorized_rows(%" PRId64 ")=", index_))) {
     } else {
       int64_t str_len = vec_.to_string(buf + pos, buf_len - pos - 1);
       pos += str_len;
@@ -1222,7 +1226,7 @@ OB_INLINE int64_t VectorizedRowByColumnWrapper::to_string(char *buf, const int64
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (nullptr != buf && buf_len > 0) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "vectorized_expr(%ld)=", index_))) {
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "vectorized_expr(%" PRId64 ")=", index_))) {
     } else if (NULL != expr_) {
       int64_t batch_size = bound_.batch_size();
       ObEvalCtx::BatchInfoScopeGuard _batch_info_guard(ctx_);

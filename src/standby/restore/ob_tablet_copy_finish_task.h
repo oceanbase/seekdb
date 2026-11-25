@@ -67,7 +67,6 @@ public:
   int process();
   VIRTUAL_TO_STRING_KV(K("ObTabletCopyFinishTask"), KP(this));
   int add_sstable(ObTableHandleV2 &table_handle);
-  int add_sstable(ObTableHandleV2 &table_handle, const int64_t last_meta_macro_seq);
   int get_sstable(
       const ObITable::TableKey &table_key,
       ObTableHandleV2 &table_handle);
@@ -99,7 +98,6 @@ private:
   ObTablesHandleArray ddl_tables_handle_;
   ObTablesHandleArray major_tables_handle_;
   ObTablesHandleArray mds_tables_handle_;
-  common::ObArray<std::pair<ObITable::TableKey, int64_t>> last_meta_seq_array_;
   ObTabletCopyFinishTaskParam param_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletCopyFinishTask);
 };

@@ -15,6 +15,7 @@
  */
 
 #include "ob_log_time_utils.h"
+#include <inttypes.h>
 
 using namespace oceanbase::common;
 
@@ -49,7 +50,7 @@ int print_human_tstamp(char *buf, const int64_t buf_len, int64_t &pos,
     ::localtime_r((const time_t *) &tv.tv_sec, &tm);
 #endif
     ret = common::databuff_printf(buf, buf_len, pos,
-                                  "[%04d-%02d-%02d %02d:%02d:%02d.%06ld]",
+                                  "[%04d-%02d-%02d %02d:%02d:%02d.%06" PRId64 "]",
                                   tm.tm_year + 1900,
                                   tm.tm_mon + 1,
                                   tm.tm_mday,
@@ -85,7 +86,7 @@ int print_human_timeval(char *buf,
     int64_t min = (static_cast<int64_t>(tv.tv_sec) / 60) % 60;
     int64_t sec = static_cast<int64_t>(tv.tv_sec) % 60;
     ret = common::databuff_printf(buf, buf_len, pos,
-                                  "[%s%02ld:%02ld:%02ld.%06ld]",
+                                  "[%s%02" PRId64 ":%02" PRId64 ":%02" PRId64 ".%06" PRId64 "]",
                                   negative ? "-" : "",
                                   hr,
                                   min,

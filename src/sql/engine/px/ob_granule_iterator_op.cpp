@@ -305,22 +305,6 @@ OB_DEF_SERIALIZE_SIZE(ObGIOpInput)
   return len;
 }
 
-int ObGIOpInput::init_task_rebalancer(ObExecContext *ctx, int64_t parallelism,
-                                      int64_t split_gi_task_cost, int64_t initial_task_count,
-                                      int64_t op_id)
-{
-  int ret = OB_SUCCESS;
-  void *buf = ctx->get_allocator().alloc(sizeof(ObGITaskReBalancer));
-  if (OB_ISNULL(buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory");
-  } else if (FALSE_IT(task_balancer_ = new (buf) ObGITaskReBalancer)) {
-  } else if (OB_FAIL(task_balancer_->init(ctx, pump_, parallelism, split_gi_task_cost,
-                                          initial_task_count, op_id))) {
-  }
-  return ret;
-}
-
 OB_SERIALIZE_MEMBER((ObGranuleIteratorSpec, ObOpSpec),
                     index_table_id_,
                     tablet_size_,

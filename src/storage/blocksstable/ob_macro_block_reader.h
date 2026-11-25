@@ -18,7 +18,7 @@
 #define OB_MACRO_BLOCK_READER_H_
 
 #include "lib/hash/ob_array_index_hash_set.h"
-#include "lib/compress/ob_compressor.h"
+#include "lib/compress/ob_compress_util.h"
 #include "storage/access/ob_table_param.h"
 #include "storage/blockstore/ob_linked_macro_block_struct.h"
 #include "ob_macro_block_common_header.h"
@@ -28,10 +28,6 @@
 #include "storage/compaction/ob_compaction_memory_context.h"
 namespace oceanbase
 {
-namespace common
-{
-class ObCompressor;
-}
 namespace share
 {
 namespace schema
@@ -115,7 +111,6 @@ private:
   int alloc_buf(ObIAllocator &allocator, const int64_t buf_size, char *&buf);
 
 private:
-  common::ObCompressor *compressor_;
   char *uncomp_buf_;
   int64_t uncomp_buf_size_;
   common::ObArenaAllocator allocator_;

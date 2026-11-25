@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_log_del_upd.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_del_upd_log_plan.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_exchange.h"
@@ -111,7 +112,7 @@ int64_t IndexDMLInfo::to_explain_string(char *buf, int64_t buf_len, ExplainType 
   int ret = OB_SUCCESS;
   BUF_PRINTF("{");
   if (index_name_.empty()) {
-    BUF_PRINTF("%lu: ", ref_table_id_);
+    BUF_PRINTF("%" PRIu64 ": ", ref_table_id_);
   } else {
     pos += index_name_.to_string(buf + pos, buf_len - pos);
   }

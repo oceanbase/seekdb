@@ -17,6 +17,7 @@
 #ifndef  OCEANBASE_UPDATESERVER_RESOURCE_POOL_H_
 #define  OCEANBASE_UPDATESERVER_RESOURCE_POOL_H_
 #include <typeinfo>
+#include <inttypes.h>
 #include "lib/ob_define.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/queue/ob_fixed_queue.h"
@@ -190,7 +191,7 @@ public:
     if (NULL != ptr) {
       Node *node = (Node *)ptr;
       if (ALLOC_MAGIC_NUM != node->magic) {
-        _COMMON_LOG_RET(ERROR, OB_ERROR, "node=%p magic=%lx not match %lx", node, node->magic,
+        _COMMON_LOG_RET(ERROR, OB_ERROR, "node=%p magic=%" PRIx64 " not match %" PRIx64 "", node, node->magic,
                     ALLOC_MAGIC_NUM);
       } else {
         free_node_(node);
@@ -250,7 +251,7 @@ protected:
         bool need_free = true;
         if (ATOMIC_LOAD(&inner_allocated_num_) < max_idle_num_) {
           if (common::OB_SUCCESS != free_list_.push(ptr)) {
-            _COMMON_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "free node to list fail, size=%ld ptr=%p", free_list_.get_total(), ptr);
+            _COMMON_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "free node to list fail, size=%" PRId64 " ptr=%p", free_list_.get_total(), ptr);
           } else {
             need_free = false;
           }
@@ -264,7 +265,7 @@ protected:
         ptr->~Node();
         common::ob_free(ptr);
       } else {
-        _COMMON_LOG_RET(ERROR, common::OB_INVALID_ARGUMENT, "invalid flag=%lu", ptr->flag);
+        _COMMON_LOG_RET(ERROR, common::OB_INVALID_ARGUMENT, "invalid flag=%" PRIu64 "", ptr->flag);
       }
     }
   }

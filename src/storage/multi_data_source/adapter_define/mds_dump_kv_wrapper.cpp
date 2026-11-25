@@ -15,6 +15,7 @@
  */
 
 #include "mds_dump_kv_wrapper.h"
+#include <inttypes.h>
 #include "mds_dump_obj_printer.h"
 #include "src/storage/tablet/ob_mds_schema_helper.h"
 
@@ -56,12 +57,12 @@ int64_t MdsDumpKVStorageMetaInfo::to_string(char *buf, const int64_t buf_len) co
   int64_t pos = 0;
   char scn_buf[64] = {'\0'};
   databuff_printf(buf, buf_len, pos, "{");
-  databuff_printf(buf, buf_len, pos, "mds_table_id:%ld, ", (int64_t)mds_table_id_);
-  databuff_printf(buf, buf_len, pos, "key_crc_check_number:0x%lx, ", (int64_t)key_crc_check_number_);
-  databuff_printf(buf, buf_len, pos, "data_crc_check_number:0x%lx, ", (int64_t)data_crc_check_number_);
+  databuff_printf(buf, buf_len, pos, "mds_table_id:%" PRId64 ", ", (int64_t)mds_table_id_);
+  databuff_printf(buf, buf_len, pos, "key_crc_check_number:0x%" PRIx64 ", ", (int64_t)key_crc_check_number_);
+  databuff_printf(buf, buf_len, pos, "data_crc_check_number:0x%" PRIx64 ", ", (int64_t)data_crc_check_number_);
   databuff_print_multi_objs(buf, buf_len, pos, "status:", status_, ", ");
   databuff_print_multi_objs(buf, buf_len, pos, "seq_no:", seq_no_, ", ");
-  databuff_printf(buf, buf_len, pos, "writer_id:%ld, ", writer_id_);
+  databuff_printf(buf, buf_len, pos, "writer_id:%" PRId64 ", ", writer_id_);
   databuff_printf(buf, buf_len, pos, "redo_scn:%s", obj_to_string(redo_scn_, scn_buf, sizeof(scn_buf)));
   databuff_printf(buf, buf_len, pos, "end_scn:%s, ", obj_to_string(end_scn_, scn_buf, sizeof(scn_buf)));
   databuff_printf(buf, buf_len, pos, "trans_version:%s", obj_to_string(trans_version_, scn_buf, sizeof(scn_buf)));
@@ -89,7 +90,7 @@ int64_t MdsDumpKVStorageAdapter::to_string(char *buf, const int64_t buf_len) con
 {
   int64_t pos = 0;
   databuff_printf(buf, buf_len, pos, "{");
-  databuff_printf(buf, buf_len, pos, "type:%ld, ", (int64_t)type_);
+  databuff_printf(buf, buf_len, pos, "type:%" PRId64 ", ", (int64_t)type_);
   MdsDumpObjPrinter key_printer;
   if (key_.empty()) {
     databuff_printf(buf, buf_len, pos, "duf_key:null, ");

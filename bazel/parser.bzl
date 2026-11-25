@@ -1,19 +1,19 @@
 def _host_tools_repository_impl(ctx):
     windows = ctx.os.name.startswith("windows")
     suffix = ".exe" if windows else ""
-    sdk = ctx.workspace_root.get_child("deps", "3rd")
+    sdk = ctx.workspace_root.get_child("deps", "prebuilt", "native", "bison-flex")
+    manifest = sdk.get_child("manifest.json")
+    ctx.watch(manifest)
+    if not manifest.exists:
+        fail("Missing bison-flex host tools; run ./build.py init")
+    binaries = sdk.get_child("bin")
     if windows:
-        sdk = sdk.get_child("tools", "win_flex_bison")
-        ctx.symlink(sdk.get_child("win_bison.exe"), "bison.exe")
-        ctx.symlink(sdk.get_child("win_flex.exe"), "flex.exe")
-        ctx.symlink(sdk.get_child("data"), "data")
-        for path in sdk.readdir():
-            if path.basename.lower().endswith(".dll"):
-                ctx.symlink(path, path.basename)
+        ctx.symlink(binaries.get_child("win_bison.exe"), "bison.exe")
+        ctx.symlink(binaries.get_child("win_flex.exe"), "flex.exe")
+        ctx.symlink(binaries.get_child("data"), "data")
     else:
-        sdk = sdk.get_child("usr", "local", "oceanbase", "devtools")
-        ctx.symlink(sdk.get_child("bin", "bison"), "bison")
-        ctx.symlink(sdk.get_child("bin", "flex"), "flex")
+        ctx.symlink(binaries.get_child("bison"), "bison")
+        ctx.symlink(binaries.get_child("flex"), "flex")
         ctx.symlink(sdk.get_child("share", "bison"), "data")
         m4 = ctx.which("m4")
         if not m4:
@@ -28,7 +28,7 @@ exports_files(["bison%s", "flex%s", "python_runtime/%s"])
 alias(name = "bison_tool", actual = "bison%s")
 alias(name = "flex_tool", actual = "flex%s")
 alias(name = "python", actual = "python_runtime/%s")
-filegroup(name = "runtime", srcs = glob(["data/**"]) + glob(["*.dll"], allow_empty = True))
+filegroup(name = "runtime", srcs = glob(["data/**"], allow_empty = False))
 filegroup(name = "m4_tool", srcs = %r)
 ''' % (suffix, suffix, python.basename, suffix, suffix, python.basename, [] if windows else ["m4"]))
 
@@ -40,9 +40,7 @@ host_tools_repository = repository_rule(
 )
 
 def _parser_impl(ctx):
-    environment = {"BISON_PKGDATADIR": ctx.file._bison.dirname + "/data"}
-    if ctx.files._m4:
-        environment["M4"] = ctx.files._m4[0].path
+    m4_environment = {"M4": ctx.files._m4[0].path} if ctx.files._m4 else {}
     ctx.actions.run(
         executable = ctx.file._bison,
         inputs = [ctx.file.grammar],
@@ -53,22 +51,26 @@ def _parser_impl(ctx):
             "--output=" + ctx.outputs.parser.path,
             ctx.file.grammar.path,
         ],
-        env = environment,
+        env = m4_environment | {"BISON_PKGDATADIR": ctx.file._bison.dirname + "/data"},
         mnemonic = "Bison",
     )
     lexer = ctx.outputs.lexer
     if ctx.attr.lexer_patch:
         lexer = ctx.actions.declare_file(ctx.label.name + "/" + lexer.basename)
+    # Run Flex through the codegen wrapper on every host. The wrapper gives each
+    # action a private temporary directory: the Windows SDK Flex shares fixed
+    # temporary names across processes, which breaks concurrent Bazel actions.
     ctx.actions.run(
-        executable = ctx.file._flex,
-        inputs = [ctx.file.lexer_source],
-        tools = ctx.files._runtime,
+        executable = ctx.file._python,
+        inputs = [ctx.file.lexer_source, ctx.file._codegen],
+        tools = ctx.files._m4 + [ctx.file._flex],
         outputs = [lexer, ctx.outputs.lexer_header],
-        arguments = ctx.attr.flex_options + [
+        arguments = [ctx.file._codegen.path, "flex", ctx.file._flex.path] + ctx.attr.flex_options + [
             "--header-file=" + ctx.outputs.lexer_header.path,
             "--outfile=" + lexer.path,
             ctx.file.lexer_source.path,
         ],
+        env = m4_environment,
         mnemonic = "Flex",
     )
     if ctx.attr.lexer_patch:

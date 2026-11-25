@@ -266,8 +266,7 @@ public:
 
   static int get_table_index_infos(share::schema::ObSchemaGetterGuard *schema_guard,
                                    const uint64_t table_id,
-                                   uint64_t *index_tid_arr,
-                                   int64_t &index_count);
+                                   ObIArray<uint64_t> &index_tids);
 
 private:
   static int batch_write(share::schema::ObSchemaGetterGuard *schema_guard,

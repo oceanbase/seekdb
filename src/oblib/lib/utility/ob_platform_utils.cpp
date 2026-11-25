@@ -61,5 +61,15 @@ int64_t ob_get_available_memory()
 #endif
 }
 
+void ob_usleep(const uint32_t usec)
+{
+#ifdef _WIN32
+  const DWORD sleep_ms = usec / 1000 + (usec % 1000 != 0 ? 1 : 0);
+  Sleep(sleep_ms);
+#else
+  ::usleep(static_cast<useconds_t>(usec));
+#endif
+}
+
 } // namespace lib
 } // namespace oceanbase

@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_LOGSERVICE_ITERATOR_STORAGE_
 #define OCEANBASE_LOGSERVICE_ITERATOR_STORAGE_
 #include <cstdint>
-#include "lib/file/ob_file.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_utility.h"

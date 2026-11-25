@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_operator.h"
+#include <inttypes.h>
 #include "share/ob_autoincrement_service.h"
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -5829,8 +5830,8 @@ int ObDDLOperator::get_target_auto_inc_sequence_value(const uint64_t table_id,
     ObSqlString sql;
 
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
-    if (OB_FAIL(sql.assign_fmt(" SELECT  sequence_value FROM %s WHERE sequence_key = %lu"
-                               " AND column_id = %lu FOR UPDATE",
+    if (OB_FAIL(sql.assign_fmt(" SELECT  sequence_value FROM %s WHERE sequence_key = %" PRIu64 ""
+                               " AND column_id = %" PRIu64 " FOR UPDATE",
                                table_name,
                                ObSchemaUtils::get_extract_schema_id(table_id),
                                column_id))) {
@@ -5878,7 +5879,7 @@ int ObDDLOperator::set_target_auto_inc_sync_value(const uint64_t table_id,
     int64_t affected_rows = 0;
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     if (OB_FAIL(sql.assign_fmt(
-                "UPDATE %s SET sequence_value = %lu, sync_value = %lu WHERE sequence_key=%lu AND column_id=%lu",
+                "UPDATE %s SET sequence_value = %" PRIu64 ", sync_value = %" PRIu64 " WHERE sequence_key=%" PRIu64 " AND column_id=%" PRIu64 "",
                 table_name, new_sequence_value, new_sync_value,
                 ObSchemaUtils::get_extract_schema_id(table_id), column_id))) {
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {

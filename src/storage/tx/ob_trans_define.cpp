@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_trans_define.h"
+#include <inttypes.h>
 #include "share/ob_server_struct.h"
 
 namespace oceanbase
@@ -61,7 +62,7 @@ int64_t ObStartTransParam::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   databuff_printf(buf, buf_len, pos,
-                  "[access_mode=%d, type=%d, isolation=%d, magic=%lu, autocommit=%d, "
+                  "[access_mode=%d, type=%d, isolation=%d, magic=%" PRIu64 ", autocommit=%d, "
                   "consistency_type=%d(%s), read_snapshot_type=%d(%s), "
                   "is_inner_trans=%d]",
                   access_mode_, type_, isolation_, magic_, autocommit_,

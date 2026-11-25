@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX PL
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_pl_resolver.h"
 #include "share/rc/ob_server_runtime.h"
 #include "pl/ob_pl_router.h"
@@ -2840,7 +2841,7 @@ int ObPLResolver::replace_plsql_line(
           && 12 == (last_column - first_column + 1)
           && 0 == ObString(12, sql.ptr() + first_column - 1).case_compare("$$PLSQL_LINE")) {
         char buffer[13]; // $$PLSQL_LINE
-        int64_t n = snprintf(buffer, 13, "%012ld", plsql_line);
+        int64_t n = snprintf(buffer, 13, "%012" PRId64 "", plsql_line);
         if (12 == n) {
           if (new_sql.empty()) {
             OZ (ob_write_string(allocator, sql, new_sql, true/*append \0*/));
@@ -4218,7 +4219,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
       int64_t current_time = ObTimeUtility::current_time();
       ObSqlString record_name;
       char* name_buf = NULL;
-      if (OB_FAIL(record_name.append_fmt("__for_loop_cursor_record_name_%ld", current_time))) {
+      if (OB_FAIL(record_name.append_fmt("__for_loop_cursor_record_name_%" PRId64 "", current_time))) {
       } else if (OB_ISNULL(name_buf = static_cast<char*>(resolve_ctx_.allocator_.alloc(record_name.length() + 1)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
@@ -8321,11 +8322,11 @@ int ObPLResolver::build_obj_access_func_name(const ObIArray<ObObjAccessIdx> &acc
                           i, access_idxs);
       if (OB_INVALID_INDEX != access_idxs.at(i).var_index_) {
         //If encoding by name, the idx should also be encoded to prevent duplicate names.
-        OZ (buf.append_fmt("_%ld", access_idxs.at(i).var_index_),
+        OZ (buf.append_fmt("_%" PRId64 "", access_idxs.at(i).var_index_),
                            i, access_idxs);
       }
     } else if (OB_INVALID_INDEX != access_idxs.at(i).var_index_) {
-      OZ (buf.append_fmt("_var_index_%ld", access_idxs.at(i).var_index_),
+      OZ (buf.append_fmt("_var_index_%" PRId64 "", access_idxs.at(i).var_index_),
                          i, access_idxs);
     } else if (NULL == access_idxs.at(i).get_sysfunc_) {
       ret = OB_ERR_UNEXPECTED;
@@ -8344,10 +8345,10 @@ int ObPLResolver::build_obj_access_func_name(const ObIArray<ObObjAccessIdx> &acc
         if (OB_SUCC(ret) && access_idxs.at(i).get_sysfunc_->is_udf_expr()) {
           //If it is a UDF, the id should also be included to prevent naming conflicts
           ObUDFRawExpr* udf_expr = static_cast<ObUDFRawExpr*>(access_idxs.at(i).get_sysfunc_);
-          OZ (buf.append_fmt("_%ld_%ld", udf_expr->get_pkg_id(), udf_expr->get_udf_id()),
+          OZ (buf.append_fmt("_%" PRId64 "_%" PRId64 "", udf_expr->get_pkg_id(), udf_expr->get_udf_id()),
               i, access_idxs);
           for (int64_t j = 0; OB_SUCC(ret) && j < udf_expr->get_subprogram_path().count(); ++j) {
-            OZ (buf.append_fmt("_%ld", udf_expr->get_subprogram_path().at(j)),
+            OZ (buf.append_fmt("_%" PRId64 "", udf_expr->get_subprogram_path().at(j)),
                                i, j, access_idxs);
           }
         }

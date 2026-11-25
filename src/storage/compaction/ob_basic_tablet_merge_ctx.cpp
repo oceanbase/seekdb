@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_basic_tablet_merge_ctx.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -719,9 +720,9 @@ int ObBasicTabletMergeCtx::generate_macro_id_list(char *buf, const int64_t buf_l
       for (int64_t i = 0; OB_SUCC(ret) && OB_SUCC(iter.get_next_macro_id(macro_id)); ++i) {
         const int64_t block_seq = macro_id.second_id();
         if (0 == i) {
-          pret = snprintf(buf + strlen(buf), remain_len, "%ld", block_seq);
+          pret = snprintf(buf + strlen(buf), remain_len, "%" PRId64, block_seq);
         } else {
-          pret = snprintf(buf + strlen(buf), remain_len, ",%ld", block_seq);
+          pret = snprintf(buf + strlen(buf), remain_len, ",%" PRId64, block_seq);
         }
         if (pret < 0 || pret > remain_len) {
           ret = OB_BUF_NOT_ENOUGH;

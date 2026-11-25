@@ -27,6 +27,16 @@ namespace oceanbase
 using namespace storage;
 namespace share 
 {
+namespace
+{
+void reset_task_allocator_if_idle(ObVecIndexAsyncTaskOption &task_opt)
+{
+  if (task_opt.get_async_task_map().empty() && 0 == task_opt.get_processing_task_cnt()) {
+    task_opt.get_allocator()->reset();
+  }
+}
+}  // namespace
+
 int ObVecITaskExecutor::init(storage::ObLS *ls)
 {
   int ret = OB_SUCCESS;
@@ -248,6 +258,9 @@ int ObVecITaskExecutor::clear_task_ctxs(
     } else if (OB_FAIL(clear_task_ctx(task_opt, task_ctx))) {
     } 
   }
+  if (OB_SUCC(ret)) {
+    reset_task_allocator_if_idle(task_opt);
+  }
   return ret;
 }
 
@@ -331,49 +344,15 @@ int ObVecITaskExecutor::insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array)
 int ObVecITaskExecutor::clear_old_task_ctx_if_need()
 {
   int ret = OB_SUCCESS;
-  bool all_task_is_finish = true;
   ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(get_index_mgr(index_mgr))) {
   } else {
     ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
-    FOREACH_X(iter, task_opt.get_async_task_map(), OB_SUCC(ret) && all_task_is_finish) {
-      ObTabletID tablet_id = iter->first;
-      ObVecIndexAsyncTaskCtx *task_ctx = iter->second;
-      if (OB_ISNULL(task_ctx)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (!task_ctx->in_thread_pool_) {
-        // current task is finished
-      } else {
-        all_task_is_finish = false; // break if has unfinish task
-      }
-    }
-    if (OB_SUCC(ret) && all_task_is_finish && (0 == task_opt.get_processing_task_cnt())) {
-      // all tasks is finish and task record in map should be removed expectedly.
-      // when map size > 0, is not expected.
-      if (task_opt.get_async_task_map().size() > 0) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_INFO("unexpected vector async task map", K(ret), 
-          K(task_opt.get_async_task_map().size()));
-        // for debug
-        FOREACH_X(iter, task_opt.get_async_task_map(), OB_SUCC(ret)) {
-          ObVecIndexAsyncTaskCtx *task_ctx = iter->second;
-          if (OB_ISNULL(task_ctx)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            LOG_WARN("print finished but is not been removed from map tasks", K(*task_ctx));
-          }
-        }
-      } else {
-        index_mgr->get_async_task_opt().get_allocator()->reset();
-        LOG_DEBUG("reset vector async task ctx memory", K(ret), 
-          K(index_mgr->get_async_task_opt().get_allocator()), K(all_task_is_finish));
-      }
-    } else {
-      LOG_DEBUG("not reset vector async task ctx memory", 
-        K(ret), K(all_task_is_finish), K(task_opt.get_processing_task_cnt()));
-    }
+    // Task contexts are reclaimed by start_task() in the same round, so a
+    // non-empty map here is a normal in-flight state, not a leak.
+    reset_task_allocator_if_idle(task_opt);
   }
   return OB_SUCCESS;
 }

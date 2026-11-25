@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 
 #include "data_plane/report/ob_tablet_report.h"
+#include <inttypes.h>
 #include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
@@ -282,7 +283,7 @@ int ObDDLTableMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_para
 int ObDDLTableMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf, buf_len, "ddl table merge task: tablet_id=%ld, rec_scn=%lu",
+  if (OB_FAIL(databuff_printf(buf, buf_len, "ddl table merge task: tablet_id=%" PRId64 ", rec_scn=%" PRIu64 "",
                               ddl_param_.tablet_id_.id(), ddl_param_.rec_scn_.get_val_for_inner_table_field()))) {
   }
   return ret;

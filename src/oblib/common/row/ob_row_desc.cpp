@@ -169,7 +169,7 @@ DEFINE_DESERIALIZE(ObRowDesc)
     } else if (OB_FAIL(decode_vi64(buf, data_len, pos, &cid))) {
     } else if (OB_FAIL(add_column_desc(tid, cid))) {
     }
-    //_OB_LOG(DEBUG, "tid %lu, cid %lu", tid, cid);
+    //_OB_LOG(DEBUG, "tid %llu, cid %llu", tid, cid);
   }
 
   if (OB_SUCC(ret)) {

@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_DDL_OPERATOR_H_
 
 #include "lib/container/ob_iarray.h"
+#include <inttypes.h>
 #include "lib/list/ob_dlist.h"
 #include "lib/list/ob_dlink_node.h"
 #include "lib/string/ob_string.h"
@@ -803,7 +804,7 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
 {
   int ret = common::OB_SUCCESS;
   new_object_name.reset();
-  if (OB_FAIL(new_object_name.append_fmt("__recycle_$_%ld",
+  if (OB_FAIL(new_object_name.append_fmt("__recycle_$_%" PRId64 "",
                                         schema.get_schema_version()))) {
   }
   return ret;

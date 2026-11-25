@@ -14,24 +14,29 @@ SDK_HEADERS = {
         "defines": ["_GLIBCXX_USE_CXX11_ABI=1"],
         "linkopts": select({"@platforms//os:linux": ["-pthread"], "//conditions:default": []}),
     },
-    "sanity_headers": {"hdrs": ["devtools/include/sanity/**/*.h"], "includes": ["devtools/include"]},
-    "absl_headers": _headers("absl"),
+    "sanity_headers": {"hdrs": ["sanity/include/sanity/**/*.h"], "includes": ["sanity/include"]},
     "boost_headers": _headers("boost"),
-    "curl_headers": _headers("curl"),
-    "fast_float_headers": _headers("fast_float", ["include", "include/fast_float"]),
-    "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
-    "libunwind_headers": {"hdrs": ["include/libunwind*.h", "include/unwind.h"], "includes": ["include"]},
-    "libxml2_headers": _headers("libxml2", ["include/libxml2"]),
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
-    "rapidjson_headers": _headers("rapidjson"),
-    "roaring_headers": _headers("roaring"),
-    "s2_headers": _headers("s2"),
+    "curl_headers": _headers("curl") | {
+        "linkopts": select({
+            "@platforms//os:android": ["-lz"],
+            "@platforms//os:ios": ["-lz"],
+            "//conditions:default": [],
+        }),
+    },
+    "roaring_headers": _headers("roaring") | {
+        "defines": select({
+            "@platforms//os:emscripten": ["ROARING_EXCEPTIONS=0"],
+            "//conditions:default": [],
+        }),
+    },
+    "jemalloc_headers": _headers("jemalloc"),
     "vsag_headers": _headers("vsag"),
-    "zlib_headers": {"hdrs": ["include/zconf.h", "include/zlib.h"], "includes": ["include"]},
-    "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
+    "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h"], "includes": ["include"]},
 }
 SDK_IMPORTS = {
+    "roaring": {"static_library": "lib/libroaring.a"},
     "gtest_archive": {"static_library": "lib/libgtest.a"},
     "libaio": {
         "static_library": "lib/libaio.a",
@@ -44,28 +49,20 @@ SDK_IMPORTS = {
         "includes": ["include"],
     },
     "libssl": {"static_library": "lib/libssl.a"},
-    "libunwind": {"static_library": "lib/libunwind.a"},
-    "zlib": {"static_library": "lib/libz.a"},
+    "curl": {
+        "static_library": "lib/libcurl.a",
+        "deps": [":curl_headers", ":libssl", ":libcrypto"],
+    },
 }
 
-SDK_IMPORTS.update({
-    name: {"static_library": "lib/" + archive}
-    for name, archive in {
-        "libxml2": "libxml2.a",
-        "curl": "libcurl.a",
-        "lzma": "liblzma.a",
-    }.items()
-})
-
 SDK_FILEGROUPS = {
-    "ios_base_metadata": {"srcs": ["verified/*.json"]},
-    "ios_base_licenses": {"srcs": ["licenses/**/*"]},
-    "sanity_pass": {"srcs": ["devtools/lib64/libsanitypass.so"]},
+    "ios_locked_metadata": {"srcs": ["locked_manifests/*.json"]},
+    "ios_locked_licenses": {"srcs": ["locked_licenses/**/*"]},
+    "sanity_pass": {"srcs": ["sanity/lib/libsanitypass.so"]},
 }
 
 HOST_FILES = [
     "devtools/bin/llvm-objcopy",
-    "devtools/lib64/libsanitypass.so",
 ]
 
 NATIVE_LINK_FILES = [
@@ -78,25 +75,15 @@ NATIVE_LINK_FILES = [
 _WINDOWS_SHARED = {
     "libcrypto": ("openssl/libcrypto.lib", "openssl_bin/libcrypto-3-x64.dll", []),
     "libssl": ("openssl/libssl.lib", "openssl_bin/libssl-3-x64.dll", [":libcrypto"]),
-    "zlib": ("lib/zlib.lib", "bin/zlib1.dll", []),
-    "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
-    "libxml2": ("lib/libxml2.lib", "bin/libxml2.dll", [":zlib", ":iconv"]),
-    "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":zlib"]),
-    "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
     "pthreads": ("lib/pthreadVC3.lib", "bin/pthreadVC3.dll", []),
-    "openmp": ("vsag/libomp.lib", "vsag_bin/libomp.dll", []),
+    "openmp": ("lib/libomp.lib", "bin/libomp.dll", []),
 }
 
 _WINDOWS_HEADER_LIBRARIES = {
-    "absl_headers": [":absl"],
-    "curl_headers": [":curl"],
-    "libxml2_headers": [":libxml2"],
     "openssl_headers": [":libssl"],
     "roaring_headers": [":roaring"],
-    "s2_headers": [":s2"],
     "vsag_headers": [":vsag"],
-    "zlib_headers": [":zlib"],
     "windows_headers": [":pthreads", ":compiler_runtime"],
 }
 
@@ -110,11 +97,16 @@ def _windows_libraries():
             hdrs = native.glob(["include/openssl/*.h"]) if name == "libcrypto" else [],
             includes = ["include"] if name == "libcrypto" else [],
         )
+    cc_import(name = "_curl_archive", static_library = "lib/libcurl.lib", visibility = ["//visibility:private"])
+    cc_import(name = "_zlib_archive", static_library = "lib/libzs.lib", visibility = ["//visibility:private"])
+    cc_library(
+        name = "curl",
+        deps = [":curl_headers", ":_curl_archive", ":_zlib_archive"],
+        linkopts = ["ws2_32.lib", "iphlpapi.lib", "bcrypt.lib", "advapi32.lib", "crypt32.lib", "secur32.lib"],
+    )
     # Archives within one upstream package stay private to its library target.
     archives = {
-        "absl": (native.glob(["lib/absl_*.lib"]), [":abseil_dll"]),
-        "s2": (["lib/s2.lib"], [":absl", ":libssl"]),
-        "vsag": (["vsag/" + name + ".lib" for name in [
+        "vsag": (["lib/" + name + ".lib" for name in [
             "cpuinfo", "simd", "vsag_static", "diskann", "openblas",
             "antlr4-runtime-static", "antlr4-autogen", "fmt",
         ]], [":openmp"]),
@@ -135,12 +127,12 @@ def _windows_libraries():
         )
 
 def sdk_targets(windows = False):
-    native.exports_files(HOST_FILES + native.glob(["lib/**/*.a", "lib/**/*.so", "lib/**/*.so.*", "lib64/**/*.a", "lib64/**/*.so", "lib64/**/*.so.*"], allow_empty = True))
+    native.exports_files(HOST_FILES + native.glob(["lib/**/*.a", "lib/**/*.so", "lib/**/*.so.*", "lib64/**/*.a", "lib64/**/*.so", "lib64/**/*.so.*"] + (["lib/**/*.lib"] if windows else []), allow_empty = True))
     for name, attributes in SDK_HEADERS.items():
         if windows and name in _WINDOWS_HEADER_LIBRARIES:
             attributes = attributes | {"deps": _WINDOWS_HEADER_LIBRARIES[name]}
-        if windows and name == "absl_headers":
-            attributes = attributes | {"defines": ["ABSL_CONSUME_DLL"]}
+        if windows and name == "curl_headers":
+            attributes = attributes | {"defines": ["CURL_STATICLIB"]}
         cc_library(name = name, **(attributes | {"hdrs": native.glob(attributes["hdrs"], allow_empty = True)}))
     for name, attributes in SDK_IMPORTS.items():
         if windows:
@@ -148,44 +140,33 @@ def sdk_targets(windows = False):
         cc_import(name = name, **(attributes | ({"hdrs": native.glob(attributes["hdrs"], allow_empty = True)} if "hdrs" in attributes else {})))
     for name, attributes in SDK_FILEGROUPS.items():
         native.filegroup(name = name, **(attributes | {"srcs": native.glob(attributes["srcs"], allow_empty = True)}))
+    vsag_imports = []
+    for library in native.glob(["lib/" + name for name in [
+        "libvsag_static.a", "libdiskann.a", "libsimd.a", "libcpuinfo.a",
+        "libopenblas.a", "libio.a", "libomp_static.a",
+        "libantlr4-runtime.a", "libantlr4-autogen.a", "libfmt.a",
+    ]], allow_empty = True):
+        target = "_vsag_sdk_" + library.rsplit("/", 1)[-1]
+        cc_import(name = target, static_library = library, visibility = ["//visibility:private"])
+        vsag_imports.append(":" + target)
+    cc_library(name = "vsag_sdk", deps = [":vsag_headers"] + vsag_imports)
     if windows:
         _windows_libraries()
-
-_SOURCE_HEADERS = {
-    "absl_headers": ("abseil", "abseil"),
-    "roaring_headers": ("roaring", "roaring"),
-    "s2_headers": ("s2_ios", "s2_wasm"),
-    "vsag_headers": ("vsag_ios", "vsag_wasm"),
-}
 
 def sdk_aliases():
     cc_library(
         name = "base_libraries",
-        deps = [":libcrypto", ":libssl", ":libxml2"] + select({
-            "@platforms//os:emscripten": [],
-            "@platforms//os:windows": [":curl", ":zlib"],
-            "//conditions:default": [":curl", ":lzma", ":zlib"],
-        }),
+        deps = [":libcrypto", ":libssl"],
     )
-    for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + HOST_FILES + NATIVE_LINK_FILES:
+    for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + ["vsag_sdk"] + HOST_FILES + NATIVE_LINK_FILES:
         if name in HOST_FILES + ["sanity_pass", "sanity_headers"]:
             actual = "@third_party_native//:" + name
         else:
-            ios = "@third_party_ios//:" + name
-            simulator = "@third_party_ios_simulator//:" + name
-            wasm = "@third_party_wasm//:" + name
-            if name in _SOURCE_HEADERS:
-                ios = "@sdk_" + _SOURCE_HEADERS[name][0] + "//:library"
-                simulator = ios
-                wasm = "@sdk_" + _SOURCE_HEADERS[name][1] + "//:library"
-            elif name == "boost_headers":
-                ios = "@sdk_boost//:library"
-                simulator = ios
             actual = select({
                 "@platforms//os:android": "@third_party_android//:" + name,
-                "@platforms//os:emscripten": wasm,
-                "@platforms//os:ios": ios,
-                Label("//bazel:ios_simulator"): simulator,
+                "@platforms//os:emscripten": "@third_party_wasm//:" + name,
+                "@platforms//os:ios": "@third_party_ios//:" + name,
+                Label("//bazel:ios_simulator"): "@third_party_ios_simulator//:" + name,
                 "//conditions:default": "@third_party_native//:" + name,
             })
         native.alias(name = name, actual = actual)

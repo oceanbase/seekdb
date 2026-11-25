@@ -17,8 +17,11 @@
 #ifndef OCEANBASE_COMMON_UTILITY_H_
 #define OCEANBASE_COMMON_UTILITY_H_
 
+#include "lib/utility/ob_platform_utils.h"
+
 #ifndef _WIN32
 #include <arpa/inet.h>
+#include <inttypes.h>
 #include <unistd.h>
 #else
 // Windows: use winsock2 instead of arpa/inet
@@ -31,7 +34,7 @@
 // Windows: define useconds_t and usleep
 typedef unsigned int useconds_t;
 inline int usleep(useconds_t usec) {
-  Sleep(usec / 1000);  // Sleep takes milliseconds
+  oceanbase::lib::ob_usleep(static_cast<uint32_t>(usec));
   return 0;
 }
 #endif
@@ -53,11 +56,10 @@ inline int usleep(useconds_t usec) {
 
 #ifdef _WIN32
 #define SLEEP(time) ::Sleep((DWORD)(time) * 1000)
-#define USLEEP(time) ::Sleep((DWORD)(((time) + 999) / 1000))
 #else
 #define SLEEP(time) ::sleep(time)
-#define USLEEP(time) ::usleep(time)
 #endif
+#define USLEEP(time) ::usleep(time)
 
 #define CPUID_STD_SSE4_2 0x00100000
 
@@ -210,7 +212,7 @@ template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
               oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP>
 inline void ob_usleep(const useconds_t v)
 {
-  ::usleep(v);
+  lib::ob_usleep(static_cast<uint32_t>(v));
 }
 
 template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
@@ -223,7 +225,7 @@ inline void ob_usleep(const useconds_t v, const bool /*is_idle_sleep*/)
 
 inline void ob_throttle_usleep(const useconds_t v, int errcode, int64_t p3 = 0)
 {
-  ::usleep(v);
+  lib::ob_usleep(static_cast<uint32_t>(v));
 }
 
 template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
@@ -233,7 +235,7 @@ inline void ob_usleep(const useconds_t v, const int64_t p1, const int64_t p2, co
   UNUSED(p1);
   UNUSED(p2);
   UNUSED(p3);
-  ::usleep(v);
+  lib::ob_usleep(static_cast<uint32_t>(v));
 }
 
 template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
@@ -518,7 +520,7 @@ struct CountReporter
   ~CountReporter()
   {
     if (last_report_count_ > 0) {
-      _OB_LOG(INFO, "%s=%ld", id_, count_);
+      _OB_LOG(INFO, "%s=%" PRId64 "", id_, count_);
     }
   }
   bool has_reported() { return last_report_count_ > 0; }
@@ -529,7 +531,7 @@ struct CountReporter
     if (0 == (count % report_mod_)) {
       SeqLockGuard lock_guard(seq_lock_);
       int64_t cur_ts = ::oceanbase::common::ObTimeUtility::fast_current_time();
-      _OB_LOG_RET(ERROR, OB_ERROR, "%s=%ld:%ld:%ld\n", id_, count,
+      _OB_LOG_RET(ERROR, OB_ERROR, "%s=%" PRId64 ":%" PRId64 ":%" PRId64 "\n", id_, count,
                 1000000 * (count - last_report_count_) / (cur_ts - last_report_time_),
                 (total_cost_time - last_cost_time_)/report_mod_);
       last_report_count_ = count;

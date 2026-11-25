@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/ob_server_struct.h"
+#include <inttypes.h>
 #include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/alloc/alloc_func.h"
@@ -656,7 +657,7 @@ void ObMemstoreFreezer::report_freezer_source_events()
       ret = common::databuff_printf(server_event_value,
                                     MAX_MANAGEMENT_EVENT_VALUE_LENGTH,
                                     pos,
-                                    "%s: %ld; ",
+                                    "%s: %" PRId64 "; ",
                                     obj_to_cstring(ObFreezeSourceFlag(i)),
                                     captured_source_times);
     }
@@ -1257,16 +1258,16 @@ int ObMemstoreFreezer::print_memory_usage(
   } else {
     ret = databuff_printf(print_buf, buf_len, pos,
                           "[MEMORY] "
-                          "now=% '15ld "
-                          "active_memstore_used=% '15ld "
-                          "memstore_quota_used=% '15ld "
-                          "memstore_freeze_trigger_limit=% '15ld "
-                          "memstore_limit=% '15ld "
-                          "memory_budget=% '15ld "
-                          "max_cached_memstore_size=% '15ld "
-                          "memstore_alloc_pos=% '15ld "
-                          "memstore_frozen_pos=% '15ld "
-                          "memstore_reclaimed_pos=% '15ld\n",
+                          "now=% '15" PRId64 " "
+                          "active_memstore_used=% '15" PRId64 " "
+                          "memstore_quota_used=% '15" PRId64 " "
+                          "memstore_freeze_trigger_limit=% '15" PRId64 " "
+                          "memstore_limit=% '15" PRId64 " "
+                          "memory_budget=% '15" PRId64 " "
+                          "max_cached_memstore_size=% '15" PRId64 " "
+                          "memstore_alloc_pos=% '15" PRId64 " "
+                          "memstore_frozen_pos=% '15" PRId64 " "
+                          "memstore_reclaimed_pos=% '15" PRId64 "\n",
                           ObClockGenerator::getClock(),
                           stat.active_memstore_used_,
                           stat.memstore_quota_used_,

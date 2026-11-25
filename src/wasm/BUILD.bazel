@@ -61,7 +61,7 @@ final_link(
     name = "database_link",
     direct_object_deps = [":database_entry"],
     group_deps = ["//src/observer:observer_embedded_runtime"],
-    sdk_deps = ["//bazel/sdk_sources:source_sdk", "//bazel/third_party:base_libraries"],
+    sdk_deps = ["//bazel/third_party:prebuilt_sdk", "//bazel/third_party:base_libraries"],
     ordered_link_files = [
         "//rust:archive",
     ],
@@ -70,7 +70,6 @@ final_link(
         "--emit-symbol-map",
         "-pthread",
         "-msimd128",
-        "-sUSE_ZLIB=1",
         "-sPROXY_TO_PTHREAD=1",
         "-sMODULARIZE=1",
         "-sEXPORT_ES6=1",

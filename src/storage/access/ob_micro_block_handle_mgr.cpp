@@ -15,7 +15,7 @@
  */
 #include "lib/time/ob_time_utility.h"
 #include "lib/alloc/alloc_func.h"
-#include "share/io/ob_io_define.h"
+#include "share/io_request.h"
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_micro_block_handle_mgr.h"
@@ -213,7 +213,6 @@ int ObMicroBlockDataHandle::get_loaded_block_data(ObMicroBlockData &block_data)
 {
   int ret = OB_SUCCESS;
   const ObMicroBlockData *pblock = NULL;
-  const char *io_buf = NULL;
   if (ObSSTableMicroBlockState::IN_BLOCK_CACHE == block_state_) {
     if (NULL == (pblock = cache_handle_.get_block_data())) {
       ret = OB_ERR_UNEXPECTED;
@@ -228,18 +227,14 @@ int ObMicroBlockDataHandle::get_loaded_block_data(ObMicroBlockData &block_data)
       handle_mgr_->add_block_io_wait_time_us(get_io_interval(finish_time_us, start_time_us));
     }
     if (OB_FAIL(ret)) {
-    } else if (NULL == (io_buf = io_handle_.get_buffer())) {
-      ret = OB_INVALID_IO_BUFFER;
+    } else if (-1 == block_index_) {
+      const auto *value = io_handle_.get_micro_block();
+      if (value == nullptr) { ret = OB_INVALID_IO_BUFFER; }
+      else { block_data = value->get_block_data(); }
     } else {
-      if (-1 == block_index_) {
-        //single block io
-        pblock = &reinterpret_cast<const ObMicroBlockCacheValue *>(io_buf)->get_block_data();
-        block_data = *pblock;
-      } else {
-        //multi block io
-        const ObMultiBlockIOResult *io_result = reinterpret_cast<const ObMultiBlockIOResult *>(io_buf);
-        if (OB_FAIL(io_result->get_block_data(block_index_, micro_info_, block_data))) {
-        }
+      const auto *result = io_handle_.get_micro_blocks();
+      if (result == nullptr) { ret = OB_INVALID_IO_BUFFER; }
+      else if (OB_FAIL(result->get_block_data(block_index_, micro_info_, block_data))) {
       }
     }
   } else {

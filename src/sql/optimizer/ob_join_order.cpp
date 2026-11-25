@@ -786,8 +786,7 @@ int ObJoinOrder::compute_base_table_parallel_info(const OpParallelRule op_parall
 
 int ObJoinOrder::get_valid_index_ids_with_no_index_hint(ObSqlSchemaGuard &schema_guard,
                                                         const uint64_t ref_table_id,
-                                                        uint64_t *tids,
-                                                        const int64_t index_count,
+                                                        const ObIArray<uint64_t> &index_ids,
                                                         const ObIArray<uint64_t> &ignore_index_ids,
                                                         ObIArray<uint64_t> &valid_index_ids)
 {
@@ -797,8 +796,8 @@ int ObJoinOrder::get_valid_index_ids_with_no_index_hint(ObSqlSchemaGuard &schema
   if (!ObOptimizerUtil::find_item(ignore_index_ids, ref_table_id) &&
       OB_FAIL(valid_index_ids.push_back(ref_table_id))) {
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
-    uint64_t index_id = tids[i];
+  for (int64_t i = 0; OB_SUCC(ret) && i < index_ids.count(); ++i) {
+    uint64_t index_id = index_ids.at(i);
     if (ObOptimizerUtil::find_item(ignore_index_ids, index_id)) {
       /* do nothing */
     } else if (OB_FAIL(schema_guard.get_table_schema(index_id, index_schema))
@@ -1423,6 +1422,7 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
     }  else if (OB_FAIL(schema_guard->get_table_schema(vec_index_id, vec_index_schema))) {
     } else if (OB_ISNULL(vec_index_schema)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nullptr to index schema", K(ret));
     } else {
       is_ipivf = ObVectorIndexUtil::is_sindi_index(vec_index_schema);
       ObVecIndexType pre_vec_type = (vec_index_schema->is_vec_hnsw_index() && helper.vec_index_type_ == ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN) ? 
@@ -1460,6 +1460,7 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
   if (OB_FAIL(ret) || !vector_index_match) {
   } else if (OB_ISNULL(vec_index_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("vec_table_schema unexpected null", K(ret));
   } else {
     double selectivity = 0.0;
     if (OB_FAIL(ObOptSelectivity::calculate_selectivity(get_plan()->get_basic_table_metas(),
@@ -3547,8 +3548,7 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
   const TableItem *table_item = NULL;
   ObSqlSchemaGuard *schema_guard = NULL;
   ObSQLSessionInfo *session_info = NULL;
-  uint64_t tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1];
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1;
+  ObSEArray<uint64_t, 16> index_ids;
   const LogTableHint *log_table_hint = NULL;
   const ObSelectStmt *select_stmt = NULL;
   bool has_aggr = false; // defend aggr for ann search
@@ -3611,25 +3611,22 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
 
   if (OB_FAIL(ret) || valid_index_ids.count() > 0) {
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(ref_table_id,
-                                                            tids,
-                                                            index_count,
+                                                            index_ids,
                                                             can_use_global_index,
                                                             false /*domain index*/,
                                                             false /*spatial index*/,
                                                             false /*vector index*/))) {
-  } else if (OB_FAIL(add_valid_fts_index_ids(helper, tids, index_count))) {
-  } else if (OB_FAIL(add_valid_vec_index_ids(*stmt, schema_guard, table_id, ref_table_id, has_aggr, tids, index_count, helper))) {
-  } else if (index_count > OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1) {
-    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(add_valid_fts_index_ids(helper, index_ids))) {
+  } else if (OB_FAIL(add_valid_vec_index_ids(*stmt, schema_guard, table_id, ref_table_id, has_aggr, index_ids, helper))) {
   } else if (NULL != log_table_hint &&
              OB_FAIL(get_valid_index_ids_with_no_index_hint(*schema_guard, ref_table_id,
-                                                            tids, index_count,
+                                                            index_ids,
                                                             log_table_hint->index_list_,
                                                             valid_index_ids))) {
   } else {
     if (0 == valid_index_ids.count()) {
-      for (int64_t i = -1; OB_SUCC(ret) && i < index_count; ++i) {
-        const uint64_t tid = (i == -1) ? ref_table_id : tids[i]; //with base table
+      for (int64_t i = -1; OB_SUCC(ret) && i < index_ids.count(); ++i) {
+        const uint64_t tid = (i == -1) ? ref_table_id : index_ids.at(i); //with base table
         if (OB_FAIL(valid_index_ids.push_back(tid))) {
         } else { /*do nothing*/ }
       }
@@ -3825,8 +3822,7 @@ int ObJoinOrder::fill_opt_info_index_name(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
-  uint64_t index_ids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 3];
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 3;
+  ObSEArray<uint64_t, 16> index_ids;
   ObSqlSchemaGuard *schema_guard = NULL;
   const ObDMLStmt *stmt = NULL;
   if (OB_ISNULL(table_opt_info) || OB_ISNULL(get_plan())
@@ -3840,18 +3836,13 @@ int ObJoinOrder::fill_opt_info_index_name(const uint64_t table_id,
     // do nothing
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(base_table_id,
                                                             index_ids,
-                                                            index_count,
                                                             true /*global index*/,
                                                             true /*domain index*/))) {
-  } else if (index_count > OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(table_opt_info->available_index_id_.assign(available_index_id))) {
+  } else if (OB_FAIL(index_ids.push_back(base_table_id))) {
   } else {
-    index_ids[index_count++] = base_table_id;
-    // i == -1 represents primary key, other value of i represent index
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_ids.count(); ++i) {
       ObString name;
-      uint64_t index_id = index_ids[i];
+      uint64_t index_id = index_ids.at(i);
       if (OB_FAIL(schema_guard->get_table_schema(index_id, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -14506,8 +14497,7 @@ int ObJoinOrder::compute_fd_item_set_for_table_scan(const uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSqlSchemaGuard *schema_guard = NULL;
   const ObDMLStmt *stmt = NULL;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
+  ObSEArray<uint64_t, 16> index_ids;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt()) ||
       OB_ISNULL(schema_guard = get_plan()->get_optimizer_context().get_sql_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
@@ -14515,14 +14505,13 @@ int ObJoinOrder::compute_fd_item_set_for_table_scan(const uint64_t table_id,
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_ref_id,
-                                                            index_tids,
-                                                            index_count,
+                                                            index_ids,
                                                             true  /*global index*/,
                                                             false /*domain index*/))) {
   }
-  for (int64_t i = -1; OB_SUCC(ret) && i < index_count; ++i) {
+  for (int64_t i = -1; OB_SUCC(ret) && i < index_ids.count(); ++i) {
     const ObTableSchema *index_schema = NULL;
-    uint64_t index_id = (i == -1 ? table_ref_id : index_tids[i]);
+    uint64_t index_id = (i == -1 ? table_ref_id : index_ids.at(i));
     if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema))) {
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -16091,8 +16080,7 @@ int ObJoinOrder::add_valid_vec_index_ids(const ObDMLStmt &stmt,
                                         const uint64_t table_id,
                                         const uint64_t ref_table_id,
                                         const bool has_aggr,
-                                        uint64_t *index_tid_array,
-                                        int64_t &size,
+                                        ObIArray<uint64_t> &index_ids,
                                         PathHelper &helper)
 {
   int ret = OB_SUCCESS;
@@ -16117,7 +16105,7 @@ int ObJoinOrder::add_valid_vec_index_ids(const ObDMLStmt &stmt,
       // if hnsw, do not add vec_index_tid, mark adaptive_scan
       helper.vec_index_type_ = ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN;
     } else {
-      index_tid_array[size++] = vec_index_tid;
+      ret = index_ids.push_back(vec_index_tid);
     }
   }
   return ret;
@@ -16208,6 +16196,30 @@ int ObJoinOrder::get_vector_index_tid_from_expr(ObSqlSchemaGuard *schema_guard,
     } else if (vector_index_match && has_aggr) {
       vector_index_match = false;
     } else if (!vector_index_match) {
+      // this table does not own the vector column; nothing to match here
+    } else if (is_local_vec_ivf_index(index_type)) {
+      // An ivf rebuild exposes both the old and the new domain index. Resolve
+      // the newest complete generation here so an index that is still being
+      // built does not hide the readable generation it is replacing.
+      ObVectorIndexAlgorithmType algorithm = ObVectorIndexAlgorithmType::VIAT_IVF_FLAT;
+      uint64_t centroid_tid = OB_INVALID_ID;
+      uint64_t cid_vector_tid = OB_INVALID_ID;
+      uint64_t rowkey_cid_tid = OB_INVALID_ID;
+      uint64_t extra_tid = OB_INVALID_ID;
+      if (is_vec_ivfsq8_index(index_type)) {
+        algorithm = ObVectorIndexAlgorithmType::VIAT_IVF_SQ8;
+      } else if (is_vec_ivfpq_index(index_type)) {
+        algorithm = ObVectorIndexAlgorithmType::VIAT_IVF_PQ;
+      }
+      if (OB_FAIL(ObVectorIndexUtil::get_latest_avaliable_index_tids_for_ivf(
+              schema_guard->get_schema_guard(), *table_schema, vec_col_id, algorithm,
+              centroid_tid, cid_vector_tid, rowkey_cid_tid, extra_tid))) {
+      } else if (OB_INVALID_ID == centroid_tid) {
+        LOG_INFO("no readable ivf index generation", K(ref_table_id), K(vec_col_id));
+        vector_index_match = false;
+      } else {
+        vec_index_tid = centroid_tid;
+      }
     } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid(schema_guard->get_schema_guard(),
                                                                *table_schema,
                                                                index_type,
@@ -16911,7 +16923,7 @@ int ObJoinOrder::estimate_fts_index_scan(uint64_t table_id,
   return ret;
 }
 
-int ObJoinOrder::add_valid_fts_index_ids(PathHelper &helper, uint64_t *index_tid_array, int64_t &size)
+int ObJoinOrder::add_valid_fts_index_ids(PathHelper &helper, ObIArray<uint64_t> &index_ids)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObMatchFunRawExpr *, 4> scan_match_exprs;
@@ -16930,9 +16942,7 @@ int ObJoinOrder::add_valid_fts_index_ids(PathHelper &helper, uint64_t *index_tid
       }
     }
     if (OB_SUCC(ret)) {
-      for (int64_t i = 0; i < fts_index_ids.count() && size < OB_MAX_INDEX_PER_TABLE + 1; ++i) {
-        index_tid_array[size++] = fts_index_ids.at(i);
-      }
+      ret = append(index_ids, fts_index_ids);
     }
   }
   return ret;

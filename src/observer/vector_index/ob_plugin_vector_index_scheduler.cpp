@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX SERVER
 #include "share/ob_server_struct.h"
+#include <inttypes.h>
 #include "ob_plugin_vector_index_scheduler.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
@@ -1287,7 +1288,7 @@ int ObVectorIndexDag::fill_dag_key(char *buf, const int64_t buf_len) const
     ret = OB_NOT_INIT;
     LOG_WARN("ObVectorIndexDag has not been initialized", K(is_inited_), K_(param));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, "vector index memdata sync task: "
-                                     "table_id = %ld, tablet_id = %ld",
+                                     "table_id = %" PRId64 ", tablet_id = %" PRId64 "",
                                      param_.table_id_,
                                      param_.tablet_id_.id()))) {
   }

@@ -15,6 +15,7 @@
  */
 
 #include "share/cache/ob_kvcache_hazard_domain.h"
+#include <inttypes.h>
 #include "lib/alloc/alloc_struct.h"
 #include "lib/ob_define.h"
 #include "lib/ob_errno.h"
@@ -133,7 +134,7 @@ void HazardDomain::print_info() const
   int ret = OB_SUCCESS;
   char buf[256];
   hazptr_allocator_.print_info(buf, 256);
-  _OB_LOG(INFO, "[KVCACHE-HAZARD-POINTER] retired memory size: %ld, %s", ATOMIC_LOAD_RLX(&retired_memory_size_), buf);
+  _OB_LOG(INFO, "[KVCACHE-HAZARD-POINTER] retired memory size: %" PRId64 ", %s", ATOMIC_LOAD_RLX(&retired_memory_size_), buf);
 }
 
 void HazardDomain::wash()

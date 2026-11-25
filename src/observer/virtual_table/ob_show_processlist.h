@@ -86,6 +86,7 @@ private:
         cur_row_(NULL),
         my_session_(NULL),
         schema_guard_(NULL),
+        has_process_privilege_(false),
         output_column_ids_(),
         table_schema_(NULL)
     {
@@ -107,6 +108,7 @@ private:
       common::ObNewRow *cur_row_;
       sql::ObSQLSessionInfo *my_session_;
       share::schema::ObSchemaGetterGuard* schema_guard_;
+      bool has_process_privilege_;
       ObSEArray<uint64_t, common::OB_PREALLOCATED_NUM> output_column_ids_;
       char trace_id_[common::OB_MAX_TRACE_ID_BUFFER_SIZE];
       const share::schema::ObTableSchema *table_schema_;

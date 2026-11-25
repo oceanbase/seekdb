@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "common/ob_timeout_ctx.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
@@ -222,7 +223,7 @@ int ObTabletChecksumOperator::construct_load_sql_str_(const common::ObIArray<ObT
       (start_idx > end_idx) || (tablet_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE compaction_scn = "
-      "%lu and tablet_id IN (", OB_ALL_TABLET_CHECKSUM_TNAME,
+      "%" PRIu64 " and tablet_id IN (", OB_ALL_TABLET_CHECKSUM_TNAME,
       compaction_scn.get_val_for_inner_table_field()))) {
   } else {
     for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
@@ -230,7 +231,7 @@ int ObTabletChecksumOperator::construct_load_sql_str_(const common::ObIArray<ObT
       if (OB_UNLIKELY(!tablet_id.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(sql.append_fmt(
-          "%ld%s",
+          "%" PRId64 "%s",
           tablet_id.id(),
           ((idx == end_idx - 1) ? ")" : ", ")))) {
       }
@@ -282,7 +283,7 @@ int ObTabletChecksumOperator::insert_or_update_tablet_checksum_items_(
           } else {
             const uint64_t compaction_scn_val = item.compaction_scn_.get_val_for_inner_table_field();
             ObString b_column_meta;
-            if (OB_FAIL(sql.append_fmt("(%lu, '%lu', %ld, %ld, ",
+            if (OB_FAIL(sql.append_fmt("(%" PRIu64 ", '%" PRIu64 "', %" PRId64 ", %" PRId64 ", ",
               compaction_scn_val, item.tablet_id_.id(),
               item.data_checksum_, item.row_count_))) {
             } else if (OB_FAIL(item.column_meta_.get_hex_str(allocator, b_column_meta))) {
@@ -342,8 +343,8 @@ int ObTabletChecksumOperator::delete_tablet_checksum_items(
   const uint64_t gc_scn_val = gc_compaction_scn.is_valid() ? gc_compaction_scn.get_val_for_inner_table_field() : 0;
   if (OB_UNLIKELY(!gc_compaction_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE compaction_scn <= %lu"
-    " AND tablet_id != %ld limit %ld", OB_ALL_TABLET_CHECKSUM_TNAME,
+  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE compaction_scn <= %" PRIu64 ""
+    " AND tablet_id != %" PRId64 " limit %" PRId64 "", OB_ALL_TABLET_CHECKSUM_TNAME,
     gc_scn_val, ObTabletID::MIN_VALID_TABLET_ID, limit_cnt))) {
   } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
   } else {
@@ -363,8 +364,8 @@ int ObTabletChecksumOperator::delete_special_tablet_checksum_items(
   const uint64_t gc_scn_val = gc_compaction_scn.is_valid() ? gc_compaction_scn.get_val_for_inner_table_field() : 0;
   if (OB_UNLIKELY(!gc_compaction_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE compaction_scn <= %lu"
-    " AND tablet_id=%ld", OB_ALL_TABLET_CHECKSUM_TNAME,
+  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE compaction_scn <= %" PRIu64 ""
+    " AND tablet_id=%" PRId64 "", OB_ALL_TABLET_CHECKSUM_TNAME,
     gc_scn_val, ObTabletID::MIN_VALID_TABLET_ID))) {
   } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
   } else {
@@ -441,7 +442,7 @@ int ObTabletChecksumOperator::is_first_tablet_checksum_exist(
       ObMySQLResult *result = nullptr;
       uint64_t compaction_scn_val = compaction_scn.get_val_for_inner_table_field();
       if (OB_FAIL(sql.assign_fmt("SELECT COUNT(*) AS cnt FROM %s WHERE "
-            "compaction_scn >= %lu AND tablet_id = %lu", OB_ALL_TABLET_CHECKSUM_TNAME,
+            "compaction_scn >= %" PRIu64 " AND tablet_id = %" PRIu64 "", OB_ALL_TABLET_CHECKSUM_TNAME,
             compaction_scn_val, ObTabletID::MIN_VALID_TABLET_ID))) {
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {

@@ -103,7 +103,7 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     ObAIFuncExprInfo *info = nullptr;
     ObString model_id = arg_model_id->get_string();
     ObString prompt;
-    ObJsonObject *config = nullptr;
+    ObIJsonBase *config = nullptr;
     ObString config_str;
     share::ObAiModelEndpointInfo resolved_endpoint;
     const share::ObAiModelEndpointInfo *endpoint_info = &resolved_endpoint;
@@ -114,17 +114,17 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
       ret = OB_ERR_UNEXPECTED;
     } else if (arg_expr_prompt->datum_meta_.type_ == ObJsonType) {
       ObIJsonBase *j_base = nullptr;
-      ObJsonObject *prompt_object = nullptr;
+      ObIJsonBase *prompt_object = nullptr;
       bool is_null = false;
       if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, PROMPT_IDX, j_base, is_null))) {
       } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FALSE_IT(prompt_object = static_cast<ObJsonObject *>(j_base))) {
+      } else if (OB_FALSE_IT(prompt_object = j_base)) {
       } else if (!ObAIFuncPromptObjectUtils::is_valid_prompt_object(prompt_object)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "prompt is not valid");
         res.set_null();
-      } else if (!ObAIFuncJsonUtils::ob_is_json_array_all_str(static_cast<ObJsonArray *>(prompt_object->get_value(ObAIFuncPromptObjectUtils::prompt_args_key)))) {
+      } else if (!ObAIFuncJsonUtils::ob_is_json_array_all_str(ObAIFuncJsonUtils::get_value(prompt_object, ObAIFuncPromptObjectUtils::prompt_args_key))) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "prompt object is not support");
       } else if (OB_FAIL(ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(temp_allocator, prompt_object, prompt))) {

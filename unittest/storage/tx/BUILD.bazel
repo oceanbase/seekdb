@@ -17,8 +17,9 @@ cc_test(
     name = "test_tx_replay_executor",
     size = "small",
     linkstatic = True,
-    # liboceanbase supplies the C++ runtime; select rules_cc's $ORIGIN rpath.
+    # Keep rules_cc's $ORIGIN rpath while linking the C++ runtime used by gtest.
     features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    linkopts = ["-lstdc++"],
     deps = [
         ":tx_replay_executor_cases",
         "//src/observer:liboceanbase",

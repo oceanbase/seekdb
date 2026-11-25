@@ -57,8 +57,9 @@ int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObDatum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[0];
   ObObjType val_type = json_arg->datum_meta_.type_;
-  ObIJsonBase *json_doc = NULL;
   bool is_null_result = false;
+  JsonMetadata metadata;
+  bool allow_partial_update = false;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -66,10 +67,33 @@ int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
   } else if (val_type == ObNullType || json_datum->is_null()) {
     is_null_result = true;
-  } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
-                                                    json_doc, is_null_result, false))) {
+  } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(
+                 val_type, json_arg->datum_meta_.cs_type_))) {
+  } else if (ob_is_json(val_type)
+             && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(
+                 expr, ctx, json_datum->get_string(), allow_partial_update))) {
+  } else if (allow_partial_update) {
+    ObIJsonBase *json_doc = nullptr;
+    if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
+                                               json_doc, is_null_result))) {
+    } else if (!is_null_result) {
+      metadata.depth_ = json_doc->depth();
+    }
+    if (json_doc != nullptr) {
+      json_doc->reset();
+    }
   } else {
-    // do nothing
+    ObString data;
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+            ctx.exec_ctx_, temp_allocator, *json_datum, json_arg->datum_meta_,
+            json_arg->obj_meta_.has_lob_header(), data))) {
+    } else if (OB_FAIL(ObJsonExprHelper::get_json_metadata(
+                   data, ObJsonExprHelper::get_json_internal_type(val_type), true, 0, metadata))) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+    }
   }
 
   // set result
@@ -77,7 +101,7 @@ int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   } else if (is_null_result) {
     res.set_null();
   } else {
-    res.set_int32(json_doc->depth());
+    res.set_int32(metadata.depth_);
   }
 
   return ret;

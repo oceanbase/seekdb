@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_outline_executor.h"
 #include "sql/engine/ob_physical_plan.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 
 #include "sql/ob_sql.h"
@@ -258,7 +258,7 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
-  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().create_outline(arg); }))) {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().create_outline(arg); }))) {
   } else {/*do nothing*/ }
   return ret;
 }
@@ -298,7 +298,7 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
-  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().alter_outline(arg); }))) {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().alter_outline(arg); }))) {
   } else {/*do nothing*/ }
   return ret;
 }
@@ -317,7 +317,7 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().drop_outline(arg); }))) {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().drop_outline(arg); }))) {
   } else {/*do nothing*/ }
 
   return ret;

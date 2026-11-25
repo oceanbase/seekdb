@@ -1,0 +1,24 @@
+# URL codec must preserve supported collations during type deduction.
+--disable_query_log
+SET NAMES utf8mb4 COLLATE utf8mb4_general_ci;
+SELECT URL_ENCODE('abc') AS encoded, URL_DECODE('a%20b') AS decoded;
+SELECT URL_ENCODE(CAST(NULL AS CHAR)) IS NULL AS encode_null,
+       URL_DECODE(CAST(NULL AS CHAR)) IS NULL AS decode_null;
+SELECT URL_ENCODE(x) AS encoded FROM (SELECT 'abc' x UNION ALL SELECT 'a b') d ORDER BY encoded;
+SELECT URL_DECODE(x) AS decoded FROM (SELECT 'abc' x UNION ALL SELECT 'a%20b') d ORDER BY decoded;
+SELECT URL_ENCODE('') AS encoded, URL_DECODE('') AS decoded,
+       URL_DECODE(URL_ENCODE('中文 %')) AS round_trip;
+SELECT COLLATION(URL_ENCODE('abc')) AS encoded_collation,
+       COLLATION(URL_DECODE('abc')) AS decoded_collation;
+SELECT COLLATION(URL_ENCODE('abc' COLLATE utf8mb4_general_ci)) AS encoded_collation,
+       COLLATION(URL_DECODE('abc' COLLATE utf8mb4_general_ci)) AS decoded_collation;
+SELECT COLLATION(URL_ENCODE('abc' COLLATE utf8mb4_bin)) AS encoded_collation,
+       COLLATION(URL_DECODE('abc' COLLATE utf8mb4_bin)) AS decoded_collation;
+SELECT URL_DECODE('%20') AS decoded;
+--error 1210
+SELECT URL_DECODE('%');
+--error 1210
+SELECT URL_DECODE('%2');
+--error 1210
+SELECT URL_DECODE('%GG');
+--enable_query_log

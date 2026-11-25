@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "lib/file/path_operations.h"
 #include "rust/config.h"
+#include <inttypes.h>
 #include "share/config/ob_config_helper.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 
@@ -444,7 +446,7 @@ int ObResolverUtils::resolve_vector_type_info(const ParseNode &type_node, ObStri
   } else if (type_node.children_[0]->value_ <= 0 || type_node.children_[0]->value_ > 16000) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector column dim less or equal to zero or larger than 16000 is");
-  } else if (OB_FAIL(databuff_printf(tmp, MAX_LEN, pos, "%ld", type_node.children_[0]->value_))) {
+  } else if (OB_FAIL(databuff_printf(tmp, MAX_LEN, pos, "%" PRId64 "", type_node.children_[0]->value_))) {
   } else if (OB_FAIL(buf.append(tmp, pos))) {
   } else if (type_node.type_ == T_COLLECTION && OB_FAIL(buf.append(")"))) {
   }
@@ -4798,7 +4800,7 @@ int ObResolverUtils::check_foreign_key_set_null_satisfy(
       const ObString &fk_col_name = arg.child_columns_.at(i);
       const ObColumnSchemaV2 *fk_col_schema = child_table_schema.get_column_schema(fk_col_name);
       if (OB_ISNULL(fk_col_schema)) {
-        ret = OB_ERR_UNEXPECTED;
+        ret = OB_ERR_COLUMN_NOT_FOUND;
       } else if (fk_col_schema->is_generated_column()) {
         ret = OB_ERR_UNSUPPORTED_FK_SET_NULL_ON_GENERATED_COLUMN;
       } else if (!fk_col_schema->is_nullable()) {
@@ -5291,37 +5293,6 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
   return ret;
 }
 
-int ObResolverUtils::wait_for_sys_package_ready(ObSQLSessionInfo &session_info)
-{
-  int ret = OB_SUCCESS;
-  if (config::_enable_async_load_sys_package() && !GCTX.sys_package_ready_
-      && session_info.is_user_session() && share::server_is_write_enabled()) {
-    const int64_t retry_interval_us = 100L * 1000L; // 100ms
-    bool waited = false;
-    while (!GCTX.sys_package_ready_ && OB_SUCC(ret)) {
-      if (NULL != session_info.get_cur_exec_ctx() && OB_FAIL(session_info.get_cur_exec_ctx()->check_status())) {
-      } else {
-        if (!waited) {
-          LOG_INFO("sys package not ready yet, waiting for loading completion");
-          waited = true;
-        }
-        ob_usleep(retry_interval_us);
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (!GCTX.sys_package_ready_) {
-      LOG_WARN("sys package not ready after waiting");
-    } else {
-      if (waited) {
-        LOG_INFO("sys package ready after waiting");
-      }
-      // Return OB_SCHEMA_EAGAIN to retry acquiring schema
-      ret = OB_SCHEMA_EAGAIN;
-    }
-  }
-  return ret;
-}
-
 int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                              sql::ObRawExprFactory &expr_factory,
                                              sql::ObSQLSessionInfo &session_info,
@@ -5359,8 +5330,6 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
   }
 
   if (OB_SUCC(ret)) {
-    // Wait for sys package to be loaded if not ready yet
-    OZ (wait_for_sys_package_ready(session_info));
     if (OB_SUCC(ret)) {
       pl::ObPLResolver pl_resolver(allocator,
                                   session_info,
@@ -6062,19 +6031,14 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     char buf[DEFAULT_BUF_LENGTH] = { 0 };
     MEMCPY(buf, secure_file_priv.ptr(), secure_file_priv.length());
 
-    struct stat path_stat;
-    if (0 != stat(buf, &path_stat) || 0 == S_ISDIR(path_stat.st_mode)) {
+    bool is_directory = false;
+    if (OB_SUCCESS != path_operations::is_directory(buf, is_directory) || !is_directory) {
       ret = OB_ERR_NO_PRIVILEGE;
     } else {
       MEMSET(buf, 0, sizeof(buf));
-      char *real_secure_file = nullptr;
-#ifdef _WIN32
+      const char *real_secure_file = buf;
       ObCStringHelper helper;
-      if (NULL == (real_secure_file = ::_fullpath(buf, helper.convert(secure_file_priv), sizeof(buf)))) {
-#else
-      ObCStringHelper helper;
-      if (NULL == (real_secure_file = ::realpath(helper.convert(secure_file_priv), buf))) {
-#endif
+      if (OB_SUCCESS != path_operations::resolve_path(helper.convert(secure_file_priv), buf, sizeof(buf))) {
         ret = OB_ERR_NO_PRIVILEGE;
       } else {
         ObString secure_file_priv_tmp(real_secure_file);
@@ -6116,18 +6080,13 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     const int list_size = ARRAYSIZEOF(server_secure_path_allowlist);
     for (int i = 0; OB_ERR_NO_PRIVILEGE == ret && i < list_size; i++) {
       const char * const secure_file_path = server_secure_path_allowlist[i];
-      struct stat path_stat;
-      stat(secure_file_path, &path_stat);
-      if (0 == S_ISDIR(path_stat.st_mode)) {
+      bool is_directory = false;
+      if (OB_SUCCESS != path_operations::is_directory(secure_file_path, is_directory) || !is_directory) {
         // continue
       } else {
         MEMSET(buf, 0, sizeof(buf));
-        char *real_secure_file = nullptr;
-#ifdef _WIN32
-        if (NULL == (real_secure_file = ::_fullpath(buf, secure_file_path, sizeof(buf)))) {
-#else
-        if (NULL == (real_secure_file = ::realpath(secure_file_path, buf))) {
-#endif
+        const char *real_secure_file = buf;
+        if (OB_SUCCESS != path_operations::resolve_path(secure_file_path, buf, sizeof(buf))) {
           // continue
         } else {
           ObString secure_file_path_tmp(real_secure_file);
@@ -7030,7 +6989,7 @@ int ObResolverUtils::create_values_table_query(ObSQLSessionInfo *session_info,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN(("value desc is null"), K(ret));
         } else if (OB_FAIL(column_expr->add_flag(IS_COLUMN))) {
-        } else if (OB_FAIL(tmp_col_name.append_fmt("column_%ld", i))) {
+        } else if (OB_FAIL(tmp_col_name.append_fmt("column_%" PRId64 "", i))) {
         } else if (OB_ISNULL(buf = static_cast<char*>(allocator->alloc(tmp_col_name.length())))) {
           ret = common::OB_ALLOCATE_MEMORY_FAILED;
         } else {

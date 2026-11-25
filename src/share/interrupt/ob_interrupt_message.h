@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_INTERRUPT_OB_INTERRUPT_MESSAGE_H_
 
 #include "lib/ob_errno.h"
+#include <inttypes.h>
 #include "share/config/ob_server_config.h"
 #include "share/ob_server_struct.h"
 
@@ -51,7 +52,7 @@ public:
     (void)from_svr_addr.to_string(svr_buf, common::MAX_IP_PORT_LENGTH);
     (void) common::databuff_printf(
         buf1_, BUF1_SIZE, pos1_,
-        "tid:%ld,from:%s,%s",
+        "tid:%" PRId64 ",from:%s,%s",
         from_tid, svr_buf, extra_msg);
   }
   void reset()

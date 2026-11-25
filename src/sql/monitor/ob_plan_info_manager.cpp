@@ -17,7 +17,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_plan_info_manager.h"
-#include "lib/compress/ob_compressor_pool.h"
+#include "lib/compress/ob_compress_util.h"
 namespace oceanbase
 {
 namespace sql
@@ -262,25 +262,21 @@ int ObLogicalPlanRawData::compress_logical_plan(ObIAllocator &allocator,
     }
   }
   //step 2: compress data
-  common::ObCompressorType compressor_type = ZSTD_1_3_8_COMPRESSOR;
-  common::ObCompressor *compressor = NULL;
+  common::ObCompressorType compressor_type = ZSTD_COMPRESSOR;
   char *compress_buf = NULL;
   int64_t compress_size = total_size * 2;
   if (OB_FAIL(ret)) {
     //do nothing
-  } else if (OB_FAIL(common::ObCompressorPool::get_instance().get_compressor(compressor_type,
-                                                                             compressor))) {
-  } else if (OB_ISNULL(compressor)) {
-    ret = OB_ERR_UNEXPECTED;
   } else if (NULL == (compress_buf = (char*)allocator.alloc(compress_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     if (REACH_TIME_INTERVAL(100 * 1000)) {
     }
-  } else if (OB_FAIL(compressor->compress(buf, 
-                                          total_size,
-                                          compress_buf,
-                                          compress_size, 
-                                          compress_size))) {
+  } else if (const auto result = compression::compress(
+                 static_cast<uint8_t>(compressor_type),
+                 reinterpret_cast<const uint8_t *>(buf), total_size,
+                 reinterpret_cast<uint8_t *>(compress_buf), compress_size);
+             OB_FAIL(compression_error_code(result.code))) {
+  } else if (FALSE_IT(compress_size = static_cast<int64_t>(result.size))) {
   } else if (compress_size >= total_size) {
     //will not use compress buffer
     logical_plan_ = buf;
@@ -304,8 +300,7 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   //step 1: uncompress data
-  common::ObCompressorType compressor_type = ZSTD_1_3_8_COMPRESSOR;
-  common::ObCompressor *compressor = NULL;
+  common::ObCompressorType compressor_type = ZSTD_COMPRESSOR;
   char *uncompress_buf = NULL;
   int64_t uncompress_size = uncompress_len_;
   if (NULL == logical_plan_ || logical_plan_len_ <= 0) {
@@ -320,19 +315,17 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
     } else {
       MEMCPY(uncompress_buf, logical_plan_, uncompress_size);
     }
-  } else if (OB_FAIL(common::ObCompressorPool::get_instance().get_compressor(compressor_type,
-                                                                             compressor))) {
-  } else if (OB_ISNULL(compressor)) {
-    ret = OB_ERR_UNEXPECTED;
   } else if (NULL == (uncompress_buf = (char*)allocator.alloc(uncompress_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     if (REACH_TIME_INTERVAL(100 * 1000)) {
     }
-  } else if (OB_FAIL(compressor->decompress(logical_plan_, 
-                                            logical_plan_len_,
-                                            uncompress_buf,
-                                            uncompress_size, 
-                                            uncompress_size))) {
+  } else if (const auto result = compression::decompress(
+                 static_cast<uint8_t>(compressor_type),
+                 reinterpret_cast<const uint8_t *>(logical_plan_), logical_plan_len_,
+                 reinterpret_cast<uint8_t *>(uncompress_buf), uncompress_size);
+             OB_FAIL(compression_error_code(result.code))) {
+  } else {
+    uncompress_size = static_cast<int64_t>(result.size);
   }
   if (OB_FAIL(ret) || NULL == uncompress_buf) {
     //do nothing

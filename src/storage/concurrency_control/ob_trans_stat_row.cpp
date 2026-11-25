@@ -15,6 +15,7 @@
  */
 
 #include "storage/concurrency_control/ob_trans_stat_row.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -52,7 +53,7 @@ void build_trans_stat_(const ObTransStatRow &trans_stat_row,
   if (OB_FAIL(databuff_printf(trans_stat_ptr,
                               trans_stat_len,
                               pos,
-                              "[%ld, %ld, %ld, (%d,%ld)]",
+                              "[%" PRId64 ", %" PRId64 ", %" PRId64 ", (%d,%" PRId64 ")]",
                               trans_stat_row.trans_version_.get_val_for_tx(),
                               trans_stat_row.scn_.get_val_for_tx(),
                               trans_stat_row.trans_id_.get_id(),

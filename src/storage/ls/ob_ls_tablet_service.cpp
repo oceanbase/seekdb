@@ -1225,31 +1225,28 @@ int ObLSTabletService::create_tablet(
   ObFreezer *freezer = ls_->get_freezer();
   tablet_handle.reset();
 
-  if (OB_FAIL(ObTabletCreateDeleteHelper::prepare_create_msd_tablet())) {
+  ObUpdateTabletPointerParam param;
+  ObBucketHashWLockGuard lock_guard(bucket_lock_, key.tablet_id_.hash());
+  if (OB_FAIL(ObTabletCreateDeleteHelper::create_msd_tablet(key, tablet_handle))) {
+  } else if (OB_ISNULL(tablet = tablet_handle.get_obj())
+      || OB_ISNULL(allocator = tablet_handle.get_allocator())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("new tablet is null", K(ret), KP(tablet), KP(allocator), K(tablet_handle));
+  } else if (OB_FAIL(tablet->init_for_first_time_creation(*allocator, tablet_id, data_tablet_id,
+      create_scn, snapshot_version, create_tablet_schema, need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn,
+      micro_index_clustered, freezer, fork_info))) {
+  } else if (OB_FAIL(tablet->get_updating_tablet_pointer_param(param))) {
+  } else if (OB_FAIL(t3m->compare_and_swap_tablet(key, tablet_handle, tablet_handle, param))) {
+  } else if (OB_FAIL(tablet_id_set_.set(tablet_id))) {
   } else {
-    ObUpdateTabletPointerParam param;
-    ObBucketHashWLockGuard lock_guard(bucket_lock_, key.tablet_id_.hash());
-    if (OB_FAIL(ObTabletCreateDeleteHelper::create_msd_tablet(key, tablet_handle))) {
-    } else if (OB_ISNULL(tablet = tablet_handle.get_obj())
-        || OB_ISNULL(allocator = tablet_handle.get_allocator())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("new tablet is null", K(ret), KP(tablet), KP(allocator), K(tablet_handle));
-    } else if (OB_FAIL(tablet->init_for_first_time_creation(*allocator, tablet_id, data_tablet_id,
-        create_scn, snapshot_version, create_tablet_schema, need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn,
-        micro_index_clustered, freezer, fork_info))) {
-    } else if (OB_FAIL(tablet->get_updating_tablet_pointer_param(param))) {
-    } else if (OB_FAIL(t3m->compare_and_swap_tablet(key, tablet_handle, tablet_handle, param))) {
-    } else if (OB_FAIL(tablet_id_set_.set(tablet_id))) {
-    } else {
-      report_tablet_to_rs(tablet_id);
-    }
+    report_tablet_to_rs(tablet_id);
+  }
 
-    if (OB_SUCC(ret)) {
-      LOG_INFO("succeed to create tablet", K(ret), K(tablet_id));
-    } else {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(rollback_remove_tablet_without_lock(tablet_id))) {
-      }
+  if (OB_SUCC(ret)) {
+    LOG_INFO("succeed to create tablet", K(ret), K(tablet_id));
+  } else {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(rollback_remove_tablet_without_lock(tablet_id))) {
     }
   }
 
@@ -2304,7 +2301,6 @@ int ObLSTabletService::delete_rows(
   int ret = OB_SUCCESS;
   NG_TRACE(S_delete_rows_begin);
   const ObTabletID &data_tablet_id = ctx.tablet_id_;
-  ObRowReshape *row_reshape = nullptr;
   int64_t afct_num = 0;
 
   if (OB_UNLIKELY(!is_inited_)) {
@@ -4698,6 +4694,8 @@ int ObLSTabletService::estimate_block_count_and_row_count(
     int64_t &memtable_row_count)
 {
   int ret = OB_SUCCESS;
+  const int64_t start_us = ObTimeUtility::current_time();
+  int64_t read_timeout_us = 0;
   ObTabletHandle tablet_handle;
   ObTabletTableIterator tablet_iter;
   share::SCN max_readable_scn;
@@ -4706,12 +4704,14 @@ int ObLSTabletService::estimate_block_count_and_row_count(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(OB_TS_MGR.get_gts(max_readable_scn))) {
+  } else if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, max_readable_scn))) {
+  } else if ((read_timeout_us = timeout_us - (ObTimeUtility::current_time() - start_us)) <= 0) {
+    ret = OB_TIMEOUT;
   } else if (FALSE_IT(snapshot_version_for_tablet = static_cast<int64_t>(max_readable_scn.get_val_for_sql()))) {
   } else if (FALSE_IT(snapshot_version_for_tables = static_cast<int64_t>(max_readable_scn.get_val_for_sql()))) {
   } else if (OB_FAIL(inner_get_read_tables(
           tablet_id,
-          timeout_us,
+          read_timeout_us,
           snapshot_version_for_tablet,
           snapshot_version_for_tables,
           tablet_iter,

@@ -40,6 +40,8 @@
 .cursor/
 .codegraph/
 /.obdev
+/.ci-cache/
+/dist/
 /.settings/
 BROWSE
 Build (GNU)
@@ -170,10 +172,9 @@ tools/deploy/lib
 tools/deploy/lib/
 tools/deploy/list
 tools/deploy/log/
-tools/deploy/mysql_test/r/*.reject
+tests/mysqltest/rejects/
 tools/deploy/mytest.log*
 tools/deploy/nohup*
-tools/deploy/obclient
 tools/deploy/oblog/
 tools/deploy/run/
 tools/deploy/server.list
@@ -210,6 +211,7 @@ src/oblib/grpc/*.pb.cpp
 !src/oblib/grpc/standbyservice.grpc.pb.h
 !src/oblib/grpc/standbyservice.grpc.pb.cc
 deps/3rd
+/deps/prebuilt/
 deps/ios/
 deps/3rd_party
 deps/usr

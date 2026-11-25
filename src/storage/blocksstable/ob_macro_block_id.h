@@ -18,7 +18,6 @@
 #define SRC_STORAGE_BLOCKSSTABLE_OB_MACRO_BLOCK_ID_H_
 
 #include "share/ob_define.h"
-#include "lib/restore/ob_io_device.h"
 
 namespace oceanbase
 {
@@ -59,13 +58,6 @@ public:
   void set_block_index(const int64_t block_index) { block_index_ = block_index; }
   uint64_t write_seq() const { return write_seq_; }
   void set_write_seq(const uint64_t write_seq) { write_seq_ = write_seq; }
-
-  void set_from_io_fd(const common::ObIOFd &block_id)
-  {
-    first_id_ = block_id.first_id_;
-    second_id_ = block_id.second_id_;
-    third_id_ = block_id.third_id_;
-  }
 
   MacroBlockId &operator=(const MacroBlockId &other)
   {

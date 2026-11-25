@@ -18,7 +18,7 @@
 
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "storage/ddl/ob_ddl_lock.h"
 
@@ -515,7 +515,7 @@ int ObDropFTSIndexTask::create_drop_index_task(
     }
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(arg, res); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(arg, res); }))) {
     } else {
       task_id = res.task_id_;
     }

@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_STORAGE_OB_META_OBJ_STRUCT_H_
 #define OCEANBASE_STORAGE_OB_META_OBJ_STRUCT_H_
 
-#include "common/log/ob_log_constants.h"
 #include "lib/time/ob_clock_generator.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_define.h"

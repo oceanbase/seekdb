@@ -49,7 +49,6 @@ class ObExprCollectionConstruct;
 class ObExprObjectConstruct;
 class ObExprCalcPartitionId;
 class ObExprOpSubQueryInPl;
-typedef common::ObSEArray<ObIterExprOperator*, 2> PhyIterExprDesc;
 
 class ObExprGeneratorImpl: public ObExprGenerator, public ObRawExprVisitor
 {
@@ -149,7 +148,6 @@ private:
   common::ObArenaAllocator inner_alloc_;
   ObExprOperatorFactory inner_factory_;
   ObExprOperatorFactory &factory_;
-  PhyIterExprDesc iter_expr_desc_;
 };
 
 //generated expression with row desc

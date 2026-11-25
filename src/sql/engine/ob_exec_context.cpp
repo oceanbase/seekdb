@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "data_plane/lob/ob_lob_access_context.h"
+#include <inttypes.h>
 #include "query/engine/ob_exec_context_access.h"
 #include "query/session/ob_session_access.h"
 #include "ob_exec_context.h"
@@ -143,14 +144,14 @@ int ObDiagnosisManager::do_diagnosis(ObBitVector &skip, int64_t limit_num) {
         
         if (has_col_info) {
           ObString cur_col_name = col_names_.at(i);
-          if (OB_FAIL(err_msg.append_fmt("fail to scan file %.*s at line %ld for column %.*s, error: %s",
+          if (OB_FAIL(err_msg.append_fmt("fail to scan file %.*s at line %" PRId64 " for column %.*s, error: %s",
                                                         cur_file_url_.length(), cur_file_url_.ptr(),
                                                         idx + cur_line_number_,
                                                         cur_col_name.length(), cur_col_name.ptr(),
                                                         common::ob_strerror(err_ret)))) {
           }
         } else {
-          if (OB_FAIL(err_msg.append_fmt("fail to scan file %.*s at line %ld, error: %s",
+          if (OB_FAIL(err_msg.append_fmt("fail to scan file %.*s at line %" PRId64 ", error: %s",
                                         cur_file_url_.length(), cur_file_url_.ptr(),
                                         idx + cur_line_number_,
                                         common::ob_strerror(err_ret)))) {

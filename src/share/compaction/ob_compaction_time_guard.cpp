@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "share/compaction/ob_compaction_time_guard.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -44,7 +45,7 @@ int64_t ObCompactionTimeGuard::to_string(char *buf, const int64_t buf_len) const
   for (int64_t idx = 0; idx < size_; ++idx) {
     const uint64_t ts = event_times_[idx];
     if (ts < 1_ms) {
-      common::databuff_printf(buf, buf_len, pos, "%ldus|", ts);
+      common::databuff_printf(buf, buf_len, pos, "%" PRId64 "us|", ts);
     } else if (ts < 1_s) {
       common::databuff_printf(buf, buf_len, pos, "%.2lfms|", double(ts) / 1_ms);
     } else {
@@ -92,7 +93,7 @@ void ObCompactionTimeGuard::fmt_ts_to_meaningful_str(
 {
   common::databuff_printf(buf, buf_len, pos, "%s", lvalue);
   if (ts < 1_ms) {
-    common::databuff_printf(buf, buf_len, pos, "=%ldus|", ts);
+    common::databuff_printf(buf, buf_len, pos, "=%" PRId64 "us|", ts);
   } else if (ts < 1_s) {
     common::databuff_printf(buf, buf_len, pos, "=%.2lfms|", double(ts) / 1_ms);
   } else {

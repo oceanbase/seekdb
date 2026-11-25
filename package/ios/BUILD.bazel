@@ -4,7 +4,7 @@ exports_files(["package_framework.py"], visibility = ["//src/observer:__pkg__"])
 
 rust_licenses(
     name = "rust_licenses",
-    deps = ["//rust:archive", "@external_crates//:seekdb-jemalloc-sys"],
+    deps = ["//rust:archive"],
     manifest = "rust-licenses.json",
     visibility = ["//src/observer:__pkg__"],
 )

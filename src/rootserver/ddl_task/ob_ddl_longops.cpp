@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_ddl_longops.h"
+#include <inttypes.h>
 #include "rootserver/ddl_task/ob_ddl_task.h"
 
 using namespace oceanbase::rootserver;
@@ -32,7 +33,7 @@ int ObDDLLongopsKey::to_key_string()
   int64_t name_pos = 0;
   int64_t target_pos = 0;
   if (OB_FAIL(databuff_printf(name_, MAX_LONG_OPS_NAME_LENGTH, name_pos, "DDL TASK"))) {
-  } else if (OB_FAIL(databuff_printf(target_, MAX_LONG_OPS_TARGET_LENGTH, target_pos, "task_id=%ld, ", task_id_))) {
+  } else if (OB_FAIL(databuff_printf(target_, MAX_LONG_OPS_TARGET_LENGTH, target_pos, "task_id=%" PRId64 ", ", task_id_))) {
   }
   return ret;
 }

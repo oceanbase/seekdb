@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "storage/blocksstable/ob_block_manager.h"
 #include "ob_sstable_meta.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
-#include "share/ob_io_device_helper.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -616,7 +616,7 @@ int ObSSTableMeta::fsync_block(const ObTabletCreateSSTableParam &param)
   const bool root_block_in_disk = param.root_block_addr_.is_disked();
   const bool macro_meta_in_disk = param.data_block_macro_meta_addr_.is_disked();
   if (root_block_in_disk || macro_meta_in_disk) {
-    if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
+    if (OB_FAIL(OB_SERVER_BLOCK_MGR.fsync_block())) {
     }
   }
   return ret;
