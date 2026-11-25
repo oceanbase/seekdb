@@ -87,6 +87,10 @@ private:
                              const int64_t current_level,
                              const ObDMLStmt &stmt,
                              bool &need_trans) override;
+  int simplify_vector_approx_integer_bounds(ObDMLStmt *stmt, bool &trans_happened);
+  int check_integer_bound_implies(const ObRawExpr *first,
+                                  const ObRawExpr *second,
+                                  bool &implies);
 // used for transform in expr to or exprs
 
   /*
