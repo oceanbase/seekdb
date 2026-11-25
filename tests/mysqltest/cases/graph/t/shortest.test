@@ -117,6 +117,12 @@ EXPLAIN INTO plan_table SET statement_id='shortest_reach'
 SELECT DISTINCT personId FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
  (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person)
  COLUMNS(b.id AS personId)) g WHERE personId<>1 ORDER BY personId;
+# Isolate the implied hop predicate from the independent endpoint filter,
+# whose selectivity must still reduce the estimated output cardinality.
+EXPLAIN INTO plan_table SET statement_id='shortest_depth_only'
+SELECT DISTINCT personId FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person)
+ COLUMNS(b.id AS personId)) g ORDER BY personId;
 EXPLAIN INTO plan_table SET statement_id='shortest_property'
 SELECT name,hops FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
  (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person)
@@ -135,10 +141,19 @@ WHERE statement_id='shortest_reach' AND operator='GRAPH FEEDBACK LOOP'
 AND special_predicates LIKE '%visited=cross_hop, goal=none%';
 SELECT COUNT(*)=1 AS lower_bound_not_reestimated FROM plan_table frontier
 JOIN plan_table feedback ON frontier.statement_id=feedback.statement_id
+AND frontier.id=feedback.parent_id
+WHERE frontier.statement_id='shortest_depth_only'
+AND frontier.operator='SUBPLAN SCAN' AND frontier.object_alias='__g_walk_frontier'
+AND feedback.operator='GRAPH FEEDBACK LOOP'
+AND frontier.filter_predicates LIKE '%__g_depth >= 1%'
+AND frontier.cardinality*10>=feedback.cardinality*9;
+SELECT COUNT(*)=1 AS endpoint_filter_still_estimated FROM plan_table frontier
+JOIN plan_table feedback ON frontier.statement_id=feedback.statement_id
+AND frontier.id=feedback.parent_id
 WHERE frontier.statement_id='shortest_reach'
 AND frontier.operator='SUBPLAN SCAN' AND frontier.object_alias='__g_walk_frontier'
 AND feedback.operator='GRAPH FEEDBACK LOOP'
-AND frontier.cardinality*10>=feedback.cardinality*9;
+AND frontier.cardinality<feedback.cardinality;
 SELECT COUNT(*)=0 AS shortest_selector_eliminated FROM plan_table
 WHERE statement_id='shortest_reach' AND operator='WINDOW FUNCTION';
 SELECT COUNT(*)=1 AS property_keeps_shortest_selector FROM plan_table
