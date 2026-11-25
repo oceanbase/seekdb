@@ -126,9 +126,9 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
     }
     ObDMLExecHelper exec(sql_client);
 
-    // insert into __all_database
+    // update __all_database
     if (FAILEDx(exec.exec_update(OB_ALL_DATABASE_TNAME, dml, affected_rows))) {
-    } else if (!is_single_row(affected_rows)) {
+    } else if (affected_rows > 1) {
       ret = OB_ERR_UNEXPECTED;
     }
 
