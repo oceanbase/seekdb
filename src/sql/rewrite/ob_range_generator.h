@@ -237,6 +237,11 @@ private:
                      common::ObCmpOp cmp_op);
   int generate_contain_exec_param_range();
   int merge_and_remove_ranges();
+
+  int merge_adjacent_equal_ranges();
+  static bool is_consecutive_range(const ObNewRange &l_range,
+                                   const ObNewRange &r_range);
+
   int try_intersect_delayed_range(ObTmpRange &range);
   int create_new_range(ObNewRange *&range, int64_t column_cnt);
   static inline bool is_const_expr_or_null(int64_t idx) { return idx < OB_RANGE_EXTEND_VALUE || OB_RANGE_NULL_VALUE == idx; }
