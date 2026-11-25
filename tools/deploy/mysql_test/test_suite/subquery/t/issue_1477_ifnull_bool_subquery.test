@@ -1,0 +1,22 @@
+# owner: yukiyuan421
+# owner group: sql1
+# tags: subquery
+# issue: 1477
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+--disable_result_log
+# A boolean scalar subquery as the first argument of IFNULL, combined with a
+# double negated LIKE as the second argument, used to raise -4016 while the
+# outer NOT was simplified and the expression type was deduced a second time.
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(!(1 LIKE 'x')));
+SELECT 1 FROM dual WHERE IFNULL((SELECT TRUE), !(!(1 LIKE 'x')));
+
+# Control: only one negation, no NOT simplification happens.
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(1 LIKE 'x'));
+
+# Control: a literal instead of a scalar subquery.
+SELECT 1 FROM dual WHERE IFNULL(FALSE, !(!(1 LIKE 'x')));
+--enable_result_log
