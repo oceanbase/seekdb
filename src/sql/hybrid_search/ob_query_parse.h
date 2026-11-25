@@ -157,7 +157,6 @@ public:
   common::ObSEArray<ObReqExpr *, 4, common::ModulePageAllocator, true> score_alias_items_;
   common::ObSEArray<ObReqColumnExpr *, 4, common::ModulePageAllocator, true> field_exprs_;
   common::ObSEArray<ObReqConstExpr *, 4, common::ModulePageAllocator, true> keyword_exprs_;
-  common::ObSEArray<ObEsQueryInfo *, 4, common::ModulePageAllocator, true> sub_query_infos_;
   common::ObSEArray<common::ObSEArray<ObReqMatchExpr *, 4, common::ModulePageAllocator, true>, 4, common::ModulePageAllocator, true> match_exprs_matrix_;
 
   void set_msm_apply_type();
@@ -231,7 +230,6 @@ private:
       score_alias_items_(),
       field_exprs_(),
       keyword_exprs_(),
-      sub_query_infos_(),
       match_exprs_matrix_(),
       apply_es_mode_(false) 
   {

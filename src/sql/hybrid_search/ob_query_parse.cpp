@@ -1101,7 +1101,6 @@ int ObESQueryParser::parse_must_clauses(ObIJsonBase &req_node, ObEsQueryInfo &qu
     ObEsQueryInfo *sub_query_info = nullptr;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObEsQueryInfo::init_query_info(sub_query_info, alloc_, query_info.query_req_, &query_info, QUERY_ITEM_MUST, query_info.need_cal_score_))) {
-    } else if (OB_FAIL(query_info.sub_query_infos_.push_back(sub_query_info))) {
     } else if (OB_FAIL(parse_single_term(*clause_val, *sub_query_info))) {
     } else if (OB_NOT_NULL(sub_query_info->score_expr_) &&
                OB_FAIL(score_items.push_back(sub_query_info->score_expr_))) {
@@ -1146,7 +1145,6 @@ int ObESQueryParser::parse_must_not_clauses(ObIJsonBase &req_node, ObEsQueryInfo
     ObEsQueryInfo *sub_query_info = nullptr;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObEsQueryInfo::init_query_info(sub_query_info, alloc_, query_info.query_req_, &query_info, QUERY_ITEM_MUST_NOT))) {
-    } else if (OB_FAIL(query_info.sub_query_infos_.push_back(sub_query_info))) {
     } else if (OB_FAIL(parse_single_term(*clause_val, *sub_query_info))) {
     } else if (OB_NOT_NULL(sub_query_info->condition_expr_)) {
       if (sub_query_info->msm_info_.apply_type_ != MSM_APPLY_WITH_SUB && OB_FAIL(condition_items.push_back(sub_query_info->condition_expr_))) {
@@ -1204,7 +1202,6 @@ int ObESQueryParser::parse_should_clauses(ObIJsonBase &req_node, ObEsQueryInfo &
     ObEsQueryInfo *sub_query_info = nullptr;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObEsQueryInfo::init_query_info(sub_query_info, alloc_, query_info.query_req_, &query_info, QUERY_ITEM_SHOULD, query_info.need_cal_score_))) {
-    } else if (OB_FAIL(query_info.sub_query_infos_.push_back(sub_query_info))) {
     } else if (OB_FAIL(parse_single_term(*clause_val, *sub_query_info))) {
     } else if (OB_NOT_NULL(sub_query_info->score_expr_) && OB_FAIL(score_items.push_back(sub_query_info->score_expr_))) {
     } else if (OB_NOT_NULL(sub_query_info->condition_expr_) && OB_FAIL(condition_items.push_back(sub_query_info->condition_expr_))) {
@@ -1254,7 +1251,6 @@ int ObESQueryParser::parse_filter_clauses(ObIJsonBase &req_node, ObEsQueryInfo &
     ObEsQueryInfo *sub_query_info = nullptr;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObEsQueryInfo::init_query_info(sub_query_info, alloc_, query_info.query_req_, &query_info, QUERY_ITEM_FILTER))) {
-    } else if (OB_FAIL(query_info.sub_query_infos_.push_back(sub_query_info))) {
     } else if (OB_FAIL(parse_single_term(*clause_val, *sub_query_info))) {
     } else if (OB_NOT_NULL(sub_query_info->condition_expr_) && OB_FAIL(condition_items.push_back(sub_query_info->condition_expr_))) {
     }

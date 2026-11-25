@@ -76,7 +76,6 @@ public:
   void disable_output_row_with_nop() { need_output_row_with_nop_ = false; }
   OB_INLINE bool is_inited() { return inited_; }
   OB_INLINE bool is_read_memtable_only() const { return read_memtable_only_; }
-  OB_INLINE const common::ObIArray<share::schema::ObColDesc> &get_out_project_cells() { return out_project_cols_; }
   OB_INLINE ObNopPos &get_nop_pos() { return nop_pos_; }
   OB_INLINE void set_iter_del_row(const bool iter_del_row) { iter_del_row_ = iter_del_row; }
   OB_INLINE bool need_iter_del_row() const { return iter_del_row_; }
@@ -179,7 +178,6 @@ protected:
   sql::ObBitVector *skip_bit_;
   ObIAllocator *long_life_allocator_; // used for memory which will be chached in ObGlobalIterPool
   ObStoreRowIterPool<ObStoreRowIterator> *stmt_iter_pool_;
-  common::ObSEArray<share::schema::ObColDesc, 32> out_project_cols_;
   ObLobDataReader lob_reader_;
   ScanState scan_state_;
 private:

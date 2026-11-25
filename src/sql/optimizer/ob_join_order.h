@@ -145,7 +145,6 @@ namespace sql
     BaseTableOptInfo ()
     : optimization_method_(OptimizationMethod::MAX_METHOD),
       heuristic_rule_(HeuristicRule::MAX_RULE),
-      available_index_id_(),
       available_index_name_(),
       pruned_index_name_(),
       unstable_index_name_()
@@ -154,7 +153,6 @@ namespace sql
     // this following variables are tracked to remember how base table access path are generated
     OptimizationMethod optimization_method_;
     HeuristicRule heuristic_rule_;
-    common::ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> available_index_id_;
     common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> available_index_name_;
     common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> pruned_index_name_;
     common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> unstable_index_name_;

@@ -1060,11 +1060,6 @@ int ObTableScanOp::init_table_scan_rtdef()
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(init_attach_scan_rtdef(MY_CTDEF.attach_spec_.attach_ctdef_,
                                               tsc_rtdef_.attach_rtinfo_->attach_rtdef_))) {
-    } else if (tsc_rtdef_.attach_rtinfo_->pushdown_tasks_.empty()) {
-      //has no pushdown task, means all attach task can be pushdown
-      if (OB_FAIL(tsc_rtdef_.attach_rtinfo_->pushdown_tasks_.push_back(
-          tsc_rtdef_.attach_rtinfo_->attach_rtdef_))) {
-      }
     }
   }
   return ret;

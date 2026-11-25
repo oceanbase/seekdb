@@ -303,11 +303,9 @@ private:
 struct ObDASAttachRtInfo
 {
   ObDASAttachRtInfo()
-    : pushdown_tasks_(),
-      attach_rtdef_(nullptr),
+    : attach_rtdef_(nullptr),
       related_scan_cnt_(0)
   { }
-  common::ObSEArray<ObDASBaseRtDef*, 2> pushdown_tasks_;
   ObDASBaseRtDef *attach_rtdef_;
   int64_t related_scan_cnt_;
 };

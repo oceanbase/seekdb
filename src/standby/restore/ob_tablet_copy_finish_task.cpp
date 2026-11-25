@@ -58,7 +58,6 @@ ObTabletCopyFinishTask::ObTabletCopyFinishTask()
     ddl_tables_handle_(),
     major_tables_handle_(),
     mds_tables_handle_(),
-    last_meta_seq_array_(),
     param_()
 {
 }
@@ -183,30 +182,6 @@ int ObTabletCopyFinishTask::add_sstable(ObTableHandleV2 &table_handle)
     LOG_WARN("failed to get tables handle ptr", K(ret), K(table_handle));
   } else if (OB_FAIL(tables_handle_ptr->add_table(table_handle))) {
     LOG_WARN("failed to add table", K(ret), K(table_handle));
-  }
-  return ret;
-}
-
-int ObTabletCopyFinishTask::add_sstable(ObTableHandleV2 &table_handle, const int64_t last_meta_macro_seq)
-{
-  int ret = OB_SUCCESS;
-  ObTablesHandleArray *tables_handle_ptr = nullptr;
-  common::SpinWLockGuard guard(lock_);
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("tablet copy finish task do not init", K(ret));
-  } else if (!table_handle.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("add sstable get invalid argument", K(ret), K(table_handle));
-  } else if (!table_handle.get_table()->get_key().is_major_sstable()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table is not major", K(ret), K(table_handle));
-  } else if (OB_FAIL(get_tables_handle_ptr_(table_handle.get_table()->get_key(), tables_handle_ptr))) {
-    LOG_WARN("failed to get tables handle ptr", K(ret), K(table_handle));
-  } else if (OB_FAIL(tables_handle_ptr->add_table(table_handle))) {
-    LOG_WARN("failed to add table", K(ret), K(table_handle));
-  } else if (OB_FAIL(last_meta_seq_array_.push_back(std::pair<ObITable::TableKey, int64_t>(table_handle.get_table()->get_key(), last_meta_macro_seq)))) {
-    LOG_WARN("failed to add last meta seq", K(ret), K(table_handle), K(last_meta_macro_seq));
   }
   return ret;
 }
