@@ -1,0 +1,15 @@
+--disable_warnings
+DROP TABLE IF EXISTS ddl_identifier_backtick;
+--enable_warnings
+CREATE TABLE ddl_identifier_backtick (
+  id INT PRIMARY KEY,
+  `e``num` ENUM('first', 'second') NOT NULL,
+  `s``et` SET('x', 'y') NOT NULL
+);
+INSERT INTO ddl_identifier_backtick VALUES (1, 'first', 'x'), (2, 'second', 'y');
+CREATE UNIQUE INDEX enum_idx ON ddl_identifier_backtick (`e``num`);
+CREATE UNIQUE INDEX set_idx ON ddl_identifier_backtick (`s``et`);
+SELECT id, `e``num`, `s``et` FROM ddl_identifier_backtick ORDER BY id;
+SELECT id FROM ddl_identifier_backtick FORCE INDEX(enum_idx) WHERE `e``num` = 'second';
+SELECT id FROM ddl_identifier_backtick FORCE INDEX(set_idx) WHERE `s``et` = 'x';
+DROP TABLE ddl_identifier_backtick;
