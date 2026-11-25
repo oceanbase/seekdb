@@ -40,6 +40,56 @@ namespace oceanbase
 namespace storage
 {
 
+ObDDLMergeGuardTask::ObDDLMergeGuardTask()
+  : ObITask(ObITaskType::TASK_TYPE_DDL_MERGE_GUARD), lock_(nullptr), tablet_id_()
+{}
+
+ObDDLMergeGuardTask::~ObDDLMergeGuardTask()
+{
+  if (nullptr != lock_) {
+    const int ret = process();
+    if (OB_SUCCESS != ret) {
+      LOG_ERROR("failed to release DDL merge tablet lock", KR(ret), K(tablet_id_));
+    }
+  }
+}
+
+int ObDDLMergeGuardTask::acquire(const ObTabletID &tablet_id)
+{
+  int ret = OB_SUCCESS;
+  auto *lock = share::server_service<ObDDLMergeBucketLock>();
+  if (OB_ISNULL(lock)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(lock->lock(tablet_id))) {
+    if (OB_EAGAIN == ret) {
+      LOG_INFO("DDL merge tablet is locked", KR(ret), K(tablet_id));
+    }
+  } else {
+    lock_ = lock;
+    tablet_id_ = tablet_id;
+  }
+  return ret;
+}
+
+int ObDDLMergeGuardTask::process()
+{
+  int ret = OB_SUCCESS;
+  if (nullptr != lock_) {
+    if (OB_FAIL(lock_->unlock(tablet_id_))) {
+      LOG_WARN("failed to unlock DDL merge tablet", KR(ret), K(tablet_id_));
+    } else {
+      lock_ = nullptr;
+      tablet_id_.reset();
+    }
+  }
+  return ret;
+}
+
+void ObDDLMergeGuardTask::task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const
+{
+  BUF_PRINTF("DDL Merge Guard Task: tablet_id=%" PRId64, tablet_id_.id());
+}
+
 ObDDLMergePrepareTask::ObDDLMergePrepareTask():
   ObITask(ObITaskType::TASK_TYPE_DDL_MERGE_PREPARE),
   merge_param_(), is_inited_(false)
@@ -71,6 +121,7 @@ int ObDDLMergePrepareTask::inner_process()
   ObIDag *dag = get_dag();
   ObArray<ObITask*> merge_slice_tasks;
   ObDDLMergeAssembleTask *assemble_task = nullptr;
+  ObDDLMergeGuardTask *guard_task = nullptr;
 
   int64_t merge_slice_idx = 0;
   ObArray<ObDDLSliceRange> slice_ranges;
@@ -82,7 +133,7 @@ int ObDDLMergePrepareTask::inner_process()
     DEBUG_SYNC(BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE);
   }
 
-  /* validate tablet context before generating merge tasks */
+  // Lock the tablet before inspecting its merge state or publishing DDL completion.
   if (OB_ISNULL(dag)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(merge_param_.get_tablet_param(tablet_id, tablet_param))) {
@@ -90,6 +141,11 @@ int ObDDLMergePrepareTask::inner_process()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(tablet_param->storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(dag->alloc_task(guard_task))) {
+  } else if (OB_FAIL(guard_task->acquire(tablet_id))) {
+    if (OB_EAGAIN == ret && dag->is_independent()) {
+      ret = OB_DAG_TASK_IS_SUSPENDED;
+    }
   }
   
   /* pre-check before merge */
@@ -111,13 +167,27 @@ int ObDDLMergePrepareTask::inner_process()
   } else if (OB_FAIL(merge_helper->get_rec_scn(merge_param_))) {
   }
 
-  /* generate assemble table task */
   if (OB_FAIL(ret) || !need_merge) {
+    // The guard has no descendants yet. Release it before a suspended task retries.
+    if (nullptr != guard_task) {
+      const int remove_ret = dag->remove_task(*guard_task);
+      if (OB_SUCCESS != remove_ret) {
+        LOG_WARN("failed to remove unused DDL merge guard task", K(remove_ret), K(tablet_id));
+        if (OB_SUCC(ret)) {
+          ret = remove_ret;
+        }
+      }
+    }
+    return ret;
+  }
+
+  if (OB_FAIL(guard_task->deep_copy_children(get_child_nodes()))) {
+  } else if (OB_FAIL(ObITask::add_child(*guard_task))) {
   } else if (OB_FAIL(dag->alloc_task(assemble_task))) {
   } else if (OB_ISNULL(assemble_task)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(assemble_task->init(merge_param_))) {
-  } else if (OB_FAIL(assemble_task->deep_copy_children(get_child_nodes()))) {
+  } else if (OB_FAIL(assemble_task->add_child(*guard_task))) {
   } else if (OB_FAIL(::ObITask::add_child(*assemble_task))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < slice_ranges.count(); i++ ) {
@@ -136,9 +206,7 @@ int ObDDLMergePrepareTask::inner_process()
   if (OB_FAIL(ret)) {
   } else {
     // add task in reverse order of running
-    /* generate assemble task */
-    if (OB_FAIL(ret)) {
-    } else if (nullptr == assemble_task) {
+    if (OB_FAIL(dag->add_task(*guard_task))) {
     } else if (OB_FAIL(dag->add_task(*assemble_task))) {
     }
 

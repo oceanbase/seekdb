@@ -73,6 +73,21 @@ two major class are build to fullfil the dag progress
 1. Task  Class，which mainly control dependecy relationship, including Prepare Task， MergeSlice Task， Assemble Task
 2. Helper Class, which real execute those actions, since too many diffrent type need to be supported
 */
+class ObDDLMergeGuardTask : public share::ObITask
+{
+public:
+  ObDDLMergeGuardTask();
+  ~ObDDLMergeGuardTask() override;
+  int acquire(const ObTabletID &tablet_id);
+  int process() override;
+  void task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const override;
+  INHERIT_TO_STRING_KV("MergeGuardTask", share::ObITask, K(tablet_id_));
+
+private:
+  ObDDLMergeBucketLock *lock_;
+  ObTabletID tablet_id_;
+};
+
 class ObDDLMergePrepareTask: public share::ObITask
 {
 public:
