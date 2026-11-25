@@ -15,7 +15,15 @@ SDK_HEADERS = {
         "linkopts": select({"@platforms//os:linux": ["-pthread"], "//conditions:default": []}),
     },
     "sanity_headers": {"hdrs": ["sanity/include/sanity/**/*.h"], "includes": ["sanity/include"]},
-    "boost_headers": _headers("boost"),
+    "boost_headers": _headers("boost") | {
+        # Boost 1.74 predates libc++'s removal of std::unary_function.
+        # Select Boost's replacement on Apple platforms.
+        "defines": select({
+            "@platforms//os:macos": ["BOOST_NO_CXX98_FUNCTION_BASE"],
+            "@platforms//os:ios": ["BOOST_NO_CXX98_FUNCTION_BASE"],
+            "//conditions:default": [],
+        }),
+    },
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
     "curl_headers": _headers("curl") | {
