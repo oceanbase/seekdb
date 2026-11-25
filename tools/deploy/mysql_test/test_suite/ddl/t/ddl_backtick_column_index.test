@@ -1,0 +1,18 @@
+# Regression: identifiers containing backticks must be escaped in DDL SQL.
+CREATE TABLE ddl_backtick_enum (id BIGINT PRIMARY KEY, `a``b` ENUM('a', 'b'));
+INSERT INTO ddl_backtick_enum VALUES (1, 'a'), (2, 'b');
+CREATE UNIQUE INDEX idx_enum ON ddl_backtick_enum (`a``b`);
+SELECT id, `a``b` FROM ddl_backtick_enum ORDER BY id;
+DROP TABLE ddl_backtick_enum;
+
+CREATE TABLE ddl_backtick_set (id BIGINT PRIMARY KEY, `s``et` SET('a', 'b'));
+INSERT INTO ddl_backtick_set VALUES (1, 'a'), (2, 'b');
+CREATE UNIQUE INDEX idx_set ON ddl_backtick_set (`s``et`);
+SELECT id, `s``et` FROM ddl_backtick_set ORDER BY id;
+DROP TABLE ddl_backtick_set;
+
+CREATE TABLE ddl_backtick_plain (id BIGINT PRIMARY KEY, `plain``name` VARCHAR(30));
+INSERT INTO ddl_backtick_plain VALUES (1, 'first'), (2, 'second');
+CREATE UNIQUE INDEX idx_plain ON ddl_backtick_plain (`plain``name`);
+SELECT id, `plain``name` FROM ddl_backtick_plain ORDER BY id;
+DROP TABLE ddl_backtick_plain;
