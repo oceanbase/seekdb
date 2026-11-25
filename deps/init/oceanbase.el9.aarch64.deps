@@ -17,8 +17,6 @@ repo=http://mirrors.oceanbase.com/oceanbase/development-kit/el/9/aarch64/
 [deps]
 devdeps-libaio-0.3.112-12022092915.el8.aarch64.rpm
 
-[deps-el9]
-
 [tools]
 obdevtools-bison-2.4.1-12022100413.el8.aarch64.rpm
 obdevtools-flex-2.5.35-12022100417.el8.aarch64.rpm
