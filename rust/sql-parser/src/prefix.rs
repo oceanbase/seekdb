@@ -502,29 +502,51 @@ pub fn split_sql(input: &[u8], mode: SqlMode, first_only: bool, bounds: StackBou
         return result;
     }
     let input = &input[..end];
-    let original = input;
-    let Ok(sql) = grammar::executable_sql(input, mode, true) else {
+    let Ok(grammar::ExpandedSql { text: sql, mut comments }) =
+        grammar::executable_sql_with_comments(input, mode, true)
+    else {
         result.ends.push(input.len());
         result.failed = true;
         return result;
     };
+    // Nested markers are used for masking. Only complete comments enclose a cut.
+    comments.retain(grammar::ExecutableComment::is_complete);
     let mut offset = 0;
     while offset < sql.len() {
         let pl = classify_statement(&sql[offset..], mode).pl != PlPrefix::None;
         let diagnostics = crate::diagnostic::Diagnostics::default();
-        let end = grammar::sql::statement_end(&sql[offset..], mode, pl, &budget, &diagnostics).or_else(|error| {
-            if budget.failure().is_none() && matches!(sql, std::borrow::Cow::Owned(_)) {
-                let ignored = grammar::executable_sql(&original[offset..], mode, false)?;
+        let end = grammar::sql::statement_end(&sql[offset..], mode, pl, &budget, &diagnostics)
+            .ok()
+            .and_then(|length| {
+                let end = offset + length;
+                let next = comments.partition_point(|comment| comment.end <= end);
+                let Some(comment) = comments.get(next).filter(|comment| comment.start < end) else {
+                    return Some(end);
+                };
+                grammar::sql::trailing_statement_trivia(
+                    &sql[end..comment.end], mode, pl, &budget, &diagnostics,
+                ).ok()?;
+                let mut tokens = Tokens::new(&input[comment.end..], mode);
+                Some(match tokens.next() {
+                    Ok(Some(token)) if token.is(b";") => comment.end + token.end,
+                    Ok(None) => input.len(),
+                    _ => comment.end,
+                })
+            })
+            .or_else(|| {
+                if budget.failure().is_some() || comments.is_empty() {
+                    return None;
+                }
+                let ignored = grammar::executable_sql(&input[offset..], mode, false).ok()?;
                 let pl = classify_statement(&ignored, mode).pl != PlPrefix::None;
                 grammar::sql::statement_end(&ignored, mode, pl, &budget, &diagnostics)
-            } else {
-                Err(error)
-            }
-        });
+                    .ok()
+                    .map(|length| offset + length)
+            });
         if budget.failure().is_some() { return stack_failure(); }
         match end {
-            Ok(length) if length > 0 => {
-                offset += length;
+            Some(end) if end > offset => {
+                offset = end;
                 result.ends.push(offset);
             }
             _ => {
