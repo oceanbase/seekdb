@@ -71,9 +71,23 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
     OZ (arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.trigger_info_.get_trigger_id(),
                                                                           TRIGGER_SCHEMA,
                                                                           res.trigger_schema_version_)));
-    OZ (share::local_ddl_serial_call(
-        [&]{ return ctx.root_command_service().create_trigger_with_res(arg, res); }),
-        GCTX.self_addr());
+    // The first stage is committed. Retry schema races here so SQL retry does
+    // not restart CREATE and report the trigger we just created as a duplicate.
+    bool finish = false;
+    while (OB_SUCC(ret) && !finish) {
+      if (OB_FAIL(share::local_ddl_serial_call(
+          [&]{ return ctx.root_command_service().create_trigger_with_res(arg, res); }))) {
+        if (OB_EAGAIN == ret) {
+          ret = OB_SUCCESS;
+          if (OB_UNLIKELY(THIS_WORKER.get_timeout_remain() <= 0)) {
+            ret = OB_TIMEOUT;
+          } else if (OB_FAIL(THIS_WORKER.check_status())) {
+          }
+        }
+      } else {
+        finish = true;
+      }
+    }
     if (OB_ERR_PARALLEL_DDL_CONFLICT == ret) {
       ret = OB_SUCCESS;
     }
