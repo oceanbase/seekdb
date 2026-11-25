@@ -1,0 +1,60 @@
+# Regression for oceanbase/seekdb#1512: duplicate membership values must not
+# trigger a VALUES-table rewrite when their distinct count is below the limit.
+# Keep result checks as well as plan checks: parameter values must never be
+# removed or reordered when a cached or prepared statement is reused.
+
+--disable_query_log
+SET @saved_inlist_plan_cache = @@ob_enable_plan_cache;
+--enable_query_log
+SET ob_enable_plan_cache = 1;
+CREATE TABLE t_inlist_dup1512 (id INT PRIMARY KEY, c BIGINT, u BIGINT UNSIGNED, s VARCHAR(16)) ORGANIZATION = HEAP;
+INSERT INTO t_inlist_dup1512 VALUES (1,1,0,'1'),(2,2,1,'2'),(3,3,2,'3'),(4,4,9223372036854775807,'4'),(5,5,9223372036854775808,'01'),(6,NULL,18446744073709551615,NULL),(7,-1,NULL,'1'),(8,-9223372036854775808,3,'-1');
+
+--echo # Default plan-cache path: nine entries, only three distinct values.
+--replace_regex /rowset=[0-9]+/rowset=ROWSET/ /is_global_index=false, /is_global_index=false,/ /filter_before_indexback\[false\], /filter_before_indexback[false],/
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) FULL(t_inlist_dup1512) */ id FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (4,5,-1,4,5,-1,-9223372036854775808,4,5);
+
+--echo # The same repeated membership without plan-cache reuse.
+SET ob_enable_plan_cache = 0;
+--replace_regex /rowset=[0-9]+/rowset=ROWSET/ /is_global_index=false, /is_global_index=false,/ /filter_before_indexback\[false\], /filter_before_indexback[false],/
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) FULL(t_inlist_dup1512) */ id FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+SET ob_enable_plan_cache = 1;
+
+--echo # Four distinct values at the threshold must retain the VALUES rewrite.
+--replace_regex /rowset=[0-9]+/rowset=ROWSET/ /is_global_index=false, /is_global_index=false,/ /filter_before_indexback\[false\], /filter_before_indexback[false],/
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) FULL(t_inlist_dup1512) */ id FROM t_inlist_dup1512 WHERE c IN (1,2,3,4,1,2,3,4);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,3,4,1,2,3,4);
+
+--echo # NULL and NOT IN retain their three-valued membership semantics.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,NULL,1,2,NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c NOT IN (1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ COUNT(*) AS matched_rows FROM t_inlist_dup1512 WHERE c NOT IN (1,2,NULL,1,2,NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ COUNT(*) AS matched_rows FROM t_inlist_dup1512 WHERE c IN (NULL,NULL,NULL,NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ COUNT(*) AS matched_rows FROM t_inlist_dup1512 WHERE c NOT IN (NULL,NULL,NULL,NULL);
+
+--echo # Preserve mixed types, string equality and signed/unsigned boundaries.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,'2',3.0,1,'2',3.0,NULL,NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE s IN ('1','2','1','2');
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (-9223372036854775808,-1,-9223372036854775808,-1);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE u IN (0,18446744073709551615,0,18446744073709551615);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE u IN (9223372036854775808,18446744073709551615,9223372036854775808,18446744073709551615);
+
+--echo # Reuse one prepared statement after changing the parameter values.
+PREPARE inlist_dup_stmt FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (?,?,?,?,?,?,?,?)';
+SET @p1=1,@p2=2,@p3=3,@p4=1,@p5=2,@p6=3,@p7=1,@p8=2;
+EXECUTE inlist_dup_stmt USING @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8;
+SET @p1=4,@p2=5,@p3=-1,@p4=-9223372036854775808,@p5=4,@p6=5,@p7=-1,@p8=-9223372036854775808;
+EXECUTE inlist_dup_stmt USING @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8;
+SET @p1=NULL,@p2=NULL,@p3=NULL,@p4=NULL,@p5=NULL,@p6=NULL,@p7=NULL,@p8=NULL;
+EXECUTE inlist_dup_stmt USING @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8;
+SET @p1=NULL,@p2=2,@p3=3,@p4=NULL,@p5=2,@p6=3,@p7=5,@p8=5;
+EXECUTE inlist_dup_stmt USING @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8;
+DEALLOCATE PREPARE inlist_dup_stmt;
+DROP TABLE t_inlist_dup1512;
+--disable_query_log
+SET ob_enable_plan_cache = @saved_inlist_plan_cache;
+--enable_query_log

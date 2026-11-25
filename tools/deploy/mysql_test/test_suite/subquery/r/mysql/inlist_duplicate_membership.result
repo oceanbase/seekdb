@@ -1,0 +1,126 @@
+SET ob_enable_plan_cache = 1;
+CREATE TABLE t_inlist_dup1512 (id INT PRIMARY KEY, c BIGINT, u BIGINT UNSIGNED, s VARCHAR(16)) ORGANIZATION = HEAP;
+INSERT INTO t_inlist_dup1512 VALUES (1,1,0,'1'),(2,2,1,'2'),(3,3,2,'3'),(4,4,9223372036854775807,'4'),(5,5,9223372036854775808,'01'),(6,NULL,18446744073709551615,NULL),(7,-1,NULL,'1'),(8,-9223372036854775808,3,'-1');
+# Default plan-cache path: nine entries, only three distinct values.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) FULL(t_inlist_dup1512) */ id FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+Query Plan
+=====================================
+|ID|OPERATOR       |NAME            |
+-------------------------------------
+|0 |TABLE FULL SCAN|t_inlist_dup1512|
+=====================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_inlist_dup1512.id]), filter([t_inlist_dup1512.c IN (1, 2, 3, 1, 2, 3, 1, 2, 3)]), rowset=ROWSET
+      access([t_inlist_dup1512.c], [t_inlist_dup1512.id]), partitions(p0)
+      is_index_back=false, is_global_index=false,filter_before_indexback[false],
+      range_key([t_inlist_dup1512.__pk_increment]), range(MIN ; MAX)always true
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+ids
+1,2,3
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+ids
+1,2,3
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (4,5,-1,4,5,-1,-9223372036854775808,4,5);
+ids
+4,5,7,8
+# The same repeated membership without plan-cache reuse.
+SET ob_enable_plan_cache = 0;
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) FULL(t_inlist_dup1512) */ id FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+Query Plan
+=====================================
+|ID|OPERATOR       |NAME            |
+-------------------------------------
+|0 |TABLE FULL SCAN|t_inlist_dup1512|
+=====================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_inlist_dup1512.id]), filter([t_inlist_dup1512.c IN (1, 2, 3, 1, 2, 3, 1, 2, 3)]), rowset=ROWSET
+      access([t_inlist_dup1512.c], [t_inlist_dup1512.id]), partitions(p0)
+      is_index_back=false, is_global_index=false,filter_before_indexback[false],
+      range_key([t_inlist_dup1512.__pk_increment]), range(MIN ; MAX)always true
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,3,1,2,3,1,2,3);
+ids
+1,2,3
+SET ob_enable_plan_cache = 1;
+# Four distinct values at the threshold must retain the VALUES rewrite.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) FULL(t_inlist_dup1512) */ id FROM t_inlist_dup1512 WHERE c IN (1,2,3,4,1,2,3,4);
+Query Plan
+===============================================
+|ID|OPERATOR                 |NAME            |
+-----------------------------------------------
+|0 |HASH JOIN                |                |
+|1 |├─SUBPLAN SCAN           |VIEW2           |
+|2 |│ └─HASH DISTINCT        |                |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1   |
+|4 |└─TABLE FULL SCAN        |t_inlist_dup1512|
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_inlist_dup1512.id]), filter(nil), rowset=ROWSET
+      equal_conds([t_inlist_dup1512.c = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=ROWSET
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=ROWSET
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([t_inlist_dup1512.c], [t_inlist_dup1512.id]), filter(nil), rowset=ROWSET
+      access([t_inlist_dup1512.c], [t_inlist_dup1512.id]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t_inlist_dup1512.__pk_increment]), range(MIN ; MAX)always true
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,3,4,1,2,3,4);
+ids
+1,2,3,4
+# NULL and NOT IN retain their three-valued membership semantics.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,2,NULL,1,2,NULL);
+ids
+1,2
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c NOT IN (1,2,3,1,2,3);
+ids
+4,5,7,8
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ COUNT(*) AS matched_rows FROM t_inlist_dup1512 WHERE c NOT IN (1,2,NULL,1,2,NULL);
+matched_rows
+0
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ COUNT(*) AS matched_rows FROM t_inlist_dup1512 WHERE c IN (NULL,NULL,NULL,NULL);
+matched_rows
+0
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ COUNT(*) AS matched_rows FROM t_inlist_dup1512 WHERE c NOT IN (NULL,NULL,NULL,NULL);
+matched_rows
+0
+# Preserve mixed types, string equality and signed/unsigned boundaries.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (1,'2',3.0,1,'2',3.0,NULL,NULL);
+ids
+1,2,3
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE s IN ('1','2','1','2');
+ids
+1,2,7
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (-9223372036854775808,-1,-9223372036854775808,-1);
+ids
+7,8
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE u IN (0,18446744073709551615,0,18446744073709551615);
+ids
+1,6
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE u IN (9223372036854775808,18446744073709551615,9223372036854775808,18446744073709551615);
+ids
+5,6
+# Reuse one prepared statement after changing the parameter values.
+PREPARE inlist_dup_stmt FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM t_inlist_dup1512 WHERE c IN (?,?,?,?,?,?,?,?)';
+SET @p1=1,@p2=2,@p3=3,@p4=1,@p5=2,@p6=3,@p7=1,@p8=2;
+EXECUTE inlist_dup_stmt USING @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8;
+ids
+1,2,3
+SET @p1=4,@p2=5,@p3=-1,@p4=-9223372036854775808,@p5=4,@p6=5,@p7=-1,@p8=-9223372036854775808;
+EXECUTE inlist_dup_stmt USING @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8;
+ids
+4,5,7,8
+SET @p1=NULL,@p2=NULL,@p3=NULL,@p4=NULL,@p5=NULL,@p6=NULL,@p7=NULL,@p8=NULL;
+EXECUTE inlist_dup_stmt USING @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8;
+ids
+NULL
+SET @p1=NULL,@p2=2,@p3=3,@p4=NULL,@p5=2,@p6=3,@p7=5,@p8=5;
+EXECUTE inlist_dup_stmt USING @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8;
+ids
+2,3,5
+DEALLOCATE PREPARE inlist_dup_stmt;
+DROP TABLE t_inlist_dup1512;
