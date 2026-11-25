@@ -226,6 +226,35 @@ fn multiline_crlf_and_case_flags() {
 }
 
 #[test]
+fn bare_backslash_zero_is_an_invalid_escape() {
+    for pattern in [r"^\0", r"\0", r"[\0]", r"\08", r"\0A"] {
+        let error = compile(pattern.to_owned(), 0, 0, 0).err().unwrap();
+        assert_eq!(error.kind, ESCAPE, "{pattern}");
+    }
+    assert!(engine(r"\00").is_match("\0").unwrap());
+    assert!(engine(r"\000").is_match("\0").unwrap());
+    assert!(engine(r"^\00").is_match("\0abc").unwrap());
+    assert!(!engine(r"^\00").is_match(r"\0").unwrap());
+    assert!(engine(r"\07").is_match("\u{7}").unwrap());
+    assert!(engine(r"\0377").is_match("\u{ff}").unwrap());
+    assert!(engine(r"\0400").is_match("\u{20}0").unwrap());
+    assert!(engine(r"\050").is_match("(").unwrap());
+    assert!(!engine(r"\050").is_match("x").unwrap());
+    assert!(engine(r"\\0").is_match(r"\0").unwrap());
+    // fancy-regex rejects \Q, so quote mode is checked on the rewritten text.
+    // A quoted \0 must stay a backslash and a zero, not become an escape error.
+    assert_eq!(
+        rewrite_icu_octal_escapes(r"\Q\0\E").unwrap().as_ref(),
+        r"\Q\0\E"
+    );
+    assert!(engine(r"(a)\1").is_match("aa").unwrap());
+    assert!(compile(r"(a)\2".to_owned(), 0, 0, 0).is_err());
+    let missing_group = compile(r"(?(2)a|b)".to_owned(), 0, 0, 0).err().unwrap();
+    assert_eq!(missing_group.kind, GENERIC);
+    assert!(missing_group.message.contains("invalid capture-group reference"));
+}
+
+#[test]
 fn advanced_fancy_features_are_supported() {
     assert!(engine(r"^(\w+)\s+\1$").is_match("foo foo").unwrap());
     assert_eq!(
