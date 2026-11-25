@@ -1,0 +1,179 @@
+DROP TABLE IF EXISTS inlist_integer_dedup;
+CREATE TABLE inlist_integer_dedup(id INT PRIMARY KEY, category BIGINT);
+INSERT INTO inlist_integer_dedup VALUES (1,1),(2,2),(3,3),(4,4),(5,NULL),
+(6,-1),(7,9223372036854775807);
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+FROM inlist_integer_dedup WHERE category IN (1,2,3,1,2,3);
+Query Plan
+=========================================
+|ID|OPERATOR       |NAME                |
+-----------------------------------------
+|0 |TABLE FULL SCAN|inlist_integer_dedup|
+=========================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_integer_dedup.id]), filter([inlist_integer_dedup.category IN (1, 2, 3)]), rowset=16
+      access([inlist_integer_dedup.id], [inlist_integer_dedup.category]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([inlist_integer_dedup.id]), range(MIN ; MAX)always true
+SET ob_enable_plan_cache = true;
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,2,3,1,2,3) ORDER BY id;
+id
+1
+2
+3
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (2,3,4,2,3,4) ORDER BY id;
+id
+2
+3
+4
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,2,3,4,2,3) ORDER BY id;
+id
+1
+2
+3
+4
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,2,3,1,4,3) ORDER BY id;
+id
+1
+2
+3
+4
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,2,3,1,2,4) ORDER BY id;
+id
+1
+2
+3
+4
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,2,3,1,2,3) ORDER BY id;
+id
+1
+2
+3
+SELECT MAX(hit_count) > 0 AS reused_plan FROM oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT`
+  WHERE query_sql LIKE '%FROM inlist_integer_dedup%'
+    AND query_sql NOT LIKE '%OB_PLAN_CACHE_PLAN_STAT%';
+reused_plan
+1
+PREPARE inlist_dedup_ps FROM 'SELECT /*+ opt_param(''inlist_rewrite_threshold'', 4) */ id FROM inlist_integer_dedup WHERE category IN (?,?,?,?,?,?) ORDER BY id';
+SET @a=1,@b=2,@c=3,@d=1,@e=2,@f=3;
+EXECUTE inlist_dedup_ps USING @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+SET @a=2,@b=3,@c=4,@d=2,@e=3,@f=4;
+EXECUTE inlist_dedup_ps USING @a,@b,@c,@d,@e,@f;
+id
+2
+3
+4
+SET @a=1,@b=2,@c=3,@d=4,@e=2,@f=3;
+EXECUTE inlist_dedup_ps USING @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+4
+SET @d=1,@f=4;
+EXECUTE inlist_dedup_ps USING @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+4
+SET @f=NULL;
+EXECUTE inlist_dedup_ps USING @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+SET @a=1,@b=1,@c=1,@d=1,@e=1,@f=1;
+EXECUTE inlist_dedup_ps USING @a,@b,@c,@d,@e,@f;
+id
+1
+SET @f=4;
+EXECUTE inlist_dedup_ps USING @a,@b,@c,@d,@e,@f;
+id
+1
+4
+DEALLOCATE PREPARE inlist_dedup_ps;
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category NOT IN (1,2,3,1,2,3) ORDER BY id;
+id
+4
+6
+7
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (-1,9223372036854775807,-1,9223372036854775807) ORDER BY id;
+id
+6
+7
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (-1,1,-1,1) ORDER BY id;
+id
+1
+6
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,1,1,1) ORDER BY id;
+id
+1
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,NULL,1,NULL) ORDER BY id;
+id
+1
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category NOT IN (1,NULL,1,NULL) ORDER BY id;
+id
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,'2',1,'2') ORDER BY id;
+id
+1
+2
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1.0,2.0,1.0,2.0) ORDER BY id;
+id
+1
+2
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE category IN (1,18446744073709551615,1,18446744073709551615) ORDER BY id;
+id
+1
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id FROM inlist_integer_dedup
+WHERE (id,category) IN ((1,1),(2,2),(1,1),(2,2)) ORDER BY id;
+id
+1
+2
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+FROM inlist_integer_dedup WHERE category IN (1,2,3,4,1,2);
+Query Plan
+===================================================
+|ID|OPERATOR                 |NAME                |
+---------------------------------------------------
+|0 |HASH JOIN                |                    |
+|1 |├─SUBPLAN SCAN           |VIEW2               |
+|2 |│ └─HASH DISTINCT        |                    |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1       |
+|4 |└─TABLE FULL SCAN        |inlist_integer_dedup|
+===================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_integer_dedup.id]), filter(nil), rowset=16
+      equal_conds([inlist_integer_dedup.category = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([inlist_integer_dedup.id], [inlist_integer_dedup.category]), filter(nil), rowset=16
+      access([inlist_integer_dedup.id], [inlist_integer_dedup.category]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([inlist_integer_dedup.id]), range(MIN ; MAX)always true
+DROP TABLE inlist_integer_dedup;
