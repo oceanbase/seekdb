@@ -39,6 +39,35 @@ using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::blocksstable;
 
+namespace
+{
+// 追加一个用反引号包裹的 DDL 标识符（列名/别名），并按 MySQL 规则把标识符内部的 `` ` `` 转义为 `` `` ``。
+// 该 helper 位于 share 层，避免 share 依赖上层 sql 模块（对应 issue #1469）。
+// prefix 可为 nullptr；非空时会拼接在左反引号之后（如 "__SHADOW_"），prefix 本身不应包含反引号。
+int append_quoted_identifier(ObSqlString &sql_string, const char *prefix, const ObString &identifier)
+{
+  int ret = OB_SUCCESS;
+  const char quote = '`';
+  if (OB_FAIL(sql_string.append(&quote, 1))) {
+  } else if (nullptr != prefix && OB_FAIL(sql_string.append(prefix))) {
+  } else {
+    const int64_t len = identifier.length();
+    const char *p = identifier.ptr();
+    const char double_quote[2] = {'`', '`'};
+    for (int64_t i = 0; OB_SUCC(ret) && i < len; ++i) {
+      if (quote == p[i]) {
+        ret = sql_string.append(double_quote, 2);
+      } else {
+        ret = sql_string.append(p + i, 1);
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(sql_string.append(&quote, 1))) {
+    }
+  }
+  return ret;
+}
+}  // anonymous namespace
+
 ObDDLTaskSerializeField::ObDDLTaskSerializeField()
 {
   reset();
@@ -549,30 +578,28 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
+  const ObString &column_name = column_name_info.column_name_;
   // append comma
-  if (with_comma) {
-    if (OB_FAIL(sql_string.append_fmt(", "))) {
-    }
+  if (with_comma && OB_FAIL(sql_string.append_fmt(", "))) {
   }
   // append original column name
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast("))) {
+      } else if (OB_FAIL(append_quoted_identifier(sql_string, nullptr, column_name))) {
+      } else if (OB_FAIL(sql_string.append_fmt(" as unsigned)"))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(append_quoted_identifier(sql_string, nullptr, column_name))) {
     }
   }
   // append AS
-  if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt(" AS "))) {
-    }
+  if (OB_SUCC(ret) && with_origin_name && with_alias_name && OB_FAIL(sql_string.append_fmt(" AS "))) {
   }
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_quoted_identifier(sql_string,
+        column_name_info.is_shadow_column_ ? "__SHADOW_" : nullptr, column_name))) {
     }
   }
   return ret;
