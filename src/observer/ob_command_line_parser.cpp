@@ -528,7 +528,7 @@ void ObCommandLineParser::print_help() const
 #endif
   MPRINT();
   MPRINT();
-  MPRINT("Below are some parameters that you may be interesed in:");
+  MPRINT("Below are some parameters that you may be interested in:");
   MPRINT("  --parameter datafile_size=<size>          data file initial size (e.g. 20G)");
   MPRINT("  --parameter datafile_maxsize=<size>       data file maximum size (e.g. 50G), can be expanded when needed");
   MPRINT("  --parameter log_disk_size=<size>          log/redo/clog disk size (e.g. 10G)");
