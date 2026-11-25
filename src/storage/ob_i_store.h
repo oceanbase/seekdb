@@ -479,7 +479,6 @@ struct ObStoreCtx
                     const int64_t lock_timeout_us,
                     const share::SCN &snapshot_version);
   bool is_uncommitted_data_rollbacked() const;
-  void force_print_trace_log();
   int init_mds_filter(memtable::ObMvccMdsFilter &mds_filter)
   { return mvcc_acc_ctx_.init_mds_filter(mds_filter); }
   memtable::ObMvccMdsFilter &get_mds_filter() { return mvcc_acc_ctx_.mds_filter_; }
