@@ -1,0 +1,6 @@
+# The index build casts the enum to an unsigned value under its original column alias.
+CREATE TABLE ddl_quoted_enum (id INT PRIMARY KEY, `val``ue` ENUM('first','second'));
+INSERT INTO ddl_quoted_enum VALUES (1, 'first'), (2, 'second');
+CREATE UNIQUE INDEX idx_quoted_enum ON ddl_quoted_enum (`val``ue`);
+SELECT id, `val``ue` AS label FROM ddl_quoted_enum FORCE INDEX (idx_quoted_enum) WHERE `val``ue` = 'second';
+DROP TABLE ddl_quoted_enum;
