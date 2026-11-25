@@ -489,7 +489,7 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
           //begin trans
           if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
           } else if (!is_index_stat && !all_tstats.empty() && !param.is_temp_table_ &&
-                     OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
+                     OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param))) {
           } else if (OB_FAIL(ObDbmsStatsUtils::split_batch_write(ctx, trans.get_connection(), all_tstats, all_cstats, is_index_stat))) {
           }
           //end trans

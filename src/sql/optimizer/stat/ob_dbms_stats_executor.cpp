@@ -62,7 +62,7 @@ int ObDbmsStatsExecutor::gather_table_stats(ObExecContext &ctx,
   } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::BACKUP_HISTORY_STATS))) {
   } else if (!param.is_temp_table_ && !param.is_async_gather_ &&
              OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(
-                 ctx, backup_trans, param, ObTimeUtility::current_time(), true))) {
+                 ctx, backup_trans, param, true))) {
     LOG_WARN("failed to backup opt stats", K(ret));
   } else if (OB_FAIL(
                  prepare_gather_stats(ctx, param, partition_id_block_map, gather_helper))) {
@@ -853,7 +853,7 @@ int ObDbmsStatsExecutor::set_table_stats(ObExecContext &ctx,
     if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
     } else if (OB_FAIL(do_set_table_stats(param, &table_stat))) {
     } else if (!param.table_param_.is_temp_table_ &&
-               OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param.table_param_, ObTimeUtility::current_time()))) {
+               OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param.table_param_))) {
       LOG_WARN("failed to backup opt stats", K(ret));
     } else if (OB_FAIL(mgr.update_table_stat(trans.get_connection(),
                                              &table_stat,
@@ -1074,7 +1074,7 @@ int ObDbmsStatsExecutor::delete_table_stats(ObExecContext &ctx,
     //begin trans
     if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
     } else if (!param.is_temp_table_ &&
-               OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
+               OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param))) {
       LOG_WARN("failed to backup opt stats", K(ret));
     } else if (OB_FAIL(ObOptStatManager::get_instance().delete_table_stat(table_id,
                                                                           part_ids,

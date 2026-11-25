@@ -31,7 +31,7 @@ namespace common {
                                  %s T WHERE table_id = %" PRId64 " and \
                                  partition_id in %s and savtime in (SELECT min(savtime) From \
                                  %s TF where TF.table_id = T.table_id and TF.partition_id = T.partition_id \
-                                 and savtime >= usec_to_time('%" PRId64 "'));"
+                                 and savtime >= (CAST('%" PRId64 "' AS DECIMAL(20, 0)) * 1000));"
 
 #define FETCH_COL_STATS_HISTROY "SELECT table_id, partition_id, column_id, object_type stat_level,\
                                  distinct_cnt num_distinct, null_cnt num_null, b_max_value,\
@@ -40,7 +40,7 @@ namespace common {
                                  FROM %s T WHERE table_id = %" PRId64 " \
                                  and partition_id in %s and savtime in (SELECT min(savtime) From \
                                  %s TF where TF.table_id = T.table_id and TF.partition_id = T.partition_id \
-                                 and savtime >= usec_to_time('%" PRId64 "'));"
+                                 and savtime >= (CAST('%" PRId64 "' AS DECIMAL(20, 0)) * 1000));"
 
 #define FETCH_HISTOGRAM_HISTROY "SELECT endpoint_num, b_endpoint_value, endpoint_repeat_cnt\
                                  FROM %s T WHERE \
@@ -48,7 +48,7 @@ namespace common {
                                  savtime in (SELECT min(savtime) From %s \
                                  TF where TF.table_id = T.table_id \
                                  and TF.partition_id = T.partition_id and savtime >= \
-                                 usec_to_time('%" PRId64 "')) ORDER BY ENDPOINT_NUM;"
+                                 (CAST('%" PRId64 "' AS DECIMAL(20, 0)) * 1000)) ORDER BY ENDPOINT_NUM;"
 
 #define FETCH_STATS_HISTROY_RETENTION "SELECT sval1 retention FROM %s WHERE\
                                        sname = 'STATS_RETENTION';"
@@ -80,7 +80,7 @@ namespace common {
 
 #define SELECT_TABLE_STAT                "SELECT table_id,            \
                                                   partition_id,        \
-                                                  usec_to_time(%" PRId64 "),   \
+                                                  %" PRId64 ",   \
                                                   object_type,         \
                                                   0,                   \
                                                   last_analyzed,       \
@@ -98,7 +98,7 @@ namespace common {
                                              FROM %s                   \
                                              WHERE table_id = %" PRIu64 " %s"
 
-#define TABLE_STAT_MOCK_VALUE_PATTERN "(%" PRIu64 ", %" PRId64 ", usec_to_time(%" PRId64 "), 0, 0, 0, 0, -1, -1, 0, 0, -1, 0, 0, 0, 0, 0)"
+#define TABLE_STAT_MOCK_VALUE_PATTERN "(%" PRIu64 ", %" PRId64 ", %" PRId64 ", 0, 0, 0, 0, -1, -1, 0, 0, -1, 0, 0, 0, 0, 0)"
 
 #define INSERT_COLUMN_STAT_HISTORY "INSERT INTO %s(table_id,                  \
                                                    partition_id,              \
@@ -125,7 +125,7 @@ namespace common {
 #define SELECT_COLUMN_STAT               "SELECT   table_id,                  \
                                                    partition_id,              \
                                                    column_id,                 \
-                                                   usec_to_time(%" PRId64 "),         \
+                                                   %" PRId64 ",         \
                                                    object_type,               \
                                                    0,                         \
                                                    last_analyzed,             \
@@ -146,7 +146,7 @@ namespace common {
                                              FROM %s                          \
                                              WHERE %s"
 
-#define COLUMN_STAT_MOCK_VALUE_PATTERN "(%" PRIu64 ", %" PRId64 ", %" PRIu64 ", usec_to_time(%" PRId64 "), 0, 0, usec_to_time(%" PRId64 "), 0, 0, \
+#define COLUMN_STAT_MOCK_VALUE_PATTERN "(%" PRIu64 ", %" PRId64 ", %" PRIu64 ", %" PRId64 ", 0, 0, usec_to_time(%" PRId64 "), 0, 0, \
                                          %s, '%.*s', %s, '%.*s', 0, '', 0, -1, 0.000000, 0, 0, NULL)"
 
 #define INSERT_HISTOGRAM_STAT_HISTORY "INSERT INTO %s(table_id,                 \
@@ -163,7 +163,7 @@ namespace common {
                                                       partition_id,             \
                                                       column_id,                \
                                                       endpoint_num,             \
-                                                      usec_to_time(%" PRId64 "),        \
+                                                      %" PRId64 ",        \
                                                       object_type,              \
                                                       endpoint_normalized_value,\
                                                       endpoint_value,           \
@@ -179,7 +179,6 @@ namespace common {
 int ObDbmsStatsHistoryManager::backup_opt_stats(ObExecContext &ctx,
                                                 ObMySQLTransaction &trans,
                                                 const ObTableStatParam &param,
-                                                int64_t saving_time,
                                                 bool is_backup_for_gather/*default false*/)
 {
   int ret = OB_SUCCESS;
@@ -192,16 +191,19 @@ int ObDbmsStatsHistoryManager::backup_opt_stats(ObExecContext &ctx,
   } else if (retention_val == 0) {
     /*do nothing*/
   } else if (OB_FAIL(ObDbmsStatsUtils::get_part_ids_and_column_ids(param, part_ids, column_ids, is_backup_for_gather))) {
-  } else if (OB_FAIL(backup_table_stats(ctx, trans, param, saving_time, part_ids))) {
-  } else if (OB_FAIL(backup_column_stats(ctx, trans, param, saving_time, part_ids, column_ids))) {
-  } else {/*do nothing*/}
+  } else {
+    const int64_t saving_time_ns = ObTimeUtility::current_time_ns();
+    if (OB_FAIL(backup_table_stats(ctx, trans, param, saving_time_ns, part_ids))) {
+    } else if (OB_FAIL(backup_column_stats(ctx, trans, param, saving_time_ns, part_ids, column_ids))) {
+    }
+  }
   return ret;
 }
 
 int ObDbmsStatsHistoryManager::backup_table_stats(ObExecContext &ctx,
                                                   ObMySQLTransaction &trans,
                                                   const ObTableStatParam &param,
-                                                  const int64_t saving_time,
+                                                  const int64_t saving_time_ns,
                                                   ObIArray<int64_t> &part_ids)
 {
   int ret = OB_SUCCESS;
@@ -219,8 +221,8 @@ int ObDbmsStatsHistoryManager::backup_table_stats(ObExecContext &ctx,
                                                     param.table_id_,
                                                     (is_specify_partition || have_stat_part_ids.count() != part_ids.count()),
                                                     have_stat_part_ids,
-                                                    saving_time))) {
-  } else if (OB_FAIL(backup_no_table_part_stats(trans, param.table_id_, no_stat_part_ids, saving_time))) {
+                                                    saving_time_ns))) {
+  } else if (OB_FAIL(backup_no_table_part_stats(trans, param.table_id_, no_stat_part_ids, saving_time_ns))) {
   }
   return ret;
 }
@@ -305,7 +307,7 @@ int ObDbmsStatsHistoryManager::backup_having_table_part_stats(ObMySQLTransaction
                                                               const uint64_t table_id,
                                                               const bool is_specify_partition,
                                                               const ObIArray<int64_t> &partition_ids,
-                                                              const int64_t saving_time)
+                                                              const int64_t saving_time_ns)
 {
   int ret = OB_SUCCESS;
   ObSqlString partition_list;
@@ -319,7 +321,7 @@ int ObDbmsStatsHistoryManager::backup_having_table_part_stats(ObMySQLTransaction
   } else if (is_specify_partition &&
              OB_FAIL(extra_where_str.append_fmt(" and partition_id in %s", partition_list.ptr()))) {
   } else if (OB_FAIL(select_sql.append_fmt(SELECT_TABLE_STAT,
-                                           saving_time,
+                                           saving_time_ns,
                                            share::OB_ALL_TABLE_STAT_TNAME,
                                            share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
                                            is_specify_partition ? extra_where_str.ptr() : " "))) {
@@ -336,7 +338,7 @@ int ObDbmsStatsHistoryManager::backup_having_table_part_stats(ObMySQLTransaction
 int ObDbmsStatsHistoryManager::backup_no_table_part_stats(ObMySQLTransaction &trans,
                                                           const uint64_t table_id,
                                                           const ObIArray<int64_t> &partition_ids,
-                                                          const int64_t saving_time)
+                                                          const int64_t saving_time_ns)
 {
   int ret = OB_SUCCESS;
   int64_t idx = 0;
@@ -351,7 +353,7 @@ int ObDbmsStatsHistoryManager::backup_no_table_part_stats(ObMySQLTransaction &tr
         if (OB_FAIL(value.append_fmt(TABLE_STAT_MOCK_VALUE_PATTERN,
                                      share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
                                      partition_ids.at(idx++),
-                                     saving_time))) {
+                                     saving_time_ns))) {
         } else if (OB_FAIL(values_list.append_fmt("%s%s",
                                                   i == 0 ? "VALUES " : ", ",
                                                   value.ptr()))) {
@@ -375,7 +377,7 @@ int ObDbmsStatsHistoryManager::backup_no_table_part_stats(ObMySQLTransaction &tr
 int ObDbmsStatsHistoryManager::backup_column_stats(ObExecContext &ctx,
                                                    ObMySQLTransaction &trans,
                                                    const ObTableStatParam &param,
-                                                   const int64_t saving_time,
+                                                   const int64_t saving_time_ns,
                                                    const ObIArray<int64_t> &part_ids,
                                                    const ObIArray<uint64_t> &column_ids)
 {
@@ -399,17 +401,17 @@ int ObDbmsStatsHistoryManager::backup_column_stats(ObExecContext &ctx,
                                                 is_specify_partition || is_specify_column,
                                                 part_ids, column_ids,
                                                 having_stat_part_col_map,
-                                                saving_time))) {
+                                                saving_time_ns))) {
   } else if (OB_FAIL(backup_no_column_stats(trans, param.table_id_,
                                             part_ids, column_ids,
                                             having_stat_part_col_map,
-                                            saving_time))) {
+                                            saving_time_ns))) {
   } else if (OB_FAIL(backup_histogram_stats(trans, param.table_id_,
                                             is_specify_partition,
                                             is_specify_column,
                                             part_ids, column_ids,
                                             having_stat_part_col_map,
-                                            saving_time))) {
+                                            saving_time_ns))) {
   } else {/*do nothing*/}
   return ret;
 }
@@ -498,7 +500,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
                                                           const ObIArray<int64_t> &partition_ids,
                                                           const ObIArray<uint64_t> &column_ids,
                                                           hash::ObHashMap<ObOptColumnStat::Key, bool> &having_stat_part_col_map,
-                                                          const int64_t saving_time)
+                                                          const int64_t saving_time_ns)
 {
   int ret = OB_SUCCESS;
   if (having_stat_part_col_map.size() != 0) {
@@ -591,7 +593,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
     if (OB_SUCC(ret) && need_backup) {
       int64_t affected_rows = 0;
       if (OB_FAIL(select_sql.append_fmt(SELECT_COLUMN_STAT,
-                                        saving_time,
+                                        saving_time_ns,
                                         share::OB_ALL_COLUMN_STAT_TNAME,
                                         where_str.ptr()))) {
       } else if (OB_FAIL(raw_sql.append_fmt(INSERT_COLUMN_STAT_HISTORY,
@@ -610,7 +612,7 @@ int ObDbmsStatsHistoryManager::backup_no_column_stats(ObMySQLTransaction &trans,
                                                       const ObIArray<int64_t> &partition_ids,
                                                       const ObIArray<uint64_t> &column_ids,
                                                       hash::ObHashMap<ObOptColumnStat::Key, bool> &having_stat_part_col_map,
-                                                      const int64_t saving_time)
+                                                      const int64_t saving_time_ns)
 {
   int ret = OB_SUCCESS;
   int64_t total_cnt = partition_ids.count() * column_ids.count();
@@ -641,8 +643,8 @@ int ObDbmsStatsHistoryManager::backup_no_column_stats(ObMySQLTransaction &trans,
                                            share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
                                            partition_ids.at(i),
                                            column_ids.at(j),
-                                           saving_time,
-                                           saving_time,
+                                           saving_time_ns,
+                                           saving_time_ns / 1000,
                                            null_sql_str.ptr(),
                                            b_null_str.length(),
                                            b_null_str.ptr(),
@@ -698,7 +700,7 @@ int ObDbmsStatsHistoryManager::backup_histogram_stats(ObMySQLTransaction &trans,
                                                       const ObIArray<int64_t> &partition_ids,
                                                       const ObIArray<uint64_t> &column_ids,
                                                       hash::ObHashMap<ObOptColumnStat::Key, bool> &having_stat_part_col_map,
-                                                      const int64_t saving_time)
+                                                      const int64_t saving_time_ns)
 {
   int ret = OB_SUCCESS;
   if (having_stat_part_col_map.size() != 0) {//only process have stat part col.
@@ -725,7 +727,7 @@ int ObDbmsStatsHistoryManager::backup_histogram_stats(ObMySQLTransaction &trans,
                                             (is_specify_partition || is_specify_column) ? extra_where_str.ptr() : " "))) {
     } else if (OB_FAIL(raw_sql.append_fmt(INSERT_HISTOGRAM_STAT_HISTORY,
                                           share::OB_ALL_HISTOGRAM_STAT_HISTORY_TNAME,
-                                          saving_time,
+                                          saving_time_ns,
                                           share::OB_ALL_HISTOGRAM_STAT_TNAME,
                                           where_str.ptr()))) {
     } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
@@ -753,7 +755,8 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
     int64_t retention_val = 0;
     if (OB_FAIL(get_stats_history_retention(ctx, retention_val))) {
     } else if (OB_FAIL(time_str.append_fmt("WHERE savtime < "\
-                                           "date_sub(CURRENT_TIMESTAMP, interval %" PRId64 " day)",
+                                           "(CAST(time_to_usec(date_sub(CURRENT_TIMESTAMP, interval %" PRId64 " day)) "\
+                                           "AS DECIMAL(20, 0)) * 1000)",
                                            retention_val))) {
     } else {/*do nothing*/}
   //Attempt to delete all opt stats at once. Since this is a synchronous operation,
@@ -764,7 +767,7 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
     } else {
       only_delete_one_batch = true;
     }
-  } else if (OB_FAIL(time_str.append_fmt("WHERE savtime < usec_to_time(%" PRId64 ")", specify_time))) {
+  } else if (OB_FAIL(time_str.append_fmt("WHERE savtime < (CAST(%" PRId64 " AS DECIMAL(20, 0)) * 1000)", specify_time))) {
   } else {/*do nothing*/}
   if (OB_SUCC(ret)) {
     
@@ -874,6 +877,14 @@ int ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ObEx
           if (!is_first) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(client_result->get_obj(idx, tmp))) {
+          } else if (!fetch_history_retention && !tmp.is_null()) {
+            int64_t saving_time_ns = 0;
+            if (OB_FAIL(tmp.get_int(saving_time_ns))) {
+            } else {
+              result.set_timestamp(saving_time_ns / 1000);
+              result.set_scale(DEFAULT_SCALE_FOR_FRACTIONAL_SECONDS);
+              is_first = false;
+            }
           } else if (OB_FAIL(ob_write_obj(ctx.get_allocator(), tmp, result))) {
           } else {
             is_first = false;
@@ -912,7 +923,7 @@ int ObDbmsStatsHistoryManager::restore_table_stats(ObExecContext &ctx,
     ObMySQLTransaction trans;
     //begin trans
     if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
-    } else if (OB_FAIL(backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
+    } else if (OB_FAIL(backup_opt_stats(ctx, trans, param))) {
     } else if (OB_FAIL(ObDbmsStatsUtils::split_batch_write(ctx, trans.get_connection(), all_tstats, all_cstats))) {
     } else {/*do nothing*/}
     //end trans
