@@ -21,6 +21,8 @@
 #include "query/protocol/ob_mysql_rust_row.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/pl_composite_client_output.h"
 namespace oceanbase{
 
 using namespace common;
@@ -343,10 +345,13 @@ int ObExprOutputPack::build_row_values(
   for (int64_t column_idx = 1; OB_SUCC(ret) && column_idx < expr.arg_cnt_; ++column_idx) {
     ObDatum &datum = expr.locate_param_datum(ctx, column_idx);
     ObObj obj;
+    const bool composite_text = PlCompositeClientOutput::needs_conversion(
+        expr.args_[column_idx]->obj_meta_);
     if (OB_FAIL(datum.to_obj(obj, expr.args_[column_idx]->obj_meta_,
                              expr.args_[column_idx]->obj_datum_map_))) {
+    } else if (OB_FAIL(PlCompositeClientOutput::convert(obj, alloc, ctx.exec_ctx_))) {
     } else {
-      if (obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type) {
+      if (obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type && !composite_text) {
         ObCastMode cast_mode = CM_NONE;
         if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session, cast_mode))) {
         } else {
