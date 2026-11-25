@@ -240,7 +240,7 @@ def locked_archive(package, archive_directory):
             cached_checksum = index.read_text(encoding="ascii").strip()
             if re.fullmatch(r"[0-9a-f]{64}", cached_checksum):
                 cached = archive_directory / cached_checksum
-                if cached.is_file():
+                if cached.is_file() and sha256_file(cached) == cached_checksum:
                     return cached
 
     descriptor, temporary_name = tempfile.mkstemp(
