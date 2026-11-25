@@ -289,7 +289,6 @@ private:
   int64_t cb_tid_;                  // commit callback thread id
   int64_t exec_info_reap_ts_;       // the time reaping incremental tx exec info
   ObTxTimeoutTask commit_task_;     // commit retry task
-  ObTransTraceLog tlog_;
 #ifdef ENABLE_DEBUG_LOG
   struct DLink {
     DLink(): next_(this), prev_(this) {}
@@ -333,7 +332,7 @@ private:
   bool has_extra_state_() const;
   bool in_tx_or_has_extra_state_() const;
   bool in_tx_for_free_route_();
-  void print_trace_() const;
+  void dump_state_() const;
 public:
   ObTxDesc();
   ~ObTxDesc();
@@ -450,8 +449,8 @@ public:
   int64_t get_tx_lock_timeout() const { return lock_timeout_us_; }
   bool is_in_tx() const { return state_ > State::IDLE; }
   bool is_tx_active() const { return state_ >= State::ACTIVE && state_ < State::IN_TERMINATE; }
-  void print_trace();
-  void dump_and_print_trace();
+  void dump_state();
+  void try_dump_state();
   bool in_tx_or_has_extra_state() const;
   bool in_tx_for_free_route();
   const ObTransID &get_tx_id() const { return tx_id_; }
@@ -465,7 +464,6 @@ public:
   void add_implicit_savepoint(const ObTxSEQ savepoint);
   void release_all_implicit_savepoint();
   void release_implicit_savepoint(const ObTxSEQ savepoint);
-  ObTransTraceLog &get_tlog() { return tlog_; }
   bool need_rollback() { return state_ == State::ABORTED; }
   int64_t get_timeout_us() const { return timeout_us_; }
   share::SCN get_tx_snapshot_version() {
