@@ -54,8 +54,6 @@ class SCN;
 }
 namespace wal
 {
-#define TMP_SUFFIX ".tmp"
-
 #define WAL_EVENT(info_string, args...) FLOG_INFO("[WAL_EVENT] " info_string, args)
 
 #define WAL_REPORT_INFO_KV(args...) \
@@ -65,7 +63,6 @@ int64_t pos = 0; \
 ::oceanbase::common::databuff_print_kv(EXTRA_INFOS, MAX_INFO_LENGTH, pos, ##args); \
 
 typedef int FileDesc;
-typedef uint64_t block_id_t ;
 typedef uint64_t offset_t;
 class LSN;
 // ==================== wal env start =============================
@@ -73,11 +70,7 @@ class LSN;
 
 // ==================== block and log start ========================
 constexpr offset_t MAX_LOG_HEADER_SIZE = 4 * 1024;
-constexpr offset_t MAX_INFO_BLOCK_SIZE = 4 * 1024;
 constexpr offset_t MAX_LOG_BODY_SIZE = 3 * 1024 * 1024 + 512 * 1024;                 // The max size of one log body is 3.5MB.
-
-const int64_t WAL_PHY_BLOCK_SIZE = 1 << 26;                                        // 64MB
-const int64_t WAL_BLOCK_SIZE = WAL_PHY_BLOCK_SIZE - MAX_INFO_BLOCK_SIZE;          // log block size is 64M-MAX_INFO_BLOCK_SIZE by default.
 
 constexpr int64_t CLOG_FILE_TAIL_PADDING_TRIGGER = 4096;     // Threshold for padding the remaining space at the end of the file
 // The valid group_entry (not padding entry) size range is:
@@ -87,11 +80,6 @@ constexpr int64_t CLOG_FILE_TAIL_PADDING_TRIGGER = 4096;     // Threshold for pa
 // So the MAX_LOG_BUFFER_SIZE is defined as below:
 constexpr offset_t MAX_LOG_BUFFER_SIZE = MAX_LOG_BODY_SIZE + MAX_LOG_HEADER_SIZE + CLOG_FILE_TAIL_PADDING_TRIGGER;        // max size of the log buffer is (3.5MB + 4KB + 4KB)
 
-constexpr offset_t LOG_DIO_ALIGN_SIZE = 4 * 1024;
-constexpr offset_t LOG_DIO_ALIGNED_BUF_SIZE_REDO = MAX_LOG_BUFFER_SIZE + LOG_DIO_ALIGN_SIZE;
-const block_id_t LOG_INITIAL_BLOCK_ID = 0;
-constexpr block_id_t LOG_MAX_BLOCK_ID = UINT64_MAX/WAL_BLOCK_SIZE - 1;
-constexpr block_id_t LOG_INVALID_BLOCK_ID = LOG_MAX_BLOCK_ID + 1;
 typedef common::ObFixedArray<share::SCN, ObIAllocator> SCNArray;
 typedef common::ObFixedArray<LSN, ObIAllocator> LSNArray;
 // ==================== block and log end ===========================
@@ -145,39 +133,6 @@ inline bool is_valid_log_id(const int64_t log_id)
   return (log_id > 0);
 }
 
-inline bool is_valid_block_id(block_id_t  block_id)
-{
-  return block_id >= 0 && block_id < LOG_MAX_BLOCK_ID;
-}
-
-inline bool is_tmp_block(const char *block_name)
-{
-  bool bool_ret = false;
-  if (NULL != block_name && NULL != strstr(block_name, TMP_SUFFIX)) {
-    bool_ret = true;
-  }
-  return bool_ret;
-}
-
-inline int convert_to_tmp_block(const char *log_dir,
-                               const block_id_t  block_id,
-                               char *buf,
-                               const int64_t buf_len)
-{
-  int64_t pos = 0;
-  return databuff_printf(buf, buf_len, pos, "%s/%" PRIu64 "%s", log_dir,
-          block_id, TMP_SUFFIX);
-}
-
-inline int convert_to_normal_block(const char *log_dir,
-                                   const block_id_t  block_id,
-                                   char *buf,
-                                   const int64_t buf_len)
-{
-  int64_t pos = 0;
-  return databuff_printf(buf, buf_len, pos, "%s/%" PRIu64, log_dir, block_id);
-}
-
 struct TimeoutChecker
 {
   explicit TimeoutChecker(const int64_t timeout_us)
@@ -217,15 +172,6 @@ inline bool is_valid_file_desc(const FileDesc &fd)
   return 0 <= fd;
 }
 
-int block_id_to_string(const block_id_t block_id,
-                       char *str,
-                       const int64_t str_len);
-int block_id_to_tmp_string(const block_id_t block_id,
-                           char *str,
-                           const int64_t str_len);
-
-int construct_absolute_block_path(const char *dir_path, const block_id_t block_id, const int64_t buf_len, char *absolute_block_path);
-int construct_absolute_tmp_block_path(const char *dir_path, const block_id_t block_id, const int64_t buf_len, char *absolute_tmp_block_path);
 int convert_sys_errno();
 
 bool is_number(const char *);

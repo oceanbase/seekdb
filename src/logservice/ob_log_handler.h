@@ -50,7 +50,6 @@ namespace logservice
 class ObLogApplyService;
 class ObApplyStatus;
 class ObLogService;
-class ObILogStorage;
 class AppendCb;
 class ObILogHandler
 {
@@ -273,12 +272,6 @@ public:
   // OB_NOT_RUNNING: in stop state
   // OB_EAGAIN: try lock failed, need retry.
   int is_replay_fatal_error(bool &has_fatal_error);
-  template<class LogEntryType, class StartPoint>
-  friend int init_log_iterator(
-    ObLogHandler *log_handler,
-    const StartPoint &start_point,
-    const int64_t suggested_max_read_buf_size,
-    wal::Iterator<LogEntryType> &iterator);
 private:
   static constexpr int64_t MIN_CONN_TIMEOUT_US = 5 * 1000 * 1000;     // 5s
   typedef common::RWLock RWLock;
@@ -294,7 +287,6 @@ private:
 
   template<typename StartPoint, typename IteratorType>
   int seek_log_iterator_dispatch_(const StartPoint &start_point,
-                                  const int64_t suggested_max_read_buf_size,
                                   IteratorType &iterator);
 
   int advance_base_lsn_impl_(const wal::LSN &lsn);
@@ -348,57 +340,12 @@ int seek_log_iterator_no_shared_storage(wal::Env *wal_env,
 
 template <class StartPoint, class IteratorType>
 int ObLogHandler::seek_log_iterator_dispatch_(const StartPoint &start_point,
-                                              const int64_t suggested_read_buf_size,
                                               IteratorType &iterator)
 {
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
   ret = seek_log_iterator_no_shared_storage(wal_env_, start_point, iterator);
   return ret;
-}
-
-template<class LogEntryType, class StartPoint>
-int init_log_iterator(
-  ObLogHandler *log_handler,
-  const StartPoint &start_point,
-  const int64_t suggested_read_buf_size,
-  wal::Iterator<LogEntryType> &iterator)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(log_handler) || wal::MAX_LOG_BUFFER_SIZE > suggested_read_buf_size || !start_point.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", KP(log_handler), K(start_point));
-  } else if (OB_FAIL(log_handler->seek_log_iterator_dispatch_(start_point, suggested_read_buf_size, iterator))) {
-  } else {}
-  return ret;
-}
-
-int __get_log_handler(
-    ObILogStorage &log_storage,
-    ObLogHandler *&log_handler);
-
-template<class LogEntryType, class StartPoint>
-int init_log_iterator_(ObILogStorage &log_storage,
-  const StartPoint &start_point,
-  const int64_t suggested_read_buf_size,
-  wal::Iterator<LogEntryType> &iterator)
-{
-  int ret = OB_SUCCESS;
-  ObLogHandler *log_handler = NULL;
-  if (OB_FAIL(__get_log_handler(log_storage, log_handler))) {
-  } else if (OB_FAIL(init_log_iterator(log_handler, start_point, suggested_read_buf_size, iterator))) {
-  } else {}
-  return ret;
-}
-
-template<typename StartPoint, typename IteratorType>
-int seek_log_iterator(ObILogStorage &log_storage,
-                      const StartPoint &start_point,
-                      wal::Iterator<IteratorType> &iterator)
-{
-  constexpr int64_t suggested_read_buf_size = wal::WAL_BLOCK_SIZE;
-  return init_log_iterator_(
-      log_storage, start_point, suggested_read_buf_size, iterator);
 }
 
 // =============================== Iterator end===========================

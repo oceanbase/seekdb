@@ -175,12 +175,15 @@ int HandleImpl::set_base_lsn(const LSN &lsn)
 {
   RLockGuard guard(lock_);
   int ret = OB_SUCCESS;
-  const LSN block_lsn(lsn.val_ / WAL_BLOCK_SIZE * WAL_BLOCK_SIZE);
   if (!is_inited_ || !lsn.is_valid()) {
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
-  } else if (OB_FAIL(from_rust_code(wal_rs::set_base_lsn_ffi(**stream_, block_lsn.val_).code))) {
   } else {
-    SERVER_EVENT_ADD("LOG", "SET BASE LSN", "NEW_BASE_LSN", block_lsn);
+    const auto result = wal_rs::set_base_lsn_ffi(**stream_, lsn.val_);
+    ret = from_rust_code(result.code);
+    if (OB_SUCC(ret)) {
+      const LSN base_lsn(result.base_lsn);
+      SERVER_EVENT_ADD("LOG", "SET BASE LSN", "NEW_BASE_LSN", base_lsn);
+    }
   }
   return ret;
 }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::env::Env;
-use crate::format::{copied_bytes, Error, Result};
+use crate::format::{block_start, copied_bytes, Error, Result};
 use crate::stream::{self, Cursor, Next, Stream};
 
 #[cxx::bridge(namespace = "oceanbase::wal::wal_rs")]
@@ -411,7 +411,7 @@ fn progress_ffi(stream: &Stream) -> Progress {
 }
 
 fn base_info_ffi(stream: &Stream, lsn: u64) -> BaseInfoResult {
-    match stream.base_info(lsn) {
+    match stream.base_info(block_start(lsn)) {
         Ok(info) => BaseInfoResult {
             code: Code::Ok,
             info: info.into(),
@@ -430,7 +430,7 @@ fn base_info_ffi(stream: &Stream, lsn: u64) -> BaseInfoResult {
 }
 
 fn set_base_lsn_ffi(stream: &Stream, lsn: u64) -> Progress {
-    match stream.set_base_lsn(lsn) {
+    match stream.set_base_lsn(block_start(lsn)) {
         Ok(_) => progress_ffi(stream),
         Err(error) => Progress {
             code: error.into(),

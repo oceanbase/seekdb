@@ -125,6 +125,10 @@ pub fn block_offset(lsn: u64) -> u64 {
     lsn % BLOCK_SIZE
 }
 
+pub(crate) fn block_start(lsn: u64) -> u64 {
+    lsn - block_offset(lsn)
+}
+
 pub fn physical_offset(lsn: u64) -> u64 {
     SEGMENT_HEADER_SIZE + block_offset(lsn)
 }

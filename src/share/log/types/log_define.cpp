@@ -16,7 +16,6 @@
 
 #include "share/log/types/log_define.h"
 #include "share/ob_errno.h"
-#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -54,54 +53,6 @@ int convert_sys_errno()
     break;
   default:
     ret = OB_IO_ERROR;
-  }
-  return ret;
-}
-
-int block_id_to_string(const block_id_t block_id, char *str, const int64_t str_len)
-{
-  int ret = OB_SUCCESS;
-  if (false == is_valid_block_id(block_id) || OB_ISNULL(str) || 0 >= str_len) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t pos = 0;
-    ret = databuff_printf(str, str_len, pos, "%" PRIu64, block_id);
-  }
-  return ret;
-}
-
-int block_id_to_tmp_string(const block_id_t block_id, char *str, const int64_t str_len)
-{
-  int ret = OB_SUCCESS;
-  if (false == is_valid_block_id(block_id) || OB_ISNULL(str) || 0 >= str_len) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t pos = 0;
-    ret = databuff_printf(str, str_len, pos, "%" PRIu64 ".tmp", block_id);
-  }
-  return ret;
-}
-
-int construct_absolute_block_path(const char *dir_path, const block_id_t block_id, const int64_t buf_len, char *absolute_block_path)
-{
-  int ret = OB_SUCCESS;
-  if (false == is_valid_block_id(block_id) || OB_ISNULL(dir_path) || 0 >= buf_len || OB_ISNULL(absolute_block_path)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t pos = 0;
-    ret = databuff_printf(absolute_block_path, buf_len, pos, "%s/%" PRIu64, dir_path, block_id);
-  }
-  return ret;
-}
-
-int construct_absolute_tmp_block_path(const char *dir_path, const block_id_t block_id, const int64_t buf_len, char *absolute_tmp_block_path)
-{
-  int ret = OB_SUCCESS;
-  if (false == is_valid_block_id(block_id) || OB_ISNULL(dir_path) || 0 >= buf_len || OB_ISNULL(absolute_tmp_block_path)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t pos = 0;
-    ret = databuff_printf(absolute_tmp_block_path, buf_len, pos, "%s/%" PRIu64 ".tmp", dir_path, block_id);
   }
   return ret;
 }

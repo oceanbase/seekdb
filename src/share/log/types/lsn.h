@@ -20,7 +20,7 @@
 #include "lib/utility/ob_macro_utils.h"         // OB_UNLIKELY
 #include "lib/utility/ob_print_utils.h"         // Print*
 #include "lib/json/ob_yson.h"
-#include "log_define.h"                         // block_id_t
+#include "log_define.h"                         // offset_t
 namespace oceanbase {
 namespace wal {
 struct LSN
@@ -60,15 +60,6 @@ public:
   }
 };
 
-inline block_id_t lsn_2_block(const LSN &lsn, const uint64_t block_size)
-{
-  return lsn.val_ / block_size;
-}
-
-inline offset_t lsn_2_offset(const LSN &lsn, const uint64_t block_size)
-{
-  return lsn.val_ % block_size;
-}
 } // end namespace wal
 } // end namespace oceanbase
 

@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX WAL
 #include "ob_log_handler.h"
-#include "logservice/ob_i_log_storage.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -183,10 +182,9 @@ int ObLogHandler::append_imported_groups(const wal::ImportedGroups &groups)
 int ObLogHandler::seek(const LSN &lsn, EntryIterator &iter)
 {
   int ret = OB_SUCCESS;
-  constexpr int64_t default_suggested_max_read_buf_size = WAL_BLOCK_SIZE;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
+  } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, iter))) {
   } else {
   }
   return ret;
@@ -195,10 +193,9 @@ int ObLogHandler::seek(const LSN &lsn, EntryIterator &iter)
 int ObLogHandler::seek(const LSN &lsn, GroupIterator &iter)
 {
   int ret = OB_SUCCESS;
-  constexpr int64_t default_suggested_max_read_buf_size = WAL_BLOCK_SIZE;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
+  } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, iter))) {
   } else {
   }
   return ret;
@@ -253,7 +250,6 @@ int ObLogHandler::get_end_scn(SCN &scn) const
 int ObLogHandler::get_wal_base_info(const LSN &base_lsn, BaseInfo &wal_base_info)
 {
   int ret = OB_SUCCESS;
-  LSN new_base_lsn;
   RLockGuard guard(lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -262,10 +258,9 @@ int ObLogHandler::get_wal_base_info(const LSN &base_lsn, BaseInfo &wal_base_info
   } else if (false == base_lsn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "Invalid argument", K(ret), K(base_lsn), K(lbt()));
-  } else if (FALSE_IT(new_base_lsn.val_ = lsn_2_block(base_lsn, WAL_BLOCK_SIZE) * WAL_BLOCK_SIZE)) {
   } else {
-    ret = wal_handle_.get_base_info(new_base_lsn, wal_base_info);
-    CLOG_LOG(INFO, "get_wal_base_info finish", KR(ret), K(base_lsn), K(new_base_lsn), K(wal_base_info));
+    ret = wal_handle_.get_base_info(base_lsn, wal_base_info);
+    CLOG_LOG(INFO, "get_wal_base_info finish", KR(ret), K(base_lsn), K(wal_base_info));
   }
   return ret;
 }
@@ -460,13 +455,6 @@ int ObLogHandler::advance_base_lsn_impl_(const LSN &lsn)
   } else if (OB_FAIL(wal_handle_.advance_base_lsn(lsn))) {
   } else {}
   return ret;
-}
-
-int __get_log_handler(
-    ObILogStorage &log_storage,
-    ObLogHandler *&log_handler)
-{
-  return log_storage.get_log_handler(log_handler);
 }
 
 } // end namespace logservice
