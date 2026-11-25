@@ -1,0 +1,6 @@
+delimiter |;
+SELECT 1 /*! ; */|
+SELECT 1 /*! ; */ /* trailing comment */; SET @comment_split = 2|
+SELECT @comment_split AS second_value|
+SELECT /*! 3 + 4 AS result; */|
+delimiter ;|

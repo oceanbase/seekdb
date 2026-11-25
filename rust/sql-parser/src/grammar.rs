@@ -17,20 +17,46 @@ use std::borrow::Cow;
 use crate::budget::Budget;
 use crate::diagnostic::Diagnostics;
 
+pub(crate) struct ExecutableComment {
+    pub start: usize,
+    content: usize,
+    close: usize,
+    pub end: usize,
+}
+
+impl ExecutableComment {
+    pub(crate) fn is_complete(&self) -> bool {
+        self.close < self.end
+    }
+}
+
+pub(crate) struct ExpandedSql<'sql> {
+    pub text: Cow<'sql, [u8]>,
+    pub comments: Vec<ExecutableComment>,
+}
+
 pub(crate) fn executable_sql<'sql>(
     sql: &'sql [u8],
     mode: SqlMode,
     execute: bool,
 ) -> Result<Cow<'sql, [u8]>, peg::error::ParseError<usize>> {
+    executable_sql_with_comments(sql, mode, execute).map(|expanded| expanded.text)
+}
+
+pub(crate) fn executable_sql_with_comments<'sql>(
+    sql: &'sql [u8],
+    mode: SqlMode,
+    execute: bool,
+) -> Result<ExpandedSql<'sql>, peg::error::ParseError<usize>> {
     if !sql.windows(3).any(|bytes| bytes == b"/*!") {
-        return Ok(Cow::Borrowed(sql));
+        return Ok(ExpandedSql { text: Cow::Borrowed(sql), comments: Vec::new() });
     }
     let spans = sql::executable_comments(sql, mode, false, &Budget::lexical_scan(), &Diagnostics::default())?;
     if spans.is_empty() {
-        return Ok(Cow::Borrowed(sql));
+        return Ok(ExpandedSql { text: Cow::Borrowed(sql), comments: spans });
     }
     let mut bytes = sql.to_vec();
-    for (start, content, close, end) in spans {
+    for &ExecutableComment { start, content, close, end } in &spans {
         if execute {
             bytes[start..content].fill(b' ');
             bytes[close..end].fill(b' ');
@@ -38,7 +64,7 @@ pub(crate) fn executable_sql<'sql>(
             bytes[start + 2..close].fill(b' ');
         }
     }
-    Ok(Cow::Owned(bytes))
+    Ok(ExpandedSql { text: Cow::Owned(bytes), comments: spans })
 }
 
 fn reserved(word: &str) -> bool {
@@ -257,12 +283,14 @@ peg::parser! {
             / ("--" &(space() / ![_]) / "#") (!"\n" [_])*
         rule executable_comment_start() -> (usize,usize)
             = start:position!() "/*!" ([b'0'..=b'9']*<5>)? content:position!() { (start,content) }
-        pub rule executable_comments() -> Vec<(usize,usize,usize,usize)> = spans:(
+        pub rule executable_comments() -> Vec<ExecutableComment> = spans:(
                 outer:executable_comment_start()
                 nested:(opaque_comment_token() { None }
-                    / marker:executable_comment_start() { Some((marker.0,marker.1,marker.1,marker.1)) }
+                    / marker:executable_comment_start() {
+                        Some(ExecutableComment { start:marker.0,content:marker.1,close:marker.1,end:marker.1 })
+                    }
                     / !"*/" [_] { None })* close:position!() "*/" end:position!() {
-                    let mut spans=vec![(outer.0,outer.1,close,end)];
+                    let mut spans=vec![ExecutableComment { start:outer.0,content:outer.1,close,end }];
                     spans.extend(nested.into_iter().flatten());
                     spans
                 }
@@ -2853,6 +2881,7 @@ peg::parser! {
             }
         rule sql_statement() -> Node = select(0) / insert() / update() / delete() / transaction() / ddl() / account_statement() / role_statement() / setting() / explain() / show() / flush_privileges() / alter_system() / prepared_statement() / diagnostics() / analyze() / lock_tables() / load_data() / kill() / purge() / restore_table() / restore_database()
         rule statement() -> Node = _ value:(package_statement() / routine_statement(0) / pl_call() / anonymous_statement() / sql_statement()) { value }
+        pub rule trailing_statement_trivia() = _ (";" _)*
         #[no_eof]
         pub rule statement_end() -> usize = (statement() / _) (";" / ![_]) end:position!() { end }
         pub rule query() -> Node = value:(

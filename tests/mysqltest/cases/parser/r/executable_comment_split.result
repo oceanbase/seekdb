@@ -1,0 +1,12 @@
+SELECT 1 /*! ; */|
+1
+1
+SELECT 1 /*! ; */ /* trailing comment */; SET @comment_split = 2|
+1
+1
+SELECT @comment_split AS second_value|
+second_value
+2
+SELECT /*! 3 + 4 AS result; */|
+result
+7
