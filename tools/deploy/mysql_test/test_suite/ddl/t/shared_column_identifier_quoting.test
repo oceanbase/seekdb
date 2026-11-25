@@ -1,0 +1,31 @@
+# Shared DDL column formatting must escape identifiers without a SQL dependency.
+--disable_warnings
+DROP TABLE IF EXISTS ddl_quoted_enum, ddl_quoted_set, ddl_quoted_pk;
+--enable_warnings
+
+# ENUM/SET unique indexes exercise casts and shadow-column aliases.
+CREATE TABLE ddl_quoted_enum (id INT PRIMARY KEY, `e``n` ENUM('a', 'b'));
+INSERT INTO ddl_quoted_enum VALUES (1, 'a'), (2, 'b'), (3, NULL);
+CREATE UNIQUE INDEX idx_enum ON ddl_quoted_enum (`e``n`);
+SELECT id, `e``n` FROM ddl_quoted_enum FORCE INDEX (idx_enum) ORDER BY id;
+--error 1062
+INSERT INTO ddl_quoted_enum VALUES (4, 'a');
+INSERT INTO ddl_quoted_enum VALUES (5, NULL);
+SELECT id, `e``n` FROM ddl_quoted_enum ORDER BY id;
+
+CREATE TABLE ddl_quoted_set (id INT PRIMARY KEY, ```s````t``` SET('a', 'b'));
+INSERT INTO ddl_quoted_set VALUES (1, 'a'), (2, 'a,b'), (3, NULL);
+CREATE UNIQUE INDEX idx_set ON ddl_quoted_set (```s````t```);
+SELECT id, ```s````t``` FROM ddl_quoted_set FORCE INDEX (idx_set) ORDER BY id;
+--error 1062
+INSERT INTO ddl_quoted_set VALUES (4, 'a,b');
+
+# Offline table redefinition exercises both original names and aliases.
+CREATE TABLE ddl_quoted_pk (`key``id` INT PRIMARY KEY, `v``alue` INT NOT NULL, plain INT);
+INSERT INTO ddl_quoted_pk VALUES (1, 10, 100), (2, 20, 200);
+ALTER TABLE ddl_quoted_pk DROP PRIMARY KEY, ADD PRIMARY KEY (`v``alue`);
+ALTER TABLE ddl_quoted_pk MODIFY COLUMN plain BIGINT;
+CREATE INDEX idx_key ON ddl_quoted_pk (`key``id`);
+SELECT * FROM ddl_quoted_pk FORCE INDEX (idx_key) ORDER BY `key``id`;
+
+DROP TABLE ddl_quoted_enum, ddl_quoted_set, ddl_quoted_pk;
