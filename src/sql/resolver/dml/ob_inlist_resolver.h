@@ -89,7 +89,9 @@ public:
                                          const ObStmt *stmt,
                                          common::ObIAllocator &alloc,
                                          bool &is_question_mark,
-                                         bool &is_enable);
+                                         bool &is_enable,
+                                         bool &deduplicate);
+  static int deduplicate_integer_inlist(ObRawExpr &right_expr, ObQueryCtx &query_ctx);
   // try to merge IN nodes under root_node (which is an AND/OR node)
   // if merge does not happen, the ret_node is root_node
   // if merge happened, the merged node will be a new node with merged children, and if:
@@ -101,6 +103,10 @@ public:
                                const ParseNode *&ret_node);
   int resolve_inlist(ObInListInfo &inlist_infos);
 private:
+  static int check_integer_inlist_cardinality(const ParseNode &in_list,
+                                             const ParamStore *param_store,
+                                             const int64_t threshold,
+                                             bool &reaches_threshold);
   static int get_inlist_rewrite_info(const ParseNode &in_list,
                                      const int64_t column_cnt,
                                      int64_t col_idx,
