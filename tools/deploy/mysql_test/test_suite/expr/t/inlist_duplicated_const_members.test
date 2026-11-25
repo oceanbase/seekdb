@@ -1,0 +1,31 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#### owner: competition-2026
+#### owner group: sql3
+#### description: duplicated const IN-list members keep a direct IN predicate (issue 1512)
+--disable_warnings
+drop table if exists t_inlist_dup;
+--enable_warnings
+create table t_inlist_dup (id int primary key, v int, w int, s varchar(16)) organization = heap;
+insert into t_inlist_dup values (1,1,10,'a'),(2,2,20,'b'),(3,3,30,'c'),(4,4,40,'d'),(5,5,50,'e');
+
+# 6 literals, distinct set {1,2,3}. With the threshold lowered to 4 this list
+# used to be rewritten as =ANY(SELECT DISTINCT ... FROM VALUES(...)).
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where v in (2,1,2,3,3,1) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where v not in (2,1,2,3,3,1,4,4) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where v in (1,1,null,null) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where v not in (2,2,null,null) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where (v,w) in ((2,20),(1,10),(2,20),(3,30),(3,30),(1,10)) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where s in ('a','b','a','c','c','b') order by id;
+# distinct count does not fall below the threshold, so the original
+# values-table rewrite stays in place and the result is unchanged
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where v in (1,1,2,2,3,3,4,4) order by id;
+# identical negative constants collapse; -1 stays distinct from 1
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_inlist_dup where v in (-1,-1,1,1) order by id;
+
+explain select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where v in (2,1,2,3,3,1) order by id;
+explain select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where v in (1,2,3) order by id;
+explain select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from t_inlist_dup where v in (1,1,2,2,3,3,4,4) order by id;
+
+drop table t_inlist_dup;
