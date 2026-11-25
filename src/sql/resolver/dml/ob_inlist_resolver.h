@@ -101,6 +101,10 @@ public:
                                const ParseNode *&ret_node);
   int resolve_inlist(ObInListInfo &inlist_infos);
 private:
+  static int check_small_distinct_integer_inlist(const ParseNode &in_list,
+                                                const ParamStore *param_store,
+                                                const int64_t threshold,
+                                                bool &is_small);
   static int get_inlist_rewrite_info(const ParseNode &in_list,
                                      const int64_t column_cnt,
                                      int64_t col_idx,
