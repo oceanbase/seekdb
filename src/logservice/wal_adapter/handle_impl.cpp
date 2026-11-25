@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX WAL
 #include "logservice/wal_adapter/handle_impl.h"
-#include <cstring>
+#include <cstdlib>
 #include <string>
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_structured_event_logger.h"
@@ -55,12 +55,8 @@ void report_fatal_ffi(rust::Str path, rust::Str operation, const int32_t raw_os_
   const std::string action(operation);
   LOG_ERROR("fatal WAL I/O failure", KR(ret), "segment", segment.c_str(),
       "operation", action.c_str(), "raw_os_error", raw_os_error, KERRNOMSG(raw_os_error));
-  fprintf(stderr, "FATAL WAL I/O failure: segment=%s operation=%s raw_os_error=%d (%s) ret=%d\n",
-      segment.c_str(), action.c_str(), raw_os_error, strerror(raw_os_error), ret);
-  fflush(stderr);
-  OB_LOGGER.stop();
-  OB_LOGGER.wait();
-  _Exit(1);
+  OB_LOGGER.flush();
+  std::_Exit(1);
 }
 }
 

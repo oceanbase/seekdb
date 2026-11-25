@@ -147,6 +147,7 @@ int ObLogger::init()
 }
 void ObLogger::stop() { set_enable_async_log(false); logger::option(logger::OptionKey::Stopped, 1, 1); }
 void ObLogger::wait() { if (is_inited()) (void)logger::flush(); }
+void ObLogger::flush() { if (is_inited()) (void)logger::flush(); }
 void ObLogger::destroy() { (void)logger::shutdown(); }
 void ObLogger::set_new_file_info(const char *info) { (void)logger::set_new_file_info(info); }
 void ObLogger::set_file_name(const char *file, bool no_redirect, bool unused)
