@@ -744,7 +744,6 @@ int ObTabletPersister::fill_tablet_write_info(
       write_info.buffer_ = buf;
       write_info.offset_ = 0;
       write_info.size_ = size;
-      write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     }
   }
   return ret;
@@ -1328,7 +1327,6 @@ int ObTabletPersister::link_write_medium_info_list(
             write_info.buffer_ = buffer;
             write_info.offset_ = 0;
             write_info.size_ = size;
-            write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
             blocksstable::ObStorageObjectOpt curr_opt;
             build_async_write_start_opt_(curr_opt);
             if (OB_FAIL(reader_writer.async_link_write(write_info, curr_opt, write_handle))) {
@@ -1397,12 +1395,11 @@ int ObTabletPersister::load_table_store(
     int64_t buf_len = -1;
     int64_t io_pos = 0;
     ObObjectReadInfo read_info;
-    ObObjectReadHandle io_handle(io_allocator);
+    ObObjectReadHandle io_handle;
     ObMultiTimeStats::TimeStats *time_stats = nullptr;
 
     read_info.addr_ = addr;
     read_info.io_desc_.set_mode(ObIOMode::READ);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
     if (OB_FAIL(multi_stats_.acquire_stats("load_table_store", time_stats))) {
     } else if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, io_handle))) {

@@ -61,7 +61,7 @@ cc_library(
         "//src/share:datum",
         "//src/share:error_codes",
         "//src/share:execution_contracts",
-        "//src/share:io",
+        "//src/share:io_request",
         "//src/share:memory_support",
         "//src/share:schema_entities",
         "//src/share:schema_model_interface",

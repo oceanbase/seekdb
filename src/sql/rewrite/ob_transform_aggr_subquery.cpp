@@ -1126,7 +1126,14 @@ int ObTransformAggrSubquery::get_trans_param(ObDMLStmt &stmt,
   ObSEArray<ObRawExpr *, 4> pre_group_by_exprs;  // where, group exprs
   ObSEArray<ObRawExpr *, 4> post_group_by_exprs; // having, select, assign values exprs
   ObSEArray<ObRawExpr *, 4> invalid_list;
-  if (OB_FAIL(pre_group_by_exprs.assign(stmt.get_condition_exprs()))) {
+  if (stmt.is_select_stmt() && static_cast<ObSelectStmt &>(stmt).has_group_by()) {
+    // A filter sharing a SELECT subquery stays above the split view.
+    ObSEArray<ObRawExpr *, 4> retained_conditions;
+    ret = ObTransformUtils::classify_where_conds(stmt, pre_group_by_exprs, retained_conditions);
+  } else {
+    ret = pre_group_by_exprs.assign(stmt.get_condition_exprs());
+  }
+  if (OB_FAIL(ret)) {
   } else if (stmt.is_select_stmt()) {
     ObSelectStmt &sel_stmt = static_cast<ObSelectStmt &>(stmt);
     if (sel_stmt.has_rollup()) {

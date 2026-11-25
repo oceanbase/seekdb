@@ -717,10 +717,8 @@ STORAGE_UNITY_GROUPS = [
         name = "ob_storage_tmp_file_0",
         language = "c++",
         srcs = [
-            "src/storage/tmp_file/ob_i_tmp_file.cpp",
-            "src/storage/tmp_file/ob_i_tmp_file_manager.cpp",
+            "src/storage/tmp_file/ob_tmp_file_io.cpp",
             "src/storage/tmp_file/ob_shared_nothing_tmp_file.cpp",
-            "src/storage/tmp_file/ob_sn_tmp_file_manager.cpp",
             "src/storage/tmp_file/ob_tmp_file_block_manager.cpp",
             "src/storage/tmp_file/ob_tmp_file_cache.cpp",
             "src/storage/tmp_file/ob_tmp_file_eviction_manager.cpp",

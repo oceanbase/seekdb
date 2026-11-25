@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_index_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
@@ -88,7 +88,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
               || share::schema::is_fts_or_multivalue_index(create_index_arg.index_type_)
               || share::schema::is_vec_index(create_index_arg.index_type_)) {
       start_time = ObTimeUtility::current_time();
-      if (OB_FAIL(query::serialize_root_service_call(
+      if (OB_FAIL(share::local_ddl_serial_call(
           [&]{ return ctx.root_command_service().create_index(create_index_arg, res); }))) {
       }
       refresh_time = ObTimeUtility::current_time();
@@ -231,7 +231,7 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
         int tmp_ret = OB_SUCCESS;
         ObDropIndexRes drop_index_res;
         if (OB_SUCCESS != (tmp_ret = set_drop_index_stmt_str(drop_index_arg, allocator))) {
-        } else if (OB_SUCCESS != (tmp_ret = query::serialize_root_service_call(
+        } else if (OB_SUCCESS != (tmp_ret = share::local_ddl_serial_call(
             [&]{ return root_commands.drop_index(drop_index_arg, drop_index_res); }))) {
         }
       } else {
@@ -329,7 +329,7 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
   }  else if (OB_INVALID_ID == drop_index_arg.session_id_
              && FALSE_IT(tmp_arg.session_id_ = my_session->get_sessid_for_table())) {
     //impossible
-  } else if (OB_FAIL(query::serialize_root_service_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
       [&]{ return ctx.root_command_service().drop_index(drop_index_arg, res); }))) {
   } else if (OB_FAIL(wait_drop_index_finish(res.task_id_, *my_session))) {
   }
@@ -357,7 +357,7 @@ int ObPurgeIndexExecutor::execute(ObExecContext &ctx, ObPurgeIndexStmt &stmt) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(query::serialize_root_service_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
       [&]{ return ctx.root_command_service().purge_index(purge_index_arg); }))) {
   }
   SERVER_EVENT_ADD("ddl", "purge index execute finish",

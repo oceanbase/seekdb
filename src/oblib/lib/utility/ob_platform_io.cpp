@@ -1562,56 +1562,6 @@ int ob_get_executable_path_utf8(char *buffer, int64_t buffer_size)
   return ret;
 }
 
-int ob_create_executable_alias_utf8(const char *alias_path)
-{
-  int ret = 0;
-  if (NULL == alias_path || '\0' == alias_path[0]) {
-    errno = EINVAL;
-    ret = -1;
-#ifdef _WIN32
-  } else {
-    char exe_path[4096];
-    char link_path[4096];
-    wchar_t *wide_exe = NULL;
-    wchar_t *wide_link = NULL;
-    if (0 != ob_get_executable_path_utf8(exe_path, sizeof(exe_path))) {
-      ret = -1;
-    } else if (::snprintf(link_path, sizeof(link_path), "%s.exe", alias_path) <= 0) {
-      errno = platform_io_internal::name_too_long_errno();
-      ret = -1;
-    } else if (0 != platform_io_internal::utf8_to_wide(exe_path, wide_exe)) {
-      ret = -1;
-    } else if (0 != platform_io_internal::utf8_to_wide(link_path, wide_link)) {
-      ret = -1;
-    } else {
-      ::DeleteFileW(wide_link);
-      if (FALSE == ::CreateHardLinkW(wide_link, wide_exe, NULL)
-          && FALSE == ::CopyFileW(wide_exe, wide_link, FALSE)) {
-        errno = platform_io_internal::win32_error_to_errno(::GetLastError());
-        ret = -1;
-      }
-    }
-    delete[] wide_exe;
-    delete[] wide_link;
-  }
-#else
-  } else {
-    char exe_path[4096];
-    if (0 != ob_get_executable_path_utf8(exe_path, sizeof(exe_path))) {
-      ret = -1;
-    } else {
-      // Drop the previous alias; a missing one is not an error.
-      if (0 != ::unlink(alias_path) && ENOENT != errno) {
-        ret = -1;
-      } else if (0 != ::symlink(exe_path, alias_path)) {
-        ret = -1;
-      }
-    }
-  }
-#endif
-  return ret;
-}
-
 int ob_closedir_utf8(ObPlatformDir *dir)
 {
   int ret = 0;

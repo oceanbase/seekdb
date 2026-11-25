@@ -64,9 +64,7 @@ public:
   // - OS info
   // - timezone info
   static const char *build_syslog_file_info();
-  static int calc_auto_extend_size(
-      int64_t &cur_datafile_size,
-      int64_t &actual_extend_size);
+
 private:
   static int decide_disk_size(const int64_t total_space,
                               const int64_t available_space,

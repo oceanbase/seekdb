@@ -996,7 +996,6 @@ int ObTempBlockStore::write_file(BlockIndex &bi, void *buf, int64_t size)
       } else if (OB_FAIL(data_plane::tmp_file_open(io_.fd_, io_.dir_id_))) {
       } else {
         file_size_ = 0;
-        io_.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
         io_.io_timeout_ms_ = timeout_ms;
         LOG_INFO("open file success", K_(io_.fd), K_(io_.dir_id), K(get_compressor_type()));
       }
@@ -1041,7 +1040,6 @@ int ObTempBlockStore::read_file(void *buf, const int64_t size, const int64_t off
     tmp_read_id.prefetch_ = prefetch;
     tmp_read_id.buf_ = static_cast<char *>(buf);
     tmp_read_id.size_ = size;
-    tmp_read_id.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     tmp_read_id.io_timeout_ms_ = timeout_ms;
     const uint64_t start = rdtsc();
     if (is_async) {

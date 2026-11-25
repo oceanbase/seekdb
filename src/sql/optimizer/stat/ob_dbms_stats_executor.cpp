@@ -1544,7 +1544,7 @@ int ObDbmsStatsExecutor::gather_system_stats(ObExecContext &ctx)
   } else if (io_benchmark.is_init()) {
     disk_seq_read_speed = io_benchmark.get_disk_seq_read_speed();
     disk_rnd_read_speed = io_benchmark.get_disk_rnd_read_speed();
-  } else if (OB_FAIL(io_benchmark.run_benchmark(ctx.get_allocator()))) {
+  } else if (OB_FAIL(io_benchmark.run_benchmark())) {
   } else {
     disk_seq_read_speed = io_benchmark.get_disk_seq_read_speed();
     disk_rnd_read_speed = io_benchmark.get_disk_rnd_read_speed();
@@ -1625,8 +1625,7 @@ int ObDbmsStatsExecutor::determine_auto_sample_table(ObExecContext &ctx, ObTable
 int ObDbmsStatsExecutor::try_use_prefix_index_refine_min_max(ObExecContext &ctx, ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
-  uint64_t index_tids[OB_MAX_INDEX_PER_TABLE + 2];
-  int64_t index_count = OB_MAX_INDEX_PER_TABLE + 1;
+  ObSEArray<uint64_t, 8> index_tids;
   share::schema::ObSchemaGetterGuard *schema_guard = ctx.get_virtual_table_ctx().schema_guard_;
   const share::schema::ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> refine_columns;
@@ -1640,11 +1639,10 @@ int ObDbmsStatsExecutor::try_use_prefix_index_refine_min_max(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObDbmsStatsUtils::get_table_index_infos(schema_guard,
                                                              param.table_id_,
-                                                             index_tids,
-                                                             index_count))) {
+                                                             index_tids))) {
+  } else if (OB_FAIL(index_tids.push_back(param.table_id_))) {
   } else {
-    index_tids[index_count++] = param.table_id_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_tids.count(); ++i) {
       const share::schema::ObTableSchema *index_schema = NULL;
       ObString index_name;
       rowkey_ids.reuse();

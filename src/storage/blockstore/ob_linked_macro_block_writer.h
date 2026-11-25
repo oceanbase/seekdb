@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "share/io/ob_io_manager.h"
+#include "share/io_request.h"
 #include "storage/blocksstable/ob_storage_object_handle.h"
 #include "storage/blocksstable/ob_macro_block_common_header.h"
 #include "storage/blocksstable/ob_macro_block_struct.h"

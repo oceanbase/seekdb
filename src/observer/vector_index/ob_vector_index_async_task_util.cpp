@@ -1145,8 +1145,16 @@ int ObVecIndexAsyncTask::do_work()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(vec_idx_mgr_->get_adapter_inst_guard(ctx_->task_status_.tablet_id_, adpt_guard))) {
     if (OB_HASH_NOT_EXIST == ret) {
-      ret = OB_EAGAIN;
-      LOG_INFO("can not get adapter, need wait", K(ret), KPC(ctx_));
+      // An adapter can be reloaded, but a replacement index has a different table ID.
+      ObSchemaGetterGuard guard;
+      const schema::ObSimpleTableSchemaV2 *index_schema = nullptr;
+      if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(guard))) {
+      } else if (OB_FAIL(guard.get_simple_table_schema(ctx_->task_status_.table_id_, index_schema))) {
+      } else if (OB_ISNULL(index_schema) || index_schema->is_in_recyclebin()) {
+        ret = OB_TABLE_NOT_EXIST;
+      } else {
+        ret = OB_EAGAIN;
+      }
     } else {
     }
   } else if (OB_ISNULL(adpt_guard.get_adatper())) {
@@ -1558,7 +1566,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
       } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_snapshot_table_id(), snapshot_table_schema))) {
       } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_data_table_id(), data_table_schema))) {
       } else if (OB_ISNULL(snapshot_table_schema) || snapshot_table_schema->is_in_recyclebin() || OB_ISNULL(data_table_schema) || data_table_schema->is_in_recyclebin()) {
-        ret = OB_ERR_UNEXPECTED;
+        ret = OB_TABLE_NOT_EXIST;
       } else if (FALSE_IT(lob_inrow_threshold = snapshot_table_schema->get_lob_inrow_threshold())) {
       } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(&adaptor,
                                             ctx_->task_status_.target_scn_,

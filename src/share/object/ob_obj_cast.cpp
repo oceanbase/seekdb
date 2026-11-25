@@ -5497,6 +5497,51 @@ static int year_geometry(const ObObjType expect_type, ObObjCastParams &params,
 ////////////////////////////////////////////////////////////
 // String -> XXX
 
+// MySQL parses a decimal integer in [-2^63, 2^64-1] before interpreting its bits
+// as the requested SIGNED or UNSIGNED type.
+static int cast_string_integer_bits(const ObString &str, const ObCastMode cast_mode,
+                                    const ObCollationType cs_type, const bool unsigned_target, uint64_t &bits)
+{
+  int64_t pos = 0;
+  while (pos < str.length() && ObCharset::is_space(CS_TYPE_BINARY, str.ptr()[pos])) {
+    ++pos;
+  }
+  const bool negative = pos < str.length() && '-' == str.ptr()[pos];
+  char *end = nullptr;
+  int err = 0;
+  if (negative) {
+    bits = static_cast<uint64_t>(ObCharset::strntoll(str.ptr(), str.length(), 10, &end, &err));
+  } else {
+    bits = ObCharset::strntoull(str.ptr(), str.length(), 10, &end, &err);
+  }
+
+  int ret = OB_SUCCESS;
+  const bool no_digits = end == str.ptr();
+  if (err != 0 || no_digits || end != str.ptr() + str.length()) {
+    ret = OB_ERR_TRUNCATED_WRONG_VALUE;
+    if (CM_IS_WARN_ON_FAIL(cast_mode)) {
+      constexpr int32_t max_value_bytes = 128;
+      int32_t len = str.length();
+      if (len > max_value_bytes) {
+        int64_t chars = 0;
+        len = static_cast<int32_t>(ObCharset::max_bytes_charpos(cs_type, str.ptr(), len, max_value_bytes, chars));
+      }
+      const ObString type_name("INTEGER");
+      LOG_USER_WARN(OB_ERR_TRUNCATED_WRONG_VALUE, type_name.length(), type_name.ptr(), len, str.ptr());
+    }
+  }
+  if (0 == err && !no_digits && (OB_SUCCESS == ret || CM_IS_WARN_ON_FAIL(cast_mode))) {
+    if (negative && unsigned_target) {
+      log_user_message(USER_WARN, ER_UNKNOWN_ERROR,
+                       "Cast to unsigned converted negative integer to its positive complement");
+    } else if (!negative && !unsigned_target && bits > INT64_MAX) {
+      log_user_message(USER_WARN, ER_UNKNOWN_ERROR,
+                       "Cast to signed converted positive out-of-range integer to its negative complement");
+    }
+  }
+  return ret;
+}
+
 int common_string_unsigned_integer(const ObCastMode &cast_mode,
                                    const ObObjType &in_type,
                                    const ObCollationType &in_cs_type,
@@ -5507,6 +5552,9 @@ int common_string_unsigned_integer(const ObCastMode &cast_mode,
   int ret = OB_SUCCESS;
   if (ObHexStringType == in_type) {
     out_val = hex_to_uint64(in_str);
+  } else if (is_str_integer_cast && CM_IS_EXPLICIT_CAST(cast_mode)
+             && CM_IS_STRING_INTEGER_TRUNC(cast_mode)) {
+    ret = cast_string_integer_bits(in_str, cast_mode, in_cs_type, true, out_val);
   } else {
     int err = 0;
     char *endptr = NULL;
@@ -5555,6 +5603,11 @@ int common_string_integer(const ObCastMode &cast_mode,
     } else {
       out_val = out.get_int();
     }
+  } else if (is_str_integer_cast && CM_IS_EXPLICIT_CAST(cast_mode)
+             && CM_IS_STRING_INTEGER_TRUNC(cast_mode)) {
+    uint64_t bits = 0;
+    ret = cast_string_integer_bits(in_str, cast_mode, in_cs_type, false, bits);
+    out_val = static_cast<int64_t>(bits);
   } else {
     int err = 0;
     char *endptr = NULL;

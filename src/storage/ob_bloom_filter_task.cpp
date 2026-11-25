@@ -45,8 +45,7 @@ ObBloomFilterBuildTask::ObBloomFilterBuildTask(
       macro_id_(macro_id),
       macro_handle_(),
       prefix_len_(prefix_len),
-      allocator_(ObModIds::OB_BLOOM_FILTER),
-      io_buf_(nullptr)
+      allocator_(ObModIds::OB_BLOOM_FILTER)
 {
   abort_unless(OB_SUCCESS == macro_handle_.set_macro_block_id(macro_id));
 }
@@ -142,21 +141,13 @@ int ObBloomFilterBuildTask::build_bloom_filter()
       read_info.offset_ = 0;
       read_info.size_ = OB_DEFAULT_MACRO_BLOCK_SIZE;
       read_info.io_desc_.set_mode(ObIOMode::READ);
-      read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::BLOOM_FILTER_IO);
       read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
 
-      if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
-          reinterpret_cast<char*>(allocator_.alloc(OB_DEFAULT_MACRO_BLOCK_SIZE)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(OB_DEFAULT_MACRO_BLOCK_SIZE));
-      } else {
-        read_info.buf_ = io_buf_;
-      }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::read_object(read_info, macro_handle))) {
       } else if (OB_FAIL(macro_bare_iter->open(
-          read_info.buf_, macro_handle.get_data_size(), true /*check*/))) {
+          macro_handle.get_buffer(), macro_handle.get_data_size(), true /*check*/))) {
       } else if (OB_FAIL(macro_bare_iter->get_macro_block_header(macro_header))) {
       } else if (OB_UNLIKELY(!macro_header.is_valid())) {
         ret = OB_ERR_UNEXPECTED;

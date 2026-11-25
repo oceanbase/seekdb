@@ -61,7 +61,6 @@ public:
       access_ctx_(nullptr),
       sstable_(nullptr),
       allocator_(common::ObModIds::OB_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE),
-      io_buf_(),
       prefetch_macro_cursor_(0),
       cur_macro_cursor_(0),
       is_macro_prefetch_end_(false),
@@ -75,7 +74,6 @@ public:
   {}
 
   virtual ~ObSSTableRowWholeScanner();
-  int alloc_io_buf(compaction::ObCompactionBuffer &io_buf, int64_t buf_size);
   virtual void reset() override;
   virtual void reuse() override;
   int open(
@@ -122,7 +120,6 @@ private:
   blocksstable::ObSSTable *sstable_;
   blocksstable::ObDatumRange query_range_;
   common::ObArenaAllocator allocator_;
-  compaction::ObCompactionBuffer io_buf_[PREFETCH_DEPTH];
   int64_t prefetch_macro_cursor_;
   int64_t cur_macro_cursor_;
   bool is_macro_prefetch_end_;

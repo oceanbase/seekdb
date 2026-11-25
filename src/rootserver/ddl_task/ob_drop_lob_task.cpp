@@ -18,7 +18,7 @@
 
 #include "ob_drop_lob_task.h"
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -146,7 +146,7 @@ int ObDropLobTask::drop_lob_impl()
     arg.ddl_stmt_str_ = drop_lob_sql.string();
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(2 * data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
     } else if (FALSE_IT(schema_guard.reset())) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_lob(arg); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return local_management_service_->drop_lob(arg); }))) {
     }
     LOG_INFO("finish drop lob", KR(ret), K(arg));
   }

@@ -5,7 +5,6 @@ OBSERVER_UNITY_GROUPS = [
         srcs = [
             "src/observer/ai_service/ob_ai_service_proxy.cpp",
             "src/observer/ai_service/ob_ai_service_executor.cpp",
-            "src/observer/ob_system_package_load_service.cpp",
             "src/observer/ob_tablet_runtime_meta_updater.cpp",
         ],
     ),
@@ -138,7 +137,6 @@ OBSERVER_UNITY_GROUPS = [
         srcs = [
             "src/observer/schema/ob_schema_service_sql_impl.cpp",
             "src/observer/ob_server_duty_task.cpp",
-            "src/observer/ob_system_package_load_task.cpp",
         ],
     ),
     struct(

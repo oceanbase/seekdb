@@ -74,6 +74,7 @@
 #include "storage/tx_storage/ob_access_service.h"
 #include "logservice/ob_server_log_block_mgr.h"
 #include "logservice/palf/log_io_adapter.h"
+#include "rust/storage_io.h"
 
 
 
@@ -81,7 +82,6 @@ namespace oceanbase
 {
 namespace common
 {
-class ObIOService;
 class ObOptStatMonitorManager;
 class ObRbMemMgr;
 class ObILobReadService;
@@ -133,7 +133,6 @@ class ObPrimaryMajorFreezeService;
 class ObRestoreMajorFreezeService;
 class ObDBMSSchedService;
 class ObDDLServiceLauncher;
-class ObSystemPackageLoadService;
 class ObDDLScheduler;
 class ObIRootserverLocalRuntime;
 }
@@ -245,13 +244,16 @@ class ObServer : public share::ObIMemstoreRuntime,
                  public sql::ObIDdlSliceStore
 {
 public:
-  static const int64_t DEFAULT_ETHERNET_SPEED = common::OB_DEFAULT_ETHERNET_SPEED; // single source of truthin share/io/ob_io_define.h
+  static const int64_t DEFAULT_ETHERNET_SPEED = 10000LL / 8 * 1024 * 1024;
   static const int64_t DISK_USAGE_REPORT_INTERVAL = 1000L * 1000L * 60L; // 1min
   static const uint64_t DEFAULT_CPU_FREQUENCY = 2500 * 1000; // 2500 * 1000 khz
   static ObServer &get_instance();
 
 public:
   int init(const ObServerOptions &opts);
+  const storage_io::ServiceHandle &io_service() const { return *io_service_; }
+  int configure_io(int64_t server_memory_bytes, int64_t callback_threads);
+  int validate_io_threads();
   void destroy();
 
   // Start OceanBase server, this function is blocked after invoking
@@ -448,6 +450,7 @@ private:
 
   // Shared process-local persistent store
   share::LocalStore local_store_;
+  rust::Box<storage_io::ServiceHandle> io_service_ = storage_io::new_service_handle();
 
   // The Oceanbase partition table relating to
   share::ObTabletTableOperator tablet_operator_;
@@ -494,7 +497,6 @@ private:
   sql::ObConnectResourceMgr conn_res_mgr_;
   ObDiskUsageReportTask disk_usage_report_task_;
 
-  palf::LogIODeviceWrapper log_device_;
   share::StartupResult startup_result_;
   logservice::ObServerLogBlockMgr log_block_mgr_;
 
@@ -509,7 +511,6 @@ public:
   share::ObISharedTimer * shared_timer() { return mods_shared_timer_; }
   blocksstable::ObSharedMacroBlockMgr * shared_macro_block_mgr() { return mods_shared_macro_block_mgr_; }
   storage::ObStorageMetaMemMgr * storage_meta_mem_mgr() { return mods_storage_meta_mem_mgr_; }
-  common::ObIOService * io_service() { return mods_io_service_; }
   storage::mds::ObMdsService * mds_service() { return mods_mds_service_; }
   share::ObSharedMemAllocMgr * shared_mem_alloc_mgr() { return mods_shared_mem_alloc_mgr_; }
   int set_memstore_threshold() override;
@@ -675,7 +676,6 @@ public:
   share::ObPluginVectorIndexService * plugin_vector_index_service() { return mods_plugin_vector_index_service_; }
   storage::ObIVectorIndexRuntime * vector_index_runtime();
   rootserver::ObDDLServiceLauncher * ddl_service_launcher() { return mods_ddl_service_launcher_; }
-  rootserver::ObSystemPackageLoadService * system_package_load_service() { return mods_system_package_load_service_; }
   rootserver::ObDDLScheduler * ddl_scheduler() { return mods_ddl_scheduler_; }
   rootserver::ObIRootserverLocalRuntime * rootserver_local_runtime()
   {
@@ -697,7 +697,6 @@ private:
   omt::ObSharedTimer * mods_shared_timer_ = nullptr;
   blocksstable::ObSharedMacroBlockMgr * mods_shared_macro_block_mgr_ = nullptr;
   storage::ObStorageMetaMemMgr * mods_storage_meta_mem_mgr_ = nullptr;
-  common::ObIOService * mods_io_service_ = nullptr;
   storage::mds::ObMdsService * mods_mds_service_ = nullptr;
   share::ObSharedMemAllocMgr * mods_shared_mem_alloc_mgr_ = nullptr;
   transaction::ObTransService * mods_trans_service_ = nullptr;
@@ -756,7 +755,6 @@ private:
   common::ObRbMemMgr * mods_rb_mem_mgr_ = nullptr;
   share::ObPluginVectorIndexService * mods_plugin_vector_index_service_ = nullptr;
   rootserver::ObDDLServiceLauncher * mods_ddl_service_launcher_ = nullptr;
-  rootserver::ObSystemPackageLoadService * mods_system_package_load_service_ = nullptr;
   rootserver::ObDDLScheduler * mods_ddl_scheduler_ = nullptr;
   omt::ObAiService * mods_ai_service_ = nullptr;
   share::ObChangeStreamMgr * mods_change_stream_mgr_ = nullptr;

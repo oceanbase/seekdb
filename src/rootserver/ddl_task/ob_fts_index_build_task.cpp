@@ -20,7 +20,7 @@
 #include <inttypes.h>
 #include "rootserver/ddl_task/ob_fts_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -469,7 +469,7 @@ int ObFtsIndexBuildTask::prepare_aux_table(
       } else if (OB_FAIL(arg.create_index_arg_.assign(index_arg))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version_)) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
+      } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
       } else if (res.schema_generated_) {
         task_submitted = true;
         aux_table_id = res.aux_table_id_;
@@ -1534,7 +1534,7 @@ int ObFtsIndexBuildTask::submit_drop_fts_index_task()
     drop_index_arg.is_hidden_         = create_index_arg_.is_offline_rebuild_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(data_table_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
     } else {
       drop_index_task_submitted_ = true;
       drop_index_task_id_ = drop_index_res.task_id_;

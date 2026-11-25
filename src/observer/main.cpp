@@ -51,7 +51,8 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 
 #include "lib/alloc/ob_malloc_allocator.h"
 #include "lib/allocator/ob_malloc.h"
-#include "lib/file/file_directory_utils.h"
+#include "lib/file/path_operations.h"
+#include "lib/utility/ob_platform_io.h"
 #include "lib/oblog/ob_easy_log.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_warning_buffer.h"
@@ -413,17 +414,6 @@ const char  LOG_DIR[]  = "log";
 const char  PID_DIR[]  = "run";
 const char  CONF_DIR[] = "etc";
 
-static int create_observer_softlink()
-{
-  int ret = OB_SUCCESS;
-  char softlink_path[4096] = {0};
-  snprintf(softlink_path, sizeof(softlink_path), "%s/seekdb", PID_DIR);
-  if (0 != common::ob_create_executable_alias_utf8(softlink_path)) {
-    ret = OB_IO_ERROR;
-    MPRINT("create seekdb softlink failed, errno=%d (%s)", errno, strerror(errno));
-  }
-  return ret;
-}
 static void print_args(int argc, char *argv[])
 {
   for (int i = 0; i < argc - 1; ++i) {
@@ -449,9 +439,9 @@ static int parse_args(int argc, char *argv[], ObServerOptions &opts)
   // Parse arguments and write the results directly into opts
   if (OB_FAIL(parser.parse_args(argc, argv, opts))) {
     MPRINT("Failed to parse command line arguments, ret=%d", ret);
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
+  } else if (OB_FAIL(path_operations::create_full_path(opts.base_dir_.ptr()))) {
     MPRINT("Failed to create base dir. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.base_dir_))) {
+  } else if (OB_FAIL(path_operations::to_absolute_path(opts.base_dir_))) {
   }
 
   return ret;
@@ -605,7 +595,6 @@ int inner_main(int argc, char *argv[])
     snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
   }
 #endif
-  ObStackHeaderGuard stack_header_guard;
   int64_t memory_used = get_virtual_memory_used();
 
   ObCurTraceId::SeqGenerator::seed(ObTimeUtility::current_time());
@@ -663,13 +652,12 @@ int inner_main(int argc, char *argv[])
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_uid_before_start(CONF_DIR))) {
     MPRINT("Fail check_uid_before_start, please use the initial user to start seekdb!");
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(PID_DIR))) {
+  } else if (OB_FAIL(path_operations::create_full_path(PID_DIR))) {
     MPRINT("create pid dir fail: ./run/");
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(LOG_DIR))) {
+  } else if (OB_FAIL(path_operations::create_full_path(LOG_DIR))) {
     MPRINT("create log dir fail: ./log/");
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(CONF_DIR))) {
+  } else if (OB_FAIL(path_operations::create_full_path(CONF_DIR))) {
     MPRINT("create log dir fail: ./etc/");
-  } else if (FALSE_IT(create_observer_softlink())) {
   }
   if (OB_FAIL(ret)) {
   } else if (!opts->nodaemon_ && !opts->initialize_) {

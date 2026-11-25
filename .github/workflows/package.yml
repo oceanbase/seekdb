@@ -159,9 +159,8 @@ jobs:
             deps/3rd
             deps/prebuilt
             deps/android
-            ${{ matrix.os == 'ios' && 'deps/ios' || '' }}
           key: package-sdk-v2-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
-          # iOS base libraries must match the selected Xcode/SDK exactly.
+          # Use exact cache keys for iOS to keep Xcode and SDK versions separate.
           restore-keys: ${{ matrix.os != 'ios' && format('package-sdk-v2-{0}-', matrix.id) || '' }}
       - name: Clear incomplete SDK restore
         if: steps.sdk.outputs.cache-matched-key == ''
@@ -169,7 +168,7 @@ jobs:
           python - <<'PY'
           import shutil
           from pathlib import Path
-          for path in (Path('deps/3rd'), Path('deps/prebuilt'), Path('deps/android'), Path('deps/ios')):
+          for path in (Path('deps/3rd'), Path('deps/prebuilt'), Path('deps/android')):
               if path.exists():
                   shutil.rmtree(path)
           PY
@@ -185,7 +184,6 @@ jobs:
             deps/3rd
             deps/prebuilt
             deps/android
-            ${{ matrix.os == 'ios' && 'deps/ios' || '' }}
           key: ${{ steps.sdk.outputs.cache-primary-key }}
       - name: Compile seekdb once
         id: build

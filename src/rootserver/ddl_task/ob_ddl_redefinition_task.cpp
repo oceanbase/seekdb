@@ -21,7 +21,7 @@
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "ob_ddl_redefinition_task.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_local_management_service.h"
@@ -1037,7 +1037,7 @@ int ObDDLRedefinitionTask::finish()
     if (OB_FAIL(get_orig_all_index_tablet_count(schema_guard, all_orig_index_tablet_count))) {
     } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(max(all_orig_index_tablet_count, data_table_schema->get_all_part_num()), rpc_timeout))) {
     } else if (data_table_schema->get_association_table_id() != OB_INVALID_ID &&
-        OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                  execute_ddl_task(alter_table_arg_, objs); }))) {
+        OB_FAIL(share::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                  execute_ddl_task(alter_table_arg_, objs); }))) {
     }
   }
   if (OB_SUCC(ret)) {

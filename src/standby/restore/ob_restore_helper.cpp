@@ -15,13 +15,13 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "storage/blocksstable/ob_block_manager.h"
 #include "ob_restore_helper.h"
 #include "standby/restore/ob_restore_helper_ctx.h"
 #include "standby/standby_host.h"
 #include "standby/standby_rpc.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/tablet/ob_tablet.h"
-#include "share/ob_io_device_helper.h"
 #include "common/ob_version_def.h"
 
 using namespace oceanbase::rpc;
@@ -161,7 +161,7 @@ int ObStandbyRestoreHelper::check_restore_precondition()
             KR(ret), "primary_version", result.data_version_, "standby_version", local_data_version);
       } else {
         result.required_disk_size_ = std::max(result.required_disk_size_, result.total_tablet_size_);
-        if (OB_FAIL(LOCAL_DEVICE_INSTANCE.check_space_full(result.required_disk_size_))) {
+        if (OB_FAIL(OB_SERVER_BLOCK_MGR.check_space_full(result.required_disk_size_))) {
           LOG_ERROR("failed to check_is_disk_full, cannot restore", KR(ret), K(result));
         } else {
           LOG_INFO("disk space and data version check passed",

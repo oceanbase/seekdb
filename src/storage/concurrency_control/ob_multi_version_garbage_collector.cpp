@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "storage/blocksstable/ob_block_manager.h"
 #include "rust/config.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "query/ob_i_active_snapshot_service.h"
@@ -23,7 +24,6 @@
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx/ob_weak_read_util.h"
 #include "share/ob_server_struct.h"
-#include "share/ob_io_device_helper.h"
 
 namespace oceanbase
 {
@@ -462,7 +462,7 @@ int ObMultiVersionGarbageCollector::is_disk_almost_full_(bool &is_almost_full)
 
   // Case1: io device is almost full
   if (!is_almost_full
-      && OB_FAIL(LOCAL_DEVICE_INSTANCE.check_space_full(required_size))) {
+      && OB_FAIL(OB_SERVER_BLOCK_MGR.check_space_full(required_size))) {
     if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
       ret = OB_SUCCESS;
       is_almost_full = true;

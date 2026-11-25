@@ -174,7 +174,7 @@ cc_library(
     deps = [
         ":vector_index_interface",
         "//src/oblib:oblib_foundation",
-        "//src/share:io",
+        "//src/share:io_request",
         "//src/share:json_access",
         "//src/share:runtime_context",
         "//src/share:tenant_runtime",
@@ -193,18 +193,7 @@ cc_library(
         "//src/oblib:oblib_concurrency_primitives",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_encoding_primitives",
-        "//src/oblib:oblib_restore",
     ],
-)
-
-cc_library(
-    name = "root_service_serialization",
-    hdrs = ["api/query/command/ob_root_service_serialization.h"],
-    deps = ["//src/oblib:oblib_foundation"],
-    includes = ["api"],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = ["//src:__subpackages__"],
 )
 
 cc_library(

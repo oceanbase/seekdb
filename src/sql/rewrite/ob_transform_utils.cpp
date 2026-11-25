@@ -4148,8 +4148,7 @@ int ObTransformUtils::compute_basic_table_property(const ObDMLStmt *stmt,
   ObSEArray<ObRawExpr*, 8> cur_cond_exprs;
   ObSqlBitSet<> table_set;
   ObSqlSchemaGuard *schema_guard = NULL;
-  uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
-  int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
+  ObSEArray<uint64_t, 16> index_ids;
   if (OB_ISNULL(stmt) || OB_ISNULL(table) || OB_ISNULL(check_helper.alloc_)
       || OB_ISNULL(check_helper.fd_factory_)
       || OB_ISNULL(check_helper.schema_checker_)
@@ -4165,14 +4164,13 @@ int ObTransformUtils::compute_basic_table_property(const ObDMLStmt *stmt,
   } else if (OB_FAIL(ObEqualAnalysis::compute_equal_set(check_helper.alloc_, cur_cond_exprs,
                                                         res_info.equal_sets_))) {
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table->ref_id_,
-                                                            index_tids,
-                                                            index_count,
+                                                            index_ids,
                                                             true  /*global index*/,
                                                             false /*domain index*/))) {
   } else {
-    for (int64_t i = -1; OB_SUCC(ret) && i < index_count; ++i) {
+    for (int64_t i = -1; OB_SUCC(ret) && i < index_ids.count(); ++i) {
       const ObTableSchema *index_schema = NULL;
-      uint64_t index_id = (i == -1 ? table->ref_id_ : index_tids[i]);
+      uint64_t index_id = (i == -1 ? table->ref_id_ : index_ids.at(i));
       if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema))) {
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -10189,9 +10187,8 @@ int ObTransformUtils::calc_const_expr_result(ObRawExpr * expr,
       if (OB_SUCC(ret)) {
         *has_warning = probe_warning_buf.get_total_warning_count() > 0;
       }
-      if (OB_SUCC(ret) && *has_warning && OB_FAIL(erase_calculable_expr_result(ctx, expr))) {
-        LOG_WARN("failed to erase warning expr result cache", K(ret), KPC(expr));
-      }
+      // The caller decides whether a warning permits folding. Range extraction
+      // still needs the computed value to build and validate plan constraints.
     }
   }
   return ret;

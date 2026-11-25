@@ -18,7 +18,6 @@
 #include <utility>
 #include <vector>
 #include "lib/oblog/ob_log.h"
-#include "lib/thread/protected_stack_allocator.h"
 #include "lib/worker.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_options.h"
@@ -50,7 +49,6 @@ int32_t run_server(rust::Str directory, rust::Slice<const rust::String> paramete
     ret = options.parameters_.push_back(std::make_pair(ObString(storage[i].c_str()), ObString(storage[i + 1].c_str())));
   }
   if (OB_SUCC(ret)) {
-    lib::ObStackHeaderGuard stack_header_guard;
     lib::Worker worker;
     lib::Worker::set_worker_to_thread_local(&worker);
     OB_LOGGER.set_log_level(DEFAULT_LOG_LEVEL);

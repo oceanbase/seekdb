@@ -1187,9 +1187,6 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
   // TODO: optimize with prefetch
   // Cache miss, read in sync IO
   int ret = OB_SUCCESS;
-  // Need to pay attention!!!
-  // The allocator is used to allocate io data buffer, and its memory life cycle needs to be longer than the object handle.
-  ObArenaAllocator io_allocator("IBTC_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObStorageObjectHandle macro_handle;
   ObMacroBlockReader macro_reader;
   ObStorageObjectReadInfo read_info;
@@ -1199,41 +1196,34 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
   read_info.offset_ = block_offset;
   read_info.size_ = idx_row_header.get_block_size();
   read_info.io_desc_.set_mode(ObIOMode::READ);
-  read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_TREE_CURSOR_IO);
   read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
   
 
   idx_row_header.fill_deserialize_meta(block_des_meta);
-  if (OB_ISNULL(read_info.buf_ =
-      reinterpret_cast<char*>(io_allocator.alloc(read_info.size_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(read_info.size_));
+  if (OB_FAIL(ObObjectManager::read_object(read_info, macro_handle))) {
   } else {
-    if (OB_FAIL(ObObjectManager::read_object(read_info, macro_handle))) {
+    const char *src_block_buf = macro_handle.get_buffer();
+    const int64_t src_buf_size = idx_row_header.get_block_size();
+    ObMicroBlockHeader header;
+    if (OB_FAIL(header.deserialize_and_check_header(src_block_buf, src_buf_size))) {
     } else {
-      const char *src_block_buf = macro_handle.get_buffer();
-      const int64_t src_buf_size = idx_row_header.get_block_size();
-      ObMicroBlockHeader header;
-      if (OB_FAIL(header.deserialize_and_check_header(src_block_buf, src_buf_size))) {
+      bool is_compressed = false;
+      if (OB_FAIL(macro_reader.do_decompress_data(
+          header, block_des_meta,
+          src_block_buf, src_buf_size,
+          curr_path_item_->block_data_.get_buf(),
+          curr_path_item_->block_data_.get_buf_size(),
+          is_compressed,
+          true, /* need deep copy */
+          cursor_path_.get_allocator()))) {
       } else {
-        bool is_compressed = false;
-        if (OB_FAIL(macro_reader.do_decompress_data(
-            header, block_des_meta,
-            src_block_buf, src_buf_size,
-            curr_path_item_->block_data_.get_buf(),
-            curr_path_item_->block_data_.get_buf_size(),
-            is_compressed,
-            true, /* need deep copy */
-            cursor_path_.get_allocator()))) {
-        } else {
-          curr_path_item_->is_block_allocated_ = true;
-        }
+        curr_path_item_->is_block_allocated_ = true;
       }
     }
   }
+
   macro_handle.reset();
-  io_allocator.reset();
   return ret;
 }
 

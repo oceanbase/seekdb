@@ -99,7 +99,6 @@ SHARE_UNITY_GROUPS = [
             "src/share/ob_ddl_task_executor.cpp",
             "src/share/ob_debug_sync.cpp",
             "src/share/ob_debug_sync_point.cpp",
-            "src/share/ob_device_manager.cpp",
             "src/share/ob_dml_sql_splicer.cpp",
             "src/share/ob_encryption_util.cpp",
             "src/share/ob_errno.cpp",
@@ -117,7 +116,6 @@ SHARE_UNITY_GROUPS = [
             "src/share/ob_global_stat_proxy.cpp",
             "src/share/ob_id_generator.cpp",
             "src/share/ob_est_row_count_record.cpp",
-            "src/share/ob_io_device_helper.cpp",
             "src/share/ob_lease_struct.cpp",
             "src/share/ob_table_range.cpp",
             "src/share/ob_max_id_fetcher.cpp",
@@ -289,17 +287,6 @@ SHARE_UNITY_GROUPS = [
         ],
     ),
     struct(
-        name = "ob_share_io_0",
-        language = "c++",
-        srcs = [
-            "src/share/io/ob_io_define.cpp",
-            "src/share/io/io_schedule/ob_io_schedule_v2.cpp",
-            "src/share/io/ob_io_struct.cpp",
-            "src/share/io/ob_io_calibration.cpp",
-            "src/share/io/ob_io_manager.cpp",
-        ],
-    ),
-    struct(
         name = "ob_share_resource_0",
         language = "c++",
         srcs = [
@@ -468,7 +455,6 @@ SHARE_STANDALONE_SOURCES = [
     "src/share/geo/ob_geo_func_within1.cpp",
     "src/share/geo/ob_geo_func_within2.cpp",
     "src/share/ob_ddl_args.cpp",
-    "src/share/ob_local_device.cpp",
     "src/share/ob_lonely_table_clean_rpc_struct.cpp",
     "src/share/ob_rpc_struct.cpp",
     "src/share/ob_sql_client_decorator.cpp",

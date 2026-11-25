@@ -712,8 +712,6 @@ int ObLS::register_local_services_()
   if (OB_FAIL(register_composition_log_handler_(DBMS_SCHEDULER_LOG_BASE_TYPE))) {
   } else if (OB_FAIL(register_composition_log_handler_(SYS_DDL_SCHEDULER_LOG_BASE_TYPE))) {
   } else if (OB_FAIL(register_composition_log_handler_(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE))) {
-  } else if (OB_FAIL(register_composition_log_handler_(
-                 SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE))) {
   } else if (OB_FAIL(register_composition_log_handler_(VEC_INDEX_SERVICE_LOG_BASE_TYPE))) {
   }
   logservice::ObILocalLogHandler *refresh_handler =
@@ -827,8 +825,6 @@ void ObLS::unregister_local_services_()
   unregister_composition_log_handler_(DBMS_SCHEDULER_LOG_BASE_TYPE);
   unregister_composition_log_handler_(SYS_DDL_SCHEDULER_LOG_BASE_TYPE);
   unregister_composition_log_handler_(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE);
-  unregister_composition_log_handler_(
-      SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE);
   local_log_handler_set_.unregister_handler(INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE);
 #ifdef OB_BUILD_SYS_VEC_IDX
   unregister_composition_log_handler_(VEC_INDEX_SERVICE_LOG_BASE_TYPE);

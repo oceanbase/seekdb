@@ -51,7 +51,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u32)]
 pub enum HashAlgorithm {
-    Md4 = 1,
     Md5 = 2,
     Sha1 = 3,
     Sha224 = 4,
@@ -65,7 +64,6 @@ impl TryFrom<u32> for HashAlgorithm {
     type Error = Error;
     fn try_from(value: u32) -> Result<Self> {
         match value {
-            1 => Ok(Self::Md4),
             2 => Ok(Self::Md5),
             3 => Ok(Self::Sha1),
             4 => Ok(Self::Sha224),
@@ -81,7 +79,7 @@ impl TryFrom<u32> for HashAlgorithm {
 impl HashAlgorithm {
     pub const fn digest_size(self) -> usize {
         match self {
-            Self::Md4 | Self::Md5 => 16,
+            Self::Md5 => 16,
             Self::Sha1 => 20,
             Self::Sha224 => 28,
             Self::Sha256 | Self::Sm3 => 32,

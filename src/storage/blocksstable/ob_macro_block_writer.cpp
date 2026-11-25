@@ -16,13 +16,13 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "storage/blocksstable/ob_block_manager.h"
 #include "rust/config.h"
 #include "ob_macro_block_writer.h"
 #include "ob_imacro_block_flush_callback.h"
 #include "share/rc/ob_server_runtime.h"
 #include "src/storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
 #include "src/storage/ddl/ob_ddl_clog.h"
-#include "share/ob_io_device_helper.h"
 namespace oceanbase
 {
 using namespace common;
@@ -345,8 +345,7 @@ void ObMicroBlockAdaptiveSplitter::ObMicroCompressionInfo::update(const int64_t 
 
 ObMacroBlockWriter::ObDefaultMacroBlockFlusher::ObDefaultMacroBlockFlusher()
   : macro_block_writer_(nullptr),
-    macro_handle_(nullptr),
-    device_handle_(nullptr)
+    macro_handle_(nullptr)
 {
 }
 
@@ -359,7 +358,7 @@ void ObMacroBlockWriter::ObDefaultMacroBlockFlusher::reset()
 {
   macro_block_writer_ = nullptr;
   macro_handle_ = nullptr;
-  device_handle_ = nullptr;
+
 }
 
 int ObMacroBlockWriter::ObDefaultMacroBlockFlusher::write_disk(ObMacroBlock& macro_block, const bool is_close_flush)
@@ -378,12 +377,9 @@ int ObMacroBlockWriter::ObDefaultMacroBlockFlusher::write_disk(ObMacroBlock& mac
     const int64_t data_buf_size = upper_align(macro_block.get_data_size(), DIO_ALIGN_SIZE);
     {
       object_info.size_ = data_buf_size;
-      object_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
-      object_info.io_desc_.set_sealed();
       object_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
       object_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
-      object_info.device_handle_ = device_handle_;
-      object_info.has_backup_device_handle_ = OB_NOT_NULL(device_handle_);
+
     }
     
     if (OB_FAIL(macro_handle_->async_write(object_info))) {
@@ -428,7 +424,7 @@ int ObMacroBlockWriter::ObSmallSStableMacroBlockFlusher::init(
     STORAGE_LOG(WARN, "small sstable flusher is already initialized", K(ret));
   } else {
     ObDefaultMacroBlockFlusher::set_writer_and_handles(
-        macro_block_writer, nullptr, nullptr);
+        macro_block_writer, nullptr);
     block_write_ctx_ = &block_write_ctx;
     is_inited_ = true;
   }
@@ -496,10 +492,8 @@ ObMacroBlockWriter::ObMacroBlockWriter(const bool is_need_macro_buffer)
     datum_row_(),
     data_aggregator_(nullptr),
     callback_(nullptr),
-    device_handle_(nullptr),
     builder_(NULL),
     pre_warmer_(NULL),
-    io_buf_(nullptr),
     validator_(NULL),
     default_macro_flusher_(),
     small_sstable_macro_flusher_()
@@ -557,7 +551,7 @@ void ObMacroBlockWriter::inner_reset()
   is_macro_or_micro_block_reused_ = false;
   micro_rowkey_hashs_.reset();
   datum_row_.reset();
-  device_handle_ = nullptr;
+
   micro_block_adaptive_splitter_.reset();
   release_pre_agg_util();
   if (OB_NOT_NULL(macro_seq_generator_)) {
@@ -574,7 +568,6 @@ void ObMacroBlockWriter::inner_reset()
     allocator_.free(curr_micro_column_checksum_);
     curr_micro_column_checksum_ = nullptr;
   }
-  io_buf_ = nullptr;
   validator_ = nullptr;
   custom_macro_flusher_ = nullptr;
   default_macro_flusher_.reset();
@@ -587,8 +580,7 @@ int ObMacroBlockWriter::open(
     const blocksstable::ObMacroSeqParam &macro_seq_param,
     const share::ObPreWarmerParam &pre_warm_param,
     ObIMacroBlockFlushCallback *callback,
-    ObIMacroBlockValidator *validator,
-    ObIODevice *device_handle)
+    ObIMacroBlockValidator *validator)
 {
   int ret = OB_SUCCESS;
   ObBlockWriterConcurrentGuard guard(concurrent_lock_);
@@ -600,8 +592,7 @@ int ObMacroBlockWriter::open(
       pre_warm_param,
       true,
       callback,
-      validator,
-      device_handle))) {
+      validator))) {
   }
   return ret;
 }
@@ -613,8 +604,7 @@ int ObMacroBlockWriter::inner_init(
     const share::ObPreWarmerParam &pre_warm_param,
     const bool cluster_micro_index_on_flush,
     ObIMacroBlockFlushCallback *callback,
-    ObIMacroBlockValidator *validator,
-    ObIODevice *device_handle)
+    ObIMacroBlockValidator *validator)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!data_store_desc.is_valid() || parallel_idx < 0 ||
@@ -628,7 +618,7 @@ int ObMacroBlockWriter::inner_init(
     ObSSTableIndexBuilder *sstable_index_builder = data_store_desc.sstable_index_builder_;
     callback_ = callback;
     validator_ = validator;
-    device_handle_ = device_handle;
+
     data_store_desc_ = &data_store_desc;
 
     if (OB_FAIL(init_macro_seq_generator(macro_seq_param))) {
@@ -1712,8 +1702,7 @@ bool ObMacroBlockWriter::check_can_flush_small_sstable(
       && aligned_macro_size < SMALL_SSTABLE_THRESHOLD
       && ObSSTableIndexBuilder::satisfies_small_sstable_pre_requisites(
              sstable_index_builder->get_optimization_mode(),
-             data_store_desc_->get_concurrent_cnt(),
-             device_handle_);
+             data_store_desc_->get_concurrent_cnt());
 }
 
 int ObMacroBlockWriter::flush_macro_block(ObMacroBlock &macro_block, const bool is_close_flush)
@@ -1798,7 +1787,7 @@ int ObMacroBlockWriter::prepare_default_macro_block_flusher(const bool is_close_
   }
   
   if (OB_SUCC(ret)) {
-    default_macro_flusher_.set_writer_and_handles(*this, &macro_handle, device_handle_);
+    default_macro_flusher_.set_writer_and_handles(*this, &macro_handle);
   }
   return ret;
 }
@@ -1887,22 +1876,13 @@ int ObMacroBlockWriter::check_write_complete(const MacroBlockId &macro_block_id)
   read_info.offset_ = 0;
   read_info.size_ = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
   read_info.io_desc_.set_mode(ObIOMode::READ);
-  read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
   read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.macro_block_id_ = macro_block_id;
   
 
   ObStorageObjectHandle read_handle;
-  if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
-      reinterpret_cast<char*>(allocator_.alloc(read_info.size_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret));
-  } else {
-    read_info.buf_ = io_buf_;
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
+  if (OB_FAIL(OB_SERVER_BLOCK_MGR.fsync_block())) {
   } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, read_handle))) {
   } else if (OB_FAIL(read_handle.wait())) {
   } else if (OB_FAIL(ObSSTableMacroBlockChecker::check(
@@ -1924,8 +1904,7 @@ int ObMacroBlockWriter::wait_io_finish(ObStorageObjectHandle &macro_handle, ObMa
   if (OB_FAIL(macro_handle.wait())) {
   } else if ((nullptr != macro_block) != is_need_macro_buffer_) { /* when use buffer macor block must not null, otherwise null*/
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_NOT_NULL(device_handle_)) {
-    macro_handle.reset();
+
   } else {
     if (!macro_handle.is_empty()) {
       int64_t block_io_us;
@@ -2026,31 +2005,8 @@ int ObMacroBlockWriter::alloc_block()
   } else if (OB_UNLIKELY(macro_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(INFO, "block maybe wrong", K(macro_handle));
-  } else if (OB_NOT_NULL(device_handle_)) {
-    if (OB_FAIL(alloc_block_from_device(macro_handle))) {
-    }
-  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(storage_opt, macro_handle))) {
-  }
-  return ret;
-}
 
-int ObMacroBlockWriter::alloc_block_from_device(ObStorageObjectHandle &macro_handle)
-{
-  int ret = OB_SUCCESS;
-  MacroBlockId macro_id;
-  ObIOFd io_fd;
-  ObIODOpts opts;
-  if (OB_ISNULL(device_handle_)) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "unexpected null device handle", K(ret), KP_(device_handle));
-  } else if (OB_FAIL(device_handle_->alloc_block(&opts, io_fd))) {
-  } else {
-    macro_id.reset();
-    macro_id.set_from_io_fd(io_fd);
-    if (OB_FAIL(macro_handle.set_macro_block_id(macro_id))) {
-    } else {
-      FLOG_INFO("successfully alloc block from device", K(macro_id));
-    }
+  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(storage_opt, macro_handle))) {
   }
   return ret;
 }

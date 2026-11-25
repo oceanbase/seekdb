@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_role_cmd_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -64,7 +64,7 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
       user_info.set_is_locked(true);
       OZ (arg.user_infos_.push_back(user_info));
     }
-    OZ (query::serialize_root_service_call([&]{ return ctx.root_command_service().create_user(arg, failed_index); }));
+    OZ (share::local_ddl_serial_call([&]{ return ctx.root_command_service().create_user(arg, failed_index); }));
   }
 
   return ret;
@@ -107,7 +107,7 @@ int ObAlterRoleExecutor::execute(ObExecContext &ctx, ObAlterRoleStmt &stmt)
   arg.pwd_enc_ = pwd_enc;
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().alter_role(arg); }))) {
+  } else if (OB_FAIL(share::local_ddl_serial_call([&]{ return ctx.root_command_service().alter_role(arg); }))) {
   }
   return ret;
 }

@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_IO_INFO_H_
 
 #include "storage/tmp_file/ob_tmp_file_global.h"
-#include "share/io/ob_io_define.h"
+#include "share/io_request.h"
 
 namespace oceanbase
 {

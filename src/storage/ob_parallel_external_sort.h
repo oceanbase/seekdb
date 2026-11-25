@@ -25,7 +25,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/container/ob_heap.h"
 #include "lib/container/ob_vector.h"
-#include "share/io/ob_io_manager.h"
+#include "share/io_request.h"
 #include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "blocksstable/ob_block_sstable_struct.h"
 #include "tmp_file/ob_tmp_file_manager.h"
@@ -313,7 +313,6 @@ int ObFragmentWriterV2<T>::flush_buffer()
     io_info.dir_id_ = dir_id_;
     io_info.size_ = buf_size_;
     io_info.buf_ = buf_;
-    io_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_INDEX_BUILD_WRITE);
     io_info.io_timeout_ms_ = timeout_ms;
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_write(io_info, file_io_handle_))) {
     } else {
@@ -551,7 +550,6 @@ int ObFragmentReaderV2<T>::prefetch()
       io_info.size_ = buf_size_;
       io_info.buf_ = buf_[handle_index];
       io_info.disable_page_cache_ = true;
-      io_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_INDEX_BUILD_READ);
       if (OB_FAIL(ObExternalSortConstant::get_io_timeout_ms(expire_timestamp_, io_info.io_timeout_ms_))) {
       } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_read(io_info, file_io_handles_[handle_index]))) {
         if (common::OB_ITER_END != ret) {

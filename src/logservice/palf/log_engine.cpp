@@ -123,38 +123,32 @@ int LogEngine::load(share::LocalStore &store, const char *base_dir,
                     LogGroupEntryHeader &entry_header,
                     const int64_t palf_epoch,
                     const int64_t log_storage_block_size,
-                    LogIOAdapter *io_adapter,
-                    bool &is_integrity)
+                    LogIOAdapter *io_adapter)
 {
   int ret = OB_SUCCESS;
-  bool meta_exists = false;
   block_id_t expected_next_block_id = LOG_INVALID_BLOCK_ID;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(base_dir) || OB_ISNULL(alloc_mgr) || OB_ISNULL(log_io_worker)
       || OB_ISNULL(io_adapter) || !store.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(meta_store::load(store, log_meta_, expected_next_block_id))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    PALF_LOG(ERROR, "required local PALF metadata is missing or invalid", K(ret), KCSTRING(base_dir));
   } else {
     store_ = &store;
-    ret = meta_store::load(store, log_meta_, expected_next_block_id);
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else if (OB_SUCC(ret)) {
-      meta_exists = true;
-    }
     auto update_manifest = [this, expected_next_block_id](block_id_t block_id, bool in_restart) {
       return !in_restart || block_id == expected_next_block_id + 1
           ? this->update_manifest(block_id) : OB_SUCCESS;
     };
-    const LSN base_lsn = meta_exists ? log_meta_.get_log_snapshot_meta().base_lsn_
-                                    : LSN(PALF_INITIAL_LSN_VAL);
-    if (OB_FAIL(ret)) {
-    } else if (0 != log_storage_block_size && OB_FAIL(log_storage_.load(base_dir, "log",
+    const LSN base_lsn = log_meta_.get_log_snapshot_meta().base_lsn_;
+    if (0 != log_storage_block_size && OB_FAIL(log_storage_.load(base_dir, "log",
         base_lsn, log_storage_block_size, LOG_DIO_ALIGN_SIZE, LOG_DIO_ALIGNED_BUF_SIZE_REDO,
         update_manifest, log_block_pool, plugins, log_cache, io_adapter,
         entry_header, last_group_entry_header_lsn))) {
-    } else if (OB_FAIL(integrity_verify_(meta_exists, last_group_entry_header_lsn, is_integrity))) {
-    } else if (meta_exists && 0 != log_storage_block_size
+    } else if (0 != log_storage_block_size
         && OB_FAIL(try_clear_up_holes_and_check_storage_integrity_(
             last_group_entry_header_lsn, expected_next_block_id, entry_header))) {
     } else {
@@ -169,30 +163,6 @@ int LogEngine::load(share::LocalStore &store, const char *base_dir,
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
     PALF_LOG(WARN, "initialize PALF local metadata failed", K(ret), KCSTRING(base_dir));
     destroy();
-  }
-  return ret;
-}
-
-int LogEngine::integrity_verify_(bool meta_exists,
-                                 const LSN &last_group_entry_header_lsn,
-                                 bool &is_integrity)
-{
-  int ret = OB_SUCCESS;
-  is_integrity = true;
-  bool meta_is_valid = meta_exists;
-  bool redo_is_valid = last_group_entry_header_lsn.is_valid();
-  // 1. meta is empty, but redo is not empty, unexpected error
-  // 2. meta and redo are both empty, move this directory to another place, and remove this from PalfEnvImpl
-  // 3. meta is not empty, but redo is empty, normal case
-  // 4. meta and redo are not empty, normal case
-  // In case2, we will load LogEngine success, and remove PalfHandleImpl in PalfEnvImpl.
-  if (false == meta_is_valid && true == redo_is_valid) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "local PALF metadata is missing, but redo is not empty, unexpected error", K(ret), KPC(this));
-  } else if (false == meta_is_valid && false == redo_is_valid) {
-    is_integrity = false;
-    PALF_LOG(WARN, "log engine is not integrity", KPC(this));
-  } else {
   }
   return ret;
 }
@@ -289,13 +259,14 @@ int LogEngine::append_log(const LSN &lsn, const LogWriteBuf &write_buf, const SC
 }
 
 int LogEngine::append_log(const LSNArray &lsn_array, const LogWriteBufArray &write_buf_array,
-                          const SCNArray &scn_array)
+                          const SCNArray &scn_array, int64_t &completed_count)
 {
   int ret = OB_SUCCESS;
+  completed_count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogEngine not inited!!!", K(ret), K_(is_inited));
-  } else if (OB_FAIL(log_storage_.writev(lsn_array, write_buf_array, scn_array))) {
+  } else if (OB_FAIL(log_storage_.writev(lsn_array, write_buf_array, scn_array, completed_count))) {
   } else {
   }
   return ret;

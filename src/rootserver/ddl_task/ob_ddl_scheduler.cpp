@@ -18,7 +18,6 @@
 
 #include "ob_ddl_scheduler.h"
 #include <inttypes.h>
-#include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
 #include "rootserver/ddl_task/ob_drop_vec_index_task.h"
 #include "rootserver/ddl_task/ob_drop_lob_task.h"
@@ -2419,7 +2418,7 @@ int ObDDLScheduler::remove_inactive_ddl_task()
 int ObDDLScheduler::schedule_ddl_task(const ObDDLTaskRecord &record)
 {
   int ret = OB_SUCCESS;
-  ObTraceIDGuard guard(record.trace_id_);
+  ObTraceIdGuard guard(record.trace_id_);
   if (OB_UNLIKELY(!record.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(DDL_SIM(record.task_id_, SCHEDULE_DDL_TASK_FAILED))) {

@@ -234,7 +234,6 @@ int ObClusteredIndexBlockWriter::rewrite_and_append_clustered_index_micro_block(
     const ObDataMacroBlockMeta &macro_meta)
 {
   int ret = OB_SUCCESS;
-  char * micro_buf = nullptr;
   ObStorageObjectReadInfo read_info;
   ObStorageObjectHandle object_handle;
   int64_t micro_size = 0;
@@ -244,35 +243,24 @@ int ObClusteredIndexBlockWriter::rewrite_and_append_clustered_index_micro_block(
   } else if (OB_UNLIKELY(!macro_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (FALSE_IT(micro_size = macro_meta.get_meta_val().block_size_)) {
-  } else if (OB_ISNULL(micro_buf = static_cast<char *>(
-                           macro_block_io_allocator_.alloc(micro_size)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     read_info.macro_block_id_ = macro_meta.get_macro_id();
     read_info.offset_ = macro_meta.get_meta_val().block_offset_;
     read_info.size_ = micro_size;
     read_info.io_desc_.set_mode(ObIOMode::READ);
-    read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_INDEX_BUILDER_IO);
     read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
     
-    read_info.buf_ = micro_buf;
     if (OB_FAIL(ObObjectManager::read_object(read_info, object_handle))) {
     }
   }
   // Make clustered index micro block.
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(decompress_and_make_clustered_index_micro_block(
-                 micro_buf, micro_size, macro_meta.get_macro_id(), macro_meta))) {
+                 object_handle.get_buffer(), micro_size, macro_meta.get_macro_id(), macro_meta))) {
   } else {
   }
   object_handle.reset();
-  // Recycle buffer.
-  if (OB_NOT_NULL(micro_buf)) {
-    macro_block_io_allocator_.free(micro_buf);
-    micro_buf = nullptr;
-    macro_block_io_allocator_.reuse();
-  }
   return ret;
 }
 

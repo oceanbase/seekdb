@@ -37,7 +37,6 @@
 #include "share/schema/ob_objpriv_mysql_schema_struct.h"
 #include "share/schema/ob_dependency_info.h"
 #include "share/schema/ob_trigger_info.h"
-#include "share/io/ob_io_calibration.h"
 #include "share/ob_est_row_count_record.h"
 #include "share/tablelock/ob_table_lock_priority.h"
 #include "share/transaction/ob_tx_id.h"

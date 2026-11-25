@@ -1,8 +1,16 @@
 """CXX interfaces exposed to C++ callers; Rust targets live in each crate."""
 
 load("//rust/sql-nio:features.bzl", "FEATURES")
+load("//rust/storage-io:features.bzl", IO_FEATURES = "FEATURES")
 
 MODULES = {
+    "file-io": {"bridge": "src/bridge.rs", "features": IO_FEATURES},
+    "storage-io": {
+        "bridge": "src/bridge.rs",
+        "headers": ["include/callback_adapter.h"],
+        "deps": [":file_io_headers"],
+        "features": IO_FEATURES,
+    },
     "mvt": {"bridge": "src/bridge.rs"},
     "standby-rpc": {
         "bridge": "src/bridge.rs",
@@ -12,6 +20,7 @@ MODULES = {
     "local": {
         "bridge": "src/bridge.rs",
         "headers": ["include/callbacks.h"],
+        "deps": [":file_io_headers"],
     },
     "config": {
         "bridge": "generated_config.rs",

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_package_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 #include "sql/resolver/ddl/ob_create_package_stmt.h"
 #include "sql/resolver/ddl/ob_drop_package_stmt.h"
@@ -44,7 +44,7 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(query::serialize_root_service_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
                  [&]{ return ctx.root_command_service().create_package(arg); }))) {
   }
   return ret;
@@ -64,7 +64,7 @@ int ObDropPackageExecutor::execute(ObExecContext &ctx, ObDropPackageStmt &stmt)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(query::serialize_root_service_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
                  [&]{ return ctx.root_command_service().drop_package(arg); }))) {
   }
   return ret;

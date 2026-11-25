@@ -24,13 +24,6 @@ for patch in selected:
     if hashlib.sha256(data).hexdigest() != patch["output_sha256"]:
         raise SystemExit(f"Patch output checksum mismatch: {path}")
     path.write_bytes(data)
-if package == "abseil":
-    for path in Path("absl").rglob("BUILD.bazel"):
-        content = path.read_text()
-        loads = ''.join(f'load("@rules_cc//cc:{name}.bzl", "{name}")\n'
-                        for name in ("cc_library", "cc_binary", "cc_test") if name + "(" in content)
-        content = content.replace("copts = ABSL_DEFAULT_COPTS", 'copts = select({"@platforms//os:emscripten": ["-std=c++20", "-pthread", "-fexceptions"], "//conditions:default": ["-std=c++17"]}) + ABSL_DEFAULT_COPTS')
-        path.write_text(loads + content)
 if package == "roaring":
     for path in Path("cpp").glob("*.hh"):
         Path("include/roaring", path.name).symlink_to("../../" + str(path))

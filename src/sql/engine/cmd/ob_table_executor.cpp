@@ -22,7 +22,7 @@
 #include "share/ob_server_struct.h"
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "query/command/ob_root_command_service.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/runtime/ob_query_runtime_environment.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"  // ObExprRegexpSessionVariables (unity regroup)
@@ -389,7 +389,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           obcall::ObAlterTableRes res;
           bool finish = false;
           while (OB_SUCC(ret) && !finish) {
-            if (OB_FAIL(query::serialize_root_service_call(
+            if (OB_FAIL(share::local_ddl_serial_call(
                     [&]{ return ctx.root_command_service().alter_table(alter_table_arg, res); }))) {
               if (OB_EAGAIN == ret) {
                 ret = OB_SUCCESS; // maybe table lock conflict, retry
@@ -409,7 +409,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           if (OB_LIKELY(need_clean)) {
             int tmp_ret = OB_SUCCESS;
             obcall::ObDDLRes res;
-            if (OB_SUCCESS != (tmp_ret = query::serialize_root_service_call([&]{
+            if (OB_SUCCESS != (tmp_ret = share::local_ddl_serial_call([&]{
                   return ctx.root_command_service().drop_table(drop_table_arg, res);
                 }))) {
             } else {
@@ -628,7 +628,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
     DEBUG_SYNC(BEFORE_SEND_ALTER_TABLE);
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
                    [&]{ return root_commands.alter_table(alter_table_arg, res); }))) {
     } else {
       // In rollback, retries will not be attempted, nor will the schema version be checked
@@ -715,7 +715,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
             drop_index_arg.index_action_type_ = obcall::ObIndexArg::DROP_INDEX;
             drop_index_arg.is_add_to_scheduler_ = false;
             if (OB_SUCCESS != (tmp_ret = create_index_executor.set_drop_index_stmt_str(drop_index_arg, allocator))) {
-            } else if (OB_SUCCESS != (tmp_ret = query::serialize_root_service_call(
+            } else if (OB_SUCCESS != (tmp_ret = share::local_ddl_serial_call(
                            [&]{ return root_commands.drop_index(drop_index_arg, drop_index_res); }))) {
             }
           }
@@ -743,7 +743,7 @@ int ObAlterTableExecutor::alter_table_exchange_partition_rpc(obcall::ObExchangeP
   int ret = OB_SUCCESS;
   if (OB_ISNULL(my_session) || OB_UNLIKELY(!exchange_partition_arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(query::serialize_root_service_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
                  [&]{ return root_commands.exchange_partition(exchange_partition_arg, res); }))) {
   } else {
     // In rollback, retries will not be attempted, nor will the schema version be checked
@@ -766,7 +766,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
   } else if (stmt.is_alter_triggers()) {
     if (stmt.get_tg_arg().trigger_infos_.count() > 0) {
       stmt.get_tg_arg().ddl_stmt_str_ = first_stmt;
-      OZ (query::serialize_root_service_call(
+      OZ (share::local_ddl_serial_call(
           [&]{ return ctx.root_command_service().alter_trigger(stmt.get_tg_arg()); }),
           GCTX.self_addr());
     }
@@ -1464,7 +1464,7 @@ int ObCommentExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
                && FALSE_IT(alter_table_arg.session_id_ = my_session->get_sessid_for_table())) {
       // should not in this field
     } else if (OB_FAIL(assign_alter_to_comment_(alter_table_arg, set_comment_arg))) {
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
                    [&]{ return ctx.root_command_service().set_comment(set_comment_arg, set_comment_res); }))) {
     } else {
       int64_t refresh_time = ObTimeUtility::current_time();
@@ -1581,7 +1581,7 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
           }
         } else {
           obcall::ObDDLRes res;
-          if (OB_FAIL(query::serialize_root_service_call(
+          if (OB_FAIL(share::local_ddl_serial_call(
                   [&]{ return ctx.root_command_service().drop_table(drop_table_arg, res); }))) {
           } else if (res.is_valid() && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(
               res.task_id_, *my_session, *ctx.get_query_runtime_environment(),
@@ -1623,7 +1623,7 @@ int ObRenameTableExecutor::execute(ObExecContext &ctx, ObRenameTableStmt &stmt)
   if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(query::serialize_root_service_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
                  [&]{ return ctx.root_command_service().rename_table(rename_table_arg); }))) {
   }
   return ret;
@@ -1699,7 +1699,7 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
 
       if (OB_FAIL(check_use_parallel_truncate(truncate_table_arg, use_parallel_truncate))) {
       } else if (!use_parallel_truncate) {
-        if (OB_FAIL(query::serialize_root_service_call(
+        if (OB_FAIL(share::local_ddl_serial_call(
                 [&]{ return ctx.root_command_service().truncate_table(truncate_table_arg, res); }))) {
         } else if (res.is_valid()
           && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(
@@ -1712,7 +1712,7 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
         int64_t start_time = ObTimeUtility::current_time();
         while (OB_SUCC(ret)) {
           DEBUG_SYNC(BEFORE_PARELLEL_TRUNCATE);
-          if (OB_FAIL(query::serialize_root_service_call(
+          if (OB_FAIL(share::local_ddl_serial_call(
                   [&]{ return ctx.root_command_service().truncate_table_v2(truncate_table_arg, res); }))) {
             if ((OB_TRY_LOCK_ROW_CONFLICT == ret || OB_TIMEOUT == ret || OB_NOT_MASTER == ret
                   || OB_RS_NOT_MASTER == ret || OB_RS_SHUTDOWN == ret || OB_SERVER_RUNTIME_NOT_READY == ret)
@@ -1778,7 +1778,7 @@ int ObCreateTableLikeExecutor::execute(ObExecContext &ctx, ObCreateTableLikeStmt
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
                    [&]{ return ctx.root_command_service().create_table_like(create_table_like_arg); }))) {
     }
   }
@@ -1812,7 +1812,7 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
                    [&]{ return ctx.root_command_service().fork_table(fork_table_arg, res); }))) {
     } else {
       LOG_INFO("fork table executor finished", K(fork_table_arg));
@@ -1834,7 +1834,7 @@ int ObRecyclebinRestoreTableExecutor::execute(ObExecContext &ctx, ObRecyclebinRe
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
                    [&]{ return ctx.root_command_service().restore_table_from_recyclebin(restore_table_arg); }))) {
     }
   }
@@ -1855,7 +1855,7 @@ int ObPurgeTableExecutor::execute(ObExecContext &ctx, ObPurgeTableStmt &stmt)
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
                    [&]{ return ctx.root_command_service().purge_table(purge_table_arg); }))) {
     }
   }
@@ -1873,7 +1873,7 @@ int ObOptimizeTableExecutor::execute(ObExecContext &ctx, ObOptimizeTableStmt &st
     ObSqlExecutorCtx *task_exec_ctx = nullptr;
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
                    [&]{ return ctx.root_command_service().optimize_table(arg); }))) {
     }
   }

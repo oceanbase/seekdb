@@ -18,7 +18,6 @@
 #include "rust/config.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/schema/ob_schema_struct.h"
-#include "share/io/ob_io_manager.h"
 #include "share/config/ob_server_config.h"
 #include "share/rc/ob_server_runtime.h"
 

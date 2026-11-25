@@ -80,6 +80,16 @@ Write review comments in English.
 - **Tests and evidence:** Require the smallest focused unit test, mysqltest, Rust
   test, benchmark, or measurement that would fail if the changed invariant were
   broken. Do not demand broad tests that cannot prove the behavior.
+- **`seekdb_test` impact.** Check the diff against the
+  [downstream test scenarios](../../../AGENTS.md#downstream-integration-tests).
+  For each matching PR, require its `验证` section to link to the `seekdb_test`
+  MR or commit that updates the affected cases, or explain explicitly why no
+  update is needed. If the PR omits both or gives a conclusion without a
+  reason tied to the change, ask the author to add the link or the explanation.
+  For a standalone diff, request the same evidence if it is missing. Check
+  that any linked test change covers the affected scenario and that reported
+  results use the matching product and test revisions. Apply the existing
+  severity criteria to concrete test gaps.
 - **Build and CI:** Review build or workflow changes only for correctness,
   security, portability, or reliability problems, not stylistic preferences.
 

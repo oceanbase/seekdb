@@ -139,7 +139,7 @@ bool ObTmpFileIOHandle::is_valid() const
 int ObTmpFileIOHandle::wait()
 {
   int ret = OB_SUCCESS;
-  ObITmpFileHandle file_handle;
+  ObSNTmpFileHandle file_handle;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

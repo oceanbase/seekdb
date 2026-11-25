@@ -42,7 +42,6 @@ public:
       int64_t &row_count_delta) const = 0;
 
   virtual int run_io_benchmark(
-      common::ObIAllocator &allocator,
       int64_t &disk_random_read_speed,
       int64_t &disk_sequential_read_speed) const = 0;
 };

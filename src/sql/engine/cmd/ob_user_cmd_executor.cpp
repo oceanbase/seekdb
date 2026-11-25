@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -204,7 +204,7 @@ int ObCreateUserExecutor::create_user(
   ObSArray<int64_t> failed_index;
   ObSqlString fail_msg;
   obcall::ObCreateUserArg user_arg = arg;
-  if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.create_user(user_arg, failed_index); }))) {
+  if (OB_FAIL(share::local_ddl_serial_call([&]{ return root_commands.create_user(user_arg, failed_index); }))) {
   } else if (0 != failed_index.count()) {
     ObSArray<ObString> failed_users;
     ObSArray<ObString> failed_hosts;
@@ -329,7 +329,7 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.drop_user(arg, failed_index); }))) {
+    if (OB_FAIL(share::local_ddl_serial_call([&]{ return root_commands.drop_user(arg, failed_index); }))) {
     }
     if (0 != failed_index.count()) {
       ObSArray<ObString> failed_users;
@@ -411,7 +411,7 @@ int ObLockUserExecutor::lock_user(
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.lock_user(arg, failed_index); }))) {
+    if (OB_FAIL(share::local_ddl_serial_call([&]{ return root_commands.lock_user(arg, failed_index); }))) {
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.users_, arg.hosts_, fail_msg))) {
       } else {
         ret = OB_CANNOT_USER;
@@ -509,7 +509,7 @@ int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &st
   } else if (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag()) {
     OZ (set_role_exec(ctx, stmt));
   } else if (ObAlterUserRoleStmt::SET_DEFAULT_ROLE == stmt.get_set_role_flag()) {
-    if (OB_FAIL(query::serialize_root_service_call([&] {
+    if (OB_FAIL(share::local_ddl_serial_call([&] {
           return ctx.root_command_service().alter_user_default_role(
               stmt.get_ddl_arg());
         }))) {
@@ -586,7 +586,7 @@ int ObRenameUserExecutor::rename_user(
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.rename_user(arg, failed_index); }))) {
+    if (OB_FAIL(share::local_ddl_serial_call([&]{ return root_commands.rename_user(arg, failed_index); }))) {
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.old_users_, arg.old_hosts_, fail_msg))) {
       } else {
         ret = OB_CANNOT_USER;

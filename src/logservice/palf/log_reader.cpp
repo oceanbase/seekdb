@@ -75,7 +75,7 @@ int LogReader::pread(const block_id_t block_id,
                      LogIOContext &io_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObIOFd io_fd;
+  LogFile file;
   out_read_size = 0;
   char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   if (IS_NOT_INIT) {
@@ -85,7 +85,7 @@ int LogReader::pread(const block_id_t block_id,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(block_id), K(offset), K(in_read_size), K(read_buf));
   } else if (OB_FAIL(convert_to_normal_block(log_dir_, block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
-  } else if (OB_FAIL(io_adapter_->open(block_path, LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
+  } else if (OB_FAIL(io_adapter_->open(block_path, true, file))) {
   } else {
     const int64_t start_ts = ObTimeUtility::fast_current_time();
     int64_t remained_read_size = in_read_size;
@@ -97,7 +97,7 @@ int LogReader::pread(const block_id_t block_id,
       const offset_t curr_read_offset = offset + in_read_size - remained_read_size;
       const int64_t curr_read_buf_len = remained_read_buf_len - out_read_size;
       int64_t curr_out_read_size = 0;
-      if (OB_FAIL(inner_pread_(io_fd, curr_read_offset, curr_in_read_size, curr_read_buf, curr_read_buf_len, curr_out_read_size, io_ctx))) {
+      if (OB_FAIL(inner_pread_(file, curr_read_offset, curr_in_read_size, curr_read_buf, curr_read_buf_len, curr_out_read_size, io_ctx))) {
       } else {
         out_read_size += curr_out_read_size;
         remained_read_size -= curr_out_read_size;
@@ -121,16 +121,10 @@ int LogReader::pread(const block_id_t block_id,
     }
   }
 
-  if (io_fd.is_valid()) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(io_adapter_->close(io_fd))) {
-    }
-    ret = OB_SUCCESS == ret ? tmp_ret : ret;
-  }
   return ret;
 }
 
-int LogReader::inner_pread_(const ObIOFd &read_io_fd,
+int LogReader::inner_pread_(const LogFile &read_file,
                             offset_t start_offset,
                             int64_t in_read_size,
                             char *read_buf,
@@ -149,16 +143,9 @@ int LogReader::inner_pread_(const ObIOFd &read_io_fd,
     ret = OB_BUF_NOT_ENOUGH;
     PALF_LOG(WARN, "buffer not enough to hold read result");
   } else {
-    int64_t retry_interval = 10 * 1000L;
-    do {
-      if (OB_FAIL(io_adapter_->pread(read_io_fd, limited_and_aligned_in_read_size, aligned_start_offset, read_buf, out_read_size, io_ctx))) {
-        PALF_LOG(WARN, "pread failed", K(ret), K(read_io_fd), K(aligned_start_offset), K(limited_and_aligned_in_read_size), K(backoff), K(errno), K(out_read_size));
-        if (OB_ALLOCATE_MEMORY_FAILED == ret) {
-          ret = OB_EAGAIN;
-          ob_usleep(retry_interval);
-        }
-      }
-    } while (OB_EAGAIN == ret);
+    if (OB_FAIL(io_adapter_->pread(read_file, limited_and_aligned_in_read_size, aligned_start_offset, read_buf, out_read_size))) {
+      PALF_LOG(WARN, "pread failed", K(ret), K(aligned_start_offset), K(limited_and_aligned_in_read_size), K(backoff), K(errno), K(out_read_size));
+    }
 
     if (OB_SUCC(ret)) {
       io_ctx.inc_read_io_cnt();

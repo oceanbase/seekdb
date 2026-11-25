@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_routine_executor.h"
-#include "query/command/ob_root_service_serialization.h"
+#include "share/ob_local_ddl_serial_call.h"
 #include "query/command/ob_root_command_service.h"
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
@@ -46,7 +46,7 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(query::serialize_root_service_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
                  [&]{ return ctx.root_command_service().create_routine(crt_routine_arg); }))) {
   }
   if(crt_routine_arg.with_if_not_exist_ && ret == OB_ERR_SP_ALREADY_EXISTS) {
@@ -259,7 +259,7 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(query::serialize_root_service_call(
+  } else if (OB_FAIL(share::local_ddl_serial_call(
                  [&]{ return ctx.root_command_service().drop_routine(drop_routine_arg); }))) {
   }
   return ret;
@@ -281,7 +281,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(query::serialize_root_service_call(
+    } else if (OB_FAIL(share::local_ddl_serial_call(
                    [&]{ return ctx.root_command_service().alter_routine(alter_routine_arg); }))) {
     }
   } else {

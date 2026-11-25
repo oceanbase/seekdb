@@ -71,14 +71,16 @@ public:
       ObStorageObjectHandle &object_handle);
   static int async_read_object(
       const ObStorageObjectReadInfo &read_info,
-      ObStorageObjectHandle &object_handle);
+      ObStorageObjectHandle &object_handle,
+      std::unique_ptr<storage_io::CallbackAdapter> callback = nullptr);
   static int async_write_object(
       const ObStorageObjectOpt &opt,
       const ObStorageObjectWriteInfo &write_info,
       ObStorageObjectHandle &object_handle);
   static int read_object(
       const ObStorageObjectReadInfo &read_info,
-      ObStorageObjectHandle &object_handle);
+      ObStorageObjectHandle &object_handle,
+      std::unique_ptr<storage_io::CallbackAdapter> callback = nullptr);
   static int write_object(
       const ObStorageObjectOpt &opt,
       const ObStorageObjectWriteInfo &write_info,
@@ -86,12 +88,6 @@ public:
   int64_t get_macro_object_size() const { return macro_object_size_; }
   int inc_ref(const MacroBlockId &object_id) const;
   int dec_ref(const MacroBlockId &object_id) const;
-  int resize_local_device(
-      const int64_t expected_current_size,
-      const int64_t new_device_size,
-      const int64_t new_device_disk_percentage,
-      const int64_t reserved_size);
-  int check_disk_space_available();
 
   static ObObjectManager &get_instance();
 
@@ -112,7 +108,6 @@ private:
   bool is_inited_;
   int64_t macro_object_size_;
 
-  lib::ObMutex resize_file_lock_;
 
   DISALLOW_COPY_AND_ASSIGN(ObObjectManager);
 };

@@ -158,8 +158,7 @@ private:
       ObIndexBlockRebuilder *&index_block_rebuilder);
   int read_sstable_block(
       const ObSSTable &sstable,
-      ObMacroBlockHandle &block_handle,
-      common::ObIAllocator &allocator);
+      ObMacroBlockHandle &block_handle);
   int create_new_sstable(
       common::ObArenaAllocator &allocator,
       const ObSSTableMergeRes &res,

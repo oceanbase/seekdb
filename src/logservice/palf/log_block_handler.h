@@ -20,10 +20,8 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/log/palf/log_define.h"                                // block_id_t ...
-#include "share/io/ob_io_struct.h"                     // ObIOInfo
-
-// This block contains the key class for writing a log into stable storage
-// device.
+#include "share/io_request.h"
+#include "log_io_adapter.h"
 
 namespace oceanbase
 {
@@ -31,8 +29,6 @@ namespace palf
 {
 class LogWriteBuf;
 class LogIOAdapter;
-// Only this class need to determine the storage system whether is OFS
-//
 class LogDIOAlignedBuf {
 public:
   LogDIOAlignedBuf();
@@ -101,36 +97,30 @@ public:
   void destroy();
 
   // @brief this function used to open last block after restart
-  // NB: retry until success!!
   int open(const char *block_path);
 
   // TODO by runlin, only open block via char*
   // int open(const char *block_name);
   // @brief this function used close current opened block
-  // NB: retry until success!!
   int close();
 
   // @brief this function used to truncate block via specified offset
-  // NB: retry until success!!
   int truncate(const offset_t offset);
 
   // @brief this function used to fill dio_aligned_buf_ via specified offset
   int load_data(const offset_t offset);
 
   // @brief this function used to create new block in process of writing log
-  // NB: retry until success!!
   int switch_next_block(const char *block_path);
 
   // @brief this function used to write data at specified offset
   // @param[in] the logical offset
   // @param[in] the data to be written
   // @param[in] the length of data
-  // NB: retry until success!!
   int pwrite(const offset_t offset,
              const char *buf,
              const int64_t buf_len);
 
-  // NB: retry until success!!
   int writev(const offset_t offset,
              const LogWriteBuf &write_buf);
 
@@ -141,9 +131,8 @@ public:
                             int64_t &accum_write_count,
                             int64_t &accum_write_rt) const;
 
-  TO_STRING_KV(K_(dio_aligned_buf), K_(log_block_size), K_(io_fd));
+  TO_STRING_KV(K_(dio_aligned_buf), K_(log_block_size));
 private:
-  // if timeout, retry until open block return an explicit error code
   // @brief block_path, the block path to be opened
   // @brief start_offset, the start logical offset for curr virtual block
   // @retval
@@ -151,9 +140,7 @@ private:
   //    OB_ERR_UNEXPECTED, unexpected error
   int inner_open_(const char *block_path);
 
-  int inner_close_();
 
-  // NB: retry until suuccess
   int inner_truncate_(const offset_t offset);
   int inner_load_data_(const offset_t offset);
 
@@ -162,17 +149,17 @@ private:
       const int64_t buf_len);
   int inner_writev_once_(const offset_t offset,
       const LogWriteBuf &write_buf);
-  int inner_write_impl_(const ObIOFd &io_fd, const char *buf, const int64_t count, const int64_t offset);
+  int inner_write_impl_(const LogFile &file, const char *buf, const int64_t count, const int64_t offset);
 private:
-  static constexpr int64_t RETRY_INTERVAL = 10 * 1000;
   LogDIOAlignedBuf dio_aligned_buf_;
+  bool buffer_needs_reload_;
   int64_t log_block_size_;
   int64_t total_write_size_;
   int64_t total_write_size_after_dio_;
   int64_t ob_pwrite_used_ts_;
   int64_t count_;
   int64_t trace_time_;
-  ObIOFd io_fd_;
+  LogFile file_;
   LogIOAdapter *io_adapter_;
   // === IO Failure Detection ===
   int64_t last_pwrite_start_time_us_;
