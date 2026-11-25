@@ -1214,7 +1214,10 @@ int ObTableInsertUpOp::do_insert(const ObConflictValue &constraint_value)
     // delete + insert
     OZ(constraint_value.baseline_datum_row_->to_expr(get_primary_table_upd_old_row(), eval_ctx_));
     OZ(delete_upd_old_row_to_das());
-    OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_insert_row(), eval_ctx_));
+    OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_insert_row(),
+                                                    eval_ctx_,
+                                                    get_primary_table_insert_row().count(),
+                                                    true));
     OZ(insert_row_to_das());
   } else if (NULL != constraint_value.baseline_datum_row_ &&
              NULL == constraint_value.current_datum_row_) {
@@ -1224,7 +1227,13 @@ int ObTableInsertUpOp::do_insert(const ObConflictValue &constraint_value)
   } else if (NULL == constraint_value.baseline_datum_row_ &&
              NULL != constraint_value.current_datum_row_) {
     // only insert
-    OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_insert_row(), eval_ctx_));
+    // The cached row is authoritative. In particular, a row inserted earlier in
+    // this statement may have been changed by a later conflict; its final value
+    // can differ from the insert projector's cached default or constant.
+    OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_insert_row(),
+                                                    eval_ctx_,
+                                                    get_primary_table_insert_row().count(),
+                                                    true));
     OZ(insert_row_to_das());
   }
   return ret;
