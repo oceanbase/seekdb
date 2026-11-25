@@ -70,7 +70,8 @@ public:
                           const ObTableSchema &table_schema,
                           ObTableSchema &alter_table_schema,
                           share::schema::ObSchemaOperationType operation_type,
-                          const common::ObString *ddl_stmt_str = NULL);
+                          const common::ObString *ddl_stmt_str = NULL,
+                          const bool need_update_data_table_schema_version = true);
   int only_update_table_options(common::ObISQLClient &sql_client,
                                 ObTableSchema &new_table_schema,
                                 share::schema::ObSchemaOperationType operation_type,
