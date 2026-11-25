@@ -1,5 +1,5 @@
 {
-  "name": "devdeps-libaio",
+  "name": "libaio",
   "version": "0.3.112",
   "source": "https://pagure.io/libaio",
   "packaged_as": "Static server link input and shared libraries in the libs component",

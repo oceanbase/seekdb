@@ -1,5 +1,5 @@
 {
-  "name": "devdeps-abseil-cpp",
+  "name": "Abseil",
   "version": "20211102.0",
   "source": "https://github.com/abseil/abseil-cpp/tree/20211102.0",
   "packaged_as": "Native libraries/headers in the server dependency graph",
@@ -9,7 +9,7 @@
     "abseil-LICENSE.txt"
   ],
   "redistribution": "Retain the license and applicable notices; mark any modified files.",
-  "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; licenses/abseil-LICENSE.txt",
+  "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; bazel/sdk_sources/prepare.py; licenses/abseil-cpp/abseil-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

@@ -1,5 +1,5 @@
 {
-  "name": "devdeps-libcurl-static",
+  "name": "curl",
   "version": "8.12.1",
   "source": "https://github.com/curl/curl/tree/curl-8_12_1",
   "packaged_as": "Static native library in the server dependency graph",

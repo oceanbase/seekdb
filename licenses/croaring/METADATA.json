@@ -1,5 +1,5 @@
 {
-  "name": "devdeps-roaringbitmap-croaring",
+  "name": "CRoaring",
   "version": "3.0.0",
   "source": "https://github.com/RoaringBitmap/CRoaring/tree/v3.0.0",
   "packaged_as": "Native library/headers in the server dependency graph",
@@ -9,7 +9,7 @@
     "croaring-LICENSE.txt"
   ],
   "redistribution": "Retain the supplied dual-license text and copyrights; no source or relink offer is required for unmodified binaries.",
-  "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; licenses/croaring-LICENSE.txt",
+  "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; licenses/croaring/croaring-LICENSE.txt",
   "shipped_in": [
     "engine"
   ]

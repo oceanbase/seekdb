@@ -1,5 +1,5 @@
 {
-  "name": "devdeps-boost",
+  "name": "Boost",
   "version": "1.74.0",
   "source": "https://archives.boost.io/release/1.74.0/source/boost_1_74_0.tar.bz2",
   "packaged_as": "Native headers/libraries and adapted Boost.Geometry source in the engine",
@@ -10,7 +10,7 @@
     "boost-geometry-notices.txt"
   ],
   "redistribution": "Retain the license and all copyright/modification notices; no source or relink offer is required for unmodified binaries.",
-  "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; deps/init/wasm/dependencies.json; the two listed notice files",
+  "evidence": "el8 manifest; bazel/sdk_sources/dependencies.json; deps/init/wasm/dependencies.json; licenses/boost/boost-geometry-1.74-LICENSE_1_0.txt and boost-geometry-notices.txt",
   "shipped_in": [
     "engine"
   ]

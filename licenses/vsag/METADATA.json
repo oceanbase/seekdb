@@ -1,0 +1,16 @@
+{
+  "name": "vsag",
+  "version": "0.16.20",
+  "source": "https://github.com/antgroup/vsag",
+  "packaged_as": "Static native library linked into the engine (libvsag_static.a)",
+  "license": "Apache-2.0",
+  "modified": "Yes: build-adjustments and platform cross patches applied by the seekdb-deps recipe",
+  "license_files": [
+    "vsag-LICENSE.txt"
+  ],
+  "redistribution": "Retain the Apache-2.0 text and the modification notices. The applied patches are recorded in the seekdb-deps repository under packages/vsag/0.16.20/patches.",
+  "evidence": "deps.lock.json pins vsag 0.16.20 for every platform; @third_party_native links libvsag_static.a from the locked SDK; seekdb-deps packages/vsag/0.16.20",
+  "shipped_in": [
+    "engine"
+  ]
+}
