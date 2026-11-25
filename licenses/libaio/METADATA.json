@@ -2,16 +2,16 @@
   "name": "libaio",
   "version": "0.3.112",
   "source": "https://pagure.io/libaio",
-  "packaged_as": "Static server link input, and the shared libaio.so.1 bundled in the Linux portable archive and the libs component; RPM and DEB packages use the distribution's libaio instead",
+  "packaged_as": "Static server link input and shared libraries in the libs component",
   "license": "LGPL-2.1-or-later",
   "modified": "No local patch recorded",
   "license_files": [
     "libaio-COPYING.txt"
   ],
-  "redistribution": "Retain the LGPL-2.1 text. The corresponding source ships with the compliance bundle under libaio/source/; keep it next to any copy of libaio.so.1 and keep the library replaceable so a user can relink against a modified libaio.",
-  "evidence": "el8 manifest; package/package.py; bazel/third_party/targets.bzl; upstream 0.3.112 src/libaio.h and COPYING; development-kit devdeps-libaio-0.3.112-12022092915 ships an identical libaio.h; libaio-0.3.112.tar.xz sha256 f69e5800425f4ea957426693ac09f9896bb993db5490fa021644454adcc72a32 (matches libaio_0.3.112-9.dsc)",
+  "redistribution": "Retain the LGPL-2.1 text. Provide the corresponding libaio source, any patches, and a verified relink/replacement mechanism when bundling the library; see SOURCE-OFFER.txt.",
+  "evidence": "el8 manifest; package/package.py; bazel/third_party/targets.bzl; upstream 0.3.112 src/libaio.h and COPYING",
   "shipped_in": [
     "engine"
   ],
-  "source_offer": "libaio 0.3.112: the complete upstream source release is included with this bundle at libaio/source/libaio-0.3.112.tar.xz (sha256 f69e5800425f4ea957426693ac09f9896bb993db5490fa021644454adcc72a32; https://pagure.io/libaio). The bundled libaio.so.1.0.1 is built by the development kit from this release and no patches are published for it. Keep this archive together with the library in every distribution."
+  "source_offer": "libaio 0.3.112 source: https://pagure.io/libaio/archive/libaio-0.3.112/libaio-0.3.112.tar.xz. No local patches are recorded. Provide the exact source archive and relink instructions with any distribution that bundles this library."
 }
