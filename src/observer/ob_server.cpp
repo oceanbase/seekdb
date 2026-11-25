@@ -1448,11 +1448,10 @@ int ObServer::wait_for_server_runtime()
   int ret = OB_SUCCESS;
   bool synced = false;
   bool replay_ready = false;
-  bool timestamp_ready = false;
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait for server runtime begin.");
-  while (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
+  while (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready)) {
     synced = server_runtime_controller_.has_synced();
     if (synced && !replay_ready) {
       if (OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {
@@ -1461,23 +1460,12 @@ int ObServer::wait_for_server_runtime()
         replay_ready = true;
       }
     }
-    if (OB_SUCC(ret) && !stop_ && replay_ready && !timestamp_ready) {
-      SCN gts;
-      if (OB_FAIL(OB_TS_MGR.get_gts(gts))) {
-        if (OB_EAGAIN == ret) {
-          ret = OB_SUCCESS;
-        } else {
-        }
-      } else {
-        timestamp_ready = true;
-      }
-    }
-    if (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
+    if (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready)) {
       ob_usleep(10 * 1000);
     }
   }
-  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(replay_ready), K(timestamp_ready));
-  if (OB_SUCC(ret) && !stop_ && synced && replay_ready && timestamp_ready) {
+  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(replay_ready));
+  if (OB_SUCC(ret) && !stop_ && synced && replay_ready) {
     LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "wait for server runtime success.");
