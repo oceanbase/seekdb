@@ -8,6 +8,8 @@
 
 # Preserve upstream license and notice texts verbatim.
 licenses/** -whitespace
+# Corresponding source archives ship byte for byte.
+licenses/**/*.tar.xz binary
 
 # All OceanBase code is auto-formatted using clang-format.
 *.c filter=codeformat

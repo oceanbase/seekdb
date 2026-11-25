@@ -15,6 +15,10 @@ packaging form, license, modification state, license files, redistribution
 requirements, and any corresponding-source offer.  The license and notice files
 in the same directory are upstream text and must remain verbatim.
 
+A component whose shared library is shipped under a copyleft license keeps its
+complete corresponding source under `licenses/<component>/source/`; the bundle
+copies it unchanged so every distribution of the library carries its source.
+
 `package/compliance.py` walks this directory, validates the metadata and files,
 and generates the release bundle:
 
