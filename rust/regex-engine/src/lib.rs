@@ -94,6 +94,23 @@ fn regex_error(error: Error) -> BridgeError {
     err(kind, error.to_string())
 }
 
+fn compile_error(pattern: &str, error: Error) -> BridgeError {
+    let kind = match &error {
+        Error::ParseError(pos, ParseError::GeneralParseError(message))
+            if message == "end of string not reached"
+                && pattern.as_bytes().get(*pos) == Some(&b')') =>
+        {
+            Some(PAREN)
+        }
+        _ => None,
+    };
+    let mut failure = regex_error(error);
+    if let Some(kind) = kind {
+        failure.kind = kind;
+    }
+    failure
+}
+
 // catch_unwind also protects debug/test consumers. Release builds use the
 // repository's panic=abort policy; allocation failures inside dependencies can
 // still abort rather than returning an allocation error.
@@ -255,6 +272,8 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
     let (compiled_bytes, backtracks) = limits(stack_limit, time_limit)?;
     let mut builder = RegexBuilder::new(&pattern);
     builder
+        .strict_numeric_repeat(true)
+        .reject_posix_word_boundary(true)
         .case_insensitive(flags & CASE_INSENSITIVE != 0)
         .multi_line(flags & MULTILINE != 0)
         .dot_matches_new_line(flags & DOTALL != 0)
@@ -264,7 +283,9 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
         .delegate_dfa_size_limit(compiled_bytes)
         .delegate_dfa_skip_cache_capacity_check(false)
         .max_prog_size((compiled_bytes / 64).max(1));
-    let regex = builder.build().map_err(regex_error)?;
+    let regex = builder
+        .build()
+        .map_err(|error| compile_error(&pattern, error))?;
     validate_capture_conditions(&pattern, regex.captures_len())?;
     Ok(RegexEngine { regex })
 }
