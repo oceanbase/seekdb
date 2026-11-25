@@ -1,0 +1,73 @@
+# issue #1501: fold long same-column integer equality OR filters into IN predicates.
+alter system set vector_memory_limit = 0;
+
+--disable_warnings
+drop table if exists t_issue1501_or_to_in;
+--enable_warnings
+
+create table t_issue1501_or_to_in(
+  id int primary key,
+  age int,
+  embedding vector(3),
+  vector index idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=64, ef_search=32));
+insert into t_issue1501_or_to_in values
+  (1, 1, '[0,0,0]'), (2, 2, '[1,0,0]'), (3, 3, '[2,0,0]'),
+  (4, 4, '[3,0,0]'), (5, 5, '[4,0,0]'), (6, 6, '[5,0,0]'),
+  (7, 7, '[6,0,0]'), (8, 8, '[7,0,0]'), (9, 9, '[8,0,0]');
+
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select count(*) from t_issue1501_or_to_in
+where age = 1 or age = 2 or age = 3 or age = 4
+   or age = 5 or age = 6 or age = 7 or age = 8;
+--enable_result_log
+--enable_query_log
+select count(*) = 1 as normal_or_rewritten
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(lower(s.statement), 'from t_issue1501_or_to_in where age') > 0
+  and instr(p.filter_predicates, ' IN (') > 0;
+
+# Error-prone constants must keep OR short-circuit semantics.
+alter system flush plan cache;
+--disable_warnings
+--disable_query_log
+--disable_result_log
+select count(*) from t_issue1501_or_to_in
+where age = 1 or age = 2 or age = 3 or age = 4
+   or age = 5 or age = 6 or age = 7 or age = cast('bad' as signed);
+--enable_result_log
+--enable_query_log
+--enable_warnings
+select count(*) = 1 as unsafe_or_preserved
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(lower(s.statement), 'from t_issue1501_or_to_in where age') > 0
+  and instr(p.filter_predicates, 'T_OP_OR') > 0
+  and instr(p.filter_predicates, ' IN (') = 0;
+
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1501_or_to_in
+where age = 1 or age = 2 or age = 3 or age = 4
+   or age = 5 or age = 6 or age = 7 or age = 8
+order by l2_distance(embedding, '[0,0,0]') approximate limit 3;
+--enable_result_log
+--enable_query_log
+select count(*) = 1 as ann_or_rewritten
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(lower(s.statement), 'from t_issue1501_or_to_in where age') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+  and instr(p.filter_predicates, ' IN (') > 0;
+
+select count(*) = 8 as equivalent_rows
+from t_issue1501_or_to_in
+where age = 1 or age = 2 or age = 3 or age = 4
+   or age = 5 or age = 6 or age = 7 or age = 8;
+
+drop table t_issue1501_or_to_in;
+alter system set vector_memory_limit = 0;
