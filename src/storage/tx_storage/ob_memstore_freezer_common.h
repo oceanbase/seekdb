@@ -53,6 +53,17 @@ struct ObRetryMajorInfo
   TO_STRING_KV(K_(frozen_scn));
 };
 
+// OB_MAJOR_FREEZE_NOT_FINISHED and OB_FROZEN_INFO_ALREADY_EXIST mean a major
+// freeze for the current frozen SCN is already pending or in progress and will
+// finish on its own. They are not freeze failures: recording them as one makes
+// the freezer timer re-launch a database-wide major freeze on every check
+// interval.
+inline bool is_major_freeze_in_flight(const int trigger_ret)
+{
+  return common::OB_MAJOR_FREEZE_NOT_FINISHED == trigger_ret
+      || common::OB_FROZEN_INFO_ALREADY_EXIST == trigger_ret;
+}
+
 // store a snapshot of the runtime info to make sure
 // the memstore_info will be a atomic value
 struct ObMemstoreFreezeCtx final
