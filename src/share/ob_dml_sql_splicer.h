@@ -280,9 +280,9 @@ public:
       int64_t &affected_rows);
    int exec_delete(const char *table_name, const ObDMLSqlSplicer &splicer,
                   int64_t &affected_rows);
+private:
   int check_row_exist(const char *table_name, const ObDMLSqlSplicer &splicer,
                       bool &exist);
-private:
   common::ObISQLClient &sql_client_;
 };
 

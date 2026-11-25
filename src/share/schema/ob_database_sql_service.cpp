@@ -128,14 +128,7 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
 
     // update __all_database
     if (FAILEDx(exec.exec_update(OB_ALL_DATABASE_TNAME, dml, affected_rows))) {
-    } else if (0 == affected_rows && OB_DDL_ALTER_DATABASE == op_type) {
-      // A matching row can remain unchanged when the options are already set.
-      bool exists = false;
-      ret = exec.check_row_exist(OB_ALL_DATABASE_TNAME, dml, exists);
-      if (OB_SUCC(ret) && !exists) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    } else if (!is_single_row(affected_rows)) {
+    } else if (affected_rows > 1) {
       ret = OB_ERR_UNEXPECTED;
     }
 
