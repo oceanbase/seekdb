@@ -1,0 +1,41 @@
+drop table if exists t1;
+create table t1(c1 int, c2 int);
+insert into t1 values(1, 1);
+insert into t1 values(2, 2);
+insert into t1 values(2, -1);
+insert into t1 values(3, 3);
+insert into t1 values(null, 4);
+select * from t1 where c1 in (1,2,2) order by c1, c2;
+c1	c2
+1	1
+2	-1
+2	2
+select * from t1 where c1 in (1,2) order by c1, c2;
+c1	c2
+1	1
+2	-1
+2	2
+select * from t1 where c1 not in (1,2,2) order by c1, c2;
+c1	c2
+3	3
+select * from t1 where c1 not in (1,2) order by c1, c2;
+c1	c2
+3	3
+select * from t1 where c1 in (1,2,2) and c2 > 0 order by c1, c2;
+c1	c2
+1	1
+2	2
+select * from t1 where c1 in (1,2) and c2 > 0 order by c1, c2;
+c1	c2
+1	1
+2	2
+select count(*) as diff_cnt from t1 where not ((c1 in (1,2,2)) <=> (c1 in (1,2)));
+diff_cnt
+0
+select count(*) as diff_cnt from t1 where not ((c1 not in (1,2,2)) <=> (c1 not in (1,2)));
+diff_cnt
+0
+select count(*) as diff_cnt from t1 where not ((c1 in (1,2,2) and c2 > 0) <=> (c1 in (1,2) and c2 > 0));
+diff_cnt
+0
+drop table t1;
