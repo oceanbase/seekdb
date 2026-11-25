@@ -807,13 +807,99 @@ int ObTransformSimplifyExpr::remove_dummy_join_condition_exprs(TableItem *table,
   return ret;
 }
 
+// Remove literal operands that cannot constrain an AND/OR predicate:
+//   TRUE  carries no constraint in an AND list, so "f() AND TRUE" is "f()";
+//   FALSE carries no constraint in an OR list, so "f() OR FALSE" is "f()".
+// Literal operands read no rows and raise no warnings, so dropping them keeps
+// both the result and the diagnostics of the predicate unchanged. Leaving them
+// in place makes later stages treat the whole predicate as a general expression
+// instead of a range condition, which is the anomaly reported in issue #1489.
+int ObTransformSimplifyExpr::remove_neutral_literal_operands(ObRawExpr *&expr,
+                                                             bool &normalized)
+{
+  int ret = OB_SUCCESS;
+  normalized = false;
+  ObOpRawExpr *op_expr = NULL;
+  ObSEArray<ObRawExpr *, 8> kept_params;
+  bool is_and = false;
+  bool removed = false;
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_) ||
+      OB_ISNULL(ctx_->expr_factory_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(expr), K(ctx_));
+  } else if (T_OP_AND != expr->get_expr_type() && T_OP_OR != expr->get_expr_type()) {
+    // do nothing
+  } else if (OB_ISNULL(op_expr = static_cast<ObOpRawExpr *>(expr))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(expr));
+  } else if (op_expr->get_param_count() <= 1) {
+    // a well formed AND/OR has at least two operands
+  } else {
+    is_and = (T_OP_AND == expr->get_expr_type());
+    for (int64_t i = 0; OB_SUCC(ret) && i < op_expr->get_param_count(); ++i) {
+      ObRawExpr *param = op_expr->get_param_expr(i);
+      bool is_true = false;
+      if (OB_ISNULL(param)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret), K(i));
+      } else if (!param->is_const_raw_expr()) {
+        if (OB_FAIL(kept_params.push_back(param))) {
+          LOG_WARN("failed to push back param", K(ret));
+        }
+      } else if (OB_FAIL(ObObjEvaluator::is_true(
+                   static_cast<ObConstRawExpr *>(param)->get_value(), is_true))) {
+        LOG_WARN("failed to evaluate const expr", K(ret));
+      } else if (is_and == is_true) {
+        // neutral literal for this operator, drop it
+        removed = true;
+      } else if (OB_FAIL(kept_params.push_back(param))) {
+        LOG_WARN("failed to push back param", K(ret));
+      }
+    }
+    if (OB_FAIL(ret) || !removed) {
+      // do nothing
+    } else if (OB_UNLIKELY(kept_params.empty())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected empty param list", K(ret), KPC(op_expr));
+    } else if (1 == kept_params.count()) {
+      expr = kept_params.at(0);
+      normalized = true;
+    } else {
+      ObRawExpr *new_expr = NULL;
+      if (is_and && OB_FAIL(ObRawExprUtils::build_and_expr(
+                                *ctx_->expr_factory_, kept_params, new_expr))) {
+        LOG_WARN("failed to build and expr", K(ret));
+      } else if (!is_and && OB_FAIL(ObRawExprUtils::build_or_exprs(
+                                       *ctx_->expr_factory_, kept_params, new_expr))) {
+        LOG_WARN("failed to build or expr", K(ret));
+      } else if (OB_ISNULL(new_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
+      } else if (OB_FAIL(new_expr->formalize(ctx_->session_info_))) {
+        LOG_WARN("failed to formalize expr", K(ret));
+      } else {
+        expr = new_expr;
+        normalized = true;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
                                                      ObIArray<ObExprConstraint> &constraints)
 {
   int ret = OB_SUCCESS;
   bool is_valid_type = false;
+  bool normalized = false;
   if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(remove_neutral_literal_operands(expr, normalized))) {
+  } else if (normalized) {
+    // The AND/OR was rebuilt without its neutral literals, simplify the rebuilt
+    // expression so nested operators keep folding.
+    if (OB_FAIL(SMART_CALL(inner_remove_dummy_expr(expr, constraints)))) {
+    }
   } else if (OB_FAIL(is_valid_transform_type(expr, is_valid_type))) {
   } else if (!is_valid_type) {
   } else {
