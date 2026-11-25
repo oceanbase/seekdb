@@ -49,3 +49,40 @@ diff --git a/src/vm.rs b/src/vm.rs
 +                    state.save(group * 2 + 1, ix);
 +                }
                  Insn::Restore(slot) => ix = state.get(slot),
+diff --git a/src/parse.rs b/src/parse.rs
+--- a/src/parse.rs
++++ b/src/parse.rs
+@@ -991,6 +991,7 @@
+         if depth >= MAX_RECURSION {
+             return Err(Error::ParseError(ix, ParseError::RecursionExceeded));
+         }
++        let oldflags = self.flags;
+         let open_paren_ix = ix; // position of the opening `(`
+         let ix = self.optional_whitespace(ix + 1)?;
+         let mut group_name = None;
+@@ -1029,11 +1030,15 @@
+             // Backref using Python syntax: (?P=name)
+             return self.parse_delimited_backref(ix + 3, "", ")", false);
+         } else if self.re[ix..].starts_with("?~") {
+-            return self.parse_absent(ix + 1, depth);
++            let result = self.parse_absent(ix + 1, depth);
++            self.flags = oldflags;
++            return result;
+         } else if self.re[ix..].starts_with("?>") {
+             (None, 2)
+         } else if self.re[ix..].starts_with("?(") {
+-            return self.parse_conditional(ix + 2, depth);
++            let result = self.parse_conditional(ix + 2, depth);
++            self.flags = oldflags;
++            return result;
+         } else if self.re[ix..].starts_with("?P>") {
+             return self.parse_unrestricted_subroutine_call(ix + 3, "", ")");
+         } else if self.re[ix..].starts_with("*") {
+@@ -1046,6 +1051,7 @@
+         let ix = ix + skip;
+         let (ix, child) = self.parse_re(ix, depth)?;
+         let ix = self.check_for_close_paren(ix)?;
++        self.flags = oldflags;
+         let result = match (la, skip) {
+             (Some(la), _) => Expr::LookAround(Box::new(child), la),
+             (None, 2) => Expr::AtomicGroup(Box::new(child)),
