@@ -3,7 +3,10 @@
 def _link_directory_contents(repository_ctx, directories, destination):
     names = {}
     for directory in directories:
-        for child in repository_ctx.path(directory).readdir():
+        directory = repository_ctx.path(directory)
+        if not directory.exists:
+            continue
+        for child in directory.readdir():
             if child.basename not in names:
                 repository_ctx.symlink(child, destination + "/" + child.basename)
                 names[child.basename] = True
@@ -113,7 +116,8 @@ def _third_party_headers_repository_impl(repository_ctx):
     if ios_sdk:
         repository_ctx.symlink(locked_sdk + "/manifests", "locked_manifests")
         repository_ctx.symlink(locked_sdk + "/share/licenses", "locked_licenses")
-    repository_ctx.symlink(libraries64, "lib64")
+    if repository_ctx.path(libraries64).exists:
+        repository_ctx.symlink(libraries64, "lib64")
     repository_ctx.file("BUILD.bazel", '''load("@seekdb//bazel/third_party:targets.bzl", "sdk_targets")
 package(default_visibility = ["//visibility:public"])
 sdk_targets()
