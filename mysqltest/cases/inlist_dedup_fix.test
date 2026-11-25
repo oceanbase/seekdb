@@ -1,0 +1,24 @@
+-- Test for issue #1512: duplicate integer IN list members must not trigger
+-- the VALUES-table rewrite when their distinct count is below the threshold.
+
+-- Prepare a small table with integer data.
+DROP TABLE IF EXISTS t1512;
+CREATE TABLE t1512 (id INT PRIMARY KEY, c INT, KEY(c));
+INSERT INTO t1512 VALUES
+  (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10);
+
+-- Compact list (3 values) -- always uses plain IN predicate.
+SELECT id FROM t1512 WHERE c IN (1,2,3) ORDER BY id;
+
+-- Duplicate list (3 distinct values padded to 30 elements, threshold default 100).
+-- With the fix: same result as the compact list.
+SELECT id FROM t1512 WHERE c IN (1,2,3,1,2,3,1,2,3,1,2,3,1,2,3,
+                                 1,2,3,1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY id;
+
+-- NOT IN with duplicates must also return correct results.
+SELECT id FROM t1512 WHERE c NOT IN (1,2,3,1,2,3,1,2,3,1,2,3,1,2,3,
+                                     1,2,3,1,2,3,1,2,3,1,2,3,1,2,3)
+ORDER BY id;
+
+-- Cleanup.
+DROP TABLE t1512;

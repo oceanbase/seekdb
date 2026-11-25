@@ -261,6 +261,59 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+namespace
+{
+// Count distinct T_INT literal values in a flat (scalar) IN-list.
+// Returns OB_SUCCESS with all_integer=true and distinct_count set when every
+// list element is a plain integer literal.  Sets all_integer=false (non-fatal)
+// for any non-integer node, allocation failure, or when distinct_count already
+// reaches threshold (the full rewrite is still appropriate in that case).
+int count_distinct_integer_inlist(const ParseNode &in_list,
+                                   const int64_t threshold,
+                                   int64_t &distinct_count,
+                                   bool &all_integer)
+{
+  int ret = OB_SUCCESS;
+  distinct_count = 0;
+  all_integer = true;
+  hash::ObHashMap<int64_t, int64_t, hash::NoPthreadDefendMode> seen;
+  const int64_t cap = in_list.num_child_ < threshold ? in_list.num_child_ : threshold;
+  if (OB_FAIL(seen.create(cap + 1, ObModIds::OB_SQL_HASH_SET))) {
+    // Non-fatal: fall back to original behavior.
+    all_integer = false;
+    ret = OB_SUCCESS;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && all_integer && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      if (OB_ISNULL(node) || T_INT != node->type_) {
+        // Non-integer literal (parameter, string, NULL, float, etc.): fall back.
+        all_integer = false;
+      } else {
+        int64_t dummy = 0;
+        int h = seen.get_refactored(node->value_, dummy);
+        if (OB_SUCCESS == h) {
+          // Duplicate value: skip.
+        } else if (OB_HASH_NOT_EXIST == h) {
+          if (OB_FAIL(seen.set_refactored(node->value_, i))) {
+            // Non-fatal.
+            all_integer = false;
+            ret = OB_SUCCESS;
+          } else if (++distinct_count >= threshold) {
+            // Distinct values already reach the threshold; rewrite is still needed.
+            all_integer = false;
+          }
+        } else {
+          // Unexpected hash error: fall back.
+          all_integer = false;
+          ret = OB_SUCCESS;
+        }
+      }
+    }
+  }
+  return ret;
+}
+} // anonymous namespace
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -308,6 +361,20 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       } else {
         is_enable = true;
       }
+    }
+  }
+  // Keep duplicate-heavy integer IN lists below the values-table rewrite threshold.
+  // An IN predicate is semantically unaffected by duplicate members.  When every
+  // member is a plain integer literal and the distinct count is below threshold,
+  // the VALUES-table plan is more expensive without being more correct (#1512).
+  if (OB_SUCC(ret) && is_enable && !is_prepare_stmt &&
+      T_OP_ROW != left_expr.get_expr_type()) {
+    int64_t distinct_cnt = 0;
+    bool all_int = false;
+    if (OB_FAIL(count_distinct_integer_inlist(in_list, threshold, distinct_cnt, all_int))) {
+      LOG_WARN("failed to count distinct integer inlist", K(ret));
+    } else if (all_int && distinct_cnt < threshold) {
+      is_enable = false;
     }
   }
   // 2. check same node type requests
