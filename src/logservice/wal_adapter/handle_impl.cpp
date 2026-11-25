@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX WAL
 #include "logservice/wal_adapter/handle_impl.h"
 #include <cstdlib>
-#include <string>
 #include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
@@ -47,14 +46,19 @@ void publish_flush_ffi(uint8_t *context, const uint64_t end_lsn,
 }
 
 void report_fatal_ffi(rust::Str path, rust::Str operation, const int32_t raw_os_error,
-    const bool no_space)
+    const Code code)
 {
-  const int ret = no_space ? common::OB_LOG_OUTOF_DISK_SPACE : OB_IO_ERROR;
-  const std::string segment(path);
-  const std::string action(operation);
-  OB_PRINT("[WAL] ", OB_LOG_LEVEL_DIRECT_NO_ERRCODE(DBA_ERROR), ret,
-      "fatal WAL I/O failure", LOG_KVS(KR(ret), "segment", segment.c_str(),
-          "operation", action.c_str(), "raw_os_error", raw_os_error, KERRNOMSG(raw_os_error)));
+  const int ret = from_rust_code(code);
+  const ObString segment(path.size(), path.data());
+  const ObString action(operation.size(), operation.data());
+  if (raw_os_error != 0) {
+    OB_PRINT("[WAL] ", OB_LOG_LEVEL_DIRECT_NO_ERRCODE(DBA_ERROR), ret,
+        "fatal WAL I/O failure", LOG_KVS(KR(ret), "segment", segment,
+            "operation", action, "raw_os_error", raw_os_error, KERRNOMSG(raw_os_error)));
+  } else {
+    OB_PRINT("[WAL] ", OB_LOG_LEVEL_DIRECT_NO_ERRCODE(DBA_ERROR), ret,
+        "fatal WAL failure", LOG_KVS(KR(ret), "segment", segment, "operation", action));
+  }
   OB_LOGGER.flush();
   std::_Exit(1);
 }

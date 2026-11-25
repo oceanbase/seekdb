@@ -106,7 +106,7 @@ mod ffi {
             path: &str,
             operation: &str,
             raw_os_error: i32,
-            no_space: bool,
+            code: Code,
         );
     }
 
@@ -294,10 +294,14 @@ unsafe fn set_flush_callback_ffi(
 fn set_failure_callback_ffi(stream: &Stream) -> Code {
     code(stream.set_failure_callback(|failure| unsafe {
         ffi::report_fatal_ffi(
-            &failure.path.to_string_lossy(),
+            failure
+                .path
+                .as_deref()
+                .and_then(std::path::Path::to_str)
+                .unwrap_or(""),
             failure.operation,
             failure.raw_os_error.unwrap_or(0),
-            matches!(failure.code, Error::NoSpace),
+            failure.code.into(),
         );
     }))
 }
