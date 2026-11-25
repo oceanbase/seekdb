@@ -27,6 +27,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 
 const MANIFEST_FILE: &str = "manifest";
+const STAGED_SEGMENT_FILE: &str = "segment.log.tmp";
 const MANIFEST_SIZE: usize = 128;
 const MANIFEST_FILE_SIZE: usize = MANIFEST_SIZE * 2;
 const MANIFEST_MAGIC: &[u8; 8] = b"WALMAN01";
@@ -359,7 +360,7 @@ impl Stream {
     }
 
     pub fn open(path: &str) -> Self {
-        Self::from_result(open_state(Path::new(path)))
+        Self::from_result(open_state(Path::new(path), file_io::read_exact_at))
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, State>> {
@@ -1315,7 +1316,6 @@ impl State {
         records: &[PlannedRecord],
     ) -> std::result::Result<(), WriteFailure> {
         let mut index = 0;
-        let mut created_segment = None;
         while index < records.len() {
             let id = block_id(records[index].lsn);
             let create = records[index].new_segment.is_some();
@@ -1361,28 +1361,22 @@ impl State {
                     .ok_or_else(|| WriteFailure::new(Error::Invalid, "assemble segment write"))?;
                 index += 1;
             }
-            if append_file
-                .as_ref()
-                .is_none_or(|file| file.id != id)
-            {
+            if create {
                 *append_file = Some(open_append_file_with_failure(
                     id,
-                    segment_path(directory, id),
+                    directory.join(STAGED_SEGMENT_FILE),
                     true,
                     Vec::new(),
                 )?);
             }
-            append_file
+            let file = append_file
                 .as_mut()
-                .ok_or_else(|| WriteFailure::new(Error::Io, "get append file"))?
-                .write(start, &bytes)?;
+                .filter(|file| file.id == id)
+                .ok_or_else(|| WriteFailure::new(Error::Io, "get append file"))?;
+            file.write(start, &bytes)?;
             if create {
-                created_segment = Some(segment_path(directory, id));
+                file.publish(directory)?;
             }
-        }
-        if let Some(segment) = created_segment {
-            sync_directory_io(directory)
-                .map_err(|error| WriteFailure::from_io(error, &segment, "fsync directory"))?;
         }
         Ok(())
     }
@@ -1661,7 +1655,10 @@ fn create_state(directory: &Path, base: BaseInfo, ref_scn: u64) -> Result<State>
     })
 }
 
-fn open_state(directory: &Path) -> Result<State> {
+fn open_state(
+    directory: &Path,
+    read_segment_header: impl Fn(&File, &mut [u8], u64) -> std::io::Result<()>,
+) -> Result<State> {
     let (manifest, manifest_writer) = ManifestWriter::open(directory)?;
     let mut ids = Vec::new();
     for item in fs::read_dir(directory)? {
@@ -1681,57 +1678,34 @@ fn open_state(directory: &Path) -> Result<State> {
     let (obsolete, retained) = ids.split_at(ids.partition_point(|id| *id < first_required));
     reclaim_obsolete_segments(directory, &manifest_writer.file, obsolete);
     let mut segments = BTreeMap::new();
-    let mut removed_segment = false;
     for id in retained.iter().copied() {
         if id != first_required + segments.len() as u64 {
             return Err(Error::Corrupt);
         }
         let path = segment_path(directory, id);
-        let metadata = (|| {
-            let file = File::open(&path)?;
-            let length = file.metadata()?.len();
-            if !(SEGMENT_HEADER_SIZE..=PHYSICAL_BLOCK_SIZE).contains(&length) {
-                return Err(Error::Corrupt);
-            }
-            let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
-            file_io::read_exact_at(&file, &mut segment_header, 0)?;
-            let header = validate_segment_header(&segment_header, id)?;
-            if block_id(header.start_lsn) != id
-                || header.start_lsn < manifest.base_lsn
-                || header.first_scn < header.prev_scn
-                || (id != first_required && block_offset(header.start_lsn) != 0)
-            {
-                return Err(Error::Corrupt);
-            }
-            Ok(SegmentMeta { length, header })
-        })();
-        match metadata {
-            Ok(metadata) => {
-                segments.insert(id, metadata);
-            }
-            Err(_) if Some(id) == retained.last().copied() => {
-                fs::remove_file(path)?;
-                removed_segment = true;
-            }
-            Err(error) => return Err(error),
+        let file = File::open(&path)?;
+        let length = file.metadata()?.len();
+        if !(SEGMENT_HEADER_SIZE..=PHYSICAL_BLOCK_SIZE).contains(&length) {
+            return Err(Error::Corrupt);
         }
-    }
-    if segments
-        .keys()
-        .next()
-        .is_some_and(|id| *id != first_required)
-    {
-        return Err(Error::Corrupt);
+        let mut segment_header = zeroed_bytes(SEGMENT_HEADER_SIZE as usize)?;
+        read_segment_header(&file, &mut segment_header, 0)?;
+        let header = validate_segment_header(&segment_header, id)?;
+        if block_id(header.start_lsn) != id
+            || header.start_lsn < manifest.base_lsn
+            || header.first_scn < header.prev_scn
+            || (id != first_required && block_offset(header.start_lsn) != 0)
+        {
+            return Err(Error::Corrupt);
+        }
+        segments.insert(id, SegmentMeta { length, header });
     }
     if let Some(segment) = segments.get(&first_required) {
         if segment.base_info() != manifest.previous {
             return Err(Error::Corrupt);
         }
     }
-    let mut recovered = None;
-    let segment_ids: Vec<u64> = segments.keys().rev().copied().collect();
-    for id in segment_ids {
-        let segment = segments.get(&id).ok_or(Error::Corrupt)?;
+    let recovered = if let Some((&id, segment)) = segments.last_key_value() {
         let mut scanner = SegmentScanner::new(directory, id, segment, (id + 1) * BLOCK_SIZE)?;
         let mut first = true;
         loop {
@@ -1749,14 +1723,14 @@ fn open_state(directory: &Path) -> Result<State> {
                 Err(error) => return Err(error),
             }
         }
-        if scanner.last_record.is_none() {
-            fs::remove_file(segment_path(directory, id))?;
-            segments.remove(&id);
-            removed_segment = true;
-            continue;
-        }
-        recovered = Some(scanner);
-        break;
+        Some(scanner)
+    } else {
+        None
+    };
+    match fs::remove_file(directory.join(STAGED_SEGMENT_FILE)) {
+        Ok(()) => sync_directory(directory)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+        Err(error) => return Err(error.into()),
     }
     let mut append_file = None;
     let (end_lsn, end_scn, next_log_id, accumulated_checksum, last_record) =
@@ -1793,9 +1767,6 @@ fn open_state(directory: &Path) -> Result<State> {
                 None,
             )
         };
-    if removed_segment {
-        sync_directory(directory)?;
-    }
     Ok(State {
         directory: directory.to_path_buf(),
         manifest_writer: Some(manifest_writer),
@@ -1992,8 +1963,7 @@ fn open_append_file_with_failure(
 ) -> std::result::Result<AppendFile, WriteFailure> {
     let mut options = OpenOptions::new();
     options
-        .create(create)
-        .truncate(false)
+        .create_new(create)
         .read(true)
         .write(true);
     let file = file_io::open_data_synchronous_read_write_prefer_direct(&mut options, &path)
@@ -2002,14 +1972,34 @@ fn open_append_file_with_failure(
     if create {
         file_io::extend_file(&file.file, PHYSICAL_BLOCK_SIZE)
             .map_err(|error| WriteFailure::from_io(error, &file.path, "allocate segment"))?;
-        file.file
-            .sync_all()
-            .map_err(|error| WriteFailure::from_io(error, &file.path, "fsync segment"))?;
     }
     Ok(file)
 }
 
 impl AppendFile {
+    fn publish(&mut self, directory: &Path) -> std::result::Result<(), WriteFailure> {
+        self.file
+            .sync_all()
+            .map_err(|error| WriteFailure::from_io(error, &self.path, "fsync segment"))?;
+        let path = segment_path(directory, self.id);
+        match fs::symlink_metadata(&path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(WriteFailure::from_io(error, &path, "check segment path")),
+            Ok(_) => {
+                return Err(WriteFailure::from_io(
+                    std::io::ErrorKind::AlreadyExists.into(),
+                    &path,
+                    "publish segment",
+                ));
+            }
+        }
+        file_io::publish_file(&self.path, &path)
+            .map_err(|error| WriteFailure::from_io(error, &path, "publish segment"))?;
+        self.path = path;
+        sync_directory_io(directory)
+            .map_err(|error| WriteFailure::from_io(error, &self.path, "fsync directory"))
+    }
+
     fn write(
         &mut self,
         start: u64,
@@ -2198,24 +2188,74 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_unconfirmed_segment_is_removed_without_validation() {
+    fn incomplete_staged_segment_is_removed_on_reopen() {
         let directory = Directory::new();
         let path = directory.0.to_string_lossy().into_owned();
         let stream = Stream::create(&path, base(), 0);
         let confirmed = stream.append(b"confirmed", 10).unwrap();
         drop(stream);
-        OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(segment_path(&directory.0, 1))
-            .unwrap()
-            .write_all(b"torn segment header")
-            .unwrap();
+        let staged = directory.0.join(STAGED_SEGMENT_FILE);
+        fs::write(&staged, b"torn segment header").unwrap();
 
         let reopened = Stream::open(&path);
         assert_eq!(reopened.status(), Ok(true));
         assert_eq!(reopened.progress().unwrap().end_lsn, confirmed.end_lsn);
-        assert!(!segment_path(&directory.0, 1).exists());
+        assert!(!staged.exists());
+        let mut cursor = reopened.cursor(confirmed.lsn, false);
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::Entry));
+        assert_eq!(cursor.payload(), b"confirmed");
+    }
+
+    #[test]
+    fn segment_header_read_failure_preserves_confirmed_segment() {
+        let directory = Directory::new();
+        let path = directory.0.to_str().unwrap();
+        let stream = Stream::create(path, base(), 0);
+        let confirmed = stream.append(b"confirmed", 10).unwrap();
+        drop(stream);
+
+        let segment = segment_path(&directory.0, 0);
+        let original = fs::read(&segment).unwrap();
+        let failed = Stream::from_result(open_state(&directory.0, |_, _, _| {
+            Err(std::io::Error::other("injected segment header read failure"))
+        }));
+        assert_eq!((failed.status(), segment.exists()), (Err(Error::Io), true));
+        assert_eq!(fs::read(segment).unwrap(), original);
+
+        let reopened = Stream::open(path);
+        assert_eq!(reopened.progress().unwrap().end_lsn, confirmed.end_lsn);
+        let mut cursor = reopened.cursor(confirmed.lsn, false);
+        assert_eq!(cursor.next(u64::MAX), Ok(Next::Entry));
+        assert_eq!(cursor.payload(), b"confirmed");
+    }
+
+    #[test]
+    fn segment_header_corruption_preserves_published_segment() {
+        let directory = Directory::new();
+        let path = directory.0.to_str().unwrap();
+        let stream = Stream::create(path, base(), 0);
+        stream.append(b"confirmed", 10).unwrap();
+        drop(stream);
+
+        let segment = segment_path(&directory.0, 0);
+        let mut original = fs::read(&segment).unwrap();
+        original[0] ^= 1;
+        fs::write(&segment, &original).unwrap();
+
+        assert_eq!(Stream::open(path).status(), Err(Error::Corrupt));
+        assert_eq!(fs::read(segment).unwrap(), original);
+    }
+
+    #[test]
+    fn segment_publication_preserves_existing_file() {
+        let directory = Directory::new();
+        let path = directory.0.to_str().unwrap();
+        let stream = Stream::create(path, base(), 0);
+        let published = segment_path(&directory.0, 0);
+        fs::write(&published, b"existing segment").unwrap();
+
+        assert_eq!(stream.append(b"new record", 10), Err(Error::Io));
+        assert_eq!(fs::read(published).unwrap(), b"existing segment");
     }
 
     #[test]
@@ -2996,8 +3036,7 @@ mod tests {
                     .unwrap();
             })
             .unwrap();
-        let segment = segment_path(&directory.0, 0);
-        fs::create_dir(segment).unwrap();
+        fs::create_dir(directory.0.join(STAGED_SEGMENT_FILE)).unwrap();
         let entry = encode_entry(b"imported", 10, false).unwrap();
         let group = encode_group(&entry, 0, 10, 1, 0, false).unwrap();
 
