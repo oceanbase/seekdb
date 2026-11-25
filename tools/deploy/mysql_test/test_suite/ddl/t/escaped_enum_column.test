@@ -1,0 +1,10 @@
+# Regression for shared DDL column formatting without a dependency on SQL utils.
+--disable_warnings
+DROP TABLE IF EXISTS escaped_enum_column;
+--enable_warnings
+CREATE TABLE escaped_enum_column (`e``name` ENUM('a','b'), `s``name` SET('x','y'));
+INSERT INTO escaped_enum_column VALUES ('a','x'),('b','y');
+CREATE UNIQUE INDEX escaped_enum_idx ON escaped_enum_column (`e``name`);
+CREATE UNIQUE INDEX escaped_set_idx ON escaped_enum_column (`s``name`);
+SELECT `e``name`, `s``name` FROM escaped_enum_column ORDER BY `e``name`;
+DROP TABLE escaped_enum_column;

@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS escaped_enum_column;
+CREATE TABLE escaped_enum_column (`e``name` ENUM('a','b'), `s``name` SET('x','y'));
+INSERT INTO escaped_enum_column VALUES ('a','x'),('b','y');
+CREATE UNIQUE INDEX escaped_enum_idx ON escaped_enum_column (`e``name`);
+CREATE UNIQUE INDEX escaped_set_idx ON escaped_enum_column (`s``name`);
+SELECT `e``name`, `s``name` FROM escaped_enum_column ORDER BY `e``name`;
+e`name	s`name
+a	x
+b	y
+DROP TABLE escaped_enum_column;
