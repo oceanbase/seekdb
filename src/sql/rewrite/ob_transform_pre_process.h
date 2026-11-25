@@ -164,6 +164,17 @@ private:
                                                  ObRawExpr *&in_epxr,
                                                  bool &trans_happened);
 
+  /*
+   * Remove duplicated constant values from the value list of an IN/NOT IN
+   * predicate, e.g. `c IN (1, 2, 1, 2)` is rewritten into `c IN (1, 2)`.
+   * The rewrite is only applied when every value is a plain constant, so the
+   * deduplication never changes the comparison semantics.
+   */
+  static int remove_duplicate_in_values(ObRawExprFactory &expr_factory,
+                                        const ObSQLSessionInfo &session,
+                                        ObRawExpr *&in_expr,
+                                        bool &trans_happened);
+
   static int create_partial_expr(ObRawExprFactory &expr_factory,
                                  const ObSQLSessionInfo &session,
                                  ObRawExpr *left_expr,
