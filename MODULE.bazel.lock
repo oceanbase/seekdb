@@ -203,31 +203,6 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
-    "//bazel/sdk_sources:repositories.bzl%sdk_sources": {
-      "general": {
-        "bzlTransitiveDigest": "6qbbcXCKyLfjRt7/fjlAk+QaxaAbiAQTZk24i6KV55g=",
-        "usagesDigest": "C88oWWRSwl985DWTNoqa3RJhrmyPEurpg8bTGjwBxHo=",
-        "recordedInputs": [
-          "FILE:@@//bazel/sdk_sources/dependencies.json 3284314731ac2256bc54f5db4895b8f0a20205cd653ed96245196fc85e0cf51b"
-        ],
-        "generatedRepoSpecs": {
-          "sdk_roaring": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:roaring.BUILD",
-              "package": "roaring"
-            }
-          },
-          "sdk_boost": {
-            "repoRuleId": "@@//bazel/sdk_sources:repositories.bzl%_source",
-            "attributes": {
-              "build_file": "@@//bazel/sdk_sources:boost.BUILD",
-              "package": "boost"
-            }
-          }
-        }
-      }
-    },
     "@@pybind11_bazel+//:internal_configure.bzl%internal_configure_extension": {
       "general": {
         "bzlTransitiveDigest": "BsgERqYptkJeeC8wFaLj251IoTZTSy/58WA6kVp0q8I=",

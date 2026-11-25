@@ -1,6 +1,14 @@
 {
   "platforms": {
     "android-arm64-v8a-api26": {
+      "boost": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-android-arm64-v8a-api26-20261124T113146%2B0000-68177a7d117d.tar.gz",
+        "sha256": "17a66d11504dca93d4d3fd1496a2839bc71948a67ac474f57c1d1c649287e30b"
+      },
+      "croaring": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/croaring-3.0.0/croaring-3.0.0-bin-android-arm64-v8a-api26-20261124T113152%2B0000-68177a7d117d.tar.gz",
+        "sha256": "a00059f94dabd56ab39a97fc5e5215ab3487177adac1d1003a5da23ea6642486"
+      },
       "jemalloc": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-android-arm64-v8a-api26-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "1c56becb2d54655fdc79f3edf3a78e1ea2705f700481f58d8a9c1c5cc261e9b1"
@@ -19,6 +27,14 @@
       }
     },
     "ios-arm64-device-min18": {
+      "boost": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-ios-arm64-device-min18-20261124T113146%2B0000-68177a7d117d.tar.gz",
+        "sha256": "6769ccbf835b09b20d8d4df63d2de33360aa42753227948d9cd33c349bf27fff"
+      },
+      "croaring": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/croaring-3.0.0/croaring-3.0.0-bin-ios-arm64-device-min18-20261124T113152%2B0000-68177a7d117d.tar.gz",
+        "sha256": "128b7ffd9f3fa93c7f2f8db8ac5ad809b0b591b1bdf6dfa7d7c27b25245d0b70"
+      },
       "libcurl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-ios-arm64-device-min18-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
         "sha256": "d25e4d0036e8bbe06060b41c588067f22bf28ff4d0ee77ca70bbbb60c77cf56c"
@@ -33,6 +49,14 @@
       }
     },
     "ios-arm64-simulator-min18": {
+      "boost": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-ios-arm64-simulator-min18-20261124T113146%2B0000-68177a7d117d.tar.gz",
+        "sha256": "05183332be0a1d75b6153365f44618ed3320333d2fa46170a26b187ac81ed7f0"
+      },
+      "croaring": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/croaring-3.0.0/croaring-3.0.0-bin-ios-arm64-simulator-min18-20261124T113152%2B0000-68177a7d117d.tar.gz",
+        "sha256": "f78629f8c1ae389e4a4a24ca309b500412a57733992b0c137880e87f3ccde819"
+      },
       "libcurl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-ios-arm64-simulator-min18-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
         "sha256": "016840289d6a03ddc646f8da109220fd9a53d0292fb2424178b19e0eaf6fc40f"
@@ -47,6 +71,14 @@
       }
     },
     "linux-aarch64-glibc217": {
+      "boost": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-linux-aarch64-glibc217-20261124T113146%2B0000-68177a7d117d.tar.gz",
+        "sha256": "8fa11735a9bd296efd20e5dcb15d8c3a01ccd3be98ad92c0d1e5cf2077f945ce"
+      },
+      "croaring": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/croaring-3.0.0/croaring-3.0.0-bin-linux-aarch64-glibc217-20261124T113152%2B0000-68177a7d117d.tar.gz",
+        "sha256": "0f1745c1619aea434f10132735e46789e3a1c08e02e94657bd06cfcca62c9bb8"
+      },
       "gcc": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gcc-12.3.0/gcc-12.3.0-bin-linux-aarch64-glibc217-20261123T063139%2B0000-812180f4fe02.tar.gz",
         "sha256": "cc14c38a900696e7cbecf84038b4aa98887f015dfa5e35796dc86c225a5fe9a8"
@@ -81,6 +113,14 @@
       }
     },
     "linux-x86_64-glibc217": {
+      "boost": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-linux-x86_64-glibc217-20261124T113146%2B0000-68177a7d117d.tar.gz",
+        "sha256": "547dd84a450bab7e4d9cd1d22ad2a70f67ee0eb57f37604ca5a809b2b9686aec"
+      },
+      "croaring": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/croaring-3.0.0/croaring-3.0.0-bin-linux-x86_64-glibc217-20261124T113152%2B0000-68177a7d117d.tar.gz",
+        "sha256": "a9a2b2f6b9c01f4685203a9cdd73d25059d50e536a00fd3ddf9496022ba0584a"
+      },
       "gcc": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gcc-12.3.0/gcc-12.3.0-bin-linux-x86_64-glibc217-20261123T063139%2B0000-812180f4fe02.tar.gz",
         "sha256": "a2a9e2e04457a6dd4d5a17c3ff04bbf38cf37a998266abf29cc713cf45f1bade"
@@ -115,6 +155,14 @@
       }
     },
     "macos-arm64-min13": {
+      "boost": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-macos-arm64-min13-20261124T113146%2B0000-68177a7d117d.tar.gz",
+        "sha256": "c8b881cd1a7b2cb83be675bdae96e127dd6c1998c6ac9ab80a9f2555d69a8aae"
+      },
+      "croaring": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/croaring-3.0.0/croaring-3.0.0-bin-macos-arm64-min13-20261124T113152%2B0000-68177a7d117d.tar.gz",
+        "sha256": "cebfc54757751cdf3732af34eb8705ee45ad951f127ab4f1f29bbe0758f5b679"
+      },
       "jemalloc": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-macos-arm64-min13-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "9acb925380fdb1c326513f1fe2a718cbccefa196bc12cf7e36aaa02d131c3473"
@@ -137,6 +185,14 @@
       }
     },
     "wasm32-emscripten": {
+      "boost": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-wasm32-emscripten-20261124T113146%2B0000-68177a7d117d.tar.gz",
+        "sha256": "19c0233f5cc21b3b86bb41ccc99f932f376b6835deff39e0580dcc0ff7830fbc"
+      },
+      "croaring": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/croaring-3.0.0/croaring-3.0.0-bin-wasm32-emscripten-20261124T113152%2B0000-68177a7d117d.tar.gz",
+        "sha256": "d213af833df2d5e5e9b6a7481a1a3093318fba391f189e95ed5f69dcf8403077"
+      },
       "openssl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-wasm32-emscripten-20261120T071231%2B0000-c79e60669ad8.tar.gz",
         "sha256": "8e3983d9e4db79cb93f47fb9ce64f3405f0baaf524b9c5f04f1c52aaff02abe5"
@@ -147,6 +203,14 @@
       }
     },
     "windows-x86_64-md": {
+      "boost": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-windows-x86_64-md-20261124T113146%2B0000-68177a7d117d.tar.gz",
+        "sha256": "c3e60bbfd8e138aca3a343d0b0f880e424356675bd60cde6d55a10cb3fff1050"
+      },
+      "croaring": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/croaring-3.0.0/croaring-3.0.0-bin-windows-x86_64-md-20261124T113152%2B0000-68177a7d117d.tar.gz",
+        "sha256": "238f790dd23e449c7872f5f916328471824aab1cab35122dd3e9f14a1a7773db"
+      },
       "jemalloc": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-windows-x86_64-md-20261114T020301%2B0000-845c8920ddfb.tar.gz",
         "sha256": "c4613853aabe251fa5abf12dec68bd468cf47551735185f1270ae228bd9cef49"

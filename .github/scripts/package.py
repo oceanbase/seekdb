@@ -120,7 +120,7 @@ def environment():
     elif target == "windows":
         profiles = ["oceanbase.windows.x86_64.deps"]
     else:
-        profiles = ["oceanbase.el9.x86_64.deps", "oceanbase.android.arm64.deps"]
+        profiles = ["oceanbase.el9.x86_64.deps"]
     sdk = hashlib.sha256((ROOT / "deps/init/prepare.py").read_bytes())
     sdk.update((ROOT / "deps.lock.json").read_bytes())
     for name in profiles:

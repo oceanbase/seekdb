@@ -470,22 +470,16 @@ def main(arguments):
     install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/native", cache_directory,
                    system, architecture)
     if options.wasm:
-        subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
         install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/wasm", cache_directory,
                        "Wasm", "wasm32")
+        subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
     if options.android:
-        install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android", None)
         install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/android", cache_directory,
                        "Android", "arm64")
     if options.ios:
         install_locked(ROOT / "deps.lock.json",
                        ROOT / "deps/prebuilt" / ("ios_simulator" if options.simulator else "ios"),
                        cache_directory, "iOSSimulator" if options.simulator else "iOSDevice", "arm64")
-        subprocess.run([
-            sys.executable, str(ROOT / "build.py"), "build",
-            "--config=" + ("ios-simulator" if options.simulator else "ios"),
-            "//bazel/sdk_sources:source_sdk",
-        ], cwd=ROOT, check=True)
 
 
 if __name__ == "__main__":

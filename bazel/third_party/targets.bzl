@@ -25,12 +25,18 @@ SDK_HEADERS = {
             "//conditions:default": [],
         }),
     },
-    "roaring_headers": _headers("roaring"),
+    "roaring_headers": _headers("roaring") | {
+        "defines": select({
+            "@platforms//os:emscripten": ["ROARING_EXCEPTIONS=0"],
+            "//conditions:default": [],
+        }),
+    },
     "jemalloc_headers": _headers("jemalloc"),
     "vsag_headers": _headers("vsag"),
-    "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
+    "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h"], "includes": ["include"]},
 }
 SDK_IMPORTS = {
+    "roaring": {"static_library": "lib/libroaring.a"},
     "gtest_archive": {"static_library": "lib/libgtest.a"},
     "libaio": {
         "static_library": "lib/libaio.a",
@@ -147,37 +153,20 @@ def sdk_targets(windows = False):
     if windows:
         _windows_libraries()
 
-_SOURCE_HEADERS = {
-    "roaring_headers": ("roaring", "roaring"),
-}
-
 def sdk_aliases():
     cc_library(
         name = "base_libraries",
         deps = [":libcrypto", ":libssl"],
     )
-    for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + HOST_FILES + NATIVE_LINK_FILES:
+    for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + ["vsag_sdk"] + HOST_FILES + NATIVE_LINK_FILES:
         if name in HOST_FILES + ["sanity_pass", "sanity_headers"]:
             actual = "@third_party_native//:" + name
         else:
-            ios = "@third_party_ios//:" + name
-            simulator = "@third_party_ios_simulator//:" + name
-            wasm = "@third_party_wasm//:" + name
-            if name in _SOURCE_HEADERS:
-                ios = "@sdk_" + _SOURCE_HEADERS[name][0] + "//:library"
-                simulator = ios
-                wasm = "@sdk_" + _SOURCE_HEADERS[name][1] + "//:library"
-            elif name == "boost_headers":
-                ios = "@sdk_boost//:library"
-                simulator = ios
-            native_headers = ("@sdk_boost//:library" if name == "boost_headers"
-                              else "@third_party_native//:" + name)
             actual = select({
                 "@platforms//os:android": "@third_party_android//:" + name,
-                "@platforms//os:emscripten": wasm,
-                "@platforms//os:ios": ios,
-                Label("//bazel:ios_simulator"): simulator,
-                "@platforms//os:windows": native_headers,
+                "@platforms//os:emscripten": "@third_party_wasm//:" + name,
+                "@platforms//os:ios": "@third_party_ios//:" + name,
+                Label("//bazel:ios_simulator"): "@third_party_ios_simulator//:" + name,
                 "//conditions:default": "@third_party_native//:" + name,
             })
         native.alias(name = name, actual = actual)

@@ -20,7 +20,7 @@ python3 build.py build --config=android seekdb
 ```
 
 `init --android` prepares host tools in `deps/3rd` and Android dependencies in
-`deps/android`, and installs the Android target for the pinned Rust toolchain.
+`deps/prebuilt/android`, and installs the Android target for the pinned Rust toolchain.
 Native and Android builds can share one checkout.
 
 The binary is generated at:

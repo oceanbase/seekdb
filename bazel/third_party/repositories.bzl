@@ -20,24 +20,7 @@ def _windows_sdk(repository_ctx):
         for child in repository_ctx.path(locked_headers).readdir():
             headers[child.basename] = child
     for name, path in headers.items():
-        # Boost comes from the pinned @sdk_boost source repository on every
-        # platform; leaving the installed SDK copy here would mix its version.
-        if name not in ("dirent.h", "boost"):
-            repository_ctx.symlink(path, "include/" + name)
-    # Patch a repository-owned copy, never mutate the shared installed SDK.
-    python = repository_ctx.which("python")
-    if not python or "dirent.h" not in headers:
-        fail("Windows SDK requires Python and its pinned dirent.h")
-    repository_ctx.read(repository_ctx.attr.windows_dirent_patch)
-    repository_ctx.read(headers["dirent.h"])
-    result = repository_ctx.execute([
-        python,
-        repository_ctx.path(repository_ctx.attr.windows_dirent_patch),
-        headers["dirent.h"],
-        repository_ctx.path("include/dirent.h"),
-    ], quiet = True)
-    if result.return_code:
-        fail("Cannot prepare Windows dirent header: " + result.stderr)
+        repository_ctx.symlink(path, "include/" + name)
     for source, destination in {
         "openssl/lib/VC/x64/MD": "openssl",
         "openssl/bin": "openssl_bin",
@@ -76,16 +59,9 @@ def _third_party_headers_repository_impl(repository_ctx):
     libraries64 = sdk + "/deps/devel/lib64"
     platform = repository_ctx.attr.platform
     ios_sdk = platform if platform in ["iphoneos", "iphonesimulator"] else ""
-    if platform == "android":
-        prefix = str(repository_ctx.workspace_root) + "/deps/android/usr/local/oceanbase/deps/devel"
-        headers = prefix + "/include"
-        libraries = prefix + "/lib"
-        libraries64 = prefix + "/lib64"
     if platform == "wasm":
         prefix = repository_ctx.getenv("SEEKDB_WASM_DEPS") or str(repository_ctx.workspace_root) + "/deps/wasm"
         headers = prefix + "/include"
-        libraries = prefix + "/lib"
-        libraries64 = libraries
     locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/native"
     if platform == "android":
         locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/android"
@@ -100,20 +76,23 @@ def _third_party_headers_repository_impl(repository_ctx):
         "omp.h", "ompx.h", "omp-tools.h", "ompt.h", "lapack.h", "lapacke.h",
         "lapacke_config.h", "lapacke_mangling.h", "lapacke_utils.h", "cblas.h",
     ]
-    if ios_sdk or platform == "wasm":
+    if ios_sdk or platform in ["android", "wasm"]:
         libraries = locked_sdk + "/lib"
         libraries64 = libraries
         if not repository_ctx.path(libraries + "/libssl.a").exists:
-            option = ("--ios" + (" --simulator" if ios_sdk == "iphonesimulator" else "")) if ios_sdk else "--wasm"
+            option = "--ios" + (" --simulator" if ios_sdk == "iphonesimulator" else "") if ios_sdk else "--" + platform
             fail("Missing target dependencies; run ./build.py init " + option)
         locked_names = []
         for child in repository_ctx.path(locked_sdk + "/include").readdir():
-            repository_ctx.symlink(child, "include/" + child.basename)
+            source = repository_ctx.path(headers).get_child("boost") if platform == "wasm" and child.basename == "boost" else child
+            if not source.exists:
+                fail("Missing prepared Wasm Boost headers; run ./build.py init --wasm")
+            repository_ctx.symlink(source, "include/" + child.basename)
             locked_names.append(child.basename)
-        skipped = source_headers + locked_names + (["boost"] if ios_sdk else [])
-        for child in repository_ctx.path(headers).readdir():
-            if child.basename not in skipped:
-                repository_ctx.symlink(child, "include/" + child.basename)
+        if ios_sdk:
+            for child in repository_ctx.path(headers).readdir():
+                if child.basename not in source_headers + locked_names:
+                    repository_ctx.symlink(child, "include/" + child.basename)
     else:
         locked_headers = locked_sdk + "/include"
         if repository_ctx.path(locked_headers).exists:
@@ -142,10 +121,6 @@ sdk_targets()
 
 third_party_headers_repository = repository_rule(
     attrs = {
-        "windows_dirent_patch": attr.label(
-            default = Label("//bazel/third_party:patch_windows_dirent.py"),
-            allow_single_file = True,
-        ),
         "platform": attr.string(
             default = "native",
             values = [
