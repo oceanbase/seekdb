@@ -48,11 +48,6 @@ class Env;
 namespace logservice
 {
 
-struct ObLogRuntimeConfig
-{
-  int64_t log_storage_warning_tolerance_time_;
-};
-
 class ObLogService
 {
 public:
@@ -66,8 +61,7 @@ public:
       const common::ObAddr &self,
       ObILogStorage *log_storage,
       bool is_shared_storage_mode,
-      int64_t replay_thread_quota,
-      const ObLogRuntimeConfig &runtime_config);
+      int64_t replay_thread_quota);
   static void server_module_destroy(ObLogService* &logservice);
   int start();
   void stop();
@@ -80,8 +74,7 @@ public:
            common::ObILogAllocator *alloc_mgr,
            ObILogStorage *log_storage,
            bool is_shared_storage_mode,
-           int64_t replay_thread_quota,
-           const ObLogRuntimeConfig &runtime_config);
+           int64_t replay_thread_quota);
   // Create the unique log stream from its persisted base point.
   int create_ls(const wal::BaseInfo &wal_base_info,
                 ObLogHandler &log_handler);
@@ -101,7 +94,6 @@ public:
   // @param [out] total_size_byte, the configured soft target for checkpoint and recycling.
   int get_wal_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
 
-  int update_log_runtime_config(const ObLogRuntimeConfig &runtime_config);
   int update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size);
   int get_wal_disk_soft_target(int64_t &disk_soft_target);
   int stat_wal(wal::Stat &wal_stat);
@@ -110,7 +102,6 @@ public:
 
   int diagnose_replay(ReplayDiagnoseInfo &diagnose_info);
   int diagnose_apply(ApplyDiagnoseInfo &diagnose_info);
-  int get_io_start_time(int64_t &last_working_time);
 
   wal::Env *get_wal_env() { return wal_env_; }
   bool is_replay_enabled() const;
@@ -134,10 +125,6 @@ public:
   ObLogRestoreNetDriver *get_restore_net_driver();
   int check_need_do_checkpoint(bool &need_do_checkpoint);
   ObILogStorage *get_log_storage() const { return log_storage_; }
-  int64_t get_log_storage_warning_tolerance_time() const
-  {
-    return runtime_config_.log_storage_warning_tolerance_time_;
-  }
 
 private:
   void destroy_replay_();
@@ -164,7 +151,6 @@ private:
   ObLogReplayService *replay_service_;
   int64_t replay_thread_quota_;
   ObILogStorage *log_storage_;
-  ObLogRuntimeConfig runtime_config_;
   ObSpinLock update_wal_opts_lock_;
   // Restore service for standby log sync
 private:
@@ -173,13 +159,5 @@ private:
 
 } // end namespace logservice
 } // end namespace oceanbase
-namespace oceanbase
-{
-namespace logservice
-{
-// Checks whether the clog disk is hung through the server log module.
-int check_clog_disk_hang(ObLogService &log_service, bool &clog_disk_is_hang);
-}
-}
 
 #endif // OCEANBASE_LOGSERVICE_OB_LOG_SERVICE_

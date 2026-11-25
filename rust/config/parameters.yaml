@@ -732,14 +732,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "percentage of disk space used to derive the soft log_disk_size target. Range: [0,99] in integer; only effective when log_disk_size is 0; when log_disk_percentage is 0: a) if data and log share a disk, defaults to 30; b) if data and log use different disks, defaults to 90"
 
-- name: log_storage_warning_tolerance_time
-  type: TIME
-  default: "5s"
-  range: "[1s,300s]"
-  section: LOGSERVICE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "time to tolerate log disk io delay, after that, the disk status will be set warning. Range: [1s,300s]"
-
 - name: _lcl_op_interval
   type: TIME
   default: "5s"

@@ -200,7 +200,6 @@ public:
                        K(can_read_), K(trans_version_));
 private:
   int inner_lock_for_read(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx);
-  int check_clog_disk_hang_();
 public:
   const transaction::ObLockForReadArg &lock_for_read_arg_;
   bool &can_read_;

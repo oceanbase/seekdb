@@ -15,7 +15,6 @@
  */
 
 #include "ob_tx_data_functor.h"
-#include "logservice/ob_log_service.h"  // logservice::check_clog_disk_hang
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 #include "data_plane/transaction/ob_virtual_tx_data.h"
@@ -376,12 +375,9 @@ bool LockForReadFunctor::recheck()
 int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx)
 {
   int ret = OB_ERR_SHARED_LOCK_CONFLICT;
-  const int64_t MAX_RETRY_CNT = 1000;
   const int64_t MAX_SLEEP_US = 1000;
   memtable::ObMvccAccessCtx &acc_ctx = lock_for_read_arg_.mvcc_acc_ctx_;
   int64_t lock_expire_ts = acc_ctx.eval_lock_expire_ts();
-  // check lock_for_read blocked or not every 1ms * 1000 = 1s
-  int64_t retry_cnt = 0;
 
   const int32_t state = ATOMIC_LOAD(&tx_data.state_);
 
@@ -395,7 +391,6 @@ int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx
     STORAGE_LOG(WARN, "lock for read meet stale data", KR(ret));
   } else {
     for (int32_t i = 0; OB_ERR_SHARED_LOCK_CONFLICT == ret; i++) {
-      retry_cnt++;
       if (OB_FAIL(inner_lock_for_read(tx_data, tx_cc_ctx))) {
         if (OB_UNLIKELY(ObServiceStatus::SS_STOPPING == GCTX.status_) ||
             OB_UNLIKELY(ObServiceStatus::SS_STOPPED == GCTX.status_)) {
@@ -411,37 +406,10 @@ int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx
           ob_usleep<ObWaitEventIds::LOCK_FOR_READ_WAIT>(
             (i < MAX_SLEEP_US ? i : MAX_SLEEP_US));
         }
-        if (retry_cnt == MAX_RETRY_CNT) {
-          int tmp_ret = OB_SUCCESS;
-
-          if (OB_TMP_FAIL(check_clog_disk_hang_())) {
-            ret = tmp_ret;
-          }
-
-          // reset the counter
-          retry_cnt = 0;
-        }
       }
     }
   }
 
-
-  return ret;
-}
-
-int LockForReadFunctor::check_clog_disk_hang_()
-{
-  int ret = OB_SUCCESS;
-  bool clog_is_hang = false;
-  logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
-  if (OB_ISNULL(log_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "log service is null", KR(ret));
-  } else if (OB_FAIL(logservice::check_clog_disk_hang(*log_service, clog_is_hang))) {
-  } else if (clog_is_hang) {
-    ret = OB_CLOG_DISK_HANG;
-    TRANS_LOG(ERROR, "disk hang error", K(ret), KPC(this));
-  }
   return ret;
 }
 

@@ -21,7 +21,6 @@
 #include <optional>
 #include <vector>
 #include "common/ob_role.h"
-#include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "share/log/types/base_info.h"
 #include "callback_wrapper.h"
@@ -77,33 +76,19 @@ public:
   const LSN get_end_lsn() const;
   const share::SCN get_end_scn() const;
   int stat(Stat &wal_stat);
-  int get_io_start_time(int64_t &io_start_time) const;
   TO_STRING_KV(K_(is_inited));
 
 private:
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;
   typedef RWLock::WLockGuard WLockGuard;
-  class IoScope
-  {
-  public:
-    explicit IoScope(HandleImpl &handle) : handle_(handle) { handle_.begin_io_(); }
-    ~IoScope() { handle_.end_io_(); }
-  private:
-    HandleImpl &handle_;
-  };
   template<typename IteratorType>
   int alloc_iterator_from_scn_(const SCN &scn, IteratorType &iterator);
-  void begin_io_();
-  void end_io_();
 
 private:
   mutable RWLock lock_;
   std::optional<::rust::Box<wal_rs::Stream>> stream_;
   wal::FsyncCallbackWrapper fs_cb_wrapper_;
-  mutable common::ObSpinLock io_lock_;
-  int64_t active_io_count_;
-  int64_t io_start_time_;
   bool is_inited_;
 };
 using HandleImplPtr = std::shared_ptr<HandleImpl>;

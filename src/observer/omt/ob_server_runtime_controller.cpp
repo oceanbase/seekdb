@@ -117,13 +117,6 @@ ObServerRuntimeController::ObServerRuntimeController()
   }
 }
 
-static ObLogRuntimeConfig current_log_runtime_config()
-{
-  return {
-      config::log_storage_warning_tolerance_time(),
-  };
-}
-
 static int init_log_service(
     ObLogService *&log_service,
     storage::ObLogStorageAdapter *log_storage_adapter,
@@ -145,8 +138,7 @@ static int init_log_service(
       GCTX.self_addr(),
       log_storage_adapter,
       false,
-      config::cpu_quota_concurrency(),
-      current_log_runtime_config()))) {
+      config::cpu_quota_concurrency()))) {
   } else {
     log_block_mgr.bind_log_service(*log_service);
   }
@@ -534,8 +526,6 @@ int ObServerRuntimeController::update_server_config()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  if (OB_TMP_FAIL(update_wal_config())) {
-  }
   if (OB_TMP_FAIL(update_dag_scheduler_config())) {
   }
   if (OB_TMP_FAIL(update_freezer_config_())) {
@@ -543,18 +533,6 @@ int ObServerRuntimeController::update_server_config()
   if (OB_TMP_FAIL(update_throttle_config_())) {
   }
   LOG_INFO("update_server_config success");
-  return ret;
-}
-
-int ObServerRuntimeController::update_wal_config()
-{
-  int ret = OB_SUCCESS;
-  ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
-  if (NULL == log_service) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ret = log_service->update_log_runtime_config(current_log_runtime_config());
-  }
   return ret;
 }
 
@@ -837,7 +815,6 @@ int ObServerRuntimeController::refresh_server_config_()
     ret = OB_NEED_RETRY;
   } else if (OB_FAIL(build_server_resource_config_(runtime_config))) {
   } else if (OB_FAIL(apply_server_resource_config_(runtime_config))) {
-  } else if (OB_FAIL(update_wal_config())) {
   } else {
     set_synced();
     periodically_check_runtime_();

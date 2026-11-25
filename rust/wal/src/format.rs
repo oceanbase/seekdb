@@ -139,9 +139,9 @@ pub fn crc64(bytes: &[u8]) -> u64 {
 
 pub fn crc64_with_seed(seed: u64, bytes: &[u8]) -> u64 {
     let mut crc = seed;
-    let mut chunks = bytes.chunks_exact(8);
-    for chunk in &mut chunks {
-        let value = u64::from_le_bytes(chunk.try_into().unwrap()) ^ crc;
+    let (chunks, remainder) = bytes.as_chunks::<8>();
+    for chunk in chunks {
+        let value = u64::from_le_bytes(*chunk) ^ crc;
         crc = CRC_TABLES[7][(value & 0xff) as usize]
             ^ CRC_TABLES[6][((value >> 8) & 0xff) as usize]
             ^ CRC_TABLES[5][((value >> 16) & 0xff) as usize]
@@ -151,7 +151,7 @@ pub fn crc64_with_seed(seed: u64, bytes: &[u8]) -> u64 {
             ^ CRC_TABLES[1][((value >> 48) & 0xff) as usize]
             ^ CRC_TABLES[0][(value >> 56) as usize];
     }
-    for byte in chunks.remainder() {
+    for byte in remainder {
         crc = CRC_TABLES[0][((crc ^ u64::from(*byte)) & 0xff) as usize] ^ (crc >> 8);
     }
     crc

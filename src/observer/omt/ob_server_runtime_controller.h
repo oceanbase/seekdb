@@ -75,7 +75,6 @@ public:
                                   int64_t &allowed_log_disk_size);
   int modify_server_io(const share::ObServerResourceConfig &resource_config);
   int update_server_config();
-  int update_wal_config();
   int update_dag_scheduler_config();
   int get_runtime(ObServerRuntime *&runtime) const;
   int lock_runtime(ObServerRuntime *&runtime) const;

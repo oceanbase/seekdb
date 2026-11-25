@@ -49,7 +49,6 @@ ObLogService::ObLogService() :
   replay_service_(nullptr),
   replay_thread_quota_(1),
   log_storage_(NULL),
-  runtime_config_(),
   update_wal_opts_lock_()
 {}
 
@@ -66,8 +65,7 @@ int ObLogService::server_module_init(
     const common::ObAddr &self,
     ObILogStorage *log_storage,
     const bool is_shared_storage_mode,
-    const int64_t replay_thread_quota,
-    const ObLogRuntimeConfig &runtime_config)
+    const int64_t replay_thread_quota)
 {
   int ret = OB_SUCCESS;
   common::ObILogAllocator *alloc_mgr = NULL;
@@ -82,8 +80,7 @@ int ObLogService::server_module_init(
                                       alloc_mgr,
                                       log_storage,
                                       is_shared_storage_mode,
-                                      replay_thread_quota,
-                                      runtime_config))) {
+                                      replay_thread_quota))) {
   } else if (OB_FAIL(path_operations::fsync_dir(clog_dir))) {
   } else {
     CLOG_LOG(INFO, "ObLogService server_module_init success");
@@ -353,8 +350,7 @@ int ObLogService::init(const int64_t wal_disk_soft_target,
                        common::ObILogAllocator *alloc_mgr,
                        ObILogStorage *log_storage,
                        const bool is_shared_storage_mode,
-                       const int64_t replay_thread_quota,
-                       const ObLogRuntimeConfig &runtime_config)
+                       const int64_t replay_thread_quota)
 {
   int ret = OB_SUCCESS;
 
@@ -377,7 +373,6 @@ int ObLogService::init(const int64_t wal_disk_soft_target,
     replay_thread_quota_ = replay_thread_quota;
     alloc_mgr_ = alloc_mgr;
     log_storage_ = log_storage;
-    runtime_config_ = runtime_config;
     enable_shared_storage_ = is_shared_storage_mode;
     self_ = self;
     is_inited_ = true;
@@ -518,17 +513,6 @@ int ObLogService::get_wal_disk_usage(int64_t &used_size_byte, int64_t &total_siz
   return ret;
 }
 
-int ObLogService::update_log_runtime_config(const ObLogRuntimeConfig &runtime_config)
-{
-  ObSpinLockGuard guard(update_wal_opts_lock_);
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    runtime_config_ = runtime_config;
-  }
-  return ret;
-}
 //log_disk_usage_limit_size cannot be proactively detected, it can only be passed in when triggered by the upper layer
 int ObLogService::update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size)
 {
@@ -657,18 +641,6 @@ int ObLogService::diagnose_apply(ApplyDiagnoseInfo &diagnose_info)
   return ret;
 }
 
-int ObLogService::get_io_start_time(int64_t &last_working_time)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(wal_env_->get_io_start_time(last_working_time))) {
-  } else {
-    // do nothing
-  }
-  return ret;
-}
 
 int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
 {
@@ -706,26 +678,3 @@ int ObLogService::get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_
 
 }//end of namespace logservice
 }//end of namespace oceanbase
-
-namespace oceanbase
-{
-namespace logservice
-{
-using namespace oceanbase::share;
-int check_clog_disk_hang(ObLogService &log_service, bool &clog_disk_is_hang)
-{
-  int ret = OB_SUCCESS;
-  clog_disk_is_hang = false;
-  int64_t clog_disk_last_working_time = OB_INVALID_TIMESTAMP;
-  const int64_t now = ObTimeUtility::current_time();
-  if (OB_FAIL(log_service.get_io_start_time(clog_disk_last_working_time))) {
-  } else {
-    clog_disk_is_hang =
-        OB_INVALID_TIMESTAMP != clog_disk_last_working_time &&
-        now - clog_disk_last_working_time >
-            log_service.get_log_storage_warning_tolerance_time();
-  }
-  return ret;
-}
-}
-}

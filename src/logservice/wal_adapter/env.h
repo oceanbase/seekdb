@@ -44,7 +44,6 @@ public:
   int get_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
   int update_disk_soft_target(int64_t disk_soft_target);
   int get_disk_soft_target(int64_t &disk_soft_target);
-  int get_io_start_time(int64_t &last_working_time);
   int start();
 
 private:

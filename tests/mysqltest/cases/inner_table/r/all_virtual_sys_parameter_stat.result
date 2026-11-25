@@ -68,7 +68,6 @@ lob_enable_block_cache_threshold
 log_disk_percentage
 log_disk_size
 log_restore_source
-log_storage_warning_tolerance_time
 major_compact_trigger
 major_freeze_duty_time
 max_partition_num

@@ -18,7 +18,6 @@
 #include "logservice/wal_adapter/handle_impl.h"
 #include <cstdlib>
 #include <string>
-#include "lib/time/ob_time_utility.h"
 #include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
@@ -65,9 +64,6 @@ HandleImpl::HandleImpl()
     : lock_(common::ObLatchIds::WAL_HANDLE_IMPL_LOCK),
       stream_(),
       fs_cb_wrapper_(),
-      io_lock_(common::ObLatchIds::WAL_HANDLE_IMPL_LOCK),
-      active_io_count_(0),
-      io_start_time_(OB_INVALID_TIMESTAMP),
       is_inited_(false)
 {}
 
@@ -125,7 +121,6 @@ int HandleImpl::submit_log(const char *buf, const int64_t buf_len, const SCN &re
       || !ref_scn.is_valid()) {
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
   } else {
-    IoScope io_scope(*this);
     const auto result = wal_rs::submit_ffi(**stream_,
         ::rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buf), buf_len),
         ref_scn.get_val_for_logservice());
@@ -147,7 +142,6 @@ int HandleImpl::submit_imported_groups(const ImportedGroups &groups)
   if (!is_inited_ || groups.empty()) {
     ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
   } else {
-    IoScope io_scope(*this);
     for (const auto &group : groups) {
       const LSN source_lsn(static_cast<int64_t>(group.source_lsn));
       SCN source_scn;
@@ -387,29 +381,6 @@ int HandleImpl::stat(Stat &wal_stat)
     }
   }
   return ret;
-}
-
-void HandleImpl::begin_io_()
-{
-  ObSpinLockGuard guard(io_lock_);
-  if (0 == active_io_count_++) {
-    io_start_time_ = ObTimeUtility::fast_current_time();
-  }
-}
-
-void HandleImpl::end_io_()
-{
-  ObSpinLockGuard guard(io_lock_);
-  if (0 == --active_io_count_) {
-    io_start_time_ = OB_INVALID_TIMESTAMP;
-  }
-}
-
-int HandleImpl::get_io_start_time(int64_t &io_start_time) const
-{
-  ObSpinLockGuard guard(io_lock_);
-  io_start_time = io_start_time_;
-  return OB_SUCCESS;
 }
 
 Stat::Stat()

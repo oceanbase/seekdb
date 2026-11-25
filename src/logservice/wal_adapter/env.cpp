@@ -235,18 +235,5 @@ int Env::update_disk_soft_target(const int64_t disk_soft_target)
   return ret;
 }
 
-int Env::get_io_start_time(int64_t &last_working_time)
-{
-  RLockGuard guard(lock_);
-  int ret = OB_SUCCESS;
-  last_working_time = OB_INVALID_TIMESTAMP;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else if (OB_NOT_NULL(wal_handle_)) {
-    ret = wal_handle_->get_io_start_time(last_working_time);
-  }
-  return ret;
-}
-
 } // namespace wal
 } // namespace oceanbase

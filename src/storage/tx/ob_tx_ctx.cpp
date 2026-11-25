@@ -414,18 +414,6 @@ int ObTxCtx::handle_timeout(const int64_t delay)
         } else if (commit_expired) {
           tmp_ret = post_tx_commit_resp_(OB_TRANS_STMT_TIMEOUT);
           TRANS_LOG(INFO, "callback scheduler txn commit has timeout", K(tmp_ret), KPC(this));
-        } else {
-          // make scheduler retry commit if clog disk has fatal error
-          bool clog_is_hang = false;
-          logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
-          if (OB_ISNULL(log_service)) {
-            ret = OB_ERR_UNEXPECTED;
-            TRANS_LOG(WARN, "log service is null", KR(ret));
-          } else if (OB_FAIL(logservice::check_clog_disk_hang(*log_service, clog_is_hang))) {
-          } else if (clog_is_hang) {
-            tmp_ret = post_tx_commit_resp_(OB_EAGAIN);
-            TRANS_LOG(WARN, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
-          }
         }
       }
 
