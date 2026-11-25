@@ -539,6 +539,20 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
     if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
     }
+    if (func.contain_vec_index_approx_) {
+      // The general rewrite rules stay disabled for ANN queries so that the
+      // vector index scan shape is preserved. Expression-level simplification
+      // does not change that shape, it only normalizes the filter predicates,
+      // so keep it enabled. Otherwise semantically equivalent filters such as
+      // `F OR FALSE`, duplicate conjuncts or redundant range conditions are
+      // evaluated in their original, arbitrarily large form for every
+      // candidate row visited by the vector index scan, which makes the ANN
+      // latency depend on how a filter happens to be written (#1489, #1534,
+      // #1535).
+      uint64_t vec_index_enable_list = 0;
+      ObTransformRule::add_trans_type(vec_index_enable_list, SIMPLIFY_EXPR);
+      disable_list &= ~vec_index_enable_list;
+    }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
       ObTransformRule::add_trans_type(enum_set_enable_list, SIMPLIFY_DISTINCT);
