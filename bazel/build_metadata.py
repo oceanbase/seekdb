@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -33,8 +34,20 @@ def version_source(template, status_file, output):
         "BUILD_INFO": "",
     }
     source = Path(template).read_text(encoding="utf-8")
-    for key, value in values.items():
-        source = source.replace("@" + key + "@", value)
+    def escape_cpp(value):
+        return (
+            value.replace("\\", "\\\\")
+                 .replace('"', '\\"')
+                 .replace("\n", "\\n")
+                 .replace("\r", "\\r")
+        )
+
+    pattern = r"@(" + "|".join(re.escape(key) for key in values) + r")@"
+    source = re.sub(
+        pattern,
+        lambda match: escape_cpp(values[match.group(1)]),
+        source,
+    )
     with open(output, "w", encoding="utf-8", newline="\n") as stream:
         stream.write(source)
 
