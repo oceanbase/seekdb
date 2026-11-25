@@ -1,0 +1,64 @@
+# Regression for #1470: positive inner product DESC must use the IP ANN path.
+# Non-unit vectors, unique scores, and both score signs catch projection changes.
+--disable_warnings
+DROP TABLE IF EXISTS t_ip_desc;
+--enable_warnings
+SET ob_enable_index_direct_select = 1;
+CREATE TABLE t_ip_desc (id INT PRIMARY KEY, v VECTOR(3),
+  VECTOR INDEX ip_idx(v) WITH (distance=inner_product, type=hnsw, lib=vsag));
+INSERT INTO t_ip_desc VALUES (1,'[4,0,0]'),(2,'[2,0,0]'),
+  (3,'[-1,0,0]'),(4,'[-3,0,0]'),(5,NULL);
+
+# Assert the execution path, not a timing threshold or cost estimate.
+--let $ip_plan = query_get_value("EXPLAIN BASIC SELECT id FROM t_ip_desc ORDER BY inner_product(v, [1,0,0]) DESC APPROXIMATE LIMIT 3", Query Plan, 4)
+--disable_query_log
+--eval SELECT '$ip_plan' LIKE '%VECTOR INDEX%' AS uses_ann;
+--enable_query_log
+SELECT id, CAST(inner_product(v, [1,0,0]) AS SIGNED) AS score
+  FROM t_ip_desc ORDER BY inner_product(v, [1,0,0]) DESC APPROXIMATE LIMIT 3;
+
+# ORDER BY aliases and ordinals share the SELECT expression in the resolver.
+--let $ip_plan = query_get_value("EXPLAIN BASIC SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc ORDER BY score DESC APPROXIMATE LIMIT 3", Query Plan, 4)
+--disable_query_log
+--eval SELECT '$ip_plan' LIKE '%VECTOR INDEX%' AS alias_uses_ann;
+--enable_query_log
+SELECT id, CAST(score AS SIGNED) AS score FROM
+  (SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc
+   ORDER BY score DESC APPROXIMATE LIMIT 3) q ORDER BY score DESC;
+SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc
+  ORDER BY 2 DESC APPROXIMATE LIMIT 3;
+SELECT id, inner_product([1,0,0], v) AS score FROM t_ip_desc
+  ORDER BY score DESC APPROXIMATE LIMIT 3;
+
+# Existing ANN spelling, exact DESC, ascending IP, offset, and residual filtering.
+--let $ip_plan = query_get_value("EXPLAIN BASIC SELECT id FROM t_ip_desc ORDER BY negative_inner_product(v, [1,0,0]) ASC APPROXIMATE LIMIT 3", Query Plan, 4)
+--disable_query_log
+--eval SELECT '$ip_plan' LIKE '%VECTOR INDEX%' AS negative_ip_uses_ann;
+--enable_query_log
+SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc
+  ORDER BY negative_inner_product(v, [1,0,0]) ASC APPROXIMATE LIMIT 3;
+SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc
+  ORDER BY score DESC LIMIT 3;
+SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc
+  WHERE v IS NOT NULL ORDER BY score ASC APPROXIMATE LIMIT 3;
+SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc
+  ORDER BY score DESC APPROXIMATE LIMIT 1 OFFSET 2;
+SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc
+  WHERE id >= 2 ORDER BY score DESC APPROXIMATE LIMIT 2;
+
+# Prepared execution must preserve projected positive scores on each execution.
+PREPARE ip_stmt FROM 'SELECT id, inner_product(v, ?) AS score FROM t_ip_desc ORDER BY score DESC APPROXIMATE LIMIT 2';
+SET @ip_query = '[1,0,0]';
+EXECUTE ip_stmt USING @ip_query;
+SET @ip_query = '[-1,0,0]';
+EXECUTE ip_stmt USING @ip_query;
+DEALLOCATE PREPARE ip_stmt;
+DROP TABLE t_ip_desc;
+
+# No matching IP index: keep the ordinary exact path and its score semantics.
+CREATE TABLE t_ip_desc (id INT PRIMARY KEY, v VECTOR(3),
+  VECTOR INDEX l2_idx(v) WITH (distance=l2, type=hnsw, lib=vsag));
+INSERT INTO t_ip_desc VALUES (1,'[4,0,0]'),(2,'[-1,0,0]'),(3,NULL);
+SELECT id, inner_product(v, [1,0,0]) AS score FROM t_ip_desc
+  ORDER BY score DESC APPROXIMATE LIMIT 3;
+DROP TABLE t_ip_desc;
