@@ -360,7 +360,7 @@ docker run -d \
   --name seekdb \
   -p 2881:2881 \
   -p 2886:2886 \
-  -v ./data:/var/lib/oceanbase \
+  -v ./data:/var/lib/seekdb \
   oceanbase/seekdb:latest
 ```
 请参考此 Docker 镜像的[文档](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md)获取详细信息。
