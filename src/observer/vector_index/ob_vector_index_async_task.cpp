@@ -415,7 +415,7 @@ int ObVecTaskManager::check_task_status()
                K(ret));
     }
   } else if (finished_task.empty()) {
-  } else if (OB_FAIL(get_difference(finished_task, task_ids_, tmp_task))) {
+  } else if (OB_FAIL(get_difference(task_ids_, finished_task, tmp_task))) {
   } else if (FALSE_IT(task_ids_.reuse())) {
   } else if (OB_FAIL(task_ids_.assign(tmp_task))) {
   }
