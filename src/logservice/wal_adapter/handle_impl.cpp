@@ -53,8 +53,9 @@ void report_fatal_ffi(rust::Str path, rust::Str operation, const int32_t raw_os_
   const int ret = no_space ? common::OB_LOG_OUTOF_DISK_SPACE : OB_IO_ERROR;
   const std::string segment(path);
   const std::string action(operation);
-  LOG_ERROR("fatal WAL I/O failure", KR(ret), "segment", segment.c_str(),
-      "operation", action.c_str(), "raw_os_error", raw_os_error, KERRNOMSG(raw_os_error));
+  OB_PRINT("[WAL] ", OB_LOG_LEVEL_DIRECT_NO_ERRCODE(DBA_ERROR), ret,
+      "fatal WAL I/O failure", LOG_KVS(KR(ret), "segment", segment.c_str(),
+          "operation", action.c_str(), "raw_os_error", raw_os_error, KERRNOMSG(raw_os_error)));
   OB_LOGGER.flush();
   std::_Exit(1);
 }
