@@ -433,24 +433,32 @@ for step in agent.run():
 <summary><b>🗄️ SQL — Schema + Hybrid Search</b></summary>
 
 ```sql
--- Table with vector column, full-text index, and HNSW vector index
+-- Create a table with a vector column and a full-text index
 CREATE TABLE articles (
   id        INT PRIMARY KEY,
   title     TEXT,
   content   TEXT,
-  embedding VECTOR(384),
-  FULLTEXT INDEX idx_fts (content) WITH PARSER ik,
-  VECTOR   INDEX idx_vec (embedding) WITH (DISTANCE=l2, TYPE=hnsw, LIB=vsag)
+  embedding VECTOR(3),
+  FULLTEXT INDEX idx_fts (content) WITH PARSER ik
 ) ORGANIZATION = HEAP;
 
--- Hybrid search: vector similarity + full-text match in one query
+-- Load example rows, then build an HNSW index over them
+INSERT INTO articles (id, title, content, embedding) VALUES
+  (1, 'Quarterly update', 'quarterly report', '[0.12, 0.34, 0.56]'),
+  (2, 'Meeting notes', 'planning notes', '[0.12, 0.34, 0.56]'),
+  (3, 'Quarterly archive', 'quarterly report archive', '[0.32, 0.34, 0.56]');
+CREATE VECTOR INDEX idx_vec ON articles (embedding) WITH (DISTANCE=l2, TYPE=hnsw, LIB=vsag);
+
+-- Combine full-text matching and approximate vector ranking
 SELECT id, title,
-       l2_distance(embedding, '[0.12, 0.34, ...]') AS dist
+       l2_distance(embedding, '[0.12, 0.34, 0.56]') AS dist
 FROM articles
 WHERE MATCH(content) AGAINST('quarterly report')
 ORDER BY dist APPROXIMATE
 LIMIT 10;
 ```
+
+The query returns articles `1` and `3`, in that order.
 
 Python developers can access this via SQLAlchemy or any MySQL driver.
 
