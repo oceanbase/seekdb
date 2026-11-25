@@ -1,0 +1,56 @@
+DROP TABLE IF EXISTS ddl_identifier_values, ddl_identifier_nullable;
+CREATE TABLE ddl_identifier_values (
+id INT PRIMARY KEY,
+`e``num` ENUM('red', 'green', 'blue') NOT NULL,
+```set` SET('one', 'two') NOT NULL,
+`tail``` INT NOT NULL,
+`two````ticks` INT NOT NULL,
+ordinary INT NOT NULL);
+INSERT INTO ddl_identifier_values VALUES
+(1, 'red', 'one', 10, 100, 1000),
+(2, 'green', 'two', 20, 200, 2000),
+(3, 'blue', 'one,two', 30, 300, 3000);
+CREATE UNIQUE INDEX idx_enum ON ddl_identifier_values (`e``num`);
+CREATE UNIQUE INDEX idx_set ON ddl_identifier_values (```set`);
+CREATE UNIQUE INDEX idx_trailing ON ddl_identifier_values (`tail```);
+CREATE UNIQUE INDEX idx_consecutive ON ddl_identifier_values (`two````ticks`);
+CREATE UNIQUE INDEX idx_ordinary ON ddl_identifier_values (ordinary);
+SELECT id, `e``num` AS enum_value FROM ddl_identifier_values FORCE INDEX (idx_enum) ORDER BY id;
+id	enum_value
+1	red
+2	green
+3	blue
+SELECT id, ```set` AS set_value FROM ddl_identifier_values FORCE INDEX (idx_set) ORDER BY id;
+id	set_value
+1	one
+2	two
+3	one,two
+SELECT id, `tail``` AS trailing_value FROM ddl_identifier_values FORCE INDEX (idx_trailing) ORDER BY id;
+id	trailing_value
+1	10
+2	20
+3	30
+SELECT id, `two````ticks` AS consecutive_value FROM ddl_identifier_values FORCE INDEX (idx_consecutive) ORDER BY id;
+id	consecutive_value
+1	100
+2	200
+3	300
+SELECT id, ordinary FROM ddl_identifier_values FORCE INDEX (idx_ordinary) ORDER BY id;
+id	ordinary
+1	1000
+2	2000
+3	3000
+DROP TABLE ddl_identifier_values;
+CREATE TABLE ddl_identifier_nullable (`p``k` INT PRIMARY KEY, `n``ull` INT);
+INSERT INTO ddl_identifier_nullable VALUES (1, NULL), (2, NULL), (3, 7);
+CREATE UNIQUE INDEX idx_nullable ON ddl_identifier_nullable (`n``ull`);
+INSERT INTO ddl_identifier_nullable VALUES (4, NULL);
+INSERT INTO ddl_identifier_nullable VALUES (5, 7);
+ERROR 23000: Duplicate entry '7' for key 'idx_nullable'
+SELECT `p``k` AS id, `n``ull` AS nullable_value FROM ddl_identifier_nullable FORCE INDEX (idx_nullable) ORDER BY id;
+id	nullable_value
+1	NULL
+2	NULL
+3	7
+4	NULL
+DROP TABLE ddl_identifier_nullable;
