@@ -1,0 +1,17 @@
+#owner: yimo3444
+#owner group: subquery
+# tags: subquery
+#description: Regression test for issue #1477. An IFNULL whose first argument is a
+#  boolean scalar subquery, combined with a double-negated LIKE in the predicate, used
+#  to fail with ERROR 4016 (Internal error) while type deduction tried to add an
+#  implicit cast above an expression that already carried an implicit cast.
+
+--disable_warnings
+--enable_warnings
+
+# main reproduction: before the fix this statement failed with an internal error
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(!(1 LIKE "x")));
+
+# control cases: both returned the empty set before the fix and must keep doing so
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(1 LIKE "x"));
+SELECT 1 FROM dual WHERE IFNULL(FALSE, !(!(1 LIKE "x")));
