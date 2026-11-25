@@ -313,6 +313,19 @@ private:
   bool is_inited_;
 };
 
+class ObDDLMergeBucketLock
+{
+public:
+  int init();
+  void destroy() { hash_set_.destroy(); }
+  int lock(const ObTabletID &tablet_id);
+  int unlock(const ObTabletID &tablet_id);
+
+private:
+  hash::ObHashSet<int64_t> hash_set_;
+  lib::ObMutex mutex_;
+};
+
 }// namespace storage
 }// namespace oceanbase
 

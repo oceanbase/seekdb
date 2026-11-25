@@ -166,6 +166,7 @@ class ObSSTableMergeInfoMgr;
 class ObLobManager;
 class ObMemstoreFreezer;
 class ObCompactionMemPool;
+class ObDDLMergeBucketLock;
 class ObFreezeInfoMgr;
 class ObAccessService;
 class ObEmptyReadBucket;
@@ -738,6 +739,7 @@ private:
   compaction::ObTabletScheduler * mods_tablet_scheduler_ = nullptr;
   compaction::ObMediumChecker * mods_medium_checker_ = nullptr;
   storage::ObCompactionMemPool * mods_compaction_mem_pool_ = nullptr;
+  storage::ObDDLMergeBucketLock * mods_ddl_merge_bucket_lock_ = nullptr;
   share::ObDagScheduler * mods_dag_scheduler_ = nullptr;
   storage::ObFreezeInfoMgr * mods_freeze_info_mgr_ = nullptr;
   transaction::ObTxLoopWorker * mods_tx_loop_worker_ = nullptr;

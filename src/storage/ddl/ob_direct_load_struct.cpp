@@ -395,3 +395,31 @@ int ObDDLTabletMergeDagParamV2::init_slice_sstable_array(hash::ObHashSet<int64_t
   }
   return ret;
 }
+
+int ObDDLMergeBucketLock::init()
+{
+  const int64_t bucket_count = 1007;
+  return hash_set_.create(bucket_count, ObMemAttr("DdlMrgBck"));
+}
+
+int ObDDLMergeBucketLock::lock(const ObTabletID &tablet_id)
+{
+  int ret = OB_SUCCESS;
+  if (!tablet_id.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObMutexGuard guard(mutex_);
+    if (OB_FAIL(hash_set_.set_refactored(tablet_id.id(), 0 /* overwrite */))) {
+      if (OB_HASH_EXIST == ret) {
+        ret = OB_EAGAIN;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLMergeBucketLock::unlock(const ObTabletID &tablet_id)
+{
+  ObMutexGuard guard(mutex_);
+  return hash_set_.erase_refactored(tablet_id.id());
+}
