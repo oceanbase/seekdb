@@ -802,6 +802,48 @@ inline std::ostream &operator<<(std::ostream &os, const ObString &str)  // for g
   return os;
 }
 
+// Double backticks inside a MySQL identifier; the caller supplies the outer quotes.
+// Names without backticks keep their original storage. Escaped names are allocated
+// from allocator and NUL-terminated, while dst.length() excludes that terminator.
+template <typename AllocatorT>
+int ob_escape_sql_identifier(AllocatorT &allocator, const ObString &src, ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const ObString::obstr_size_t src_len = src.length();
+  int64_t dst_len = src_len;
+  const char escape_character = '`';
+  char *ptr = NULL;
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
+    dst.assign(NULL, 0);
+  } else if (NULL == src.find(escape_character)) {
+    dst = src;
+  } else {
+    for (int64_t i = 0; i < src_len; ++i) {
+      if (src[i] == escape_character) {
+        ++dst_len;
+      }
+    }
+    if (OB_UNLIKELY(dst_len > INT32_MAX)) {
+      ret = OB_SIZE_OVERFLOW;
+    } else if (NULL == (ptr = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
+      dst.assign(NULL, 0);
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LIB_LOG(ERROR, "allocate memory failed", K(ret), "size", dst_len);
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; i < src_len; ++i) {
+        ptr[pos++] = src[i];
+        if (src[i] == escape_character) {
+          ptr[pos++] = escape_character;
+        }
+      }
+      ptr[dst_len] = '\0';
+      dst.assign_ptr(ptr, static_cast<ObString::obstr_size_t>(dst_len));
+    }
+  }
+  return ret;
+}
+
 template <typename AllocatorT>
 int ob_write_string(AllocatorT &allocator, const ObString &src, ObString &dst, bool c_style = false)
 {
