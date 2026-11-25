@@ -1,0 +1,58 @@
+exact_knn_seed_to_bounded_walk_to_source_rows
+WITH exact_seeds AS (
+SELECT chunk_id,person_id,document_id,source_uri,source_version,
+l2_distance(embedding,'[0,0,0]') AS score
+FROM graph_rag_chunks
+ORDER BY score,chunk_id LIMIT 2
+)
+SELECT s.chunk_id AS seed_chunk,s.person_id AS seed_id,s.score AS seed_score,
+p.match_no,p.step_no,
+JSON_VALUE(p.from_identity,'$.KEY_VALUE.id') AS from_id,
+JSON_VALUE(p.edge_identity,'$.KEY_VALUE.id') AS edge_id,
+JSON_VALUE(p.to_identity,'$.KEY_VALUE.id') AS to_id,
+reached.document_id,reached.chunk_id,reached.source_uri,reached.source_version
+FROM exact_seeds s,
+LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.person_id)-[e IS knows]->{0,2}(b IS person)
+ONE ROW PER STEP (v1,step_e,v2)
+COLUMNS(MATCHNUM() AS match_no,ELEMENT_NUMBER(step_e) AS step_no,
+VERTEX_ID(v1) AS from_identity,
+EDGE_ID(step_e) AS edge_identity,
+VERTEX_ID(v2) AS to_identity)) g
+) p
+JOIN graph_rag_chunks reached
+ON reached.person_id=CAST(COALESCE(
+JSON_VALUE(p.to_identity,'$.KEY_VALUE.id'),
+JSON_VALUE(p.from_identity,'$.KEY_VALUE.id')) AS SIGNED)
+ORDER BY seed_score,seed_chunk,match_no,step_no,reached.chunk_id;
+seed_chunk	seed_id	seed_score	match_no	step_no	from_id	edge_id	to_id	document_id	chunk_id	source_uri	source_version
+100	1	0	1	NULL	1	NULL	NULL	1000	100	doc://alice	7
+100	1	0	2	2	1	10	2	1001	101	doc://bob	3
+100	1	0	3	2	1	10	2	1001	101	doc://bob	3
+100	1	0	3	4	2	12	3	1002	102	doc://carol	9
+100	1	0	5	2	1	11	2	1001	101	doc://bob	3
+100	1	0	6	2	1	11	2	1001	101	doc://bob	3
+100	1	0	6	4	2	12	3	1002	102	doc://carol	9
+101	2	1	1	NULL	2	NULL	NULL	1001	101	doc://bob	3
+101	2	1	2	2	2	12	3	1002	102	doc://carol	9
+101	2	1	3	2	2	12	3	1002	102	doc://carol	9
+101	2	1	3	4	3	13	1	1000	100	doc://alice	7
+approximate_knn_composition_smoke
+WITH approx_seeds AS (
+SELECT chunk_id,person_id,l2_distance(embedding,'[0,0,0]') AS score
+FROM graph_rag_chunks
+ORDER BY score APPROXIMATE LIMIT 2
+)
+SELECT COUNT(*) > 0 AS composed
+FROM approx_seeds s,
+LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.person_id)-[e IS knows]->{1}(b IS person)
+COLUMNS(b.id AS reached_id,COUNT(e.id) AS hops)) g
+) p;
+composed
+1
+DROP TABLE graph_rag_chunks;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

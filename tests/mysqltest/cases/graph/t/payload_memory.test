@@ -1,0 +1,46 @@
+--disable_query_log
+CREATE TABLE gpm_digit(n INT PRIMARY KEY);
+INSERT INTO gpm_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE gpm_v(id INT PRIMARY KEY) PARTITION BY RANGE(id)
+(PARTITION p1 VALUES LESS THAN(2),PARTITION p2 VALUES LESS THAN MAXVALUE);
+CREATE TABLE gpm_e(eid INT,part INT,src INT,dst INT,note VARCHAR(600),doc JSON,
+ PRIMARY KEY(eid,part)) PARTITION BY LIST(part)
+(PARTITION p1 VALUES IN(1),PARTITION p9 VALUES IN(9));
+INSERT INTO gpm_v VALUES(1),(2);
+INSERT INTO gpm_e
+SELECT n,part,1,2,REPEAT('x',600),JSON_OBJECT('k',n*10+part,'s',REPEAT('y',600))
+FROM (SELECT a.n+10*b.n+100*c.n+1000*d.n AS n
+ FROM gpm_digit a,gpm_digit b,gpm_digit c,gpm_digit d) numbers
+CROSS JOIN (SELECT 1 AS part UNION ALL SELECT 9) parts WHERE n<4105;
+CREATE PROPERTY GRAPH gpm
+VERTEX TABLES(gpm_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(gpm_e KEY(eid,part) SOURCE KEY(src) REFERENCES gpm_v(id)
+ DESTINATION KEY(dst) REFERENCES gpm_v(id) LABEL link PROPERTIES(eid,part,note,doc));
+# The original temporary JSON allocations accumulated until an entire edge page
+# was consumed. Check complete wide results, including nested JSON and a second
+# page/partition, without raising the default query work-area budget.
+--echo wide_payload_full_and_index
+--let $passes=2
+while ($passes)
+{
+ SELECT COUNT(*) AS paths,
+ SUM(JSON_EXTRACT(docs,'$[0].k')=JSON_EXTRACT(ids,'$[0]')*10+JSON_EXTRACT(parts,'$[0]')) AS intact_keys,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(notes,'$[0]'))=REPEAT('x',600)) AS intact_notes,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(docs,'$[0].s'))=REPEAT('y',600)) AS intact_docs
+ FROM GRAPH_TABLE(gpm MATCH (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+ COLUMNS(JSON_ARRAYAGG(e.eid) AS ids,JSON_ARRAYAGG(e.part) AS parts,
+ JSON_ARRAYAGG(e.note) AS notes,JSON_ARRAYAGG(e.doc) AS docs)) g;
+ SELECT COUNT(*) AS steps,SUM(JSON_EXTRACT(doc,'$.k')=eid*10+part) AS intact_docs,
+ SUM(note=REPEAT('x',600)) AS intact_notes
+ FROM GRAPH_TABLE(gpm MATCH (a IS node WHERE a.id=2)<-[e IS link]-{1}(b IS node)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(se.eid AS eid,se.part AS part,se.doc AS doc,se.note AS note)) g;
+ --dec $passes
+ if ($passes)
+ {
+  CREATE INDEX gpm_src ON gpm_e(src,eid,part) LOCAL;
+  CREATE INDEX gpm_dst ON gpm_e(dst,eid,part) LOCAL;
+ }
+}
+DROP PROPERTY GRAPH gpm;
+DROP TABLE gpm_e,gpm_v,gpm_digit;

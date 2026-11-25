@@ -1,0 +1,67 @@
+SELECT COUNT(*)=1 AS native_deadline_target FROM plan_table
+WHERE statement_id='deadline' AND operator='GRAPH FEEDBACK LOOP'
+      AND special_predicates LIKE '%runtime=native%';
+native_deadline_target
+1
+SELECT COUNT(*)=1 AS fullscan_deadline_target FROM plan_table
+WHERE statement_id='deadline' AND operator='GRAPH FEEDBACK LOOP'
+        AND special_predicates LIKE '%access=full-scan%';
+fullscan_deadline_target
+1
+PREPARE graph_deadline FROM
+'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=?)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+SET @seed=1;
+EXECUTE graph_deadline USING @seed;
+paths
+4
+SET ob_query_timeout=5000000;
+EXECUTE graph_deadline USING @seed;
+ERROR HY000: Timeout, query has reached the maximum query timeout: 5000000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
+SET ob_query_timeout=30000000;
+EXECUTE graph_deadline USING @seed;
+paths
+4
+SET @seed=5;
+EXECUTE graph_deadline USING @seed;
+paths
+0
+SET @seed=1;
+EXECUTE graph_deadline USING @seed;
+paths
+4
+DEALLOCATE PREPARE graph_deadline;
+SELECT COUNT(*)=1 AS native_deadline_target FROM plan_table
+WHERE statement_id='deadline' AND operator='GRAPH FEEDBACK LOOP'
+      AND special_predicates LIKE '%runtime=native%';
+native_deadline_target
+1
+SELECT COUNT(*)=1 AS indexed_deadline_target FROM plan_table
+WHERE statement_id='deadline' AND operator='GRAPH FEEDBACK LOOP'
+        AND special_predicates LIKE '%access=index%';
+indexed_deadline_target
+1
+PREPARE graph_deadline FROM
+'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=?)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+SET @seed=1;
+EXECUTE graph_deadline USING @seed;
+paths
+4
+SET ob_query_timeout=5000000;
+EXECUTE graph_deadline USING @seed;
+ERROR HY000: Timeout, query has reached the maximum query timeout: 5000000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
+SET ob_query_timeout=30000000;
+EXECUTE graph_deadline USING @seed;
+paths
+4
+SET @seed=5;
+EXECUTE graph_deadline USING @seed;
+paths
+0
+SET @seed=1;
+EXECUTE graph_deadline USING @seed;
+paths
+4
+DEALLOCATE PREPARE graph_deadline;
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

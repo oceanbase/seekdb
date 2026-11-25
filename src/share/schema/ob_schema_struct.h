@@ -1155,6 +1155,7 @@ typedef enum {
   COLUMN_PRIV = 42,
   AI_MODEL_SCHEMA = 45,
   OBJ_MYSQL_PRIV = 47,
+  PROPERTY_GRAPH_SCHEMA = 48,
   ///<<< add schema type before this line
   OB_MAX_SCHEMA
 } ObSchemaType;
@@ -1303,7 +1304,8 @@ enum ObDependencyTableType
   DEPENDENCY_PACKAGE_BODY = 8,
   RESERVED_DEPENDENCY_10 = 10,
   RESERVED_DEPENDENCY_16 = 16,
-  DEPENDENCY_TRIGGER = 17
+  DEPENDENCY_TRIGGER = 17,
+  DEPENDENCY_PROPERTY_GRAPH = 18
 };
 
 enum class ObObjectType {
@@ -1387,6 +1389,9 @@ struct ObSchemaObjVersion
         break;
       case DEPENDENCY_OUTLINE:
         ret_type = OUTLINE_SCHEMA;
+        break;
+      case DEPENDENCY_PROPERTY_GRAPH:
+        ret_type = PROPERTY_GRAPH_SCHEMA;
         break;
       case DEPENDENCY_TRIGGER:
         ret_type = TRIGGER_SCHEMA;

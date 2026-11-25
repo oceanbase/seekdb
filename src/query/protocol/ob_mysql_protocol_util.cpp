@@ -820,6 +820,7 @@ int ObSMUtils::get_ob_type(ObObjType &ob_type, EMySQLFieldType mysql_type, const
     case EMySQLFieldType::MYSQL_TYPE_LONG_BLOB:
       ob_type = ObLongTextType;
       break;
+    case EMySQLFieldType::MYSQL_TYPE_DECIMAL:
     case EMySQLFieldType::MYSQL_TYPE_NEWDECIMAL:
       ob_type = ObNumberType;
       break;

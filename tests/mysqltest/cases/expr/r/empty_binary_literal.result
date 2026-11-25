@@ -1,0 +1,83 @@
+empty_literals_keep_values_separate_from_expression_names
+SELECT HEX(X''), LENGTH(X''), X'' IS NULL, HEX(B''), LENGTH(B''),
+HEX(N''), LENGTH(N''), LENGTH('');
+HEX(X'')	LENGTH(X'')	X'' IS NULL	HEX(B'')	LENGTH(B'')	HEX(N'')	LENGTH(N'')	LENGTH('')
+	0	0		0		0	0
+SELECT HEX(v), LENGTH(v) FROM (SELECT X'') q(v);
+HEX(v)	LENGTH(v)
+	0
+SELECT HEX(v), LENGTH(v) FROM (SELECT B'') q(v);
+HEX(v)	LENGTH(v)
+	0
+SELECT HEX(CONCAT(X'',X'41')), HEX(CONCAT(X'41',X'')),
+X'' IN (X''), X'' IN (X'41',X''), X'41' IN (X'',X'41'),
+LENGTH(X'00'), HEX(X'00'), LENGTH(X'4142');
+HEX(CONCAT(X'',X'41'))	HEX(CONCAT(X'41',X''))	X'' IN (X'')	X'' IN (X'41',X'')	X'41' IN (X'',X'41')	LENGTH(X'00')	HEX(X'00')	LENGTH(X'4142')
+41	41	1	1	1	1	00	2
+DROP TABLE IF EXISTS empty_binary_literal;
+CREATE TABLE empty_binary_literal(id INT PRIMARY KEY,k VARBINARY(20),KEY idx(k));
+INSERT INTO empty_binary_literal VALUES(1,''),(2,'A'),(3,0x00),(4,NULL);
+SELECT id FROM empty_binary_literal FORCE INDEX(idx) WHERE k IN(X'') ORDER BY id;
+id
+1
+SELECT id FROM empty_binary_literal IGNORE INDEX(idx) WHERE k IN(X'') ORDER BY id;
+id
+1
+SELECT id FROM empty_binary_literal FORCE INDEX(idx) WHERE k IN(X'',X'41') ORDER BY id;
+id
+1
+2
+SELECT id FROM empty_binary_literal IGNORE INDEX(idx) WHERE k IN(X'',X'41') ORDER BY id;
+id
+1
+2
+SELECT id FROM empty_binary_literal WHERE k IN(X'41',X'') ORDER BY id;
+id
+1
+2
+SELECT id FROM empty_binary_literal WHERE k IN(B'') ORDER BY id;
+id
+1
+SELECT id FROM empty_binary_literal WHERE k=X'' ORDER BY id;
+id
+1
+SELECT id FROM empty_binary_literal WHERE k<>X'' ORDER BY id;
+id
+2
+3
+SELECT id FROM empty_binary_literal WHERE k<=>X'' ORDER BY id;
+id
+1
+SELECT LENGTH(k) AS len,COUNT(*) AS n FROM empty_binary_literal GROUP BY k ORDER BY X'',len;
+len	n
+NULL	1
+0	1
+1	1
+1	1
+literal_and_parameter_plan_reuse
+SELECT HEX(X'41'),LENGTH(X'');
+HEX(X'41')	LENGTH(X'')
+41	0
+SELECT HEX(X''),LENGTH(X'4142');
+HEX(X'')	LENGTH(X'4142')
+	2
+SELECT HEX(X'41'),LENGTH(X'');
+HEX(X'41')	LENGTH(X'')
+41	0
+PREPARE empty_literal_ps FROM 'SELECT LENGTH(X'''') AS literal_len,id FROM empty_binary_literal WHERE k IN(X'''',?) ORDER BY id';
+SET @k=X'41';
+EXECUTE empty_literal_ps USING @k;
+literal_len	id
+0	1
+0	2
+SET @k=X'00';
+EXECUTE empty_literal_ps USING @k;
+literal_len	id
+0	1
+0	3
+SET @k=X'';
+EXECUTE empty_literal_ps USING @k;
+literal_len	id
+0	1
+DEALLOCATE PREPARE empty_literal_ps;
+DROP TABLE empty_binary_literal;

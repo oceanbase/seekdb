@@ -1,0 +1,42 @@
+fullscan_zero_hop_and_cycle_through_empty_key
+SELECT HEX(source) AS source,HEX(destination) AS destination,hops FROM GRAPH_TABLE(geb_graph MATCH (a IS node WHERE a.id IN(X''))-[e IS link WHERE e.kind IN(X'')]->{0,2}(b IS node) COLUMNS(a.id AS source,b.id AS destination,COUNT(e.edge_id) AS hops)) g ORDER BY hops,destination;
+source	destination	hops
+		0
+	41	1
+		2
+indexed_expansion_keeps_empty_edge_filter
+CREATE INDEX geb_out ON geb_e(src,kind,dst);
+SELECT HEX(source) AS source,HEX(destination) AS destination,hops FROM GRAPH_TABLE(geb_graph MATCH (a IS node WHERE a.id IN(X''))-[e IS link WHERE e.kind IN(X'')]->{0,2}(b IS node) COLUMNS(a.id AS source,b.id AS destination,COUNT(e.edge_id) AS hops)) g ORDER BY hops,destination;
+source	destination	hops
+		0
+	41	1
+		2
+fixed_join_uses_the_same_empty_literal_semantics
+SELECT HEX(source) AS source,HEX(destination) AS destination FROM GRAPH_TABLE(geb_graph MATCH
+(a IS node WHERE a.id IN(X''))-[e IS link WHERE e.kind IN(X'')]->(b IS node)
+COLUMNS(a.id AS source,b.id AS destination)) g;
+source	destination
+	41
+prepared_seed_rescan_preserves_empty_binary_identity
+PREPARE geb_ps FROM 'SELECT HEX(destination) AS destination,hops FROM GRAPH_TABLE(geb_graph MATCH (a IS node WHERE a.id=?)-[e IS link WHERE e.kind IN(X'''')]->{0,2}(b IS node) COLUMNS(b.id AS destination,COUNT(e.edge_id) AS hops)) g ORDER BY hops,destination';
+SET @seed=X'';
+EXECUTE geb_ps USING @seed;
+destination	hops
+	0
+41	1
+	2
+SET @seed=X'41';
+EXECUTE geb_ps USING @seed;
+destination	hops
+41	0
+	1
+41	2
+SET @seed=X'';
+EXECUTE geb_ps USING @seed;
+destination	hops
+	0
+41	1
+	2
+DEALLOCATE PREPARE geb_ps;
+DROP PROPERTY GRAPH geb_graph;
+DROP TABLE geb_e,geb_v;

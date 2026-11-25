@@ -1,0 +1,68 @@
+--disable_query_log
+CREATE TABLE gbi_v(k VARBINARY(512) PRIMARY KEY);
+CREATE TABLE gbi_e(tenant INT, k VARBINARY(512), src VARBINARY(512), dst VARBINARY(512), PRIMARY KEY(tenant,k));
+INSERT INTO gbi_v VALUES(X''),(X'00'),(X'FF'),(X'FF00'),(X'610062'),(REPEAT(X'FF',512));
+INSERT INTO gbi_e SELECT 1,k,k,k FROM gbi_v;
+CREATE PROPERTY GRAPH gbi
+VERTEX TABLES(gbi_v KEY(k) LABEL node PROPERTIES(k))
+EDGE TABLES(gbi_e KEY(tenant,k) SOURCE KEY(src) REFERENCES gbi_v(k)
+DESTINATION KEY(dst) REFERENCES gbi_v(k) LABEL link PROPERTIES(tenant,k));
+--echo one_hop_identity_roundtrip
+SELECT COUNT(*) AS rows_checked,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(vi,'$.KEY_VALUE.k'))=HEX(k)) AS encoded,
+ SUM(UNHEX(JSON_UNQUOTE(JSON_EXTRACT(ei,'$.KEY_VALUE.k')))=k) AS decoded,
+ SUM(JSON_EXTRACT(ei,'$.KEY_VALUE.tenant')=1) AS tenants
+FROM GRAPH_TABLE(gbi MATCH (a IS node)-[e IS link]->{1}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(v1.k AS k,VERTEX_ID(v1) AS vi,EDGE_ID(se) AS ei)) g;
+--echo zero_hop_identity_roundtrip
+SELECT COUNT(*) AS rows_checked,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(vi,'$.KEY_VALUE.k'))=HEX(k)) AS encoded
+FROM GRAPH_TABLE(gbi MATCH (a IS node)-[e IS link]->{0}(b IS node)
+COLUMNS(a.k AS k,VERTEX_ID(b) AS vi)) g;
+--echo path_array_identity_roundtrip
+SELECT COUNT(*) AS rows_checked,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(ids,'$[0].KEY_VALUE.k'))=HEX(k)) AS first_edge,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(ids,'$[1].KEY_VALUE.k'))=HEX(k)) AS second_edge
+FROM GRAPH_TABLE(gbi MATCH (a IS node)-[e IS link]->{2}(b IS node)
+COLUMNS(a.k AS k,JSON_ARRAYAGG(EDGE_ID(e)) AS ids)) g;
+--echo step_identity_roundtrip_and_nulls
+SELECT COUNT(*) AS rows_checked,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(vi,'$.KEY_VALUE.k'))=HEX(k)) AS encoded,
+ SUM(ei IS NULL AND vj IS NULL) AS zero_hops,
+ SUM(UNHEX(JSON_UNQUOTE(JSON_EXTRACT(ei,'$.KEY_VALUE.k')))=k) AS edge_roundtrips
+FROM GRAPH_TABLE(gbi MATCH (a IS node)-[e IS link]->{0,2}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(v1.k AS k,VERTEX_ID(v1) AS vi,EDGE_ID(se) AS ei,VERTEX_ID(v2) AS vj)) g;
+--echo raw_json_text
+SELECT vi FROM GRAPH_TABLE(gbi MATCH (a IS node WHERE a.k=X'FF00')-[e IS link]->{0}(b IS node)
+COLUMNS(VERTEX_ID(a) AS vi)) g;
+DROP PROPERTY GRAPH gbi;
+DROP TABLE gbi_e,gbi_v;
+
+# Fixed BINARY padding is significant; utf8mb4_bin text is still text.
+# The same key in different element mappings must keep distinct identities.
+CREATE TABLE gbi_v(k BINARY(4), txt VARCHAR(8) COLLATE utf8mb4_bin, PRIMARY KEY(k,txt));
+CREATE TABLE gbi_other LIKE gbi_v;
+CREATE TABLE gbi_e(k BINARY(4) PRIMARY KEY, src BINARY(4), st VARCHAR(8) COLLATE utf8mb4_bin,
+ dst BINARY(4), dt VARCHAR(8) COLLATE utf8mb4_bin);
+INSERT INTO gbi_v VALUES(X'FF','FF'),(X'00','00');
+INSERT INTO gbi_other SELECT * FROM gbi_v;
+INSERT INTO gbi_e SELECT k,k,txt,k,txt FROM gbi_v;
+CREATE PROPERTY GRAPH gbi
+VERTEX TABLES(gbi_v KEY(k,txt) LABEL node PROPERTIES(k,txt),
+gbi_other KEY(k,txt) LABEL other PROPERTIES(k,txt))
+EDGE TABLES(gbi_e KEY(k) SOURCE KEY(src,st) REFERENCES gbi_v(k,txt)
+DESTINATION KEY(dst,dt) REFERENCES gbi_other(k,txt) LABEL link PROPERTIES(k));
+--echo composite_keys_padding_text_and_mapping_identity
+SELECT COUNT(*) AS rows_checked,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(vi,'$.KEY_VALUE.k'))=HEX(k)) AS binary_encoded,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(vi,'$.KEY_VALUE.txt'))=txt) AS text_unchanged,
+ SUM(UNHEX(JSON_UNQUOTE(JSON_EXTRACT(ei,'$.KEY_VALUE.k')))=k) AS edge_roundtrips,
+ SUM(JSON_EXTRACT(vi,'$.KEY_VALUE')=JSON_EXTRACT(vj,'$.KEY_VALUE')) AS same_keys,
+ SUM(JSON_EXTRACT(vi,'$.ELEM_TABLE')<>JSON_EXTRACT(vj,'$.ELEM_TABLE')) AS distinct_mappings
+FROM GRAPH_TABLE(gbi MATCH (a IS node)-[e IS link]->{1}(b IS other)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(v1.k AS k,v1.txt AS txt,VERTEX_ID(v1) AS vi,EDGE_ID(se) AS ei,VERTEX_ID(v2) AS vj)) g;
+DROP PROPERTY GRAPH gbi;
+DROP TABLE gbi_e,gbi_other,gbi_v;

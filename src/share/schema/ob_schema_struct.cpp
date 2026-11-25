@@ -6726,6 +6726,8 @@ const char *schema_type_str(const ObSchemaType schema_type)
     str = "outline_schema";
   } else if (FK_SCHEMA == schema_type) {
     str = "fk_schema";
+  } else if (PROPERTY_GRAPH_SCHEMA == schema_type) {
+    str = "property_graph_schema";
   }
   return str;
 }
@@ -6743,6 +6745,7 @@ bool is_normal_schema(const ObSchemaType schema_type)
       schema_type == SYS_VARIABLE_SCHEMA ||
       schema_type == TABLE_SIMPLE_SCHEMA ||
       schema_type == MOCK_FK_PARENT_TABLE_SCHEMA ||
+      schema_type == PROPERTY_GRAPH_SCHEMA ||
       false;
 }
 

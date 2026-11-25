@@ -1,0 +1,141 @@
+SELECT COUNT(*) AS narrow_topn FROM plan_table WHERE statement_id='path_rank'
+  AND operator='TOP-N SORT' AND projection NOT LIKE '%body%';
+narrow_topn
+1
+SELECT COUNT(*) AS native_paths FROM plan_table WHERE statement_id='path_rank'
+  AND special_predicates LIKE '%runtime=native%';
+native_paths
+1
+SELECT COUNT(*) AS lazy_property_gets FROM plan_table WHERE statement_id='path_rank'
+  AND object_alias LIKE '__g_result_%' AND operator='TABLE GET';
+lazy_property_gets
+2
+SELECT id,LENGTH(source_body) AS source_bytes,LENGTH(body) AS bytes FROM GRAPH_TABLE(gl_graph MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node)
+COLUMNS(a.body AS source_body,b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT 6;
+id	source_bytes	bytes
+10000	1024	1024
+10000	1024	1024
+9999	1024	NULL
+9999	1024	NULL
+9998	1024	1024
+9998	1024	1024
+endpoint_filter_runs_before_limit
+SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1,2}(b IS node WHERE b.active=0)
+COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g ORDER BY id DESC LIMIT 6;
+id	active
+9999	0
+9999	0
+9997	0
+9997	0
+9995	0
+9995	0
+outer_property_filter_runs_before_limit
+SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1,2}(b IS node)
+COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g WHERE active=0 ORDER BY id DESC LIMIT 6;
+id	active
+9999	0
+9999	0
+9997	0
+9997	0
+9995	0
+9995	0
+ranking_property_is_not_deferred
+SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1,2}(b IS node)
+COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g ORDER BY active,id DESC LIMIT 6;
+id	active
+9999	0
+9999	0
+9997	0
+9997	0
+9995	0
+9995	0
+SELECT COUNT(*) AS missing_or_changed FROM gl_expected e LEFT JOIN gl_actual a ON a.id=e.id
+WHERE a.id IS NULL OR NOT(a.body<=>e.body) OR a.paths<>e.paths;
+missing_or_changed
+0
+SELECT COUNT(*) AS unexpected FROM gl_actual a LEFT JOIN gl_expected e ON a.id=e.id WHERE e.id IS NULL;
+unexpected
+0
+SELECT COUNT(*) AS narrow_topn FROM plan_table WHERE statement_id='path_rank'
+  AND operator='TOP-N SORT' AND projection NOT LIKE '%body%';
+narrow_topn
+1
+SELECT COUNT(*) AS native_paths FROM plan_table WHERE statement_id='path_rank'
+  AND special_predicates LIKE '%runtime=native%';
+native_paths
+1
+SELECT COUNT(*) AS lazy_property_gets FROM plan_table WHERE statement_id='path_rank'
+  AND object_alias LIKE '__g_result_%' AND operator='TABLE GET';
+lazy_property_gets
+2
+SELECT id,LENGTH(source_body) AS source_bytes,LENGTH(body) AS bytes FROM GRAPH_TABLE(gl_graph MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node)
+COLUMNS(a.body AS source_body,b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT 6;
+id	source_bytes	bytes
+10000	1024	1024
+10000	1024	1024
+9999	1024	NULL
+9999	1024	NULL
+9998	1024	1024
+9998	1024	1024
+endpoint_filter_runs_before_limit
+SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1,2}(b IS node WHERE b.active=0)
+COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g ORDER BY id DESC LIMIT 6;
+id	active
+9999	0
+9999	0
+9997	0
+9997	0
+9995	0
+9995	0
+outer_property_filter_runs_before_limit
+SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1,2}(b IS node)
+COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g WHERE active=0 ORDER BY id DESC LIMIT 6;
+id	active
+9999	0
+9999	0
+9997	0
+9997	0
+9995	0
+9995	0
+ranking_property_is_not_deferred
+SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1,2}(b IS node)
+COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g ORDER BY active,id DESC LIMIT 6;
+id	active
+9999	0
+9999	0
+9997	0
+9997	0
+9995	0
+9995	0
+SELECT COUNT(*) AS missing_or_changed FROM gl_expected e LEFT JOIN gl_actual a ON a.id=e.id
+WHERE a.id IS NULL OR NOT(a.body<=>e.body) OR a.paths<>e.paths;
+missing_or_changed
+0
+SELECT COUNT(*) AS unexpected FROM gl_actual a LEFT JOIN gl_expected e ON a.id=e.id WHERE e.id IS NULL;
+unexpected
+0
+PREPARE gl_cached FROM 'SELECT id,LENGTH(body) AS bytes FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=?)-[e IS link]->{0,2}(b IS node) COLUMNS(b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT ? OFFSET ?';
+SET @seed=1,@lim=3,@off=1;
+EXECUTE gl_cached USING @seed,@lim,@off;
+id	bytes
+10000	1024
+9999	NULL
+9999	NULL
+SET @seed=10000,@off=0;
+EXECUTE gl_cached USING @seed,@lim,@off;
+id	bytes
+10000	1024
+SET @seed=20000;
+EXECUTE gl_cached USING @seed,@lim,@off;
+id	bytes
+DEALLOCATE PREPARE gl_cached;
+DROP PROPERTY GRAPH gl_graph;
+DROP TABLE gl_v,gl_e,gl_digit,plan_table;

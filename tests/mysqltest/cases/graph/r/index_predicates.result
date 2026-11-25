@@ -1,0 +1,281 @@
+CREATE TABLE graph_ip_vertex (id INT PRIMARY KEY);
+CREATE TABLE graph_ip_edge (
+id INT PRIMARY KEY, src INT, dst INT, kind VARCHAR(16), tenant INT,
+valid_from INT, valid_until INT, enabled INT
+);
+INSERT INTO graph_ip_vertex VALUES (1),(2),(3),(4),(7),(8);
+INSERT INTO graph_ip_edge VALUES
+(1,1,2,'EVOLVES',1,0,NULL,1),
+(2,1,2,'EVOLVES',1,0,NULL,1),
+(3,2,3,'EVOLVES',1,10,11,1),
+(4,3,4,'EVOLVES',1,0,NULL,1),
+(5,7,8,'EVOLVES',1,0,NULL,1),
+(10,1,7,'OTHER',1,0,NULL,1),
+(11,2,7,'OTHER',1,0,NULL,1),
+(12,1,7,'EVOLVES',2,0,NULL,1),
+(13,2,7,'EVOLVES',2,0,NULL,1),
+(14,1,7,'EVOLVES',1,11,NULL,1),
+(15,2,7,'EVOLVES',1,11,NULL,1),
+(16,1,7,'EVOLVES',1,0,10,1),
+(17,2,7,'EVOLVES',1,0,10,1),
+(18,1,7,NULL,1,0,NULL,1),
+(19,2,7,'EVOLVES',1,0,NULL,0),
+(20,7,4,'OTHER',1,0,NULL,1),
+(21,7,3,'EVOLVES',2,0,NULL,1),
+(22,7,2,'EVOLVES',1,11,NULL,1);
+CREATE TABLE graph_ip_digit (d INT PRIMARY KEY);
+INSERT INTO graph_ip_digit VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+INSERT INTO graph_ip_edge
+SELECT 100+x.d+10*y.d+100*z.d,8,8,'OTHER',2,0,NULL,0
+FROM graph_ip_digit x,graph_ip_digit y,graph_ip_digit z;
+CREATE PROPERTY GRAPH graph_index_predicates
+VERTEX TABLES (graph_ip_vertex KEY (id) LABEL node PROPERTIES (id))
+EDGE TABLES (graph_ip_edge KEY (id)
+SOURCE KEY (src) REFERENCES graph_ip_vertex (id)
+DESTINATION KEY (dst) REFERENCES graph_ip_vertex (id)
+LABEL link PROPERTIES (id,kind,tenant,valid_from,valid_until,enabled));
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='index_predicates'
+  SELECT * FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=1)
+-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]->{0,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS uses_native_runtime FROM plan_table
+WHERE statement_id='index_predicates' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+uses_native_runtime
+1
+SELECT destination,hops,COUNT(*) AS multiplicity
+FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=1)
+-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]->{0,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
+GROUP BY destination,hops ORDER BY hops,destination;
+destination	hops	multiplicity
+1	0	1
+2	1	2
+3	2	2
+4	3	2
+SELECT destination,hops,COUNT(*) AS multiplicity
+FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=4)
+<-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]-{1,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
+GROUP BY destination,hops ORDER BY hops,destination;
+destination	hops	multiplicity
+3	1	1
+2	2	1
+1	3	2
+PREPARE graph_ip_query FROM
+'SELECT destination,hops,COUNT(*) AS multiplicity FROM GRAPH_TABLE(graph_index_predicates MATCH (a IS node WHERE a.id=?) -[e IS link WHERE e.kind=? AND e.tenant=? AND e.valid_from<=? AND (e.valid_until IS NULL OR e.valid_until>?) AND e.enabled=1]->{1,3}(b IS node) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g GROUP BY destination,hops ORDER BY hops,destination';
+SET @seed=1,@kind='EVOLVES',@tenant=1,@at=10;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+2	1	2
+3	2	2
+4	3	2
+SET @tenant=2;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+7	1	1
+3	2	1
+SET @tenant=1,@at=9;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+2	1	2
+7	1	1
+7	2	2
+8	2	1
+8	3	2
+DEALLOCATE PREPARE graph_ip_query;
+CREATE INDEX graph_ip_out ON graph_ip_edge(src,kind,tenant,valid_from,dst,valid_until,enabled);
+CREATE INDEX graph_ip_in ON graph_ip_edge(dst,kind,tenant,valid_from,src,valid_until,enabled);
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='index_predicates'
+  SELECT * FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=1)
+-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]->{0,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS uses_native_runtime FROM plan_table
+WHERE statement_id='index_predicates' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+uses_native_runtime
+1
+SELECT COUNT(*)=1 AS uses_filtered_index_range FROM plan_table
+WHERE statement_id='index_predicates'
+      AND operator='TABLE RANGE SCAN'
+      AND object_alias='__g_step_edge(graph_ip_out)'
+      AND special_predicates LIKE '%range_cond%kind%';
+uses_filtered_index_range
+1
+SELECT destination,hops,COUNT(*) AS multiplicity
+FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=1)
+-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]->{0,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
+GROUP BY destination,hops ORDER BY hops,destination;
+destination	hops	multiplicity
+1	0	1
+2	1	2
+3	2	2
+4	3	2
+SELECT destination,hops,COUNT(*) AS multiplicity
+FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=4)
+<-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]-{1,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
+GROUP BY destination,hops ORDER BY hops,destination;
+destination	hops	multiplicity
+3	1	1
+2	2	1
+1	3	2
+PREPARE graph_ip_query FROM
+'SELECT destination,hops,COUNT(*) AS multiplicity FROM GRAPH_TABLE(graph_index_predicates MATCH (a IS node WHERE a.id=?) -[e IS link WHERE e.kind=? AND e.tenant=? AND e.valid_from<=? AND (e.valid_until IS NULL OR e.valid_until>?) AND e.enabled=1]->{1,3}(b IS node) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g GROUP BY destination,hops ORDER BY hops,destination';
+SET @seed=1,@kind='EVOLVES',@tenant=1,@at=10;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+2	1	2
+3	2	2
+4	3	2
+SET @tenant=2;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+7	1	1
+3	2	1
+SET @tenant=1,@at=9;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+2	1	2
+7	1	1
+7	2	2
+8	2	1
+8	3	2
+DEALLOCATE PREPARE graph_ip_query;
+DROP INDEX graph_ip_out ON graph_ip_edge;
+DROP INDEX graph_ip_in ON graph_ip_edge;
+CREATE INDEX graph_ip_out ON graph_ip_edge(src,kind,tenant,valid_from,dst);
+CREATE INDEX graph_ip_in ON graph_ip_edge(dst,kind,tenant,valid_from,src);
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='index_predicates'
+  SELECT * FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=1)
+-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]->{0,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS uses_native_runtime FROM plan_table
+WHERE statement_id='index_predicates' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+uses_native_runtime
+1
+SELECT COUNT(*)=1 AS uses_filtered_index_range FROM plan_table
+WHERE statement_id='index_predicates'
+      AND operator='TABLE RANGE SCAN'
+      AND object_alias='__g_step_edge(graph_ip_out)'
+      AND special_predicates LIKE '%range_cond%kind%';
+uses_filtered_index_range
+1
+SELECT destination,hops,COUNT(*) AS multiplicity
+FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=1)
+-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]->{0,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
+GROUP BY destination,hops ORDER BY hops,destination;
+destination	hops	multiplicity
+1	0	1
+2	1	2
+3	2	2
+4	3	2
+SELECT destination,hops,COUNT(*) AS multiplicity
+FROM GRAPH_TABLE(graph_index_predicates MATCH
+(a IS node WHERE a.id=4)
+<-[e IS link WHERE e.kind='EVOLVES' AND e.tenant=1
+AND e.valid_from<=10 AND (e.valid_until IS NULL OR e.valid_until>10)
+AND e.enabled=1]-{1,3}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
+GROUP BY destination,hops ORDER BY hops,destination;
+destination	hops	multiplicity
+3	1	1
+2	2	1
+1	3	2
+PREPARE graph_ip_query FROM
+'SELECT destination,hops,COUNT(*) AS multiplicity FROM GRAPH_TABLE(graph_index_predicates MATCH (a IS node WHERE a.id=?) -[e IS link WHERE e.kind=? AND e.tenant=? AND e.valid_from<=? AND (e.valid_until IS NULL OR e.valid_until>?) AND e.enabled=1]->{1,3}(b IS node) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g GROUP BY destination,hops ORDER BY hops,destination';
+SET @seed=1,@kind='EVOLVES',@tenant=1,@at=10;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+2	1	2
+3	2	2
+4	3	2
+SET @tenant=2;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+7	1	1
+3	2	1
+SET @tenant=1,@at=9;
+EXECUTE graph_ip_query USING @seed,@kind,@tenant,@at,@at;
+destination	hops	multiplicity
+2	1	2
+7	1	1
+7	2	2
+8	2	1
+8	3	2
+DEALLOCATE PREPARE graph_ip_query;
+DROP PROPERTY GRAPH graph_index_predicates;
+DROP TABLE graph_ip_edge,graph_ip_vertex,graph_ip_digit;

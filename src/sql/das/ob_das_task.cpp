@@ -206,6 +206,26 @@ int DASOpResultIter::get_next_row()
   return ret;
 }
 
+int DASOpResultIter::get_next_rows(int64_t &count, int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  count = 0;
+  if (OB_UNLIKELY(capacity <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!task_iter_.is_end()) {
+    ObDASScanOp *scan_op = DAS_SCAN_OP(*task_iter_);
+    if (OB_ISNULL(scan_op) || OB_ISNULL(scan_op->get_output_result_iter())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected das task scan result", K(ret), KPC(*task_iter_));
+    } else {
+      ret = scan_op->get_output_result_iter()->get_next_rows(count, capacity);
+    }
+  } else {
+    ret = OB_ITER_END;
+  }
+  return ret;
+}
+
 
 int DASOpResultIter::next_result()
 {

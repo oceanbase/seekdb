@@ -2274,6 +2274,22 @@ typedef enum ObItemType
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
   T_FLUSH_PRIVILEGES = 4920,
+  T_CREATE_PROPERTY_GRAPH = 4921,
+  T_DROP_PROPERTY_GRAPH = 4922,
+  T_SHOW_CREATE_PROPERTY_GRAPH = 4923,
+  T_GRAPH_ELEMENT_LIST = 4924,
+  T_GRAPH_VERTEX = 4925,
+  T_GRAPH_EDGE = 4926,
+  T_GRAPH_TABLE = 4927,
+  T_GRAPH_PATTERN = 4928,
+  T_GRAPH_NODE_PATTERN = 4929,
+  T_GRAPH_EDGE_PATTERN = 4930,
+  T_GRAPH_QUANTIFIER = 4931,
+  T_GRAPH_TABLE_SHAPE = 4932,
+  T_GRAPH_PATH_MODE = 4933,
+  // Internal-only parse node emitted by the GRAPH_TABLE resolver. It keeps
+  // bounded WALK feedback loops distinguishable from user recursive CTEs.
+  T_GRAPH_FEEDBACK_LOOP = 4934,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

@@ -1,0 +1,239 @@
+graph_metadata_shapes
+SET NAMES utf8mb4;
+SELECT COUNT(*) AS graphs_before FROM information_schema.PROPERTY_GRAPHS WHERE GRAPH_SCHEMA=DATABASE();
+graphs_before
+0
+CREATE TABLE meta_person(
+tenant INT, id BIGINT UNSIGNED,
+`na``me` VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
+amount DECIMAL(12,3), rating DOUBLE, happened DATETIME(6),
+code VARBINARY(8), attrs JSON, status ENUM('new','done'), body TEXT,
+PRIMARY KEY(tenant,id));
+CREATE TABLE meta_edge(
+tenant INT,id BIGINT UNSIGNED,src_tenant INT,src BIGINT UNSIGNED,
+dst_tenant INT,dst BIGINT UNSIGNED,weight FLOAT,
+PRIMARY KEY(tenant,id));
+CREATE PROPERTY GRAPH meta_graph
+VERTEX TABLES(meta_person KEY(tenant,id) LABEL person PROPERTIES(tenant,id,`na``me`,amount,rating,happened,code,attrs,status,body))
+EDGE TABLES(meta_edge KEY(tenant,id)
+SOURCE KEY(src_tenant,src) REFERENCES meta_person(tenant,id)
+DESTINATION KEY(dst_tenant,dst) REFERENCES meta_person(tenant,id)
+LABEL knows PROPERTIES(id,weight));
+SELECT * FROM information_schema.PROPERTY_GRAPHS
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta_graph' ORDER BY GRAPH_NAME;
+GRAPH_SCHEMA	GRAPH_NAME
+test	meta_graph
+SELECT * FROM information_schema.PROPERTY_GRAPH_ELEMENTS
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta_graph' ORDER BY ELEMENT_NAME;
+GRAPH_SCHEMA	GRAPH_NAME	ELEMENT_NAME	ELEMENT_KIND	OBJECT_SCHEMA	OBJECT_NAME	OBJECT_TYPE
+test	meta_graph	meta_edge	EDGE	test	meta_edge	BASE TABLE
+test	meta_graph	meta_person	VERTEX	test	meta_person	BASE TABLE
+SELECT * FROM information_schema.PROPERTY_GRAPH_KEYS
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta_graph' ORDER BY ELEMENT_NAME,ORDINAL_POSITION;
+GRAPH_SCHEMA	GRAPH_NAME	ELEMENT_NAME	ORDINAL_POSITION	COLUMN_NAME
+test	meta_graph	meta_edge	1	tenant
+test	meta_graph	meta_edge	2	id
+test	meta_graph	meta_person	1	tenant
+test	meta_graph	meta_person	2	id
+SELECT * FROM information_schema.PROPERTY_GRAPH_EDGE_RELATIONSHIPS
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta_graph' ORDER BY EDGE_ELEMENT_NAME,ENDPOINT_TYPE,ORDINAL_POSITION;
+GRAPH_SCHEMA	GRAPH_NAME	EDGE_ELEMENT_NAME	ENDPOINT_TYPE	VERTEX_ELEMENT_NAME	ORDINAL_POSITION	EDGE_COLUMN_NAME	VERTEX_COLUMN_NAME
+test	meta_graph	meta_edge	DESTINATION	meta_person	1	dst_tenant	tenant
+test	meta_graph	meta_edge	DESTINATION	meta_person	2	dst	id
+test	meta_graph	meta_edge	SOURCE	meta_person	1	src_tenant	tenant
+test	meta_graph	meta_edge	SOURCE	meta_person	2	src	id
+SELECT * FROM information_schema.PROPERTY_GRAPH_LABELS
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta_graph' ORDER BY LABEL_NAME;
+GRAPH_SCHEMA	GRAPH_NAME	LABEL_NAME
+test	meta_graph	knows
+test	meta_graph	person
+SELECT * FROM information_schema.PROPERTY_GRAPH_ELEMENT_LABELS
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta_graph' ORDER BY ELEMENT_NAME,LABEL_NAME;
+GRAPH_SCHEMA	GRAPH_NAME	ELEMENT_NAME	LABEL_NAME
+test	meta_graph	meta_edge	knows
+test	meta_graph	meta_person	person
+SELECT * FROM information_schema.PROPERTY_GRAPH_LABEL_PROPERTIES
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta_graph' ORDER BY LABEL_NAME,ORDINAL_POSITION;
+GRAPH_SCHEMA	GRAPH_NAME	LABEL_NAME	PROPERTY_NAME	ORDINAL_POSITION	DATA_TYPE	COLUMN_TYPE	CHARACTER_MAXIMUM_LENGTH	CHARACTER_OCTET_LENGTH	NUMERIC_PRECISION	NUMERIC_SCALE	DATETIME_PRECISION	CHARACTER_SET_NAME	COLLATION_NAME
+test	meta_graph	knows	id	1	bigint	bigint(20) unsigned	NULL	NULL	20	0	NULL	NULL	NULL
+test	meta_graph	knows	weight	2	float	float	NULL	NULL	12	NULL	NULL	NULL	NULL
+test	meta_graph	person	tenant	1	int	int(11)	NULL	NULL	11	0	NULL	NULL	NULL
+test	meta_graph	person	id	2	bigint	bigint(20) unsigned	NULL	NULL	20	0	NULL	NULL	NULL
+test	meta_graph	person	na`me	3	varchar	varchar(40)	40	160	NULL	NULL	NULL	utf8mb4	utf8mb4_bin
+test	meta_graph	person	amount	4	decimal	decimal(12,3)	NULL	NULL	12	3	NULL	NULL	NULL
+test	meta_graph	person	rating	5	double	double	NULL	NULL	22	NULL	NULL	NULL	NULL
+test	meta_graph	person	happened	6	datetime	datetime(6)	NULL	NULL	NULL	NULL	6	NULL	NULL
+test	meta_graph	person	code	7	varbinary	varbinary(8)	8	8	NULL	NULL	NULL	NULL	NULL
+test	meta_graph	person	attrs	8	json	json	536870911	536870911	NULL	NULL	NULL	NULL	NULL
+test	meta_graph	person	status	9	enum	enum('new','done')	NULL	NULL	NULL	NULL	NULL	utf8mb4	utf8mb4_general_ci
+test	meta_graph	person	body	10	text	text	65535	65535	NULL	NULL	NULL	utf8mb4	utf8mb4_general_ci
+SELECT * FROM information_schema.PROPERTY_GRAPH_PROPERTY_DEFINITIONS
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta_graph' ORDER BY ELEMENT_NAME,PROPERTY_NAME;
+GRAPH_SCHEMA	GRAPH_NAME	ELEMENT_NAME	PROPERTY_NAME	COLUMN_NAME	VALUE_EXPRESSION	DATA_TYPE	COLUMN_TYPE	IS_NULLABLE
+test	meta_graph	meta_edge	id	id	`id`	bigint	bigint(20) unsigned	NO
+test	meta_graph	meta_edge	weight	weight	`weight`	float	float	YES
+test	meta_graph	meta_person	amount	amount	`amount`	decimal	decimal(12,3)	YES
+test	meta_graph	meta_person	attrs	attrs	`attrs`	json	json	YES
+test	meta_graph	meta_person	body	body	`body`	text	text	YES
+test	meta_graph	meta_person	code	code	`code`	varbinary	varbinary(8)	YES
+test	meta_graph	meta_person	happened	happened	`happened`	datetime	datetime(6)	YES
+test	meta_graph	meta_person	id	id	`id`	bigint	bigint(20) unsigned	NO
+test	meta_graph	meta_person	na`me	na`me	`na``me`	varchar	varchar(40)	YES
+test	meta_graph	meta_person	rating	rating	`rating`	double	double	YES
+test	meta_graph	meta_person	status	status	`status`	enum	enum('new','done')	YES
+test	meta_graph	meta_person	tenant	tenant	`tenant`	int	int(11)	NO
+graph_metadata_type_parity
+SELECT COUNT(*) AS properties_checked,
+SUM(p.DATA_TYPE <=> c.DATA_TYPE) AS data_types,
+SUM(p.COLUMN_TYPE <=> c.COLUMN_TYPE) AS column_types,
+SUM(p.CHARACTER_MAXIMUM_LENGTH <=> c.CHARACTER_MAXIMUM_LENGTH) AS char_lengths,
+SUM(p.CHARACTER_OCTET_LENGTH <=> c.CHARACTER_OCTET_LENGTH) AS byte_lengths,
+SUM(p.NUMERIC_PRECISION <=> c.NUMERIC_PRECISION) AS precisions,
+SUM(p.NUMERIC_SCALE <=> c.NUMERIC_SCALE) AS scales,
+SUM(p.DATETIME_PRECISION <=> c.DATETIME_PRECISION) AS datetime_precisions,
+SUM(p.CHARACTER_SET_NAME <=> c.CHARACTER_SET_NAME) AS charsets,
+SUM(p.COLLATION_NAME <=> c.COLLATION_NAME) AS collations
+FROM information_schema.PROPERTY_GRAPH_LABEL_PROPERTIES p
+JOIN information_schema.PROPERTY_GRAPH_ELEMENT_LABELS l
+USING(GRAPH_SCHEMA,GRAPH_NAME,LABEL_NAME)
+JOIN information_schema.PROPERTY_GRAPH_ELEMENTS e
+USING(GRAPH_SCHEMA,GRAPH_NAME,ELEMENT_NAME)
+JOIN information_schema.PROPERTY_GRAPH_PROPERTY_DEFINITIONS d
+USING(GRAPH_SCHEMA,GRAPH_NAME,ELEMENT_NAME,PROPERTY_NAME)
+JOIN information_schema.COLUMNS c
+ON c.TABLE_SCHEMA=e.OBJECT_SCHEMA AND c.TABLE_NAME=e.OBJECT_NAME AND c.COLUMN_NAME=d.COLUMN_NAME
+WHERE p.GRAPH_SCHEMA=DATABASE() AND p.GRAPH_NAME='meta_graph';
+properties_checked	data_types	column_types	char_lengths	byte_lengths	precisions	scales	datetime_precisions	charsets	collations
+12	12	12	12	12	12	12	12	12	12
+graph_metadata_filters_and_rescan
+CREATE PROPERTY GRAPH meta_z VERTEX TABLES(meta_person KEY(tenant,id) LABEL other PROPERTIES(id));
+CREATE DATABASE graph_meta_other;
+USE graph_meta_other;
+CREATE TABLE meta_person(id INT PRIMARY KEY);
+CREATE PROPERTY GRAPH meta_graph VERTEX TABLES(meta_person KEY(id) LABEL person PROPERTIES(id));
+USE test;
+SELECT GRAPH_SCHEMA,GRAPH_NAME FROM information_schema.PROPERTY_GRAPHS
+WHERE GRAPH_SCHEMA IN ('test','graph_meta_other') AND GRAPH_NAME='meta_graph' ORDER BY GRAPH_SCHEMA;
+GRAPH_SCHEMA	GRAPH_NAME
+graph_meta_other	meta_graph
+test	meta_graph
+SELECT GRAPH_NAME FROM information_schema.PROPERTY_GRAPHS
+WHERE GRAPH_SCHEMA='test' AND GRAPH_NAME>'meta_graph' AND GRAPH_NAME<='meta_z';
+GRAPH_NAME
+meta_z
+SELECT COUNT(*) AS missing FROM information_schema.PROPERTY_GRAPH_KEYS
+WHERE GRAPH_SCHEMA='missing_database' OR GRAPH_NAME='missing_graph';
+missing
+0
+SELECT GRAPH_NAME FROM information_schema.PROPERTY_GRAPHS
+WHERE GRAPH_SCHEMA='test' AND GRAPH_NAME IN ('meta_graph','meta_z') ORDER BY GRAPH_NAME DESC LIMIT 1;
+GRAPH_NAME
+meta_z
+PREPARE graph_metadata_cached FROM
+'SELECT ELEMENT_NAME FROM information_schema.PROPERTY_GRAPH_ELEMENTS WHERE GRAPH_SCHEMA=? AND GRAPH_NAME=? ORDER BY ELEMENT_NAME';
+SET @db='test',@graph='meta_graph';
+EXECUTE graph_metadata_cached USING @db,@graph;
+ELEMENT_NAME
+meta_edge
+meta_person
+SET @db='graph_meta_other';
+EXECUTE graph_metadata_cached USING @db,@graph;
+ELEMENT_NAME
+meta_person
+SET @db='missing_database';
+EXECUTE graph_metadata_cached USING @db,@graph;
+ELEMENT_NAME
+DEALLOCATE PREPARE graph_metadata_cached;
+graph_metadata_permissions
+CREATE USER graph_meta_reader IDENTIFIED BY 'graph_test';
+GRANT SELECT(id) ON test.meta_person TO graph_meta_reader;
+SELECT COUNT(*) AS visible_rows FROM information_schema.PROPERTY_GRAPHS WHERE GRAPH_NAME='meta_graph';
+visible_rows
+1
+SELECT COUNT(*) AS visible_rows FROM information_schema.PROPERTY_GRAPH_ELEMENTS WHERE GRAPH_NAME='meta_graph';
+visible_rows
+2
+SELECT COUNT(*) AS visible_rows FROM information_schema.PROPERTY_GRAPH_KEYS WHERE GRAPH_NAME='meta_graph';
+visible_rows
+4
+SELECT COUNT(*) AS visible_rows FROM information_schema.PROPERTY_GRAPH_EDGE_RELATIONSHIPS WHERE GRAPH_NAME='meta_graph';
+visible_rows
+4
+SELECT COUNT(*) AS visible_rows FROM information_schema.PROPERTY_GRAPH_LABELS WHERE GRAPH_NAME='meta_graph';
+visible_rows
+2
+SELECT COUNT(*) AS visible_rows FROM information_schema.PROPERTY_GRAPH_ELEMENT_LABELS WHERE GRAPH_NAME='meta_graph';
+visible_rows
+2
+SELECT COUNT(*) AS visible_rows FROM information_schema.PROPERTY_GRAPH_LABEL_PROPERTIES WHERE GRAPH_NAME='meta_graph';
+visible_rows
+12
+SELECT COUNT(*) AS visible_rows FROM information_schema.PROPERTY_GRAPH_PROPERTY_DEFINITIONS WHERE GRAPH_NAME='meta_graph';
+visible_rows
+12
+PREPARE graph_metadata_priv FROM 'SELECT COUNT(*) AS visible_graphs FROM information_schema.PROPERTY_GRAPHS WHERE GRAPH_SCHEMA=?';
+SET @db='test';
+EXECUTE graph_metadata_priv USING @db;
+visible_graphs
+2
+REVOKE SELECT(id) ON test.meta_person FROM graph_meta_reader;
+EXECUTE graph_metadata_priv USING @db;
+visible_graphs
+0
+SELECT COUNT(*) AS hidden_rows FROM information_schema.PROPERTY_GRAPHS;
+hidden_rows
+0
+SELECT COUNT(*) AS hidden_rows FROM information_schema.PROPERTY_GRAPH_ELEMENTS;
+hidden_rows
+0
+SELECT COUNT(*) AS hidden_rows FROM information_schema.PROPERTY_GRAPH_KEYS;
+hidden_rows
+0
+SELECT COUNT(*) AS hidden_rows FROM information_schema.PROPERTY_GRAPH_EDGE_RELATIONSHIPS;
+hidden_rows
+0
+SELECT COUNT(*) AS hidden_rows FROM information_schema.PROPERTY_GRAPH_LABELS;
+hidden_rows
+0
+SELECT COUNT(*) AS hidden_rows FROM information_schema.PROPERTY_GRAPH_ELEMENT_LABELS;
+hidden_rows
+0
+SELECT COUNT(*) AS hidden_rows FROM information_schema.PROPERTY_GRAPH_LABEL_PROPERTIES;
+hidden_rows
+0
+SELECT COUNT(*) AS hidden_rows FROM information_schema.PROPERTY_GRAPH_PROPERTY_DEFINITIONS;
+hidden_rows
+0
+DEALLOCATE PREPARE graph_metadata_priv;
+DROP USER graph_meta_reader;
+graph_metadata_lifecycle
+PREPARE graph_metadata_lifecycle FROM 'SELECT COUNT(*) AS definitions FROM information_schema.PROPERTY_GRAPH_PROPERTY_DEFINITIONS WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME=?';
+SET @graph='meta_z';
+EXECUTE graph_metadata_lifecycle USING @graph;
+definitions
+1
+DROP PROPERTY GRAPH meta_z;
+EXECUTE graph_metadata_lifecycle USING @graph;
+definitions
+0
+CREATE PROPERTY GRAPH meta_z VERTEX TABLES(meta_person KEY(tenant,id) LABEL renamed PROPERTIES(id,amount));
+EXECUTE graph_metadata_lifecycle USING @graph;
+definitions
+2
+DEALLOCATE PREPARE graph_metadata_lifecycle;
+DROP PROPERTY GRAPH meta_z;
+CREATE PROPERTY GRAPH `meta"图` VERTEX TABLES(meta_person KEY(tenant,id) LABEL `人"类` PROPERTIES(id));
+SELECT GRAPH_NAME,LABEL_NAME FROM information_schema.PROPERTY_GRAPH_LABELS
+WHERE GRAPH_SCHEMA=DATABASE() AND GRAPH_NAME='meta"图';
+GRAPH_NAME	LABEL_NAME
+meta"图	人"类
+DROP PROPERTY GRAPH `meta"图`;
+DROP PROPERTY GRAPH meta_graph;
+DROP TABLE meta_edge,meta_person;
+USE graph_meta_other;
+DROP PROPERTY GRAPH meta_graph;
+USE test;
+DROP DATABASE graph_meta_other;
+SELECT COUNT(*) AS graphs_after FROM information_schema.PROPERTY_GRAPHS WHERE GRAPH_SCHEMA=DATABASE();
+graphs_after
+0

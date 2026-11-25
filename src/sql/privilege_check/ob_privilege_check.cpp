@@ -28,6 +28,7 @@
 #include "sql/resolver/ddl/ob_drop_database_stmt.h"
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
+#include "sql/resolver/ddl/graph_ddl_stmt.h"
 #include "sql/resolver/dcl/ob_revoke_stmt.h"
 #include "sql/resolver/dcl/ob_set_password_stmt.h"
 #include "sql/resolver/dml/ob_update_stmt.h"
@@ -440,6 +441,26 @@ int get_alter_table_stmt_need_privs(
         ADD_NEED_PRIV(need_priv);
       }
     }
+  }
+  return ret;
+}
+
+int get_graph_ddl_stmt_need_privs(const ObSessionPrivInfo &session_priv,
+                                  const ObStmt *basic_stmt, ObIArray<ObNeedPriv> &need_privs)
+{
+  UNUSED(session_priv);
+  int ret = OB_SUCCESS;
+  if (basic_stmt == nullptr
+      || (basic_stmt->get_stmt_type() != stmt::T_CREATE_PROPERTY_GRAPH
+          && basic_stmt->get_stmt_type() != stmt::T_DROP_PROPERTY_GRAPH)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const GraphDDLStmt &graph_stmt = *static_cast<const GraphDDLStmt *>(basic_stmt);
+    ObNeedPriv need;
+    need.db_ = graph_stmt.database_name_;
+    need.priv_level_ = OB_PRIV_DB_LEVEL;
+    need.priv_set_ = basic_stmt->get_stmt_type() == stmt::T_CREATE_PROPERTY_GRAPH ? OB_PRIV_CREATE : OB_PRIV_DROP;
+    ret = need_privs.push_back(need);
   }
   return ret;
 }

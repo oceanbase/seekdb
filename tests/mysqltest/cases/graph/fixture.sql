@@ -1,0 +1,10 @@
+CREATE TABLE gp_vertex (tenant BIGINT NOT NULL, id BIGINT NOT NULL, name VARCHAR(32), PRIMARY KEY(tenant,id));
+CREATE TABLE gp_edge (tenant BIGINT NOT NULL, id BIGINT NOT NULL, src_tenant BIGINT, src BIGINT, dst_tenant BIGINT, dst BIGINT, weight BIGINT, PRIMARY KEY(tenant,id), KEY gp_out(src_tenant,src,tenant,id), KEY gp_in(dst_tenant,dst,tenant,id));
+CREATE TABLE gp_company (tenant BIGINT NOT NULL, id BIGINT NOT NULL, name VARCHAR(32), PRIMARY KEY(tenant,id));
+CREATE TABLE gp_works (tenant BIGINT NOT NULL, id BIGINT NOT NULL, src_tenant BIGINT, src BIGINT, dst_tenant BIGINT, dst BIGINT, PRIMARY KEY(tenant,id));
+CREATE TABLE gp_binding (binding_id BIGINT PRIMARY KEY, tenant BIGINT NOT NULL, id BIGINT NOT NULL);
+INSERT INTO gp_vertex VALUES (1,1,'A'),(1,2,'B'),(1,3,'C'),(1,4,NULL),(1,5,'isolated'),(2,1,'D');
+INSERT INTO gp_edge VALUES (1,1,1,1,1,3,1),(1,2,1,1,1,3,2),(1,3,1,2,1,3,1),(1,4,1,3,1,3,1),(1,5,1,1,9,9,1),(1,6,9,9,1,1,1),(1,7,1,3,1,1,1),(1,8,1,4,1,4,1),(1,9,1,1,NULL,NULL,1),(2,1,2,1,1,3,1);
+INSERT INTO gp_company VALUES (1,1,'company-A');
+INSERT INTO gp_works VALUES (1,1,1,1,1,1);
+INSERT INTO gp_binding VALUES (10,1,1),(11,1,1),(12,1,2),(13,2,1),(14,9,9);

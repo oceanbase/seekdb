@@ -200,3 +200,35 @@ delete from fts_table where c3 = 1;
 alter table fts_table add column a1 int auto_increment;
 insert into fts_table(c1,c2,c3,c4) values(1, 1, 101, 'NqJdemuM2u k47fI1Lo6z');
 drop table fts_table;
+create table fts_stored_rebuild (
+id int primary key,
+amount decimal(20,2),
+title varchar(80),
+body text,
+fulltext index title_idx(title) with parser space,
+fulltext index body_idx(body) with parser space,
+key amount_idx(amount)
+) partition by hash(id) partitions 8;
+alter table fts_stored_rebuild add column computed decimal(57,2) generated always as (812.46 + amount) stored;
+insert into fts_stored_rebuild(id, amount, title, body) values
+(1, 10.25, 'alpha database', 'storage engine'),
+(2, null, 'beta database', 'query engine');
+alter table fts_stored_rebuild add column computed_again decimal(57,2) generated always as (813.46 + amount) stored;
+select id, computed, computed_again from fts_stored_rebuild order by id;
+id	computed	computed_again
+1	822.71	823.71
+2	NULL	NULL
+select id from fts_stored_rebuild where match(title) against('alpha') order by id;
+id
+1
+select id from fts_stored_rebuild where match(body) against('query') order by id;
+id
+2
+update fts_stored_rebuild set amount = 20.00, title = 'gamma database' where id = 1;
+select id, computed, computed_again from fts_stored_rebuild where amount = 20.00;
+id	computed	computed_again
+1	832.46	833.46
+select id from fts_stored_rebuild where match(title) against('gamma') order by id;
+id
+1
+drop table fts_stored_rebuild;

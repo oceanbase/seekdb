@@ -1,0 +1,36 @@
+--disable_query_log
+CREATE TABLE gps_digit(n INT PRIMARY KEY);
+INSERT INTO gps_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE gps_v(id INT PRIMARY KEY);
+INSERT INTO gps_v SELECT a.n+10*b.n+100*c.n+1000*d.n+1
+FROM gps_digit a,gps_digit b,gps_digit c,gps_digit d
+WHERE a.n+10*b.n+100*c.n+1000*d.n<4095;
+INSERT INTO gps_v VALUES(5000),(6000);
+CREATE TABLE gps_e(eid INT PRIMARY KEY,src INT,dst INT,note VARCHAR(4096));
+INSERT INTO gps_e SELECT id,id,5000,'' FROM gps_v WHERE id<5000;
+INSERT INTO gps_e VALUES(5000,5000,6000,REPEAT('x',4096)),(5001,5000,6000,REPEAT('y',4096));
+CREATE PROPERTY GRAPH gps
+VERTEX TABLES(gps_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(gps_e KEY(eid) SOURCE KEY(src) REFERENCES gps_v(id)
+DESTINATION KEY(dst) REFERENCES gps_v(id) LABEL link PROPERTIES(eid,note));
+# Every seed retains its own path. Only identical immutable edge payload bytes
+# can be shared; the two parallel edges must retain their different payloads.
+--echo repeated_edge_payload_preserves_paths_full_and_index
+--let $passes=2
+while ($passes)
+{
+ SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+ SUM(JSON_EXTRACT(ids,'$[0]')=seed) AS distinct_histories,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(notes,'$[0]'))='') AS empty_first,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(notes,'$[1]'))=REPEAT('x',4096)) AS x_paths,
+ SUM(JSON_UNQUOTE(JSON_EXTRACT(notes,'$[1]'))=REPEAT('y',4096)) AS y_paths
+ FROM GRAPH_TABLE(gps MATCH (a IS node WHERE a.id<5000)-[e IS link]->{2}(b IS node)
+ COLUMNS(a.id AS seed,JSON_ARRAYAGG(e.eid) AS ids,JSON_ARRAYAGG(e.note) AS notes)) g;
+ --dec $passes
+ if ($passes)
+ {
+  CREATE INDEX gps_src ON gps_e(src,eid,dst);
+ }
+}
+DROP PROPERTY GRAPH gps;
+DROP TABLE gps_e,gps_v,gps_digit;

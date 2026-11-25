@@ -1,0 +1,410 @@
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+EXPLAIN INTO plan_table SET statement_id='parameter_reuse'
+  SELECT s.binding_id,g.endpoint FROM pr_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,2}
+(b IS person) COLUMNS(b.id AS endpoint)) p) g;
+SELECT COUNT(*)=1 AS parameter_reuse_eligible FROM plan_table
+WHERE statement_id='parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+parameter_reuse_eligible
+1
+DROP TABLE plan_table;
+SELECT COUNT(*) AS mismatched_bag_groups FROM (
+SELECT binding_id,endpoint,hops,edges,SUM(n) AS difference FROM (
+SELECT binding_id,endpoint,hops,edges,1 AS n FROM pr_expected
+UNION ALL
+SELECT s.binding_id,g.endpoint,g.hops,CAST(g.edges AS CHAR(200)),-1 AS n
+FROM pr_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,2}
+(b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+) bags GROUP BY binding_id,endpoint,hops,edges HAVING SUM(n)<>0
+) differences;
+mismatched_bag_groups
+0
+SELECT s.binding_id,g.endpoint,g.hops,g.edges FROM pr_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,4}
+(b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+ORDER BY s.binding_id,g.hops,CAST(g.edges AS CHAR);
+binding_id	endpoint	hops	edges
+1	1	0	NULL
+1	2	1	[10]
+1	2	1	[11]
+1	3	2	[10, 12]
+1	3	2	[11, 12]
+1	1	3	[10, 12, 13]
+1	1	3	[11, 12, 13]
+1	2	4	[10, 12, 13, 10]
+1	2	4	[10, 12, 13, 11]
+1	2	4	[11, 12, 13, 10]
+1	2	4	[11, 12, 13, 11]
+2	1	0	NULL
+3	1	0	NULL
+3	2	1	[10]
+3	2	1	[11]
+3	3	2	[10, 12]
+3	3	2	[11, 12]
+3	1	3	[10, 12, 13]
+3	1	3	[11, 12, 13]
+3	2	4	[10, 12, 13, 10]
+3	2	4	[10, 12, 13, 11]
+3	2	4	[11, 12, 13, 10]
+3	2	4	[11, 12, 13, 11]
+4	1	0	NULL
+5	1	0	NULL
+5	2	1	[10]
+6	5	0	NULL
+7	1	0	NULL
+7	2	1	[10]
+7	2	1	[11]
+7	3	2	[10, 12]
+7	3	2	[11, 12]
+7	1	3	[10, 12, 13]
+7	1	3	[11, 12, 13]
+7	2	4	[10, 12, 13, 10]
+7	2	4	[10, 12, 13, 11]
+7	2	4	[11, 12, 13, 10]
+7	2	4	[11, 12, 13, 11]
+SELECT s.binding_id,g.hops,g.sn,g.eid,g.dst FROM pr_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)<-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]-{0,2}
+(b IS person) ONE ROW PER STEP(v1,se,v2)
+COLUMNS(COUNT(e.id) AS hops,ELEMENT_NUMBER(se) AS sn,se.id AS eid,v2.id AS dst)) p) g
+ORDER BY s.binding_id,g.hops,g.sn,g.eid,g.dst;
+binding_id	hops	sn	eid	dst
+1	0	NULL	NULL	NULL
+1	1	2	13	3
+1	2	2	13	3
+1	2	4	12	2
+2	0	NULL	NULL	NULL
+2	1	2	13	3
+2	2	2	13	3
+2	2	4	12	2
+3	0	NULL	NULL	NULL
+3	1	2	13	3
+3	2	2	13	3
+3	2	4	12	2
+4	0	NULL	NULL	NULL
+5	0	NULL	NULL	NULL
+6	0	NULL	NULL	NULL
+7	0	NULL	NULL	NULL
+7	1	2	13	3
+7	2	2	13	3
+7	2	4	12	2
+PREPARE pr_cached FROM 'SELECT s.binding_id,COUNT(*) AS paths FROM pr_seeds s,LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since>=?]->{0,2}(b IS person) COLUMNS(b.id AS endpoint)) p) g GROUP BY s.binding_id ORDER BY s.binding_id';
+SET @cutoff=2020;
+EXECUTE pr_cached USING @cutoff;
+binding_id	paths
+1	5
+2	1
+3	5
+4	1
+5	5
+6	1
+7	5
+SET @cutoff=2022;
+EXECUTE pr_cached USING @cutoff;
+binding_id	paths
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+START TRANSACTION;
+DELETE FROM graph_person WHERE id=2;
+SET @cutoff=2020;
+EXECUTE pr_cached USING @cutoff;
+binding_id	paths
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+ROLLBACK;
+EXECUTE pr_cached USING @cutoff;
+binding_id	paths
+1	5
+2	1
+3	5
+4	1
+5	5
+6	1
+7	5
+DEALLOCATE PREPARE pr_cached;
+CREATE INDEX pr_src ON graph_knows(src,since,dst);
+CREATE INDEX pr_dst ON graph_knows(dst,since,src);
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+EXPLAIN INTO plan_table SET statement_id='parameter_reuse'
+  SELECT s.binding_id,g.endpoint FROM pr_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,2}
+(b IS person) COLUMNS(b.id AS endpoint)) p) g;
+SELECT COUNT(*)=1 AS parameter_reuse_eligible FROM plan_table
+WHERE statement_id='parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+parameter_reuse_eligible
+1
+DROP TABLE plan_table;
+SELECT COUNT(*) AS mismatched_bag_groups FROM (
+SELECT binding_id,endpoint,hops,edges,SUM(n) AS difference FROM (
+SELECT binding_id,endpoint,hops,edges,1 AS n FROM pr_expected
+UNION ALL
+SELECT s.binding_id,g.endpoint,g.hops,CAST(g.edges AS CHAR(200)),-1 AS n
+FROM pr_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,2}
+(b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+) bags GROUP BY binding_id,endpoint,hops,edges HAVING SUM(n)<>0
+) differences;
+mismatched_bag_groups
+0
+SELECT s.binding_id,g.endpoint,g.hops,g.edges FROM pr_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,4}
+(b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+ORDER BY s.binding_id,g.hops,CAST(g.edges AS CHAR);
+binding_id	endpoint	hops	edges
+1	1	0	NULL
+1	2	1	[10]
+1	2	1	[11]
+1	3	2	[10, 12]
+1	3	2	[11, 12]
+1	1	3	[10, 12, 13]
+1	1	3	[11, 12, 13]
+1	2	4	[10, 12, 13, 10]
+1	2	4	[10, 12, 13, 11]
+1	2	4	[11, 12, 13, 10]
+1	2	4	[11, 12, 13, 11]
+2	1	0	NULL
+3	1	0	NULL
+3	2	1	[10]
+3	2	1	[11]
+3	3	2	[10, 12]
+3	3	2	[11, 12]
+3	1	3	[10, 12, 13]
+3	1	3	[11, 12, 13]
+3	2	4	[10, 12, 13, 10]
+3	2	4	[10, 12, 13, 11]
+3	2	4	[11, 12, 13, 10]
+3	2	4	[11, 12, 13, 11]
+4	1	0	NULL
+5	1	0	NULL
+5	2	1	[10]
+6	5	0	NULL
+7	1	0	NULL
+7	2	1	[10]
+7	2	1	[11]
+7	3	2	[10, 12]
+7	3	2	[11, 12]
+7	1	3	[10, 12, 13]
+7	1	3	[11, 12, 13]
+7	2	4	[10, 12, 13, 10]
+7	2	4	[10, 12, 13, 11]
+7	2	4	[11, 12, 13, 10]
+7	2	4	[11, 12, 13, 11]
+SELECT s.binding_id,g.hops,g.sn,g.eid,g.dst FROM pr_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)<-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]-{0,2}
+(b IS person) ONE ROW PER STEP(v1,se,v2)
+COLUMNS(COUNT(e.id) AS hops,ELEMENT_NUMBER(se) AS sn,se.id AS eid,v2.id AS dst)) p) g
+ORDER BY s.binding_id,g.hops,g.sn,g.eid,g.dst;
+binding_id	hops	sn	eid	dst
+1	0	NULL	NULL	NULL
+1	1	2	13	3
+1	2	2	13	3
+1	2	4	12	2
+2	0	NULL	NULL	NULL
+2	1	2	13	3
+2	2	2	13	3
+2	2	4	12	2
+3	0	NULL	NULL	NULL
+3	1	2	13	3
+3	2	2	13	3
+3	2	4	12	2
+4	0	NULL	NULL	NULL
+5	0	NULL	NULL	NULL
+6	0	NULL	NULL	NULL
+7	0	NULL	NULL	NULL
+7	1	2	13	3
+7	2	2	13	3
+7	2	4	12	2
+PREPARE pr_cached FROM 'SELECT s.binding_id,COUNT(*) AS paths FROM pr_seeds s,LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since>=?]->{0,2}(b IS person) COLUMNS(b.id AS endpoint)) p) g GROUP BY s.binding_id ORDER BY s.binding_id';
+SET @cutoff=2020;
+EXECUTE pr_cached USING @cutoff;
+binding_id	paths
+1	5
+2	1
+3	5
+4	1
+5	5
+6	1
+7	5
+SET @cutoff=2022;
+EXECUTE pr_cached USING @cutoff;
+binding_id	paths
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+START TRANSACTION;
+DELETE FROM graph_person WHERE id=2;
+SET @cutoff=2020;
+EXECUTE pr_cached USING @cutoff;
+binding_id	paths
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+ROLLBACK;
+EXECUTE pr_cached USING @cutoff;
+binding_id	paths
+1	5
+2	1
+3	5
+4	1
+5	5
+6	1
+7	5
+DEALLOCATE PREPARE pr_cached;
+DROP TABLE pr_expected,pr_seeds;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+SELECT COUNT(*)=1 AS typed_parameter_reuse_eligible FROM plan_table
+WHERE statement_id='typed_parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+typed_parameter_reuse_eligible
+1
+typed_contexts_preserve_binary_strings_dates_decimals_and_nulls
+SELECT s.id,g.eid FROM pr_bindings s,LATERAL (
+SELECT * FROM GRAPH_TABLE(pr_graph MATCH
+(a IS person WHERE a.id=1)-[e IS knows WHERE e.tenant=s.tenant
+AND e.valid_at>=s.since AND e.weight>=s.weight]->{1}(b IS person)
+COLUMNS(JSON_ARRAYAGG(e.id) AS eid)) p) g ORDER BY s.id,CAST(g.eid AS CHAR);
+id	eid
+1	[10]
+3	[11]
+4	[10]
+6	[12]
+8	[10]
+CREATE INDEX pr_typed_src ON pr_edge(src,tenant,dst);
+SELECT COUNT(*)=1 AS typed_parameter_reuse_eligible FROM plan_table
+WHERE statement_id='typed_parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+typed_parameter_reuse_eligible
+1
+typed_contexts_preserve_binary_strings_dates_decimals_and_nulls
+SELECT s.id,g.eid FROM pr_bindings s,LATERAL (
+SELECT * FROM GRAPH_TABLE(pr_graph MATCH
+(a IS person WHERE a.id=1)-[e IS knows WHERE e.tenant=s.tenant
+AND e.valid_at>=s.since AND e.weight>=s.weight]->{1}(b IS person)
+COLUMNS(JSON_ARRAYAGG(e.id) AS eid)) p) g ORDER BY s.id,CAST(g.eid AS CHAR);
+id	eid
+1	[10]
+3	[11]
+4	[10]
+6	[12]
+8	[10]
+SELECT COUNT(*) AS complete_bindings_after_cache_pressure FROM pr_bindings s,LATERAL (
+SELECT * FROM GRAPH_TABLE(pr_graph MATCH
+(a IS person WHERE a.id=1)-[e IS knows WHERE e.tenant<s.tenant]->{0,1}(b IS person)
+COLUMNS(b.id AS endpoint)) p) g WHERE s.id>=100;
+complete_bindings_after_cache_pressure
+400
+DROP PROPERTY GRAPH pr_graph;
+DROP TABLE pr_digit,pr_bindings,pr_edge,pr_vertex;
