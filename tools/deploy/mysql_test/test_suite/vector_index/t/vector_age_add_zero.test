@@ -1,0 +1,36 @@
+CREATE TABLE issue1538_digits (n INT PRIMARY KEY);
+INSERT INTO issue1538_digits VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+
+CREATE TABLE issue1538_vectors (
+  id INT PRIMARY KEY,
+  age INT NOT NULL,
+  embedding VECTOR(3) NOT NULL,
+  KEY idx_age (age)
+) ORGANIZATION HEAP;
+
+INSERT INTO issue1538_vectors
+SELECT a.n + 10*b.n + 100*c.n + 1000*d.n + 10000*e.n + 1,
+       a.n + 10*b.n + 100*c.n + 1,
+       '[1,0,0]'
+FROM issue1538_digits a
+CROSS JOIN issue1538_digits b
+CROSS JOIN issue1538_digits c
+CROSS JOIN issue1538_digits d
+CROSS JOIN issue1538_digits e
+WHERE e.n < 3;
+
+CREATE VECTOR INDEX idx_embedding ON issue1538_vectors (embedding)
+  WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=immediate);
+ANALYZE TABLE issue1538_vectors;
+SET ob_hnsw_ef_search = 16;
+
+EXPLAIN SELECT id FROM issue1538_vectors
+WHERE age > 10
+ORDER BY l2_distance(embedding, '[10,20,30]') APPROXIMATE LIMIT 10;
+
+EXPLAIN SELECT id FROM issue1538_vectors
+WHERE ((age + 0) + 0) > 10
+ORDER BY l2_distance(embedding, '[10,20,30]') APPROXIMATE LIMIT 10;
+
+DROP TABLE issue1538_vectors;
+DROP TABLE issue1538_digits;
