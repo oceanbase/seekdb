@@ -378,9 +378,11 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
     ObOptColumnStatHandle handler;
     ObObj expr_value;
     const ObColumnRefRawExpr *col = static_cast<const ObColumnRefRawExpr *>(left_expr);
-    hash::ObHashSet<ObObj> obj_set;
+    // value -> the first IN list param holding it
+    hash::ObHashMap<ObObj, const ObRawExpr *> obj_map;
+    const ObRawExpr *first_param = NULL;
     ObHistEqualSelHelper helper;
-    if (OB_FAIL(obj_set.create(hash::cal_next_prime(right_expr->get_param_count()), 
+    if (OB_FAIL(obj_map.create(hash::cal_next_prime(right_expr->get_param_count()),
                                "OptSelHashSet", "OptSelHashSet"))) {
     } else if (OB_FAIL(ObOptSelectivity::get_column_basic_sel(table_metas, ctx, *left_expr, &distinct_sel, &null_sel))) {
     } else if (OB_FAIL(helper.init(table_metas, ctx, *col))) {
@@ -402,9 +404,12 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
       if (OB_SUCC(ret)) {
         if (helper.is_valid() && get_value) {
           helper.set_compare_value(expr_value);
-          if (OB_HASH_EXIST == obj_set.exist_refactored(expr_value)) {
-            // duplicate value, do nothing
-          } else if (OB_FAIL(obj_set.set_refactored(expr_value))) {
+          if (OB_SUCCESS == obj_map.get_refactored(expr_value, first_param)) {
+            // duplicate value, estimated once
+            if (OB_FAIL(add_duplicate_param_constraint(ctx, first_param, param_expr))) {
+              LOG_WARN("failed to add duplicate param constraint", K(ret));
+            }
+          } else if (OB_FAIL(obj_map.set_refactored(expr_value, param_expr))) {
           } else if (OB_FAIL(helper.get_sel(ctx, tmp_selectivity))) {
           } else {
             selectivity += tmp_selectivity * (1 - null_sel);
@@ -417,9 +422,11 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
             selectivity += distinct_sel;
           }
           use_hist = false;
-        } else if (OB_HASH_EXIST == obj_set.exist_refactored(expr_value)) {
-          // do nothing
-        } else if (OB_FAIL(obj_set.set_refactored(expr_value))) {
+        } else if (OB_SUCCESS == obj_map.get_refactored(expr_value, first_param)) {
+          if (OB_FAIL(add_duplicate_param_constraint(ctx, first_param, param_expr))) {
+            LOG_WARN("failed to add duplicate param constraint", K(ret));
+          }
+        } else if (OB_FAIL(obj_map.set_refactored(expr_value, param_expr))) {
         } else if (expr_value.is_null()) {
           contain_null = true;
         } else {
@@ -427,9 +434,9 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
         }
       }
     }
-    if (obj_set.created()) {
+    if (obj_map.created()) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = obj_set.destroy())) {
+      if (OB_SUCCESS != (tmp_ret = obj_map.destroy())) {
         LOG_WARN("failed to destroy hash set", K(tmp_ret), K(ret));
         ret = COVER_SUCC(tmp_ret);
       }
@@ -471,6 +478,44 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
           selectivity = std::max(distinct_sel, selectivity); // at least one distinct_sel
         }
       } else { }//do nothing
+    }
+  }
+  return ret;
+}
+
+// An IN list estimates each distinct value once. Auto-parameterization gives equal
+// literals different questionmarks, so merging them is only valid while those params
+// stay equal: record the equality as a plan cache constraint, like duplicate boolean
+// predicates do, so a statement with the same text but distinct values gets its own plan.
+int ObInSelEstimator::add_duplicate_param_constraint(const OptSelectivityCtx &ctx,
+                                                     const ObRawExpr *first_param,
+                                                     const ObRawExpr *second_param)
+{
+  int ret = OB_SUCCESS;
+  ObQueryCtx *query_ctx = ctx.get_opt_ctx().get_query_ctx();
+  if (OB_ISNULL(first_param) || OB_ISNULL(second_param)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null param", K(ret), K(first_param), K(second_param));
+  } else if (T_QUESTIONMARK != first_param->get_expr_type()
+             || T_QUESTIONMARK != second_param->get_expr_type()) {
+    // literal values are part of the statement text
+  } else if (OB_ISNULL(query_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null query ctx", K(ret));
+  } else {
+    const ObConstRawExpr *first = static_cast<const ObConstRawExpr *>(first_param);
+    const ObConstRawExpr *second = static_cast<const ObConstRawExpr *>(second_param);
+    ObPCParamEqualInfo equal_info;
+    equal_info.first_param_idx_ = first->get_value().get_unknown();
+    equal_info.second_param_idx_ = second->get_value().get_unknown();
+    // values that only match after casting to the column type cannot be guarded
+    // by the strict param comparison of the plan cache, keep them unconstrained
+    if (equal_info.first_param_idx_ == equal_info.second_param_idx_
+        || first->get_param().is_null() || second->get_param().is_null()
+        || !first->get_param().strict_equal(second->get_param())) {
+    } else if (OB_FAIL(add_var_to_array_no_dup(query_ctx->all_equal_param_constraints_,
+                                               equal_info))) {
+      LOG_WARN("failed to add equal param constraint", K(ret));
     }
   }
   return ret;

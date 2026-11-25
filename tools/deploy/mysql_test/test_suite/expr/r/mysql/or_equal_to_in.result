@@ -1,0 +1,279 @@
+drop table if exists t1, t2, tv;
+create table t1 (id int primary key, a int, b int, u bigint unsigned, s varchar(10), key idx_a(a));
+insert into t1 values
+(1, 1, 10, 1, 'a'), (2, 2, 20, 2, 'b'), (3, 3, 30, 3, 'c'), (4, 4, 40, 4, 'd'),
+(5, 5, 50, 5, 'e'), (6, null, 60, 6, 'A'), (7, 7, null, 7, 'f'), (8, -1, 80, 8, 'g');
+create table t2 (id int primary key, a int);
+insert into t2 values (1, 1), (2, 2), (3, 3), (4, 4), (5, 5);
+# three or more equalities on one integer column become IN
+explain basic select id from t1 where a = 1 or a = 3 or a = 5;
+Query Plan
+===============================
+|ID|OPERATOR        |NAME     |
+-------------------------------
+|0 |TABLE RANGE SCAN|t1(idx_a)|
+===============================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter(nil), rowset=16
+      access([t1.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t1.a], [t1.id]), range(1,MIN ; 1,MAX), (3,MIN ; 3,MAX), (5,MIN ; 5,MAX), 
+      range_cond([t1.a IN (1, 3, 5)])
+select id from t1 where a = 1 or a = 3 or a = 5 order by id;
+id
+1
+3
+5
+# reversed operands, duplicate values, gaps and negative values
+explain basic select id from t1 where a = 5 or 1 = a or a = 5 or a = -1;
+Query Plan
+===============================
+|ID|OPERATOR        |NAME     |
+-------------------------------
+|0 |TABLE RANGE SCAN|t1(idx_a)|
+===============================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter(nil), rowset=16
+      access([t1.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t1.a], [t1.id]), range(5,MIN ; 5,MAX), (1,MIN ; 1,MAX), (-1,MIN ; -1,MAX), 
+      range_cond([t1.a IN (5, 1, 5, -1)])
+select id from t1 where a = 5 or 1 = a or a = 5 or a = -1 order by id;
+id
+1
+5
+8
+# other branches keep their form, the column group is folded at its first branch
+explain basic select id from t1 where b = 60 or a = 1 or a = 2 or a = 3 or b = 80;
+Query Plan
+=========================
+|ID|OPERATOR       |NAME|
+-------------------------
+|0 |TABLE FULL SCAN|t1  |
+=========================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter([(T_OP_OR, t1.b = 60, t1.a IN (1, 2, 3), t1.b = 80)]), rowset=16
+      access([t1.id], [t1.b], [t1.a]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.id]), range(MIN ; MAX)always true
+select id from t1 where b = 60 or a = 1 or a = 2 or a = 3 or b = 80 order by id;
+id
+1
+2
+3
+6
+8
+# two columns that each reach the threshold
+explain basic select id from t1 where a = 1 or b = 30 or a = 2 or b = 40 or a = 3 or b = 50;
+Query Plan
+=========================
+|ID|OPERATOR       |NAME|
+-------------------------
+|0 |TABLE FULL SCAN|t1  |
+=========================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter([t1.a IN (1, 2, 3) OR t1.b IN (30, 40, 50)]), rowset=16
+      access([t1.id], [t1.a], [t1.b]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.id]), range(MIN ; MAX)always true
+select id from t1 where a = 1 or b = 30 or a = 2 or b = 40 or a = 3 or b = 50 order by id;
+id
+1
+2
+3
+4
+5
+# nested under AND
+explain basic select id from t1 where b > 10 and (a = 2 or a = 4 or a = 7);
+Query Plan
+===============================
+|ID|OPERATOR        |NAME     |
+-------------------------------
+|0 |TABLE RANGE SCAN|t1(idx_a)|
+===============================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter([t1.b > 10]), rowset=16
+      access([t1.id], [t1.b]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.a], [t1.id]), range(2,MIN ; 2,MAX), (4,MIN ; 4,MAX), (7,MIN ; 7,MAX), 
+      range_cond([t1.a IN (2, 4, 7)])
+select id from t1 where b > 10 and (a = 2 or a = 4 or a = 7) order by id;
+id
+2
+4
+# NULL constants and NULL column values keep their semantics
+explain basic select id from t1 where a = 1 or a = 2 or a = 3 or a = null;
+Query Plan
+===============================
+|ID|OPERATOR        |NAME     |
+-------------------------------
+|0 |TABLE RANGE SCAN|t1(idx_a)|
+===============================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter(nil), rowset=16
+      access([t1.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t1.a], [t1.id]), range(1,MIN ; 1,MAX), (2,MIN ; 2,MAX), (3,MIN ; 3,MAX), 
+      range_cond([t1.a IN (1, 2, 3)])
+select id from t1 where a = 1 or a = 2 or a = 3 or a = null order by id;
+id
+1
+2
+3
+select id from t1 where not (a = 1 or a = 2 or a = 3) order by id;
+id
+4
+5
+7
+8
+# join and having conditions
+explain basic select t1.id from t1 join t2 on t1.id = t2.id and (t2.a = 1 or t2.a = 3 or t2.a = 5);
+Query Plan
+===========================
+|ID|OPERATOR         |NAME|
+---------------------------
+|0 |MERGE JOIN       |    |
+|1 |├─TABLE FULL SCAN|t2  |
+|2 |└─TABLE FULL SCAN|t1  |
+===========================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter(nil), rowset=16
+      equal_conds([t1.id = t2.id]), other_conds(nil)
+      merge_directions([ASC])
+  1 - output([t2.id]), filter([t2.a IN (1, 3, 5)]), rowset=16
+      access([t2.id], [t2.a]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([t2.id]), range(MIN ; MAX)always true
+  2 - output([t1.id]), filter(nil), rowset=16
+      access([t1.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t1.id]), range(MIN ; MAX)always true
+select t1.id from t1 join t2 on t1.id = t2.id and (t2.a = 1 or t2.a = 3 or t2.a = 5) order by t1.id;
+id
+1
+3
+5
+explain basic select a, count(*) from t1 group by a having a = 1 or a = 2 or a = 4;
+Query Plan
+=================================
+|ID|OPERATOR          |NAME     |
+---------------------------------
+|0 |MERGE GROUP BY    |         |
+|1 |└─TABLE RANGE SCAN|t1(idx_a)|
+=================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.a], [T_FUN_COUNT(*)]), filter(nil), rowset=16
+      group([t1.a]), agg_func([T_FUN_COUNT(*)])
+  1 - output([t1.a]), filter(nil), rowset=16
+      access([t1.a]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t1.a], [t1.id]), range(1,MIN ; 1,MAX), (2,MIN ; 2,MAX), (4,MIN ; 4,MAX), 
+      range_cond([t1.a IN (1, 2, 4)])
+select a, count(*) from t1 group by a having a = 1 or a = 2 or a = 4 order by a;
+a	count(*)
+1	1
+2	1
+4	1
+# not rewritten: fewer than three branches
+explain basic select id from t1 where a = 1 or a = 2;
+Query Plan
+===============================
+|ID|OPERATOR        |NAME     |
+-------------------------------
+|0 |TABLE RANGE SCAN|t1(idx_a)|
+===============================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter(nil), rowset=16
+      access([t1.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t1.a], [t1.id]), range(1,MIN ; 1,MAX), (2,MIN ; 2,MAX), 
+      range_cond([t1.a = 1 OR t1.a = 2])
+select id from t1 where a = 1 or a = 2 order by id;
+id
+1
+2
+# not rewritten: strings, unsigned columns with signed literals, non-integer constants
+explain basic select id from t1 where s = 'a' or s = 'b' or s = 'c';
+Query Plan
+=========================
+|ID|OPERATOR       |NAME|
+-------------------------
+|0 |TABLE FULL SCAN|t1  |
+=========================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter([(T_OP_OR, t1.s = 'a', t1.s = 'b', t1.s = 'c')]), rowset=16
+      access([t1.id], [t1.s]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.id]), range(MIN ; MAX)always true
+select id from t1 where s = 'a' or s = 'b' or s = 'c' order by id;
+id
+1
+2
+3
+6
+explain basic select id from t1 where u = 1 or u = 2 or u = 3;
+Query Plan
+=========================
+|ID|OPERATOR       |NAME|
+-------------------------
+|0 |TABLE FULL SCAN|t1  |
+=========================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter([(T_OP_OR, t1.u = 1, t1.u = 2, t1.u = 3)]), rowset=16
+      access([t1.id], [t1.u]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.id]), range(MIN ; MAX)always true
+select id from t1 where u = 1 or u = 2 or u = 3 order by id;
+id
+1
+2
+3
+explain basic select id from t1 where a = 1 or a = 2 or a = 2.5;
+Query Plan
+=========================
+|ID|OPERATOR       |NAME|
+-------------------------
+|0 |TABLE FULL SCAN|t1  |
+=========================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.id]), filter([(T_OP_OR, t1.a = 1, t1.a = 2, cast(t1.a, DECIMAL_INT(2, 1)) = 2.5)]), rowset=16
+      access([t1.id], [t1.a]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([t1.id]), range(MIN ; MAX)always true
+select id from t1 where a = 1 or a = 2 or a = 2.5 order by id;
+id
+1
+2
+# approximate vector search keeps the rewrite although rule-based rewrites are disabled
+create table tv (id int primary key, age int, v vector(3), vector index vidx(v) with (distance=l2, type=hnsw, lib=vsag));
+insert into tv values (1, 1, '[1,0,0]'), (2, 2, '[0,1,0]'), (3, 3, '[0,0,1]'), (4, 4, '[1,1,0]'), (5, 5, '[1,1,1]');
+explain basic select id from tv where age = 1 or age = 2 or age = 4 order by l2_distance(v, '[1,0,0]') approximate limit 2;
+Query Plan
+=================================================
+|ID|OPERATOR                               |NAME|
+-------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|tv  |
+=================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([tv.id]), filter([tv.age IN (1, 2, 4)]), rowset=16
+      access([tv.id], [tv.age]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([tv.id]), range(MIN ; MAX)always true
+select id from tv where age = 1 or age = 2 or age = 4 order by l2_distance(v, '[1,0,0]') approximate limit 2;
+id
+1
+4
+drop table t1, t2, tv;

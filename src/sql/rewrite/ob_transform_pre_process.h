@@ -380,6 +380,16 @@ private:
   int flatten_conditions(ObDMLStmt *stmt, bool &trans_happened);
   int recursive_flatten_join_conditions(ObDMLStmt *stmt, TableItem *table, bool &trans_happened);
   int do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
+  // rewrite `c = v1 OR c = v2 OR ...` on an integer column into `c IN (v1, v2, ...)`
+  static const int64_t OR_EQUAL_TO_IN_MIN_BRANCHES = 3;
+  int transform_or_equal_to_in(ObDMLStmt *stmt, bool &trans_happened);
+  int recursive_transform_join_or_equal_to_in(TableItem *table, bool &trans_happened);
+  int do_transform_or_equal_to_in(ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
+  int recursive_transform_or_equal_to_in(ObRawExpr *&expr, bool &trans_happened);
+  int merge_or_equal_to_in(ObRawExpr *&or_expr, bool &trans_happened);
+  static int get_column_equal_const(ObRawExpr *expr,
+                                    ObRawExpr *&column_expr,
+                                    ObRawExpr *&const_expr);
   int preserve_order_for_pagination(ObDMLStmt *stmt, 
                                     bool &trans_happened);
   int check_stmt_need_preserve_order(ObDMLStmt *stmt, 
