@@ -616,7 +616,7 @@ int ObKVCacheIterator::get_next_kvpair(
   } else {
     handle.reset();
     while (OB_SUCC(ret)) {
-      if (pos_ >= map_->bucket_num_ && handle_list_.empty()) {
+      if (pos_ >= map_->get_bucket_num() && handle_list_.empty()) {
         ret = OB_ITER_END;
       } else if (OB_SUCC(handle_list_.pop_front(node))) {
         bool protect_success;
@@ -626,7 +626,7 @@ int ObKVCacheIterator::get_next_kvpair(
         }
       } else {
         if (common::OB_ENTRY_NOT_EXIST == ret) {
-          if (pos_ >= map_->bucket_num_) {
+          if (pos_ >= map_->get_bucket_num()) {
             ret = OB_ITER_END;
           } else if (OB_FAIL(map_->multi_get(cache_id_, pos_++, handle_list_))) {
           }
