@@ -1,0 +1,68 @@
+DROP TABLE IF EXISTS ddl_identifier_escaping;
+CREATE TABLE ddl_identifier_escaping (
+id INT PRIMARY KEY,
+`e``n` ENUM('a', 'b', 'c'),
+```s` SET('a', 'b', 'c'),
+`trail``` VARCHAR(16),
+`two````ticks` INT,
+`列``名` INT,
+plain INT
+);
+INSERT INTO ddl_identifier_escaping VALUES
+(1, 'a', 'a,b', 'first', 10, 100, 1000),
+(2, 'b', 'c', 'second', 20, 200, 2000),
+(3, NULL, NULL, NULL, NULL, NULL, NULL),
+(4, NULL, NULL, NULL, NULL, NULL, NULL);
+CREATE UNIQUE INDEX idx_enum ON ddl_identifier_escaping (`e``n`);
+CREATE UNIQUE INDEX idx_set ON ddl_identifier_escaping (```s`);
+CREATE INDEX idx_trailing ON ddl_identifier_escaping (`trail```);
+CREATE INDEX idx_consecutive ON ddl_identifier_escaping (`two````ticks`);
+CREATE INDEX idx_multibyte ON ddl_identifier_escaping (`列``名`);
+CREATE UNIQUE INDEX idx_plain ON ddl_identifier_escaping (plain);
+CREATE UNIQUE INDEX idx_composite ON ddl_identifier_escaping (`e``n`, ```s`);
+SELECT id, `e``n` AS enum_value FROM ddl_identifier_escaping
+FORCE INDEX (idx_enum) WHERE `e``n` IS NOT NULL ORDER BY id;
+id	enum_value
+1	a
+2	b
+SELECT id, ```s` AS set_value FROM ddl_identifier_escaping
+FORCE INDEX (idx_set) WHERE ```s` IS NOT NULL ORDER BY id;
+id	set_value
+1	a,b
+2	c
+SELECT id FROM ddl_identifier_escaping FORCE INDEX (idx_trailing)
+WHERE `trail``` = 'first';
+id
+1
+SELECT id FROM ddl_identifier_escaping FORCE INDEX (idx_consecutive)
+WHERE `two````ticks` = 20;
+id
+2
+SELECT id FROM ddl_identifier_escaping FORCE INDEX (idx_multibyte)
+WHERE `列``名` = 100;
+id
+1
+SELECT id FROM ddl_identifier_escaping FORCE INDEX (idx_plain)
+WHERE plain = 2000;
+id
+2
+SELECT id, `e``n` AS enum_value, ```s` AS set_value
+FROM ddl_identifier_escaping FORCE INDEX (idx_composite) ORDER BY id;
+id	enum_value	set_value
+1	a	a,b
+2	b	c
+3	NULL	NULL
+4	NULL	NULL
+INSERT INTO ddl_identifier_escaping (id, `e``n`) VALUES (5, 'a');
+ERROR 23000: Duplicate entry '1' for key 'idx_enum'
+INSERT INTO ddl_identifier_escaping (id, ```s`) VALUES (6, 'c');
+ERROR 23000: Duplicate entry '4' for key 'idx_set'
+INSERT INTO ddl_identifier_escaping (id) VALUES (7);
+SELECT COUNT(*) AS null_rows FROM ddl_identifier_escaping
+FORCE INDEX (idx_enum) WHERE `e``n` IS NULL;
+null_rows
+3
+SELECT COUNT(*) AS row_count FROM ddl_identifier_escaping;
+row_count
+5
+DROP TABLE ddl_identifier_escaping;
