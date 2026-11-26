@@ -1,0 +1,35 @@
+src/share/geo/geodesic.cpp
+  s_30af9b719990ec::t_a8b328e4c706c4 155,334-1464
+  s_30af9b719990ec::t_e06053a24addab 324
+  s_30af9b719990ec::t_e67f6a031ec2ac 1-154,156-323,325-333,1465-2056
+src/share/geo/ob_geo_func_isvalid.cpp
+  s_30af9b719990ec::t_1685a91b6905d6 20,31-48,85
+licenses/geographiclib-c/LICENSE
+  s_30af9b719990ec::t_ed782faf05a41f 1-23
+licenses/geographiclib-c/METADATA.json
+  s_30af9b719990ec::t_b0c73f19e301fd 1-16
+src/share/BUILD.bazel
+  s_30af9b719990ec::t_d23386f44db9ca 37-48,1734,1819
+src/share/geo/geodesic.h
+  s_30af9b719990ec::t_7e8597b44040ab 1-847
+src/share/geo/ob_geo_area_geographic.h
+  s_30af9b719990ec::t_38f18282087445 19,24,31-34,39,42,44-45,48-50,52-55,57-66,70,72-76,80,83-84
+src/share/geo/ob_geo_func_correct.cpp
+  s_30af9b719990ec::t_214de9b5f22cd8 21,66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "38abc00dfac6a76291e052c1df94b947d4ea4631",
+  "prompts": {},
+  "sessions": {
+    "s_30af9b719990ec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a215fd-2b20-7592-bc56-de515163e360",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "unknown"
+    }
+  }
+}
