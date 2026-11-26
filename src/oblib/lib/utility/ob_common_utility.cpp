@@ -166,6 +166,29 @@ void set_stackattr(void *stackaddr, size_t stacksize)
   g_stacksize = stacksize;
 }
 
+int64_t get_default_thread_stack_size()
+{
+  int64_t stack_size = 0;
+#if defined(__GLIBC__)
+  pthread_attr_t attr;
+  if (0 == pthread_attr_init(&attr)) {
+    size_t size = 0;
+    if (0 == pthread_getattr_default_np(&attr)
+        && 0 == pthread_attr_getstacksize(&attr, &size)) {
+      stack_size = static_cast<int64_t>(size);
+    }
+    pthread_attr_destroy(&attr);
+  }
+#endif
+  if (stack_size <= 0) {
+    // Conservative fallback covering the platforms without a queryable
+    // default: 8 MiB is the upper end of the defaults we expect (glibc with a
+    // typical finite RLIMIT_STACK).
+    stack_size = 8L << 20;
+  }
+  return stack_size;
+}
+
 ObFatalErrExtraInfoGuard::ObFatalErrExtraInfoGuard()
 {
   last_ = get_val();
