@@ -150,13 +150,17 @@ int get_stackattr(void *&stackaddr, size_t &stacksize)
 #if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
     if (OB_SUCC(ret)) {
 #if defined(__x86_64__) || defined(__aarch64__)
-      // Keep the native stack top. Limit the initial probe to 256 KiB within
-      // the real stack. Explicit stack switches cache their full segment size.
+      // Keep the native stack top. Probe the first 256 KiB of the native
+      // stack. Explicit stack switches cache their full segment size.
       constexpr size_t initial_stack_size = 256L << 10;
-      if (stacksize > initial_stack_size) {
-        stackaddr = static_cast<char *>(stackaddr) + (stacksize - initial_stack_size);
-        stacksize = initial_stack_size;
+      if (OB_UNLIKELY(stacksize < initial_stack_size)) {
+        ret = OB_NOT_SUPPORTED;
+        COMMON_LOG(WARN, "native stack is smaller than the required initial stack size",
+                   K(ret), K(stacksize), K(initial_stack_size));
+        return ret;
       }
+      stackaddr = static_cast<char *>(stackaddr) + (stacksize - initial_stack_size);
+      stacksize = initial_stack_size;
 #endif
       set_stackattr(stackaddr, stacksize);
     }
