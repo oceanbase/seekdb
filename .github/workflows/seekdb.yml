@@ -120,7 +120,6 @@ jobs:
           export GITHUB_RUN_ID="${{ github.run_id }}"
           export SEEKDB_TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}"
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
 
       - name: Test

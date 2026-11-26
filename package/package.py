@@ -53,6 +53,7 @@ def normalize_permissions(root):
 
 def stage(destination, artifacts, dependencies, layout, version, release, component="server",
           binary_package=None, seekdb_bin=None, obshell_bin=None, portable=False):
+    locked_sdk = dependencies.parent / "prebuilt/native"
     if component == "libs":
         if binary_package:
             shutil.copytree(binary_package / "lib/seekdb", destination / "usr/libexec/seekdb/lib",
@@ -60,7 +61,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
             normalize_permissions(destination)
             return
         for name in ("libaio.so", "libaio.so.1", "libaio.so.1.0.1"):
-            source = dependencies / "usr/local/oceanbase/deps/devel/lib" / name
+            source = locked_sdk / "lib" / name
             target = destination / "usr/libexec/seekdb/lib" / name
             if source.is_symlink():
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -123,10 +124,9 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
     if layout == "windows":
         if not binary_package:
             copy(ROOT / "package/msi/seekdb.cnf", config / "seekdb.cnf")
-            sdk = dependencies.parent / "prebuilt/native"
-            shutil.copytree(sdk / "share/licenses", destination / "licenses", dirs_exist_ok=True)
-            copy(sdk / "manifests/vsag.json", share / "dependencies/sdk-manifest.json")
-            shutil.copytree(sdk / "manifests", share / "dependencies/sdk-manifests", dirs_exist_ok=True)
+            shutil.copytree(locked_sdk / "share/licenses", destination / "licenses", dirs_exist_ok=True)
+            copy(locked_sdk / "manifests/vsag.json", share / "dependencies/sdk-manifest.json")
+            shutil.copytree(locked_sdk / "manifests", share / "dependencies/sdk-manifests", dirs_exist_ok=True)
             copy(ROOT / "deps.lock.json", share / "dependencies/deps.lock.json")
         helpers.mkdir(parents=True, exist_ok=True)
         return
@@ -136,7 +136,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
     if portable:
         return
     if layout == "linux":
-        copy(obshell_bin or dependencies / "home/admin/oceanbase/bin/obshell", binary / "obshell", True)
+        copy(obshell_bin or locked_sdk / "bin/obshell", binary / "obshell", True)
         import binary_distribution
         binary_distribution.linux_system_dependencies(binary / "obshell")
         copy(profile / "seekdb.service", destination / "usr/lib/systemd/system/seekdb.service")
@@ -278,6 +278,7 @@ def main():
         parser.error("RPM and DEB require the Linux server payload")
     if options.format == "tgz" and options.layout not in (None, "linux", "macos"):
         parser.error("TGZ supports Linux and macOS payloads")
+    dependencies = options.dependencies.absolute()
     output = options.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="seekdb-package-") as temporary:
@@ -305,18 +306,21 @@ def main():
         if options.format == "binary" or options.seekdb_bin:
             import binary_distribution
             binary_package = work / "binary"
-            stage(binary_package, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
+            stage(binary_package, options.artifacts.resolve(), dependencies, options.layout,
                   options.version, options.release, seekdb_bin=options.seekdb_bin, portable=True)
             original = options.seekdb_bin or options.artifacts / "src/observer" / (
                 "seekdb/seekdb.exe" if options.layout == "windows" else "seekdb")
             directories = [path.resolve() for path in options.runtime_lib_dir]
-            fallbacks = [options.dependencies.resolve() / path for path in (
+            fallbacks = [dependencies / path for path in (
                 "usr/local/oceanbase/devtools/lib64", "usr/local/oceanbase/deps/devel/lib",
                 "usr/local/oceanbase/deps/devel/lib/vsag_lib")]
-            prebuilt = options.dependencies.absolute().parent / "prebuilt"
+            prebuilt = dependencies.parent / "prebuilt"
             locked = prebuilt / ("android" if options.layout == "android" else "native")
             fallbacks.insert(0, locked / "lib")
             if options.layout == "linux":
+                if not options.seekdb_bin:
+                    # Prefer the shared libraries from the SDK used to link seekdb.
+                    directories.append(locked / "lib")
                 fallbacks.insert(0, locked / "gcc" / "lib64")
             metadata = binary_distribution.prepare(binary_package, original.resolve(), options.layout, directories,
                                       options.extra_library, options.glibc_version, fallbacks)
@@ -348,7 +352,7 @@ def main():
                                  (metadata["glibc"], options.distribution, baseline))
             release = package_release(release, options.distribution)
         payload = output if options.format == "stage" else work / "server"
-        stage(payload, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
+        stage(payload, options.artifacts.resolve(), dependencies, options.layout,
               options.version, release, options.component,
               binary_package=binary_package, obshell_bin=options.obshell_bin)
         if metadata and options.layout == "linux" and options.component == "server":
@@ -384,7 +388,7 @@ def main():
                                  (required, options.distribution, baseline))
         debug_symbols.strip_tree(payload, options.layout)
         if options.format == "rpm":
-            rpm(payload, work, output, options.version, options.release, options.dependencies.resolve(),
+            rpm(payload, work, output, options.version, options.release, dependencies,
                 options.distribution, metadata["arch"] if metadata else None)
         elif options.format == "deb":
             deb(payload, output, options.version, options.release,
@@ -394,7 +398,7 @@ def main():
                 metadata["arch"] if metadata else None)
             if options.layout == "linux" and options.component == "server":
                 libs = work / "libs"
-                stage(libs, options.artifacts.resolve(), options.dependencies.resolve(), "linux",
+                stage(libs, options.artifacts.resolve(), dependencies, "linux",
                       options.version, options.release, "libs", binary_package=binary_package)
                 debug_symbols.strip_tree(libs, "linux")
                 tgz(libs, output, options.version, options.release, "libs", "linux",

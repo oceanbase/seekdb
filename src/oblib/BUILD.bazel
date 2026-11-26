@@ -978,7 +978,6 @@ cc_library(
         ":_oblib_foundation_impl",
         ":_oblib_rpc_impl",
         ":_oblib_vector_impl",
-        "//bazel/third_party:libaio",
         "//bazel/third_party:libcrypto",
         "//bazel/third_party:libssl",
         "//rust:compression",

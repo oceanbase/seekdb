@@ -85,7 +85,6 @@ stop_pid_file() {
 
 read_base_dir
 
-stop_pid_file "$BASE_DIR/run/obshell.pid"
 stop_pid_file "$BASE_DIR/run/daemon.pid"
 stop_pid_file "$BASE_DIR/run/seekdb.pid"
 rm -f "$ACTIVE_PATHS_FILE" 2>/dev/null || true

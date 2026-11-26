@@ -95,6 +95,10 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-linux-aarch64-glibc217-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "80343fd4b97c62c9689007d3229f0ea05f8d062b10136a6f094787e154d678ee"
       },
+      "libaio": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libaio-0.3.112/libaio-0.3.112-bin-linux-aarch64-glibc217-20261125T094819%2B0000-288530f8bce6.tar.gz",
+        "sha256": "636300c78ff82ad28b3975abdf9a16fc44874a1862835e19f463746c3f1cda2d"
+      },
       "libcurl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-linux-aarch64-glibc217-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
         "sha256": "f7c1cc019fc513df585f9bf61dda71336f0a0228c265f45c6bad7b2be37e2568"
@@ -106,6 +110,10 @@
       "ob-sanity": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/ob-sanity-1.0.0/ob-sanity-1.0.0-bin-linux-aarch64-glibc217-20261124T035858%2B0000-6be1041e42be.tar.gz",
         "sha256": "34bb80df4fe905db3eac9f52efac1e7da250634e0f164986034f409f993cad09"
+      },
+      "obshell": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/obshell-4.5.1.3/obshell-4.5.1.3-bin-linux-aarch64-glibc217-20261125T091939%2B0000-73a01a73c509.tar.gz",
+        "sha256": "49e4654480d33e525173d471af2b02d4d2c16fd5ca6cc34458d76272e3ed428f"
       },
       "openssl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-linux-aarch64-glibc217-20261120T071231%2B0000-c79e60669ad8.tar.gz",
@@ -141,6 +149,10 @@
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/jemalloc-5.3.1/jemalloc-5.3.1-bin-linux-x86_64-glibc217-20261113T092920%2B0000-4c3512459ecc.tar.gz",
         "sha256": "041ae2dce281770af17c18bec4dbcb3b0524e88366217eca38c0f797c15e64d9"
       },
+      "libaio": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libaio-0.3.112/libaio-0.3.112-bin-linux-x86_64-glibc217-20261125T094819%2B0000-288530f8bce6.tar.gz",
+        "sha256": "9411e04ce782a0db070c53db8f6827f90f7bfeb302743eec3b1f7f4bbc43858e"
+      },
       "libcurl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/libcurl-8.18.0/libcurl-8.18.0-bin-linux-x86_64-glibc217-20261123T130827%2B0000-bdaceaa89a17.tar.gz",
         "sha256": "2d9b870b5df738596c8d3d50525911631acc81be57ecbad60d932af53c364d70"
@@ -152,6 +164,10 @@
       "ob-sanity": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/ob-sanity-1.0.0/ob-sanity-1.0.0-bin-linux-x86_64-glibc217-20261124T035858%2B0000-6be1041e42be.tar.gz",
         "sha256": "e1fb2435364b10a923eb90f8ce0059f9fbef6605d02e87cea49994715ab0f966"
+      },
+      "obshell": {
+        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/obshell-4.5.1.3/obshell-4.5.1.3-bin-linux-x86_64-glibc217-20261125T091939%2B0000-73a01a73c509.tar.gz",
+        "sha256": "105a7ea92edce6720f1432eb0cb2f0a4d0780a9011bf0fb21651181fe6660605"
       },
       "openssl": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/openssl-3.5.9/openssl-3.5.9-bin-linux-x86_64-glibc217-20261120T071231%2B0000-c79e60669ad8.tar.gz",

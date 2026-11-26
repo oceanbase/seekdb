@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 import platform
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -18,59 +17,10 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 PROFILES = Path(__file__).resolve().parent
-EL_RELEASES = ((9, "el9"), (8, "el8"), (7, "el7"))
-LINUX_RELEASES = {
-    "rhel": EL_RELEASES,
-    "centos": EL_RELEASES,
-    "almalinux": EL_RELEASES[:2],
-    "rocky": EL_RELEASES[:2],
-    "alinux": ((3, "al8"), (2.1903, "el7")),
-    "alios": ((8, "el8"), (7, "el7")),
-    "anolis": ((23, "el9"), (8, "el8"), (7, "el7")),
-    "ubuntu": ((22.04, "el9"), (16.04, "el7")),
-    "debian": ((12, "el9"), (9, "el7")),
-    "fedora": ((33, "el7"),),
-    "kylin": ((10, "el8"),),
-    "openEuler": ((22, "el9"),),
-    "opensuse-leap": ((15, "el7"),),
-    "sles": ((15, "el7"),),
-    "uos": ((20, "el7"),),
-    "tencentos": ((3.1, "el8"),),
-    "arch": ((0, "el8"),),
-    "garuda": ((0, "el8"),),
-}
 
 
-def host_profile():
-    system = platform.system()
-    arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(
-        platform.machine().lower(), platform.machine().lower())
-    if system == "Windows":
-        tag = "windows." + arch
-    elif system == "Darwin":
-        arm = subprocess.run(["sysctl", "-n", "hw.optional.arm64"],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
-        if arch == "aarch64" or arm.stdout.strip() == "1":
-            arch = "arm64"
-        major = int(subprocess.check_output(["sw_vers", "-productVersion"], universal_newlines=True).split(".")[0])
-        if major < 15:
-            raise ValueError("macOS 15 or newer is required for native dependencies")
-        # The dependency ABI follows the release baseline, not the build host.
-        tag = "macos15.%s" % arch
-    elif system == "Linux":
-        release = {}
-        for line in Path("/etc/os-release").read_text().splitlines():
-            key, separator, value = line.partition("=")
-            if separator:
-                release[key] = shlex.split(value)[0] if value else ""
-        version = re.search(r"\d+(?:\.\d+)?", release.get("VERSION_ID", "0"))
-        version_number = float(version.group()) if version else 0
-        family = next((tag for minimum, tag in LINUX_RELEASES.get(release["ID"], ())
-                       if version_number >= minimum), None)
-        tag = "%s.%s" % (family, arch)
-    else:
-        raise ValueError("Unsupported host: " + system)
-    profile = PROFILES / ("oceanbase." + tag + ".deps")
+def windows_profile(architecture):
+    profile = PROFILES / ("oceanbase.windows." + architecture + ".deps")
     if not profile.is_file():
         raise ValueError("No dependencies profile for this host: " + profile.name)
     return profile
@@ -435,8 +385,6 @@ def main(arguments):
     targets.add_argument("--ios", action="store_true")
     targets.add_argument("--wasm", action="store_true")
     parser.add_argument("--simulator", action="store_true")
-    parser.add_argument("--linux-profile", choices=("el7", "el8", "el9", "al8"),
-                        help="Linux dependency ABI profile, independently of the build host")
     options = parser.parse_args(arguments)
     if options.simulator and not options.ios:
         parser.error("--simulator requires --ios")
@@ -453,18 +401,16 @@ def main(arguments):
     system = platform.system()
     architecture = platform.machine().lower()
     if system == "Darwin":
-        architecture = {"aarch64": "arm64", "amd64": "x86_64"}.get(architecture, architecture)
-    else:
+        architecture = "arm64" if architecture == "aarch64" else architecture
+        if int(platform.mac_ver()[0].split(".")[0]) < 15:
+            raise ValueError("macOS 15 or newer is required for native dependencies")
+        if architecture != "arm64":
+            raise ValueError("macOS native dependencies require an arm64 environment")
+    elif system in ("Linux", "Windows"):
         architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture)
-    if options.linux_profile:
-        if platform.system() != "Linux":
-            parser.error("--linux-profile requires a Linux build host")
-        arch = {"arm64": "aarch64"}.get(platform.machine().lower(), platform.machine().lower())
-        profile = PROFILES / ("oceanbase.%s.%s.deps" % (options.linux_profile, arch))
-        if not profile.is_file():
-            parser.error("dependency profile is unavailable: " + profile.name)
     else:
-        profile = host_profile()
+        raise ValueError("Unsupported host: " + system)
+    profile = windows_profile(architecture) if system == "Windows" else None
     rust_target = None
     if options.android:
         rust_target = "aarch64-linux-android"
@@ -473,7 +419,8 @@ def main(arguments):
     prepare_rust(rust_target)
     cache = os.environ.get("DEP_CACHE_DIR")
     cache_directory = Path(cache).expanduser().resolve() if cache else None
-    install(profile, ROOT / "deps/3rd", cache_directory if os.name != "nt" else None)
+    if profile is not None:
+        install(profile, ROOT / "deps/3rd", cache_directory if os.name != "nt" else None)
     install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/native", cache_directory,
                    system, architecture)
     if options.wasm:
