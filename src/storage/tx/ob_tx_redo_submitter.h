@@ -45,6 +45,7 @@ public:
     write_seq_no_(),
     submit_cb_list_idx_(-1),
     submit_out_cnt_(0),
+    yielded_after_submit_(false),
     submitted_scn_()
   {}
   ~ObTxRedoSubmitter();
@@ -62,6 +63,7 @@ public:
   // parallel submit, only traversal writter's callback-list
   int parallel_submit(const ObTxSEQ &write_seq);
   int get_submitted_cnt() const { return submit_out_cnt_; }
+  bool yielded_after_submit() const { return yielded_after_submit_; }
   share::SCN get_submitted_scn() const { return submitted_scn_; }
 private:
   // general submit entry, will traversal all callback-list
@@ -116,6 +118,7 @@ private:
   int submit_cb_list_idx_;
   // the count of logs this submitter submitted out
   int submit_out_cnt_;
+  bool yielded_after_submit_;
   // last submitted log scn
   share::SCN submitted_scn_;
 };
@@ -177,7 +180,10 @@ inline int ObTxRedoSubmitter::parallel_submit(const ObTxSEQ &write_seq_no)
   }
   if (do_submit) {
     ret = _submit_redo_pipeline_(false);
-    ret = save_ret != OB_SUCCESS ? save_ret : ret;
+    // Retain a submit or callback failure from the blocking list.
+    if (OB_SUCC(ret)) {
+      ret = save_ret;
+    }
   }
   return ret;
 }
@@ -234,6 +240,7 @@ inline int ObTxRedoSubmitter::fill(ObTxLogBlock &block,
 inline int ObTxRedoSubmitter::_submit_redo_pipeline_(const bool display_blocked_info)
 {
   int ret = OB_SUCCESS;
+  yielded_after_submit_ = false;
   memtable::ObTxFillRedoCtx ctx;
   ctx.tx_id_ = tx_id_;
   ctx.write_seq_no_ = write_seq_no_;
@@ -333,6 +340,9 @@ inline int ObTxRedoSubmitter::_submit_redo_pipeline_(const bool display_blocked_
         if (stop) {
           // return fill_ret if submit success
           ret = (submit_ret == OB_SUCCESS) ? fill_ret : submit_ret;
+          // Distinguish a successful batch with pending redo from an EAGAIN
+          // raised by log admission or callback processing.
+          yielded_after_submit_ = submitted && OB_SUCCESS == submit_ret && OB_EAGAIN == fill_ret;
         } else {
           // if submit failed, should stop
           ret = submit_ret;
