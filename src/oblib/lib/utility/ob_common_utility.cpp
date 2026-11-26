@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX COMMON
 #include "lib/utility/ob_common_utility.h"
 #include <inttypes.h>
+#include <pthread.h>
+#include <stdio.h>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -105,6 +107,95 @@ int check_stack_overflow(bool &is_overflow,
 #endif
 }
 
+#if !defined(__EMSCRIPTEN__) && (defined(__linux__) || defined(__APPLE__) || defined(_WIN32))
+
+#if defined(__x86_64__) || defined(__aarch64__)
+static constexpr size_t INITIAL_STACK_SIZE = 256L << 10;
+#endif
+
+static int get_native_stackattr(void *&stackaddr, size_t &stacksize)
+{
+  int ret = OB_SUCCESS;
+  const bool in_hook_bak = in_hook();
+  in_hook() = true;
+  DEFER(in_hook() = in_hook_bak);
+#ifdef __linux__
+  pthread_attr_t attr;
+  if (OB_UNLIKELY(0 != pthread_getattr_np(pthread_self(), &attr))) {
+    ret = OB_ERROR;
+    COMMON_LOG(ERROR, "cannot get thread params", K(ret), KERRMSG);
+  } else {
+    if (OB_UNLIKELY(0 != pthread_attr_getstack(&attr, &stackaddr, &stacksize))) {
+      ret = OB_ERROR;
+      COMMON_LOG(ERROR, "cannot get thread stack params", K(ret), KERRMSG);
+    }
+    if (OB_UNLIKELY(0 != pthread_attr_destroy(&attr))) {
+      ret = OB_ERROR;
+      COMMON_LOG(ERROR, "destroy thread attr failed", K(ret), KERRMSG);
+    }
+  }
+#elif defined(__APPLE__)
+  stacksize = pthread_get_stacksize_np(pthread_self());
+  void *stacktop = pthread_get_stackaddr_np(pthread_self());
+  // macOS reports the stack top. The caller expects the lowest address.
+  stackaddr = static_cast<char *>(stacktop) - stacksize;
+#elif defined(_WIN32)
+  ULONG_PTR low_limit = 0, high_limit = 0;
+  GetCurrentThreadStackLimits(&low_limit, &high_limit);
+  stackaddr = reinterpret_cast<void *>(low_limit);
+  stacksize = high_limit - low_limit;
+#endif
+  return ret;
+}
+#endif
+
+int check_startup_stack()
+{
+  int ret = OB_SUCCESS;
+#if !defined(__EMSCRIPTEN__) && (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) \
+    && (defined(__x86_64__) || defined(__aarch64__))
+  static const auto check_stack = [](const char *thread_name) {
+    void *stackaddr = nullptr;
+    size_t stacksize = 0;
+    int ret = get_native_stackattr(stackaddr, stacksize);
+    if (OB_FAIL(ret)) {
+      fprintf(stderr, "SeekDB cannot start: could not query the %s stack (error %d).\n",
+              thread_name, ret);
+    } else if (stacksize < INITIAL_STACK_SIZE) {
+      ret = OB_NOT_SUPPORTED;
+      fprintf(stderr, "SeekDB cannot start: %s stack has %zu bytes, requires at least %zu bytes.\n",
+              thread_name, stacksize, INITIAL_STACK_SIZE);
+    }
+    return ret;
+  };
+  ret = check_stack("main thread");
+  if (OB_SUCC(ret)) {
+    static int worker_ret;
+    pthread_attr_t attr;
+    pthread_t worker;
+    int err = pthread_attr_init(&attr);
+    if (err == 0) {
+      // Use initialized default pthread attributes, as Thread::start() does.
+      err = pthread_create(&worker, &attr, [](void *) -> void * {
+        worker_ret = check_stack("default worker thread");
+        return nullptr;
+      }, nullptr);
+      pthread_attr_destroy(&attr);
+    }
+    if (err != 0) {
+      ret = OB_ERR_SYS;
+      fprintf(stderr, "SeekDB cannot start: could not create the stack probe thread (pthread error %d).\n", err);
+    } else if (0 != (err = pthread_join(worker, nullptr))) {
+      ret = OB_ERR_SYS;
+      fprintf(stderr, "SeekDB cannot start: could not join the stack probe thread (pthread error %d).\n", err);
+    } else {
+      ret = worker_ret;
+    }
+  }
+#endif
+  return ret;
+}
+
 int get_stackattr(void *&stackaddr, size_t &stacksize)
 {
 #ifdef __EMSCRIPTEN__
@@ -118,54 +209,19 @@ int get_stackattr(void *&stackaddr, size_t &stacksize)
   if (OB_LIKELY(g_stackaddr != nullptr)) {
     stackaddr = g_stackaddr;
     stacksize = g_stacksize;
-  } else {
-    bool in_hook_bak = in_hook();
-    in_hook() = true;
-    DEFER(in_hook() = in_hook_bak);
-#ifdef __linux__
-    pthread_attr_t attr;
-    if (OB_UNLIKELY(0 != pthread_getattr_np(pthread_self(), &attr))) {
-      ret = OB_ERROR;
-      COMMON_LOG(ERROR, "cannot get thread params", K(ret), KERRMSG);
-    } else if (OB_UNLIKELY(0 != pthread_attr_getstack(&attr, &stackaddr, &stacksize))) {
-      ret = OB_ERROR;
-      COMMON_LOG(ERROR, "cannot get thread statck params", K(ret), KERRMSG);
-    } else if (OB_UNLIKELY(0 != pthread_attr_destroy(&attr))) {
-      ret = OB_ERROR;
-      COMMON_LOG(ERROR, "destroy thread attr failed", K(ret), KERRMSG);
-    }
-#elif defined(__APPLE__)
-    // macOS doesn't support pthread_getattr_np, use macOS specific APIs
-    stacksize = pthread_get_stacksize_np(pthread_self());
-    void *stacktop = pthread_get_stackaddr_np(pthread_self());
-    // pthread_get_stackaddr_np returns the TOP of the stack.
-    // OceanBase's check_stack_overflow expects stackaddr to be the BOTTOM (lowest address).
-    stackaddr = (void*)((char*)stacktop - stacksize);
-#elif defined(_WIN32)
-    ULONG_PTR low_limit = 0, high_limit = 0;
-    GetCurrentThreadStackLimits(&low_limit, &high_limit);
-    stackaddr = (void*)low_limit;
-    stacksize = (size_t)(high_limit - low_limit);
-#endif
-#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
-    if (OB_SUCC(ret)) {
-#if defined(__x86_64__) || defined(__aarch64__)
-      // Keep the native stack top. Probe the first 256 KiB of the native
-      // stack. Explicit stack switches cache their full segment size.
-      constexpr size_t initial_stack_size = 256L << 10;
-      if (OB_UNLIKELY(stacksize < initial_stack_size)) {
-        ret = OB_NOT_SUPPORTED;
-        COMMON_LOG(WARN, "native stack is smaller than the required initial stack size",
-                   K(ret), K(stacksize), K(initial_stack_size));
-        return ret;
-      }
-      stackaddr = static_cast<char *>(stackaddr) + (stacksize - initial_stack_size);
-      stacksize = initial_stack_size;
-#endif
-      set_stackattr(stackaddr, stacksize);
-    }
-#endif
   }
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
+  else if (OB_SUCC(ret = get_native_stackattr(stackaddr, stacksize))) {
+#if defined(__x86_64__) || defined(__aarch64__)
+    // Keep the real stack top. Threads supplied by a host may have smaller bounds.
+    if (stacksize > INITIAL_STACK_SIZE) {
+      stackaddr = static_cast<char *>(stackaddr) + (stacksize - INITIAL_STACK_SIZE);
+      stacksize = INITIAL_STACK_SIZE;
+    }
+#endif
+    set_stackattr(stackaddr, stacksize);
+  }
+#endif
   return ret;
 #endif
 }
