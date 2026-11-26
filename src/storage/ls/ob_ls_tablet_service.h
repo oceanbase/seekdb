@@ -22,7 +22,7 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "share/log/ob_log_base_type.h"
-#include "logservice/palf/palf_callback.h"
+#include "logservice/wal_adapter/callback.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/ob_dml_common.h"
 #include "storage/ob_relative_table.h"
@@ -114,7 +114,7 @@ private:
   virtual int replay(
       const void *buffer,
       const int64_t nbytes,
-      const palf::LSN &lsn,
+      const wal::LSN &lsn,
       const share::SCN &scn) override;
 
   // local lifecycle

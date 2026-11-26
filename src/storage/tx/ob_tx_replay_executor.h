@@ -59,7 +59,7 @@ public:
                      const char *buf,
                      const int64_t size,
                      const int skip_pos,
-                     const palf::LSN &lsn,
+                     const wal::LSN &lsn,
                      const share::SCN &log_timestamp,
                      const logservice::ObLogBaseHeader &base_header);
 
@@ -78,7 +78,7 @@ public:
 private:
   ObTxReplayExecutor(storage::ObLS *ls,
                      storage::ObLSTxService *ls_tx_srv,
-                     const palf::LSN &lsn,
+                     const wal::LSN &lsn,
                      const share::SCN &log_timestamp,
                      const logservice::ObLogBaseHeader &base_header)
       : ctx_(nullptr),
@@ -147,7 +147,7 @@ private:
   ObTxLogBlock log_block_;
   int16_t replay_queue_;
   int64_t replaying_log_entry_no_;
-  palf::LSN lsn_;
+  wal::LSN lsn_;
   share::SCN log_ts_ns_;
 
   memtable::ObMemtableMutatorIterator * mmi_ptr_;

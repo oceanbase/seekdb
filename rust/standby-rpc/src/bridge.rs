@@ -23,7 +23,7 @@ pub mod ffi {
         fetch_macro_block,
         get_ls_view_tablet_count,
         check_restore_precondition,
-        fetch_standby_palf_base_info,
+        fetch_standby_wal_base_info,
         fetch_log,
         get_promotion_boundary,
     }
@@ -57,6 +57,7 @@ pub mod ffi {
         max_bytes: u64,
         source_lsn: u64,
         end_scn: u64,
+        zero_padding_before: u32,
     }
     struct Trace {
         id: String,

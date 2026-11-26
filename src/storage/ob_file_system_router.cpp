@@ -90,7 +90,7 @@ int ObFileSystemRouter::get_server_clog_dir(
   int ret = OB_SUCCESS;
   int pret = 0;
   {
-    pret = snprintf(server_clog_dir, MAX_PATH_SIZE, "%s/sys", clog_dir_);
+    pret = snprintf(server_clog_dir, MAX_PATH_SIZE, "%s", clog_dir_);
     if (pret < 0 || pret >= MAX_PATH_SIZE) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_ERROR("failed to construct server clog path", K(ret));

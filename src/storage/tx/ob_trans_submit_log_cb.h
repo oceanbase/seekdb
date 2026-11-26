@@ -60,8 +60,8 @@ public:
   const share::SCN &get_base_ts() const { return base_ts_; }
   int set_log_ts(const share::SCN &log_ts);
   const share::SCN &get_log_ts() const { return log_ts_; }
-  int set_lsn(const palf::LSN &lsn);
-  palf::LSN get_lsn() const { return lsn_; }
+  int set_lsn(const wal::LSN &lsn);
+  wal::LSN get_lsn() const { return lsn_; }
   void set_submit_ts(const int64_t submit_ts) { submit_ts_ = submit_ts; }
   int64_t get_submit_ts() const { return submit_ts_; }
 
@@ -72,7 +72,7 @@ public:
 protected:
   share::SCN base_ts_;
   share::SCN log_ts_;
-  palf::LSN lsn_;
+  wal::LSN lsn_;
   int64_t submit_ts_;
 
   int64_t log_size_; 

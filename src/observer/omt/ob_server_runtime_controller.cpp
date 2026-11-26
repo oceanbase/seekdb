@@ -117,46 +117,28 @@ ObServerRuntimeController::ObServerRuntimeController()
   }
 }
 
-static ObLogRuntimeConfig current_log_runtime_config()
-{
-  return {
-      config::log_disk_utilization_threshold(),
-      config::log_disk_utilization_limit_threshold(),
-      config::log_disk_throttling_percentage(),
-      config::log_disk_throttling_maximum_duration(),
-      config::log_storage_warning_tolerance_time(),
-      config::_enable_log_cache(),
-  };
-}
-
 static int init_log_service(
     ObLogService *&log_service,
     storage::ObLogStorageAdapter *log_storage_adapter,
-    ObServerLogBlockMgr &log_block_mgr,
-    const storage_io::NamedOwnerHandle *log_files)
+    ObServerLogBlockMgr &log_block_mgr)
 {
   int ret = OB_SUCCESS;
   const auto *runtime = share::server_runtime();
   const share::ObServerModuleInitCtx *module_init_ctx =
       OB_ISNULL(runtime) ? nullptr : runtime->get_module_init_ctx();
-  if (OB_ISNULL(module_init_ctx) || OB_ISNULL(GCTX.local_store_)
-      || OB_ISNULL(log_files)) {
+  if (OB_ISNULL(module_init_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "log service composition is incomplete", KR(ret),
-        KP(module_init_ctx), KP(log_files));
+        KP(module_init_ctx));
   } else if (OB_FAIL(ObLogService::server_module_init(
       log_service,
-      module_init_ctx->palf_options_,
-      *GCTX.local_store_,
+      module_init_ctx->wal_disk_soft_target_,
       module_init_ctx->clog_dir_,
       OB_FILE_SYSTEM_ROUTER.get_clog_dir(),
       GCTX.self_addr(),
       log_storage_adapter,
-      &log_block_mgr,
-      log_files,
       false,
-      config::cpu_quota_concurrency(),
-      current_log_runtime_config()))) {
+      config::cpu_quota_concurrency()))) {
   } else {
     log_block_mgr.bind_log_service(*log_service);
   }
@@ -544,8 +526,6 @@ int ObServerRuntimeController::update_server_config()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  if (OB_TMP_FAIL(update_palf_config())) {
-  }
   if (OB_TMP_FAIL(update_dag_scheduler_config())) {
   }
   if (OB_TMP_FAIL(update_freezer_config_())) {
@@ -553,19 +533,6 @@ int ObServerRuntimeController::update_server_config()
   if (OB_TMP_FAIL(update_throttle_config_())) {
   }
   LOG_INFO("update_server_config success");
-  return ret;
-}
-
-int ObServerRuntimeController::update_palf_config()
-{
-  int ret = OB_SUCCESS;
-  ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
-  if (NULL == log_service) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ret = log_service->update_palf_options_except_disk_usage_limit_size(
-        current_log_runtime_config());
-  }
   return ret;
 }
 
@@ -1259,7 +1226,7 @@ int ObServer::obs_init_modules()
     SERVER_LOG(WARN, "mods_log_storage_adapter_ fail", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(init_log_service(
-      mods_log_service_, mods_log_storage_adapter_, log_block_mgr_, &log_block_mgr_.physical_owner()))) {
+      mods_log_service_, mods_log_storage_adapter_, log_block_mgr_))) {
     SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObLSService::server_module_init(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
@@ -1369,7 +1336,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(
       mods_change_stream_mgr_,
-      *mods_log_service_->get_palf_env(),
+      *mods_log_service_->get_wal_env(),
       schema_publish_signal_,
       share::server_runtime()))) {
     SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret));

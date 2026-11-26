@@ -17,13 +17,15 @@
 #include "ob_log_replay_service.h"
 #include "logservice/ob_i_log_storage.h"
 #include "share/config/ob_server_config.h"
+#include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace palf;
+using namespace wal;
 using namespace storage;
 namespace logservice
 {
@@ -173,12 +175,12 @@ ObLogReplayService::ObLogReplayService()
     is_running_(false),
     replay_stat_(),
     log_storage_(NULL),
-    palf_env_(NULL),
+    wal_env_(NULL),
     allocator_(NULL),
     status_lock_(),
     replay_status_(nullptr),
-    wait_cost_stat_("[REPLAY STAT REPLAY TASK IN QUEUE TIME]", PALF_STAT_PRINT_INTERVAL_US),
-    replay_cost_stat_("[REPLAY STAT REPLAY TASK EXECUTE COST TIME]", PALF_STAT_PRINT_INTERVAL_US)
+    wait_cost_stat_("[REPLAY STAT REPLAY TASK IN QUEUE TIME]", WAL_STAT_PRINT_INTERVAL_US),
+    replay_cost_stat_("[REPLAY STAT REPLAY TASK EXECUTE COST TIME]", WAL_STAT_PRINT_INTERVAL_US)
 {}
 
 ObLogReplayService::~ObLogReplayService()
@@ -186,7 +188,7 @@ ObLogReplayService::~ObLogReplayService()
   destroy();
 }
 
-int ObLogReplayService::init(PalfEnv *palf_env,
+int ObLogReplayService::init(Env *wal_env,
                              ObILogStorage *log_storage,
                              ObILogAllocator *allocator,
                              const int64_t replay_thread_quota)
@@ -197,11 +199,11 @@ int ObLogReplayService::init(PalfEnv *palf_env,
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogReplayService init twice", K(ret));
-  } else if (OB_ISNULL(palf_env_= palf_env)
+  } else if (OB_ISNULL(wal_env_= wal_env)
              || OB_ISNULL(log_storage_ = log_storage)
              || OB_ISNULL(allocator_ = allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env),
+    CLOG_LOG(WARN, "invalid argument", K(ret), KP(wal_env),
         KP(log_storage), KP(allocator), K(replay_thread_quota));
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
       1,
@@ -300,7 +302,7 @@ void ObLogReplayService::destroy()
   replay_stat_.destroy();
   allocator_ = NULL;
   log_storage_ = NULL;
-  palf_env_ = NULL;
+  wal_env_ = NULL;
 }
 
 void ObLogReplayService::handle(common::LinkTask *task)
@@ -389,10 +391,10 @@ int ObLogReplayService::create_status()
     CLOG_LOG(WARN, "failed to alloc replay status", K(ret));
   } else {
     new (replay_status) ObReplayStatus();
-    if (OB_FAIL(replay_status->init(palf_env_, this))) {
+    if (OB_FAIL(replay_status->init(wal_env_, this))) {
       server_free(replay_status);
       replay_status = NULL;
-      CLOG_LOG(ERROR, "failed to init replay status", K(ret), K(palf_env_), K(this));
+      CLOG_LOG(ERROR, "failed to init replay status", K(ret), K(wal_env_), K(this));
     } else {
       replay_status->inc_ref();
       {
@@ -916,8 +918,7 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
     free_replay_task(replay_task);
   } else if (OB_SUCC(ret) && need_iterate_next_log) {
     bool unused_iterate_end_by_replayable_point = false;
-    // TODO by runlin: compatibility with LogEntryHeader
-    if (OB_FAIL(submit_task->update_submit_log_meta_info(cur_lsn + log_size + sizeof(LogEntryHeader),
+    if (OB_FAIL(submit_task->update_submit_log_meta_info(submit_task->get_entry_end_lsn(),
                                                          cur_log_submit_scn))) {
       // log info fallback
       CLOG_LOG(ERROR, "failed to update_submit_log_meta_info", KR(ret), K(cur_lsn),

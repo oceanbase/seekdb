@@ -24,7 +24,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_server_info.h"
-#include "standby/ob_standby_palf_base_info.h"
+#include "standby/ob_standby_wal_base_info.h"
 #include "standby/standby_rpc_stream_util.h"
 #include "standby/ob_standby_source_util.h"
 #include "standby/control/standby_state_store.h"
@@ -169,7 +169,7 @@ public:
   int check_restore_precondition(const rpc::Message* request,
       rpc::Message* response) const;
 
-  int fetch_standby_palf_base_info(const rpc::Message* request,
+  int fetch_standby_wal_base_info(const rpc::Message* request,
       rpc::Message* response) const;
 
   int fetch_log(const rpc::Message* request,
@@ -203,9 +203,9 @@ public:
         if (error != 0) return error;
         return writer.write(response.take_frame()) ? 0 : OB_CANCELED;
       }
-      case rpc::Method::fetch_standby_palf_base_info: {
+      case rpc::Method::fetch_standby_wal_base_info: {
         rpc::Message response;
-        const int error = self->fetch_standby_palf_base_info(&request, &response);
+        const int error = self->fetch_standby_wal_base_info(&request, &response);
         if (error != 0) return error;
         return writer.write(response.take_frame()) ? 0 : OB_CANCELED;
       }
@@ -827,25 +827,25 @@ int StandbyRpcService::check_restore_precondition(
   return ret;
 }
 
-int StandbyRpcService::fetch_standby_palf_base_info(
+int StandbyRpcService::fetch_standby_wal_base_info(
         const rpc::Message* request,
     rpc::Message* response) const
 {
   int ret = OB_SUCCESS;
-  standby::ObFetchStandbyPalfBaseInfoArg arg;
-  standby::ObFetchStandbyPalfBaseInfoResult result;
+  standby::ObFetchStandbyWalBaseInfoArg arg;
+  standby::ObFetchStandbyWalBaseInfoResult result;
 
   if (OB_ISNULL(request) || OB_ISNULL(response)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fetch standby palf base info request", K(ret), KP(request), KP(response));
+    LOG_WARN("invalid fetch standby wal base info request", K(ret), KP(request), KP(response));
   } else if (OB_FAIL(deserialize_message(*request, arg))) {
-    LOG_WARN("failed to deserialize ObFetchStandbyPalfBaseInfoArg", K(ret));
-  } else if (OB_FAIL(standby::ObStandbyPalfBaseInfoBuilder::build(arg, result))) {
-    LOG_WARN("failed to build standby palf base info", K(ret), K(arg));
+    LOG_WARN("failed to deserialize ObFetchStandbyWalBaseInfoArg", K(ret));
+  } else if (OB_FAIL(standby::ObStandbyWalBaseInfoBuilder::build(arg, result))) {
+    LOG_WARN("failed to build standby wal base info", K(ret), K(arg));
   } else if (OB_FAIL(serialize_message(result, response))) {
-    LOG_WARN("failed to serialize ObFetchStandbyPalfBaseInfoResult", K(ret), K(result));
+    LOG_WARN("failed to serialize ObFetchStandbyWalBaseInfoResult", K(ret), K(result));
   } else {
-    LOG_INFO("fetch standby palf base info RPC handled successfully", K(arg), K(result));
+    LOG_INFO("fetch standby wal base info RPC handled successfully", K(arg), K(result));
   }
 
   return ret;
@@ -863,7 +863,7 @@ int StandbyRpcService::fetch_log(
     return ret;
   }
 
-  const palf::LSN start_lsn(request->start_lsn());
+  const wal::LSN start_lsn(request->start_lsn());
   int64_t sent_bytes = 0;
   if (request->max_bytes() > MAX_FETCH_BYTES) {
     ret = OB_INVALID_ARGUMENT;
@@ -876,9 +876,9 @@ int StandbyRpcService::fetch_log(
       ObLSService *ls_service = share::server_service<ObLSService>();
       ObLS *ls = nullptr;
       logservice::ObLogHandler *log_handler = nullptr;
-      palf::LSN begin_lsn;
-      palf::LSN end_lsn;
-      palf::PalfGroupBufferIterator iterator;
+      wal::LSN begin_lsn;
+      wal::LSN end_lsn;
+      wal::GroupIterator iterator;
       if (OB_ISNULL(ls_service)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ls service is null", K(ret));
@@ -888,7 +888,7 @@ int StandbyRpcService::fetch_log(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("log stream or handler is null", K(ret), KP(ls), KP(log_handler));
       } else if (request->max_bytes() > 0
-                 && OB_FAIL(log_handler->get_begin_lsn(begin_lsn))) {
+                 && OB_FAIL(log_handler->get_base_lsn(begin_lsn))) {
         LOG_WARN("failed to get source log begin lsn", K(ret), K(start_lsn));
       } else if (request->max_bytes() > 0
                  && OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
@@ -912,8 +912,7 @@ int StandbyRpcService::fetch_log(
         const char *buf = nullptr;
         int64_t size = 0;
         share::SCN log_scn;
-        palf::LSN log_lsn;
-        palf::LogGroupEntry group_entry;
+        wal::LSN log_lsn;
         if (writer->cancelled()) {
           ret = OB_CANCELED;
         } else if (OB_FAIL(iterator.next())) {
@@ -921,16 +920,15 @@ int StandbyRpcService::fetch_log(
             ret = OB_SUCCESS;
           }
           break;
-        } else if (OB_FAIL(iterator.get_entry(buf, group_entry, log_lsn))) {
+        } else if (OB_FAIL(iterator.get_entry(buf, size, log_scn, log_lsn))) {
           LOG_WARN("failed to read source log group", K(ret));
-        } else if (FALSE_IT(size = group_entry.get_group_entry_size())) {
-        } else if (FALSE_IT(log_scn = group_entry.get_scn())) {
         } else {
           rpc::Message response;
           response.set_buf(buf, size);
           response.set_size(size);
           response.set_source_lsn(log_lsn.val_);
           response.set_end_scn(log_scn.get_val_for_logservice());
+          response.set_zero_padding_before(iterator.get_zero_padding_before());
           if (!writer->write(response.take_frame())) {
             ret = OB_CANCELED;
           } else {
@@ -1249,9 +1247,9 @@ int StandbyRpcClient::check_restore_precondition(
   return ret;
 }
 
-int StandbyRpcClient::fetch_standby_palf_base_info(
-    const standby::ObFetchStandbyPalfBaseInfoArg &arg,
-    standby::ObFetchStandbyPalfBaseInfoResult &result)
+int StandbyRpcClient::fetch_standby_wal_base_info(
+    const standby::ObFetchStandbyWalBaseInfoArg &arg,
+    standby::ObFetchStandbyWalBaseInfoResult &result)
 {
   int ret = OB_SUCCESS;
 
@@ -1260,23 +1258,23 @@ int StandbyRpcClient::fetch_standby_palf_base_info(
     LOG_WARN("StandbyRpcClient not inited", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fetch standby palf base info arg", K(ret), K(arg));
+    LOG_WARN("invalid fetch standby wal base info arg", K(ret), K(arg));
   } else {
     rpc::Message req;
     rpc::Message res;
     if (OB_FAIL(serialize_message(arg, &req))) {
-      LOG_WARN("failed to serialize ObFetchStandbyPalfBaseInfoArg", K(ret), K(arg));
+      LOG_WARN("failed to serialize ObFetchStandbyWalBaseInfoArg", K(ret), K(arg));
     } else {
-      auto status = rpc_client_.call(rpc::Method::fetch_standby_palf_base_info, req, res);
+      auto status = rpc_client_.call(rpc::Method::fetch_standby_wal_base_info, req, res);
       if (OB_FAIL(status)) {
-        LOG_WARN("failed to call fetch_standby_palf_base_info RPC", K(ret), K(arg));
+        LOG_WARN("failed to call fetch_standby_wal_base_info RPC", K(ret), K(arg));
       } else if (OB_FAIL(deserialize_message(res, result))) {
-        LOG_WARN("failed to deserialize ObFetchStandbyPalfBaseInfoResult", K(ret), K(arg));
+        LOG_WARN("failed to deserialize ObFetchStandbyWalBaseInfoResult", K(ret), K(arg));
       } else if (!result.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid fetch standby palf base info result", K(ret), K(arg), K(result));
+        LOG_WARN("invalid fetch standby wal base info result", K(ret), K(arg), K(result));
       } else {
-        LOG_INFO("fetch standby palf base info completed", K(arg), K(result));
+        LOG_INFO("fetch standby wal base info completed", K(arg), K(result));
       }
     }
   }
@@ -1285,10 +1283,10 @@ int StandbyRpcClient::fetch_standby_palf_base_info(
 }
 
 int StandbyRpcClient::fetch_log(
-    const palf::LSN &start_lsn,
+    const wal::LSN &start_lsn,
     const int64_t max_bytes,
-    const std::function<int(const char *, int64_t, const palf::LSN &,
-                            const share::SCN &)> &consume_log)
+    const std::function<int(const char *, int64_t, const wal::LSN &,
+                            const share::SCN &, uint32_t)> &consume_log)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
@@ -1308,7 +1306,7 @@ int StandbyRpcClient::fetch_log(
     } else {
       while (OB_SUCC(ret) && reader->read(response)) {
         share::SCN log_scn;
-        const palf::LSN source_lsn(response.source_lsn());
+        const wal::LSN source_lsn(response.source_lsn());
         if (response.size() == 0) {
           // The terminal frame carries the source stream boundary.
         } else if (!source_lsn.is_valid()
@@ -1319,7 +1317,8 @@ int StandbyRpcClient::fetch_log(
         } else if (OB_FAIL(log_scn.convert_for_logservice(response.end_scn()))) {
           LOG_WARN("invalid source log scn", K(ret), "source_scn", response.end_scn());
         } else if (OB_FAIL(consume_log(
-            response.buf().data(), static_cast<int64_t>(response.size()), source_lsn, log_scn))) {
+            response.buf().data(), static_cast<int64_t>(response.size()), source_lsn,
+            log_scn, response.zero_padding_before()))) {
           LOG_WARN("failed to consume source log group", K(ret), K(source_lsn),
               K(log_scn), "size", response.size());
         }

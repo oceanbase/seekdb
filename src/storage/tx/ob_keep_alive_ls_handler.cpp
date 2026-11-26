@@ -102,7 +102,7 @@ void ObKeepAliveLSHandler::clear_keep_alive_smaller_scn_info()
 int ObKeepAliveLSHandler::try_submit_log(const SCN &min_start_scn, MinStartScnStatus min_start_status)
 {
   int ret = OB_SUCCESS;
-  palf::LSN lsn;
+  wal::LSN lsn;
   SCN scn = SCN::min_scn();
 
   SpinWLockGuard guard(lock_);
@@ -125,7 +125,7 @@ int ObKeepAliveLSHandler::try_submit_log(const SCN &min_start_scn, MinStartScnSt
     } else if (OB_FAIL(serialize_keep_alive_log_(min_start_scn, min_start_status))) {
       ATOMIC_STORE(&is_busy_, false);
       TRANS_LOG(WARN, "[Keep Alive] serialize keep alive log failed", K(ret));
-    } else if (OB_FAIL(log_handler_ptr_->append(submit_buf_, submit_buf_pos_, ref_scn, true,
+    } else if (OB_FAIL(log_handler_ptr_->append(submit_buf_, submit_buf_pos_, ref_scn,
                                                 this, lsn, scn))) {
       stat_info_.other_error_cnt += 1;
       ATOMIC_STORE(&is_busy_, false);
@@ -167,7 +167,7 @@ int ObKeepAliveLSHandler::on_failure()
 
 int ObKeepAliveLSHandler::replay(const void *buffer,
                                  const int64_t nbytes,
-                                 const palf::LSN &lsn,
+                                 const wal::LSN &lsn,
                                  const SCN &scn)
 {
   int ret = OB_SUCCESS;
@@ -231,7 +231,7 @@ bool ObKeepAliveLSHandler::check_gts_()
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid arguments", K(ret), KP(log_handler_ptr_));
   } else if (OB_FAIL(OB_TS_MGR.get_gts(gts))) {
-  } else if (OB_FAIL(log_handler_ptr_->get_max_scn(max_scn))) {
+  } else if (OB_FAIL(log_handler_ptr_->get_end_scn(max_scn))) {
   } else if (!last_gts_.is_valid_and_not_min()
       || last_gts_ == gts) {
     need_submit = true;

@@ -36,8 +36,8 @@ int ObLSTxLogAdapter::init(ObITxLogParam *param, ObTxTable *tx_table)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid arguments", KR(ret), KP(param), KP(log_handler_));
   } else {
-    ObTxPalfParam *palf_param = static_cast<ObTxPalfParam *>(param);
-    log_handler_ = palf_param->get_log_handler();
+    ObTxWalParam *wal_param = static_cast<ObTxWalParam *>(param);
+    log_handler_ = wal_param->get_log_handler();
     tx_table_ = tx_table;
   }
   return ret;
@@ -46,15 +46,12 @@ int ObLSTxLogAdapter::init(ObITxLogParam *param, ObTxTable *tx_table)
 int ObLSTxLogAdapter::submit_log(const char *buf,
                                  const int64_t size,
                                  const SCN &base_scn,
-                                 ObTxBaseLogCb *cb,
-                                 const bool need_nonblock,
-                                 const int64_t retry_timeout_us)
+                                 ObTxBaseLogCb *cb)
 {
   int ret = OB_SUCCESS;
-  palf::LSN lsn;
+  wal::LSN lsn;
   SCN scn;
   int64_t cur_ts = ObTimeUtility::current_time();
-  const bool is_big_log = (size > palf::MAX_NORMAL_LOG_BODY_SIZE);
 
   if (base_scn.convert_to_ts() > cur_ts + 86400000000L) {
     // only print error log
@@ -63,57 +60,20 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
     }
   }
   if (NULL == buf || 0 >= size || OB_ISNULL(cb) || !base_scn.is_valid()
-      || retry_timeout_us < 0 || size > palf::MAX_LOG_BODY_SIZE) {
+      || size > wal::MAX_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(buf), K(size), K(base_scn), KP(cb));
   } else if (OB_ISNULL(log_handler_) || !log_handler_->is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
   } else {
-    static const int64_t MAX_SLEEP_US = 100;
-    int64_t retry_cnt = 0;
-    int64_t sleep_us = 0;
-    int64_t expire_us = INT64_MAX;
-    bool block_flag = need_nonblock;
-    if (retry_timeout_us < INT64_MAX - cur_ts) {
-      expire_us = cur_ts + retry_timeout_us;
-    }
-    if (expire_us == INT64_MAX) {
-      block_flag = false;
-    }
-    do {
-      if (is_big_log && OB_FAIL(log_handler_->append_big_log(buf, size, base_scn, block_flag,
-                                                              cb, lsn, scn))) {
-        if ((!need_nonblock || OB_EAGAIN != ret) || 0 == retry_cnt || REACH_TIME_INTERVAL(1000 * 1000)) {
-          TRANS_LOG(WARN, "append big log to palf failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
-                K(need_nonblock), K(block_flag), K(expire_us), K(is_big_log), K(retry_cnt));
-        }
-      } else if (!is_big_log && OB_FAIL(log_handler_->append(buf, size, base_scn, block_flag,
-                                                         cb, lsn, scn))) {
-        if ((!need_nonblock || OB_EAGAIN != ret) || 0 == retry_cnt || REACH_TIME_INTERVAL(1000 * 1000)) {
-          TRANS_LOG(WARN, "append log to palf failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
-              K(need_nonblock), K(block_flag), K(expire_us), K(retry_cnt));
-        }
-      } else {
-        cb->set_base_ts(base_scn);
-        cb->set_lsn(lsn);
-        cb->set_log_ts(scn);
-        cb->set_submit_ts(cur_ts);
-      }
-      if (!need_nonblock) {
-        // retries are not needed in block mode.
-        break;
-      } else if (OB_EAGAIN == ret) {
-        retry_cnt++;
-        sleep_us = retry_cnt * 10;
-        sleep_us = sleep_us > MAX_SLEEP_US ? MAX_SLEEP_US : sleep_us;
-        ob_usleep(sleep_us);
-        cur_ts = ObTimeUtility::current_time();
-      }
-    } while (OB_EAGAIN == ret && cur_ts < expire_us);
-    if (need_nonblock && OB_EAGAIN == ret) {
-      TRANS_LOG(WARN, "append log to palf retry timeout", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn),
-          K(block_flag), K(expire_us), K(is_big_log), K(retry_cnt));
+    if (OB_FAIL(log_handler_->append(buf, size, base_scn, cb, lsn, scn))) {
+      TRANS_LOG(WARN, "append log to wal failed", K(ret), KP(log_handler_), KP(buf), K(size), K(base_scn));
+    } else {
+      cb->set_base_ts(base_scn);
+      cb->set_lsn(lsn);
+      cb->set_log_ts(scn);
+      cb->set_submit_ts(cur_ts);
     }
   }
 
@@ -128,18 +88,6 @@ int ObLSTxLogAdapter::get_max_decided_scn(SCN &scn)
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
   } else {
     ret = log_handler_->get_max_decided_scn(scn);
-  }
-  return ret;
-}
-
-int ObLSTxLogAdapter::get_append_mode_initial_scn(share::SCN &ref_scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(log_handler_) || !log_handler_->is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
-  } else {
-    ret = log_handler_->get_append_mode_initial_scn(ref_scn);
   }
   return ret;
 }

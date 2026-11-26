@@ -2592,21 +2592,6 @@ int ObLocalManagementService::set_config_pre_hook(obcall::ObAdminSetConfigArg &a
       } else if (!valid) {
         ret = OB_INVALID_ARGUMENT;
       }
-    } else if (0 == STRCMP(item->name_.ptr(), LOG_DISK_UTILIZATION_LIMIT_THRESHOLD)) {
-      // check log_disk_utilization_limit_threshold
-      valid = ObConfigLogDiskLimitThresholdIntChecker::check(*item);
-      if (!valid) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "log_disk_utilization_limit_threshold should be greater than log_disk_throttling_percentage "
-                      "when log_disk_throttling_percentage is not equal to 100");
-      }
-    } else if (0 == STRCMP(item->name_.ptr(), LOG_DISK_THROTTLING_PERCENTAGE)) {
-      // check log_disk_throttling_percentage
-      valid = ObConfigLogDiskThrottlingPercentageIntChecker::check(*item);
-      if (!valid) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "log_disk_throttling_percentage should be equal to 100 or smaller than log_disk_utilization_limit_threshold");
-      }
     }
   }
   return ret;

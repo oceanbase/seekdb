@@ -47,7 +47,7 @@ void ObLSStorageClogHandler::reset()
 int ObLSStorageClogHandler::replay(
     const void *buffer,
     const int64_t nbytes,
-    const palf::LSN &lsn,
+    const wal::LSN &lsn,
     const share::SCN &scn)
 {
   int ret = OB_SUCCESS;

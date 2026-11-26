@@ -96,52 +96,6 @@ int64_t ObConfigWriteThrottleTriggerIntChecker::get_freeze_trigger_percentage_()
   return percent;
 }
 
-bool ObConfigLogDiskLimitThresholdIntChecker::check(const ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  const int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  const int64_t throttling_percentage = get_log_disk_throttling_percentage_();
-  if (is_valid) {
-    is_valid = (throttling_percentage != 0);
-  }
-  if (is_valid) {
-    is_valid = (throttling_percentage == 100) || (value > throttling_percentage);
-  }
-  return is_valid;
-}
-
-int64_t ObConfigLogDiskLimitThresholdIntChecker::get_log_disk_throttling_percentage_()
-{
-  int64_t percent = 0;
-
-  percent = config::log_disk_throttling_percentage();
-
-  return percent;
-}
-
-bool ObConfigLogDiskThrottlingPercentageIntChecker::check(const obcall::ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  const int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  const int64_t limit_threshold = get_log_disk_utilization_limit_threshold_();
-  if (is_valid) {
-    is_valid = (limit_threshold != 0);
-  }
-  if (is_valid) {
-    is_valid = (value == 100) || (value < limit_threshold);
-  }
-  return is_valid;
-}
-
-int64_t ObConfigLogDiskThrottlingPercentageIntChecker::get_log_disk_utilization_limit_threshold_()
-{
-  int64_t threshold = 0;
-
-  threshold = config::log_disk_utilization_limit_threshold();
-
-  return threshold;
-}
-
 bool ObConfigTabletSizeChecker::check(const char *text) const
 {
   bool is_valid = false;

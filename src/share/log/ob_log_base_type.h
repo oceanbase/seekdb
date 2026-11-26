@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_OB_LOG_BASE_TYPE_
 #define OCEANBASE_LOGSERVICE_OB_LOG_BASE_TYPE_
 
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 
 namespace oceanbase
 {
@@ -238,7 +238,7 @@ class ObIReplaySubHandler
 public:
   virtual int replay(const void *buffer,
                      const int64_t nbytes,
-                     const palf::LSN &lsn,
+                     const wal::LSN &lsn,
                      const share::SCN &scn) = 0;
 };
 

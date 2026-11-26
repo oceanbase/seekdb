@@ -27,7 +27,7 @@
 namespace oceanbase
 {
 using namespace share;
-using namespace palf;
+using namespace wal;
 namespace storage
 {
 namespace checkpoint
@@ -128,8 +128,8 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
   DEBUG_SYNC(BEFORE_CHECKPOINT_TASK);
   ObLS *tenant_ls = nullptr;
   query::ObIChangeStreamService *cs_service = nullptr;
-  palf::LSN checkpoint_lsn;
-  palf::LSN cs_min_dep_lsn;
+  wal::LSN checkpoint_lsn;
+  wal::LSN cs_min_dep_lsn;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
   } else if (OB_FAIL(tenant_ls->get_data_checkpoint()->check_can_move_to_active_in_newcreate())) {
   } else if (OB_FAIL(tenant_ls->get_checkpoint_executor()->update_clog_checkpoint())) {
@@ -147,7 +147,7 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
 
     if (OB_FAIL(tenant_ls->get_log_handler()->advance_base_lsn(checkpoint_lsn))) {
     } else {
-      FLOG_INFO("[CHECKPOINT] advance palf base lsn successfully", K(checkpoint_lsn));
+      FLOG_INFO("[CHECKPOINT] advance wal base lsn successfully", K(checkpoint_lsn));
       STORAGE_LOG(INFO, "succeed to update_clog_checkpoint");
     }
   }

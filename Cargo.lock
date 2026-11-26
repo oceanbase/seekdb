@@ -1633,6 +1633,7 @@ dependencies = [
  "storage-io",
  "uuid-generator",
  "vector-kernels",
+ "wal",
  "xml-parser",
 ]
 
@@ -2322,6 +2323,15 @@ version = "0.1.0"
 dependencies = [
  "cxx",
  "simsimd",
+]
+
+[[package]]
+name = "wal"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "file-io",
+ "log",
 ]
 
 [[package]]

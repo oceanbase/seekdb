@@ -48,7 +48,7 @@ ObChangeStreamMgr::~ObChangeStreamMgr()
 
 int ObChangeStreamMgr::server_module_init(
     ObChangeStreamMgr *&mgr,
-    palf::PalfEnv &palf_env,
+    wal::Env &wal_env,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -56,7 +56,7 @@ int ObChangeStreamMgr::server_module_init(
   if (OB_ISNULL(mgr)) {
     ret = common::OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(
-      mgr->init(palf_env, schema_publish_signal, run_wrapper))) {
+      mgr->init(wal_env, schema_publish_signal, run_wrapper))) {
   } else {
     LOG_INFO("ObChangeStreamMgr server_module_init success");
   }
@@ -64,7 +64,7 @@ int ObChangeStreamMgr::server_module_init(
 }
 
 int ObChangeStreamMgr::init(
-    palf::PalfEnv &palf_env,
+    wal::Env &wal_env,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -73,7 +73,7 @@ int ObChangeStreamMgr::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(fetcher_.init(
-      &dispatcher_, palf_env, schema_publish_signal, run_wrapper))) {
+      &dispatcher_, wal_env, schema_publish_signal, run_wrapper))) {
   } else if (OB_FAIL(dispatcher_.init())) {
   } else if (OB_FAIL(worker_.init(worker_thread_count))) {
   } else {
@@ -147,7 +147,7 @@ int ObChangeStreamMgr::update_refresh_scn(const int64_t refresh_scn)
   return ret;
 }
 
-int ObChangeStreamMgr::get_min_dep_lsn(palf::LSN &min_dep_lsn) const
+int ObChangeStreamMgr::get_min_dep_lsn(wal::LSN &min_dep_lsn) const
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
@@ -179,7 +179,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
     int64_t schema_version_v2 = 0;
     ObCSAsyncSchemaState schema_state;
     SCN target_scn;
-    palf::LSN fence_lsn;
+    wal::LSN fence_lsn;
     const int64_t capture_epoch = mgr->dispatcher_.get_epoch();
     const int64_t now = ObTimeUtility::current_time();
 
@@ -226,7 +226,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
     } else if (schema_state.has_async_index_) {
       storage::ObLS *ls = nullptr;
       if (OB_FAIL(share::server_service<storage::ObLSService>()->get_ls(ls))
-          || OB_FAIL(ls->get_log_handler()->get_max_lsn(fence_lsn))) {
+          || OB_FAIL(ls->get_log_handler()->get_end_lsn(fence_lsn))) {
         LOG_WARN("failed to capture refresh fence_lsn", KR(ret), K(target_scn));
       }
     }

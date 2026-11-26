@@ -38,7 +38,7 @@ protected:
   {
   public:
     RecordingExecutor(storage::ObLS *ls, const logservice::ObLogBaseHeader &header)
-      : ObTxReplayExecutor(ls, nullptr, palf::LSN(4096), SCN::plus(SCN::base_scn(), 100), header),
+      : ObTxReplayExecutor(ls, nullptr, wal::LSN(4096), SCN::plus(SCN::base_scn(), 100), header),
         row_count_(0), row_ret_(OB_SUCCESS), empty_payload_(false)
     {}
     ~RecordingExecutor() = default;

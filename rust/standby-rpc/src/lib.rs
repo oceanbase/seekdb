@@ -64,6 +64,7 @@ impl Frame {
             max_bytes: 0,
             source_lsn: 0,
             end_scn: 0,
+            zero_padding_before: 0,
         }
     }
 }
@@ -330,14 +331,14 @@ impl StandbyService for Handler {
         Ok(Response::new(precondition_response(frame)?))
     }
 
-    async fn fetch_standby_palf_base_info(
+    async fn fetch_standby_wal_base_info(
         &self,
-        request: Request<FetchStandbyPalfBaseInfoReq>,
-    ) -> Result<Response<FetchStandbyPalfBaseInfoRes>, Status> {
+        request: Request<FetchStandbyWalBaseInfoReq>,
+    ) -> Result<Response<FetchStandbyWalBaseInfoRes>, Status> {
         let trace = request_trace(request.metadata());
         let request = request.into_inner();
         let mut stream = self.stream(
-            Method::fetch_standby_palf_base_info,
+            Method::fetch_standby_wal_base_info,
             Frame {
                 buf: request.buf,
                 size: request.size,
@@ -352,7 +353,7 @@ impl StandbyService for Handler {
         if let Some(result) = stream.next().await {
             result?;
         }
-        Ok(Response::new(FetchStandbyPalfBaseInfoRes {
+        Ok(Response::new(FetchStandbyWalBaseInfoRes {
             buf: frame.buf,
             size: frame.size,
         }))
@@ -379,6 +380,7 @@ impl StandbyService for Handler {
                 size: frame.size,
                 source_lsn: frame.source_lsn,
                 end_scn: frame.end_scn,
+                zero_padding_before: frame.zero_padding_before,
             })
         }))))
     }
@@ -667,14 +669,14 @@ async fn client_call(
                 return Ok(());
             }
         }
-        Method::fetch_standby_palf_base_info => {
-            let mut request = Request::new(FetchStandbyPalfBaseInfoReq {
+        Method::fetch_standby_wal_base_info => {
+            let mut request = Request::new(FetchStandbyWalBaseInfoReq {
                 buf: frame.buf,
                 size: frame.size,
             });
             request.set_timeout(timeout);
             let response = client
-                .fetch_standby_palf_base_info(request)
+                .fetch_standby_wal_base_info(request)
                 .await?
                 .into_inner();
             if sender
@@ -703,6 +705,7 @@ async fn client_call(
                         size: response.size,
                         source_lsn: response.source_lsn,
                         end_scn: response.end_scn,
+                        zero_padding_before: response.zero_padding_before,
                         ..Frame::empty()
                     }))
                     .await

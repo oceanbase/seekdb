@@ -49,7 +49,7 @@ public:
   // create a LS
   int create_ls(const share::ObServerRole &server_role = share::PRIMARY_SERVER_ROLE);
   int create_ls_for_restore(
-      const palf::PalfBaseInfo &palf_base_info,
+      const wal::BaseInfo &wal_base_info,
       const share::SCN &restore_checkpoint_scn);
   int update_ls_meta_for_physical_restore(const ObLSMeta &source_meta);
 
@@ -95,7 +95,7 @@ private:
       CREATE_STATE_INIT = 0, // begin
       CREATE_STATE_LS_ALLOCATED = 1,
       CREATE_STATE_PUBLISHED = 2,
-      CREATE_STATE_PALF_ENABLED = 3,
+      CREATE_STATE_WAL_ENABLED = 3,
       CREATE_STATE_INNER_TABLET_CREATED = 4,
       CREATE_STATE_FINISH = 5
   };
@@ -105,14 +105,14 @@ private:
     share::ObServerRole server_role_;
     ObRestoreStatus restore_status_;
     share::SCN create_scn_;
-    palf::PalfBaseInfo palf_base_info_;
+    wal::BaseInfo wal_base_info_;
     bool need_create_inner_tablet_;
   };
 
   int create_ls_(const ObCreateLSCommonArg &arg);
   int inner_create_ls_(const ObRestoreStatus &restore_status,
                        const share::SCN &create_scn,
-                       const palf::LSN &clog_base_lsn,
+                       const wal::LSN &clog_base_lsn,
                        ObLS *&ls);
   int publish_ls_(ObLS *ls);
   void free_ls_(ObLS *ls);

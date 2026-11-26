@@ -61,7 +61,7 @@ public:
   // for replay, do nothing
   int replay(const void *buffer,
              const int64_t buf_size,
-             const palf::LSN &lsn,
+             const wal::LSN &lsn,
              const share::SCN &scn) 
   { 
     UNUSED(buffer);

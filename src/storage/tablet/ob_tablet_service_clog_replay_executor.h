@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 #include "common/ob_tablet_id.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 #include "storage/tablet/ob_tablet_replay_executor.h"
 #include "share/scn.h"
 

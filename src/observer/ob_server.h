@@ -73,7 +73,6 @@
 #include "storage/ob_disk_usage_reporter.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "logservice/ob_server_log_block_mgr.h"
-#include "logservice/palf/log_io_adapter.h"
 #include "rust/storage_io.h"
 
 
@@ -266,7 +265,7 @@ public:
   bool is_stopped();
   int wait_until_refreshed(
       int64_t abs_timeout_us) override;
-  int get_min_dep_lsn(palf::LSN &min_dep_lsn) override;
+  int get_min_dep_lsn(wal::LSN &min_dep_lsn) override;
 
 public:
   //Refer to ObPurgeCompletedMonitorInfoTask
@@ -497,7 +496,6 @@ private:
   sql::ObConnectResourceMgr conn_res_mgr_;
   ObDiskUsageReportTask disk_usage_report_task_;
 
-  share::StartupResult startup_result_;
   logservice::ObServerLogBlockMgr log_block_mgr_;
 
   // This handler is used to process tasks during startup. it can speed up the startup process.

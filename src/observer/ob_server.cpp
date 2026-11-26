@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "lib/file/path_operations.h"
-#include "logservice/palf/log_meta.h"
 #include "share/io_request.h"
 #include "rust/config.h"
 #include "rust/config/config_checkers.h"
@@ -373,7 +372,7 @@ int ObServer::wait_until_refreshed(
       abs_timeout_us);
 }
 
-int ObServer::get_min_dep_lsn(palf::LSN &min_dep_lsn)
+int ObServer::get_min_dep_lsn(wal::LSN &min_dep_lsn)
 {
   return OB_ISNULL(mods_change_stream_mgr_)
       ? common::OB_NOT_INIT
@@ -527,7 +526,7 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
         "    base-dir: %s\n"
         "    data-dir: %s\n"
         "    redo-dir: %s\n"
-        "    PALF-dir: %s/sys/log_stream\n",
+        "    WAL-dir: %s\n",
         ret, data_file_exists, redo_empty, base_dir, data_dir, redo_dir, redo_dir);
     std::fflush(stderr);
   }
@@ -703,8 +702,7 @@ ObServer::ObServer()
     schema_status_proxy_(sql_proxy_),
     is_log_dir_empty_(false),
     conn_res_mgr_(),
-    disk_usage_report_task_(),
-    log_block_mgr_(startup_result_)
+    disk_usage_report_task_()
 {
 }
 
@@ -1364,9 +1362,6 @@ int ObServer::start()
       FLOG_INFO("server metadata is ready");
     }
 
-    if (OB_SUCC(ret) && !stop_ && OB_FAIL(startup_result_.finish())) {
-      LOG_ERROR("background log allocation failed during startup", KR(ret));
-    }
     if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -1379,7 +1374,6 @@ int ObServer::start()
 
   int64_t start_service_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret)) {
-    startup_result_.report_failure(ret);
     LOG_ERROR("failure occurs, stop observer startup", KR(ret));
     LOG_DBA_FORCE_PRINT(DBA_ERROR, OB_SERVER_START_FAIL, ret,
                         DBA_STEP_INC_INFO(server_start),
@@ -1449,15 +1443,10 @@ int ObServer::wait_for_server_runtime()
   int ret = OB_SUCCESS;
   bool synced = false;
   bool replay_ready = false;
-  bool timestamp_ready = false;
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "wait for server runtime begin.");
-  while (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
-    if (OB_FAIL(startup_result_.error())) {
-      LOG_ERROR("log allocation failed while waiting for server runtime", KR(ret));
-      break;
-    }
+  while (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready)) {
     synced = server_runtime_controller_.has_synced();
     if (synced && !replay_ready) {
       if (OB_FAIL(standby_module_->wait_replay_ready([this]() { return stop_; }))) {
@@ -1466,23 +1455,12 @@ int ObServer::wait_for_server_runtime()
         replay_ready = true;
       }
     }
-    if (OB_SUCC(ret) && !stop_ && replay_ready && !timestamp_ready) {
-      SCN gts;
-      if (OB_FAIL(OB_TS_MGR.get_gts(gts))) {
-        if (OB_EAGAIN == ret) {
-          ret = OB_SUCCESS;
-        } else {
-        }
-      } else {
-        timestamp_ready = true;
-      }
-    }
-    if (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready || !timestamp_ready)) {
+    if (OB_SUCC(ret) && !stop_ && (!synced || !replay_ready)) {
       ob_usleep(10 * 1000);
     }
   }
-  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(replay_ready), K(timestamp_ready));
-  if (OB_SUCC(ret) && !stop_ && synced && replay_ready && timestamp_ready) {
+  FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(replay_ready));
+  if (OB_SUCC(ret) && !stop_ && synced && replay_ready) {
     LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "wait for server runtime success.");
@@ -1571,7 +1549,6 @@ bool ObServer::is_stopped()
 
 void ObServer::set_stop()
 {
-  log_block_mgr_.stop();
   net_frame_.sql_nio_stop();
   stop_ = true;
   ob_service_.set_stop();
@@ -2073,11 +2050,7 @@ int ObServer::validate_io_threads()
   const int64_t data_threads = config::sync_io_thread_count();
   const int64_t log_threads = config::disk_io_thread_count();
   if (data_threads < 0 || log_threads < 0) { return OB_INVALID_ARGUMENT; }
-  int ret = OB_SERVER_BLOCK_MGR.validate_io_threads(data_threads);
-  if (ret == OB_SUCCESS) {
-    ret = convert_storage_error(log_block_mgr_.physical_owner().validate_named_workers(log_threads));
-  }
-  return ret;
+  return OB_SERVER_BLOCK_MGR.validate_io_threads(data_threads);
 }
 
 int ObServer::configure_io(int64_t server_memory_bytes, int64_t callback_threads)
@@ -2092,18 +2065,7 @@ int ObServer::init_io()
   int ret = OB_SUCCESS;
   rust::String data_dir = config::data_dir();
   rust::String redo_dir = config::redo_dir();
-  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(data_dir.c_str(), redo_dir.c_str()))) {
-  } else {
-    char log_dir[MAX_PATH_SIZE] = {'\0'};
-    bool directory_exists = false;
-    const int length = snprintf(log_dir, sizeof(log_dir), "%s/sys/log_stream",
-        OB_FILE_SYSTEM_ROUTER.get_clog_dir());
-    if (length < 0 || length >= sizeof(log_dir)) {
-      ret = OB_BUF_NOT_ENOUGH;
-    } else if (OB_FAIL(palf::meta_store::check_directory(local_store_, log_dir, directory_exists))) {
-      LOG_ERROR("PALF directory check failed before log recovery", KR(ret), K(log_dir));
-    }
-  }
+  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(data_dir.c_str(), redo_dir.c_str()))) {}
 
   if (OB_SUCC(ret)) {
     storage_io::RuntimeConfig io_config{};
@@ -2136,11 +2098,7 @@ int ObServer::init_io()
         int64_t data_disk_percentage = 0;
         int64_t log_disk_percentage = 0;
 
-        if (!log_block_mgr_.can_reinitialize()) {
-          ret = OB_STATE_NOT_MATCH;
-          LOG_ERROR("previous log physical owner has not drained", KR(ret));
-        } else if (OB_FAIL(log_block_mgr_.init(storage_env_.clog_dir_,
-            ObServerUtils::get_log_disk_info_in_config, *io_service_, disk_threads, max_io_depth))) {
+        if (OB_FAIL(log_block_mgr_.init(ObServerUtils::get_log_disk_info_in_config))) {
           LOG_ERROR("log block mgr init failed", KR(ret));
         } else if (OB_FAIL(ObServerUtils::cal_all_part_disk_size(config::datafile_size(),
                                                   config::log_disk_size(),
@@ -2504,17 +2462,12 @@ int ObServer::init_storage()
   bool clogdir_is_empty = false;
 
   if (OB_SUCC(ret)) {
-    int64_t log_disk_in_use = 0;
     // Check if the clog directory is empty
-    if (OB_FAIL(log_block_mgr_.get_disk_usage(log_disk_in_use))) {
-    } else if (0 == log_disk_in_use
-        && OB_FAIL(logservice::ObServerLogBlockMgr::check_clog_directory_is_empty(
+    if (OB_FAIL(logservice::ObServerLogBlockMgr::check_clog_directory_is_empty(
             OB_FILE_SYSTEM_ROUTER.get_clog_dir(), clogdir_is_empty))) {
       LOG_ERROR("is_dir_empty fail", K(ret));
     } else if (clogdir_is_empty) {
       LOG_INFO("clog dir is empty");
-    } else {
-      clogdir_is_empty = log_disk_in_use == 0;
     }
   }
 

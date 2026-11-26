@@ -25,7 +25,7 @@
 #include "logservice/ob_log_service.h"
 #include "logservice/replayservice/ob_log_replay_service.h"
 #include "share/ob_debug_sync.h"
-#include "share/log/palf/log_define.h"
+#include "share/log/types/log_define.h"
 #include "share/rc/ob_server_runtime.h"
 #include "standby/standby_rpc.h"
 #include "standby/ob_standby_source_util.h"
@@ -69,7 +69,7 @@ bool is_fatal_sync_error(const int ret)
 }
 
 int get_local_position(
-    palf::LSN &end_lsn,
+    wal::LSN &end_lsn,
     share::SCN &end_scn,
     share::SCN &sync_scn)
 {
@@ -180,7 +180,7 @@ int ObStandbyLogSyncService::get_local_progress(
     share::SCN &sync_scn)
 {
   int ret = OB_SUCCESS;
-  palf::LSN end_lsn;
+  wal::LSN end_lsn;
   ret = get_local_position(end_lsn, end_scn, sync_scn);
   return ret;
 }
@@ -407,56 +407,43 @@ int ObStandbyLogSyncService::query_source_promotion_boundary_(
   return ret;
 }
 
-int ObStandbyLogSyncService::append_log_group_(
-    const char *buf,
-    const int64_t size,
-    const palf::LSN &source_lsn,
-    const share::SCN &source_scn)
-{
-  int ret = OB_SUCCESS;
-  logservice::ObLogHandler *log_handler = nullptr;
-  if (OB_ISNULL(buf) || size <= 0 || size > palf::MAX_LOG_BUFFER_SIZE
-      || !source_lsn.is_valid() || !source_scn.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid standby log group", KR(ret), KP(buf), K(size), K(source_lsn), K(source_scn));
-  } else if (OB_FAIL(get_log_handler(log_handler))) {
-  } else if (OB_FAIL(log_handler->append_imported_group(
-      source_lsn, source_scn, buf, size))) {
-    if (OB_STATE_NOT_MATCH == ret || OB_CHECKSUM_ERROR == ret || OB_INVALID_DATA == ret) {
-      record_fatal_error_(ret);
-    }
-    LOG_WARN("failed to append source log group locally", KR(ret), K(source_lsn), K(source_scn), K(size));
-  }
-  return ret;
-}
-
 int ObStandbyLogSyncService::sync_once_(
     const common::ObAddr &source_addr,
     bool &made_progress)
 {
   int ret = OB_SUCCESS;
-  palf::LSN start_lsn;
+  wal::LSN start_lsn;
   logservice::ObLogHandler *log_handler = nullptr;
   StandbyRpcClient client;
+  wal::ImportedGroups groups;
   made_progress = false;
   if (OB_SUCCESS != (ret = get_fatal_error_())) {
   } else if (OB_FAIL(get_log_handler(log_handler))) {
-  } else if (OB_FAIL(log_handler->get_max_lsn(start_lsn))) {
-    // Imported groups advance max_lsn before their asynchronous flush advances
-    // end_lsn. Starting the next batch at end_lsn can fetch an already
-    // submitted group again and violate PALF's strict continuity check.
+  } else if (OB_FAIL(log_handler->get_end_lsn(start_lsn))) {
     LOG_WARN("failed to get local standby log import position", KR(ret));
   } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
     LOG_WARN("failed to init standby RPC client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.fetch_log(
       start_lsn,
       FETCH_BATCH_BYTES,
-      [this, &made_progress](const char *buf, const int64_t size,
-                            const palf::LSN &source_lsn,
-                            const share::SCN &source_scn) -> int {
-        int ret = append_log_group_(buf, size, source_lsn, source_scn);
-        if (OB_SUCC(ret)) {
-          made_progress = true;
+      [&groups](const char *buf, const int64_t size,
+                const wal::LSN &source_lsn,
+                const share::SCN &source_scn,
+                const uint32_t zero_padding_before) -> int {
+        int ret = OB_SUCCESS;
+        if (OB_ISNULL(buf) || size <= 0 || size > wal::MAX_LOG_BUFFER_SIZE
+            || !source_lsn.is_valid() || !source_scn.is_valid()) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          auto copied = wal::wal_rs::copy_imported_group(
+              source_lsn.val_, source_scn.get_val_for_logservice(),
+              zero_padding_before,
+              {reinterpret_cast<const uint8_t *>(buf), static_cast<size_t>(size)});
+          if (wal::wal_rs::Code::Ok != copied.code) {
+            ret = wal::from_rust_code(copied.code);
+          } else {
+            groups.emplace_back(std::move(copied.group));
+          }
         }
         return ret;
       }))) {
@@ -464,6 +451,13 @@ int ObStandbyLogSyncService::sync_once_(
       record_fatal_error_(ret);
     }
     LOG_WARN("failed to fetch standby logs", KR(ret), K(source_addr), K(start_lsn));
+  } else if (!groups.empty() && OB_FAIL(log_handler->append_imported_groups(groups))) {
+    if (is_fatal_sync_error(ret)) {
+      record_fatal_error_(ret);
+    }
+    LOG_WARN("failed to append fetched standby log groups", KR(ret), K(groups.size()));
+  } else {
+    made_progress = !groups.empty();
   }
   return ret;
 }

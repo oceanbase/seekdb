@@ -20,35 +20,37 @@
 #include <stdint.h>
 #include "share/log/ob_log_base_header.h"
 #include "share/log/ob_log_base_type.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 #include "share/scn.h"
-#include "logservice/palf/palf_callback.h"
-#include "logservice/palf/palf_iterator.h"
-#include "logservice/palf/palf_handle.h"
+#include "logservice/wal_adapter/callback.h"
+#include "logservice/wal_adapter/iterator.h"
+#include "logservice/wal_adapter/handle.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/queue/ob_link_queue.h"
+#include "lib/thread/ob_link_task.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/thread/ob_thread_lease.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/ob_define.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_errno.h"
 #include "logservice/ob_log_handler.h"
 
 namespace oceanbase
 {
-namespace palf
+namespace wal
 {
-class PalfEnv;
+class Env;
 }
 namespace logservice
 {
 class ObLogReplayService;
 struct LSReplayStat
 {
-  palf::LSN end_lsn_;
+  wal::LSN end_lsn_;
   bool enabled_;
-  palf::LSN unsubmitted_lsn_;
+  wal::LSN unsubmitted_lsn_;
   share::SCN unsubmitted_scn_;
   int64_t pending_cnt_;
   TO_STRING_KV(K(end_lsn_), K(enabled_), K(unsubmitted_lsn_),
@@ -59,7 +61,7 @@ struct ReplayDiagnoseInfo
 {
   ReplayDiagnoseInfo() { reset(); }
   ~ReplayDiagnoseInfo() { reset(); }
-  palf::LSN max_replayed_lsn_;
+  wal::LSN max_replayed_lsn_;
   share::SCN max_replayed_scn_;
   common::ObSqlString diagnose_str_;
   TO_STRING_KV(K(max_replayed_lsn_), K(max_replayed_scn_));
@@ -115,7 +117,7 @@ public:
     reset();
   }
   ObLogReplayTask(const ObLogBaseHeader &header,
-                  const palf::LSN &lsn,
+                  const wal::LSN &lsn,
                   const share::SCN &scn,
                   const int64_t log_size)
       : log_type_(header.get_log_type()),
@@ -144,7 +146,7 @@ public:
   void shallow_copy(const ObLogReplayTask &other);
 public:
   ObLogBaseType log_type_;
-  palf::LSN lsn_;
+  wal::LSN lsn_;
   share::SCN scn_;
   bool is_pre_barrier_;
   bool is_post_barrier_;
@@ -259,7 +261,7 @@ public:
   {
     destroy();
   }
-  int init(const palf::LSN &base_lsn,
+  int init(const wal::LSN &base_lsn,
            const share::SCN &base_scn,
            ObReplayStatus *replay_status);
   void reset() override;
@@ -270,13 +272,14 @@ public:
   bool has_remained_submit_log(const share::SCN &replayable_point,
                                bool &iterate_end_by_replayable_point);
   // No rollback allowed
-  int update_submit_log_meta_info(const palf::LSN &lsn, const share::SCN &scn);
-  int get_next_to_submit_log_info(palf::LSN &lsn, share::SCN &scn) const;
-  int get_committed_end_lsn(palf::LSN &lsn) const;
-  int get_base_lsn(palf::LSN &lsn) const;
+  int update_submit_log_meta_info(const wal::LSN &lsn, const share::SCN &scn);
+  int get_next_to_submit_log_info(wal::LSN &lsn, share::SCN &scn) const;
+  int get_committed_end_lsn(wal::LSN &lsn) const;
+  int get_base_lsn(wal::LSN &lsn) const;
   int get_base_scn(share::SCN &scn) const;
   int need_skip(const share::SCN &scn, bool &need_skip);
-  int get_log(const char *&buffer, int64_t &nbytes, share::SCN &scn, palf::LSN &offset);
+  int get_log(const char *&buffer, int64_t &nbytes, share::SCN &scn, wal::LSN &offset);
+  wal::LSN get_entry_end_lsn() const { return iterator_.get_entry_end_lsn(); }
   int next_log(const share::SCN &replayable_point,
                bool &iterate_end_by_replayable_point);
   // Reset the iterator with the current endpoint as the new starting point
@@ -284,7 +287,7 @@ public:
   INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask, K(iterator_));
 private:
   //for unittest, should be a member not pointer
-  palf::PalfBufferIterator iterator_; 
+  wal::EntryIterator iterator_;
 };
 
 class ObReplayServiceReplayTask : public ObReplayServiceTask
@@ -331,7 +334,7 @@ private:
   bool need_batch_push_; // batch push judgment flag, only the log pull thread can modify this value
 };
 
-class ObReplayFsCb : public palf::PalfFSCb
+class ObReplayFsCb : public wal::FsyncCallback
 {
 public:
   ObReplayFsCb() : replay_status_(NULL) {}
@@ -348,7 +351,7 @@ public:
     replay_status_ = NULL;
   }
   // Callback interface, call the update_end_offset interface of replay status
-  int update_end_lsn(const palf::LSN &end_offset, const share::SCN &end_scn);
+  int update_end_lsn(const wal::LSN &end_offset, const share::SCN &end_scn);
 private:
   ObReplayStatus *replay_status_;
 };
@@ -366,11 +369,11 @@ public:
 public:
   ObReplayStatus();
   ~ObReplayStatus();
-  int init(palf::PalfEnv *palf_env,
+  int init(wal::Env *wal_env,
            ObLogReplayService *rp_sv);
   void destroy();
 public:
-  int enable(const palf::LSN &base_lsn,
+  int enable(const wal::LSN &base_lsn,
              const share::SCN &base_scn);
   int disable();
   // Internal execution gate; LogService owns the logical enabled state.
@@ -398,7 +401,7 @@ public:
   int stop_fetching();
   // There are submitted log tasks pending replay
   // update right margin of logs that need to replay
-  int update_end_offset(const palf::LSN &lsn);
+  int update_end_offset(const wal::LSN &lsn);
 
   int push_log_replay_task(ObLogReplayTask &task);
   int batch_push_all_task_queue();
@@ -411,7 +414,7 @@ public:
   //Release the special log_buf in ObLogReplayTask, only forward barrier logs are effective
   void free_replay_task_log_buf(ObLogReplayTask *task);
 
-  int get_min_unreplayed_lsn(palf::LSN &lsn);
+  int get_min_unreplayed_lsn(wal::LSN &lsn);
   int get_replay_process(int64_t &submitted_log_size,
                          int64_t &unsubmitted_log_size,
                          int64_t &replayed_log_size,
@@ -424,8 +427,8 @@ public:
                            bool &need_replay,
                            const int64_t replay_queue_idx);
   //check whether can replay log so far
-  void set_post_barrier_submitted(const palf::LSN &lsn);
-  int set_post_barrier_finished(const palf::LSN &lsn);
+  void set_post_barrier_submitted(const wal::LSN &lsn);
+  int set_post_barrier_finished(const wal::LSN &lsn);
   int trigger_fetch_log();
   inline void inc_ref()
   {
@@ -440,7 +443,7 @@ public:
     return replay_hint & (REPLAY_TASK_QUEUE_SIZE - 1);
   }
   // Used to record log stream level errors, this type of error is unrecoverable
-  void set_err_info(const palf::LSN &lsn,
+  void set_err_info(const wal::LSN &lsn,
                     const share::SCN &scn,
                     const ObLogBaseType &log_type,
                     const int64_t replay_hint,
@@ -449,7 +452,7 @@ public:
                     const int err_ret);
   bool has_fatal_error() const;
   static bool is_fatal_error(int ret);
-  int is_replayed_to(const palf::LSN &target_lsn, bool &reached) const;
+  int is_replayed_to(const wal::LSN &target_lsn, bool &reached) const;
   int get_max_replayed_scn(share::SCN &scn) const;
   int get_min_unreplayed_scn(share::SCN &scn) const;
   int stat(LSReplayStat &stat) const;
@@ -460,11 +463,11 @@ public:
   int64_t get_pending_count() const;
   void update_replayable_point(const share::SCN &scn);
   share::SCN get_replayable_point() const;
-  bool need_check_memstore(const palf::LSN &lsn)
+  bool need_check_memstore(const wal::LSN &lsn)
   {
     return (lsn - last_check_memstore_lsn_) > LS_CHECK_MEMSTORE_INTERVAL_THRESHOLD;
   }
-  void set_last_check_memstore_lsn(const palf::LSN &lsn)
+  void set_last_check_memstore_lsn(const wal::LSN &lsn)
   {
     last_check_memstore_lsn_ = lsn;
   }
@@ -477,7 +480,7 @@ public:
 private:
   int submit_task_to_replay_service_(ObReplayServiceTask &task);
   // Register callback and submit the currently initialized submit_log_task
-  int enable_(const palf::LSN &base_lsn,
+  int enable_(const wal::LSN &base_lsn,
               const share::SCN &base_scn);
   // Unregister callback and clear task
   int disable_();
@@ -500,8 +503,8 @@ private:
   // inc_ref() before push task into replay_service, dec_ref() after replay_service finished handling task
   int64_t ref_cnt_;
   // used for barrier demand
-  palf::LSN post_barrier_lsn_;
-  palf::LSN last_check_memstore_lsn_;
+  wal::LSN post_barrier_lsn_;
+  wal::LSN last_check_memstore_lsn_;
   // protect is_active_ and submit_log_task_
   // Hold the read lock until the log replay is complete when replaying a log entry
   // Ensure that no log replay will occur after write lock is disabled
@@ -511,7 +514,7 @@ private:
   ObLogReplayService *rp_sv_;
   struct LogInfo
   {
-    palf::LSN lsn_;
+    wal::LSN lsn_;
     share::SCN scn_;
     int64_t replay_hint_ = 0;
     ObLogBaseType log_type_ = ObLogBaseType::INVALID_LOG_BASE_TYPE;
@@ -525,19 +528,20 @@ private:
     bool is_submit_err_ = false;
     int err_ret_ = common::OB_SUCCESS;
   };
-  void init_progress(const palf::LSN &base_lsn, const share::SCN &base_scn);
-  void get_next_to_submit_log_info(palf::LSN &lsn, share::SCN &scn) const;
-  palf::LSN get_base_lsn() const;
+  void init_progress(const wal::LSN &base_lsn, const share::SCN &base_scn);
+  void get_next_to_submit_log_info(wal::LSN &lsn, share::SCN &scn) const;
+  wal::LSN get_base_lsn() const;
   share::SCN get_base_scn() const;
-  int update_submit_log_meta_info(const palf::LSN &lsn, const share::SCN &scn);
+  int update_submit_lsn(const wal::LSN &lsn);
+  int update_submit_log_meta_info(const wal::LSN &lsn, const share::SCN &scn);
   int update_submit_scn(const share::SCN &scn);
   void set_queue_head(int64_t index, const LogInfo &head);
   void set_queue_first_handle_ts(int64_t index, int64_t timestamp);
   LogInfo get_min_unreplayed_log_info_() const; // caller holds progress_lock_
   mutable common::ObSpinLock progress_lock_;
-  palf::LSN next_to_submit_lsn_;
+  wal::LSN next_to_submit_lsn_;
   share::SCN next_to_submit_scn_;
-  palf::LSN base_lsn_;
+  wal::LSN base_lsn_;
   share::SCN base_scn_;
   LogInfo queue_heads_[common::REPLAY_TASK_QUEUE_SIZE];
   ErrorInfo error_;
@@ -549,8 +553,8 @@ private:
   ObReplayServiceReplayTask task_queues_[common::REPLAY_TASK_QUEUE_SIZE];
   ObReplayServiceSubmitTask submit_log_task_;
 
-  palf::PalfEnv *palf_env_;
-  palf::PalfHandle palf_handle_;
+  wal::Env *wal_env_;
+  wal::Handle wal_handle_;
   ObReplayFsCb fs_cb_;
   mutable int64_t get_log_info_debug_time_;
   mutable int64_t try_wrlock_debug_time_;

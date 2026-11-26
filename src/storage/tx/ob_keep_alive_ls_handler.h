@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_KEEP_ALIVE_LS_HANDLER
 #define OCEANBASE_TRANSACTION_KEEP_ALIVE_LS_HANDLER
 
-#include "logservice/palf/palf_callback.h"
+#include "logservice/wal_adapter/callback.h"
 #include "share/log/ob_log_base_header.h"
 #include "share/log/ob_log_base_type.h"
 #include "logservice/ob_append_callback.h"
@@ -72,7 +72,7 @@ private:
 struct KeepAliveLsInfo
 {
   share::SCN loop_job_succ_scn_;
-  palf::LSN lsn_;
+  wal::LSN lsn_;
   share::SCN min_start_scn_;
   MinStartScnStatus min_start_status_;
 
@@ -159,7 +159,7 @@ public:
   int on_success();
   int on_failure();
 
-  int replay(const void *buffer, const int64_t nbytes, const palf::LSN &lsn, const share::SCN &scn);
+  int replay(const void *buffer, const int64_t nbytes, const wal::LSN &lsn, const share::SCN &scn);
   void deactivate() override {}
   int activate() override { return OB_SUCCESS; }
   share::SCN get_rec_scn() { return share::SCN::max_scn(); }

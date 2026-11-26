@@ -722,7 +722,7 @@
   range: "[0M,)"
   section: LOGSERVICE
   edit_level: DYNAMIC_EFFECTIVE
-  description: "the size of disk space used by the log files. Range: [0, +∞)"
+  description: "soft target for log disk usage, used to drive checkpoint and recycling without limiting writes. Range: [0, +∞)"
 
 - name: log_disk_percentage
   type: INT
@@ -730,54 +730,7 @@
   range: "[0,99]"
   section: LOGSERVICE
   edit_level: DYNAMIC_EFFECTIVE
-  description: "the percentage of disk space used by the log files. Range: [0,99] in integer;only effective when parameter log_disk_size is 0;when log_disk_percentage is 0: a) if the data and the log are on the same disk, means log_disk_percentage = 30 b) if the data and the log are on the different disks, means log_disk_perecentage = 90"
-
-- name: log_disk_utilization_limit_threshold
-  type: INT
-  default: "95"
-  range: "[80, 100]"
-  section: LOGSERVICE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "maximum of log disk usage percentage before stop submitting or receiving logs, should be bigger than log_disk_utilization_threshold. Range: [80, 100]"
-
-- name: log_disk_utilization_threshold
-  type: INT
-  default: "0"
-  range: "[0, 100)"
-  section: LOGSERVICE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "log disk utilization threshold before reuse log files, should be smaller than log_disk_utilization_limit_threshold. 0 means recycle log files as soon as possibleRange: [0, 100)"
-
-- name: log_disk_throttling_percentage
-  type: INT
-  default: "60"
-  range: "[40, 100]"
-  section: LOGSERVICE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "the threshold of the size of the log disk when writing_limit will be triggered. Rang:[40,100]. setting 100 means turn off writing limit"
-
-- name: log_disk_throttling_maximum_duration
-  type: TIME
-  default: "2h"
-  range: "[1s, 3d]"
-  section: LOGSERVICE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "maximum duration of log disk throttling, that is the time remaining until the log disk space is exhausted after log disk throttling triggered."
-
-- name: log_storage_warning_tolerance_time
-  type: TIME
-  default: "5s"
-  range: "[1s,300s]"
-  section: LOGSERVICE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "time to tolerate log disk io delay, after that, the disk status will be set warning. Range: [1s,300s]"
-
-- name: _enable_log_cache
-  type: BOOL
-  default: "True"
-  section: LOGSERVICE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "specifies whether allow to fill log kv cache. Value:  True:turned on  False: turned off"
+  description: "percentage of disk space used to derive the soft log_disk_size target. Range: [0,99] in integer; only effective when log_disk_size is 0; when log_disk_percentage is 0: a) if data and log share a disk, defaults to 30; b) if data and log use different disks, defaults to 90"
 
 - name: _lcl_op_interval
   type: TIME

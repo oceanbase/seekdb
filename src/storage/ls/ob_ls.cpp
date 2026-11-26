@@ -71,7 +71,7 @@ ObLS::~ObLS()
 
 int ObLS::init(const ObRestoreStatus &restore_status,
                const SCN &create_scn,
-               const palf::LSN &clog_base_lsn)
+               const wal::LSN &clog_base_lsn)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -83,11 +83,11 @@ int ObLS::init(const ObRestoreStatus &restore_status,
   } else if (OB_FAIL(ls_meta_.init(restore_status, create_scn, clog_base_lsn))) {
   } else if (OB_FAIL(ls_freezer_.init(this))) {
   } else {
-    ObTxPalfParam tx_palf_param(get_log_handler());
+    ObTxWalParam tx_wal_param(get_log_handler());
     common::ObInOutBandwidthThrottle *bandwidth_throttle = GCTX.bandwidth_throttle_;
     if (OB_ISNULL(bandwidth_throttle)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(txs_svr->create_ls(*this, &tx_palf_param, nullptr))) {
+    } else if (OB_FAIL(txs_svr->create_ls(*this, &tx_wal_param, nullptr))) {
     } else if (OB_FAIL(ls_tablet_svr_.init(this))) {
     } else if (OB_FAIL(tx_table_.init(this))) {
     } else if (OB_FAIL(checkpoint_executor_.init(this, get_log_handler()))) {
@@ -141,22 +141,22 @@ int ObLS::remove_ls_inner_tablet()
   return ret;
 }
 
-int ObLS::create_ls(const palf::PalfBaseInfo &palf_base_info)
+int ObLS::create_ls(const wal::BaseInfo &wal_base_info)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  bool is_palf_exist = false;
+  bool is_wal_exist = false;
   bool need_retry = false;
   static const int64_t SLEEP_TS = 100_ms;
   int64_t retry_cnt = 0;
   ObLogService *logservice = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(logservice->check_palf_exist(is_palf_exist))) {
-  } else if (is_palf_exist) {
+  } else if (OB_FAIL(logservice->check_wal_exist(is_wal_exist))) {
+  } else if (is_wal_exist) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("palf should not exist now", K(ret), K_(ls_meta));
-  } else if (OB_FAIL(logservice->create_ls(palf_base_info, log_handler_))) {
+    LOG_WARN("wal should not exist now", K(ret), K_(ls_meta));
+  } else if (OB_FAIL(logservice->create_ls(wal_base_info, log_handler_))) {
   } else {
     if (OB_FAIL(ret)) {
       do {
@@ -183,11 +183,12 @@ int ObLS::load_ls()
 {
   int ret = OB_SUCCESS;
   ObLogService *logservice = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
-  bool is_palf_exist = false;
+  bool is_wal_exist = false;
 
-  if (OB_FAIL(logservice->check_palf_exist(is_palf_exist))) {
-  } else if (!is_palf_exist) {
-    LOG_WARN("there is no ls at disk, skip load", K_(ls_meta));
+  if (OB_FAIL(logservice->check_wal_exist(is_wal_exist))) {
+  } else if (!is_wal_exist) {
+    ret = OB_LOG_MISSING;
+    LOG_WARN("wal is missing", KR(ret), K_(ls_meta));
   } else if (OB_FAIL(logservice->add_ls(log_handler_))) {
   } else {
     // TODO: add_ls has no interface to rollback now, something can not rollback.
@@ -422,7 +423,7 @@ int ObLS::offline_compaction_()
 int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handlers)
 {
   int ret = OB_SUCCESS;
-  palf::LSN end_lsn;
+  wal::LSN end_lsn;
   bool reached = false;
   logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
@@ -498,7 +499,7 @@ int ObLS::stop_local_log_(const int64_t deadline_us)
 {
   int ret = OB_SUCCESS;
   bool is_done = false;
-  palf::LSN end_lsn;
+  wal::LSN end_lsn;
   logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
   log_handler_.set_local_append_enabled(false);
   local_log_handler_set_.deactivate();

@@ -11,6 +11,7 @@ MODULES = {
         "deps": [":file_io_headers"],
         "features": IO_FEATURES,
     },
+    "wal": {"bridge": "src/bridge.rs", "headers": ["include/callbacks.h"]},
     "mvt": {"bridge": "src/bridge.rs"},
     "standby-rpc": {
         "bridge": "src/bridge.rs",

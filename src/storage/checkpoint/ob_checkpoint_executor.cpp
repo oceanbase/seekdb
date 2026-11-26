@@ -27,7 +27,7 @@ namespace oceanbase
 {
 using namespace share;
 using namespace logservice;
-using namespace palf;
+using namespace wal;
 namespace storage
 {
 namespace checkpoint
@@ -236,7 +236,7 @@ int ObCheckpointExecutor::update_clog_checkpoint()
           }
         } else if (OB_FAIL(loghandler_->locate_by_scn_coarsely(checkpoint_scn, clog_checkpoint_lsn))) {
           if (OB_NOT_INIT == ret) {
-            STORAGE_LOG(WARN, "palf has been disabled", K(ret), K(checkpoint_scn));
+            STORAGE_LOG(WARN, "wal has been disabled", K(ret), K(checkpoint_scn));
             ret = OB_SUCCESS;
           } else if (OB_NEED_RETRY == ret || OB_ENTRY_NOT_EXIST == ret) {
             STORAGE_LOG(WARN, "locate_by_scn_coarsely need retry", K(checkpoint_scn));
@@ -419,7 +419,7 @@ int ObCheckpointExecutor::calculate_min_recycle_scn_(const LSN clog_checkpoint_l
   if (OB_ISNULL(log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "get_log_service failed", K(ret));
-  } else if (OB_FAIL(log_service->get_palf_disk_usage(used_size, total_size))) {
+  } else if (OB_FAIL(log_service->get_wal_disk_usage(used_size, total_size))) {
   } else {
     LSN min_recycle_lsn = clog_checkpoint_lsn
         + (total_size * DEFAULT_MIN_LS_RECYCLE_CLOG_PERCENTAGE / 100);
@@ -429,7 +429,7 @@ int ObCheckpointExecutor::calculate_min_recycle_scn_(const LSN clog_checkpoint_l
   return ret;
 }
 
-int ObCheckpointExecutor::calculate_expected_recycle_scn_(const palf::LSN clog_checkpoint_lsn,
+int ObCheckpointExecutor::calculate_expected_recycle_scn_(const wal::LSN clog_checkpoint_lsn,
                                                           SCN &expected_recycle_scn)
 {
   int ret = OB_SUCCESS;

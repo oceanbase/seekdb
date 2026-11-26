@@ -72,9 +72,9 @@ class ObSchemaMgr;
 namespace obcall
 {
 }
-namespace palf
+namespace wal
 {
-  struct PalfBaseInfo;
+  struct BaseInfo;
 }
 namespace rootserver
 {

@@ -31,9 +31,9 @@ service StandbyService {
   rpc get_ls_view_tablet_count(GetLSViewTabletCountReq) returns (GetLSViewTabletCountRes);
   // Check restore precondition (disk size and cluster version)
   rpc check_restore_precondition(CheckRestorePreconditionReq) returns (CheckRestorePreconditionRes);
-  // Locate source palf base info for standby replay after copied SSTable baseline
-  rpc fetch_standby_palf_base_info(FetchStandbyPalfBaseInfoReq) returns (FetchStandbyPalfBaseInfoRes);
-  // Stream serialized PALF group entries starting after the requested SCN.
+  // Locate source wal base info for standby replay after copied SSTable baseline
+  rpc fetch_standby_wal_base_info(FetchStandbyWalBaseInfoReq) returns (FetchStandbyWalBaseInfoRes);
+  // Stream serialized WAL group entries starting after the requested SCN.
   rpc fetch_log(FetchLogReq) returns (stream FetchLogRes);
   // Return the durable cutover boundary of a fenced primary.
   rpc get_promotion_boundary(GetPromotionBoundaryReq) returns (GetPromotionBoundaryRes);
@@ -107,12 +107,12 @@ message CheckRestorePreconditionRes {
   uint64 data_version = 3;
 }
 
-message FetchStandbyPalfBaseInfoReq {
+message FetchStandbyWalBaseInfoReq {
   bytes buf = 1;
   uint64 size = 2;
 }
 
-message FetchStandbyPalfBaseInfoRes {
+message FetchStandbyWalBaseInfoRes {
   bytes buf = 1;
   uint64 size = 2;
 }
@@ -127,6 +127,7 @@ message FetchLogRes {
   uint64 size = 2;
   uint64 source_lsn = 3;
   uint64 end_scn = 4;
+  uint32 zero_padding_before = 5;
 }
 
 message NodeAddress {

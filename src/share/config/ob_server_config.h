@@ -50,8 +50,6 @@ const char* const DATA_DISK_USAGE_LIMIT_PERCENTAGE = "data_disk_usage_limit_perc
 const char* const COMPATIBLE = "compatible";
 const char* const ENABLE_COMPATIBLE_MONOTONIC = "_enable_compatible_monotonic";
 const char* const WEAK_READ_VERSION_REFRESH_INTERVAL = "weak_read_version_refresh_interval";
-const char* const LOG_DISK_UTILIZATION_LIMIT_THRESHOLD = "log_disk_utilization_limit_threshold";
-const char* const LOG_DISK_THROTTLING_PERCENTAGE = "log_disk_throttling_percentage";
 const char* const DEFAULT_TABLE_ORGANIZATION = "default_table_organization";
 
 class ObServerMemoryConfig;

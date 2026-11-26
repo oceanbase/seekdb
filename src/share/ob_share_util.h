@@ -63,7 +63,6 @@ public:
   // Write capability is independent from the immutable boot role.
   static int is_server_write_enabled(bool &enabled);
   // get_sys_ls_readable_scn has been demoted to storage::free function(see end of file storage ns)
-  // check_clog_disk_full_or_hang has been demoted to logservice::free function
   static int gen_default_server_runtime_schema(
       common::ObISQLClient &sql_client,
       schema::ObServerRuntimeSchema &runtime_schema);

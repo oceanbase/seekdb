@@ -26,7 +26,7 @@ using namespace share;
 using namespace transaction;
 using namespace common;
 using namespace blocksstable;
-using namespace palf;
+using namespace wal;
 
 namespace memtable
 {

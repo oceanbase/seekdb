@@ -26,12 +26,6 @@
 
 namespace oceanbase
 {
-namespace palf
-{
-class LogIOFlushLogTask;
-class LogHandleSubmitTask;
-class LogIOTruncatePrefixBlocksTask;
-}
 namespace logservice
 {
 class ObLogReplayTask;
@@ -43,7 +37,7 @@ class ObTraceProfile;
 class ObILogAllocator : public ObIAllocator
 {
 public:
-  ObILogAllocator() : flying_log_task_(0), flying_log_handle_submit_task_(0) {}
+  ObILogAllocator() = default;
   virtual ~ObILogAllocator() {}
 
 public:
@@ -53,22 +47,10 @@ public:
   virtual void *ge_alloc(const int64_t size) = 0;
   virtual void ge_free(void *ptr) = 0;
   virtual const ObBlockAllocMgr &get_clog_blk_alloc_mgr() const = 0;
-  virtual palf::LogHandleSubmitTask *alloc_log_handle_submit_task(const int64_t palf_epoch) = 0;
-  virtual void free_log_handle_submit_task(palf::LogHandleSubmitTask *ptr) = 0;
-  virtual palf::LogIOFlushLogTask *alloc_log_io_flush_log_task(const int64_t palf_epoch) = 0;
-  virtual void free_log_io_flush_log_task(palf::LogIOFlushLogTask *ptr) = 0;
-  virtual palf::LogIOTruncatePrefixBlocksTask *alloc_log_io_truncate_prefix_blocks_task(const int64_t palf_epoch) = 0;
-  virtual void free_log_io_truncate_prefix_blocks_task(palf::LogIOTruncatePrefixBlocksTask *ptr) = 0;
   virtual void *alloc_replay_task(const int64_t size) = 0;
   virtual void *alloc_replay_log_buf(const int64_t size) = 0;
   virtual void free_replay_task(logservice::ObLogReplayTask *ptr) = 0;
   virtual void free_replay_log_buf(void *ptr) = 0;
-  TO_STRING_KV(K_(flying_log_task));
-
-
-protected:
-  int64_t flying_log_task_;
-  int64_t flying_log_handle_submit_task_;
 };
 
 class ObLogAllocator
@@ -82,8 +64,6 @@ public:
   // The memory limit of replay engine
   const int64_t REPLAY_MEM_LIMIT_THRESHOLD = 512 * 1024 * 1024ll;
   // The memory percent of replay engine for inner_table
-  static int choose_blk_size(int obj_size);
-
 public:
   explicit ObLogAllocator();
   ~ObLogAllocator();
@@ -100,12 +80,6 @@ public:
   void *ge_alloc(const int64_t size);
   void ge_free(void *ptr);
   const ObBlockAllocMgr &get_clog_blk_alloc_mgr() const;
-  palf::LogIOFlushLogTask *alloc_log_io_flush_log_task(const int64_t palf_epoch);
-  void free_log_io_flush_log_task(palf::LogIOFlushLogTask *ptr);
-  palf::LogHandleSubmitTask *alloc_log_handle_submit_task(const int64_t palf_epoch);
-  void free_log_handle_submit_task(palf::LogHandleSubmitTask *ptr);
-  palf::LogIOTruncatePrefixBlocksTask *alloc_log_io_truncate_prefix_blocks_task(const int64_t palf_epoch);
-  void free_log_io_truncate_prefix_blocks_task(palf::LogIOTruncatePrefixBlocksTask *ptr);
   void *alloc_replay_task(const int64_t size);
   void *alloc_replay_log_buf(const int64_t size);
   void free_replay_task(logservice::ObLogReplayTask *ptr);
@@ -114,15 +88,9 @@ public:
 private:
   int64_t total_limit_;
   int64_t pending_replay_mutator_size_;
-  const int LOG_HANDLE_SUBMIT_TASK_SIZE;
-  const int LOG_IO_FLUSH_LOG_TASK_SIZE;
-  const int LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE;
   ObBlockAllocMgr clog_blk_alloc_;
   ObBlockAllocMgr replay_log_task_blk_alloc_;
   ObVSliceAlloc clog_ge_alloc_;
-  ObSliceAlloc log_handle_submit_task_alloc_;
-  ObSliceAlloc log_io_flush_log_task_alloc_;
-  ObSliceAlloc log_io_truncate_prefix_blocks_task_alloc_;
   ObVSliceAlloc replay_log_task_alloc_;
 };
 

@@ -67,12 +67,7 @@ kvcache_memory_limit
 lob_enable_block_cache_threshold
 log_disk_percentage
 log_disk_size
-log_disk_throttling_maximum_duration
-log_disk_throttling_percentage
-log_disk_utilization_limit_threshold
-log_disk_utilization_threshold
 log_restore_source
-log_storage_warning_tolerance_time
 major_compact_trigger
 major_freeze_duty_time
 max_partition_num
@@ -169,7 +164,6 @@ _enable_hgby_skew_detection
 _enable_index_merge
 _enable_inner_session_mgr
 _enable_in_range_optimization
-_enable_log_cache
 _enable_mysql_compatible_dates
 _enable_newsort
 _enable_optimizer_qualify_filter

@@ -174,8 +174,8 @@ int ObLogStorageAdapter::get_unrecyclable_log_disk_size(
   } else if (OB_FAIL(ls_service_->get_ls(ls))) {
   } else {
     logservice::ObLogHandler *log_handler = ls->get_log_handler();
-    palf::LSN end_lsn;
-    const palf::LSN base_lsn = ls->get_clog_base_lsn();
+    wal::LSN end_lsn;
+    const wal::LSN base_lsn = ls->get_clog_base_lsn();
     if (OB_ISNULL(log_handler)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(log_handler->get_end_lsn(end_lsn))) {

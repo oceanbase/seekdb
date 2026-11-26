@@ -55,7 +55,7 @@ int ObStandbyBootstrapService::bootstrap(
   int ret = OB_SUCCESS;
   common::ObAddr primary_addr;
   share::SCN restore_checkpoint_scn;
-  palf::PalfBaseInfo palf_base_info;
+  wal::BaseInfo wal_base_info;
   storage::ObStandbySSTableCopier copier;
   source_end_scn.reset();
 
@@ -70,9 +70,9 @@ int ObStandbyBootstrapService::bootstrap(
           primary_addr, param.bandwidth_throttle_, *param.restore_config_))) {
         LOG_WARN("failed to init standby sstable copier", KR(ret), K(primary_addr));
       } else if (OB_FAIL(copier.prepare_replay_base(
-                     restore_checkpoint_scn, palf_base_info, source_end_scn))) {
+                     restore_checkpoint_scn, wal_base_info, source_end_scn))) {
         LOG_WARN("failed to prepare standby replay base", KR(ret), K(primary_addr));
-      } else if (OB_FAIL(create_sys_ls_(param, palf_base_info, restore_checkpoint_scn))) {
+      } else if (OB_FAIL(create_sys_ls_(param, wal_base_info, restore_checkpoint_scn))) {
         LOG_WARN("failed to create standby restore sys ls", KR(ret));
       } else if (OB_FAIL(copier.copy(restore_checkpoint_scn))) {
         LOG_WARN("failed to copy standby sstable baseline", KR(ret));
@@ -118,7 +118,7 @@ int ObStandbyBootstrapService::check_bootstrap_source(
 
 int ObStandbyBootstrapService::create_sys_ls_(
     const ObStandbyBootstrapParam &param,
-    const palf::PalfBaseInfo &palf_base_info,
+    const wal::BaseInfo &wal_base_info,
     const share::SCN &restore_checkpoint_scn)
 {
   int ret = OB_SUCCESS;
@@ -135,12 +135,12 @@ int ObStandbyBootstrapService::create_sys_ls_(
   } else if (OB_ISNULL(log_service = share::server_service<logservice::ObLogService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log_service is null");
-  } else if (!palf_base_info.is_valid() || !restore_checkpoint_scn.is_valid()) {
+  } else if (!wal_base_info.is_valid() || !restore_checkpoint_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid replay base for standby bootstrap",
-        KR(ret), K(palf_base_info), K(restore_checkpoint_scn));
+        KR(ret), K(wal_base_info), K(restore_checkpoint_scn));
   } else if (OB_FAIL(ls_service->create_ls_for_restore(
-                 palf_base_info, restore_checkpoint_scn))) {
+                 wal_base_info, restore_checkpoint_scn))) {
     LOG_WARN("create ls failed", KR(ret));
   }
   return ret;

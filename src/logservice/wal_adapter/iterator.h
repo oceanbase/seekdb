@@ -1,0 +1,180 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_LOGSERVICE_WAL_ADAPTER_ITERATOR_
+#define OCEANBASE_LOGSERVICE_WAL_ADAPTER_ITERATOR_
+
+#include <optional>
+#include <type_traits>
+#include "rust/wal.h"
+#include "share/ob_errno.h"
+
+namespace oceanbase
+{
+namespace wal
+{
+struct PayloadEntry {};
+struct GroupEntry {};
+
+inline int from_rust_code(const wal_rs::Code code)
+{
+  switch (code) {
+    case wal_rs::Code::Ok: return OB_SUCCESS;
+    case wal_rs::Code::Invalid: return OB_INVALID_ARGUMENT;
+    case wal_rs::Code::NotInit: return OB_NOT_INIT;
+    case wal_rs::Code::NotFound: return OB_ENTRY_NOT_EXIST;
+    case wal_rs::Code::End: return OB_ITER_END;
+    case wal_rs::Code::OutLower: return OB_ERR_OUT_OF_LOWER_BOUND;
+    case wal_rs::Code::OutUpper: return OB_ERR_OUT_OF_UPPER_BOUND;
+    case wal_rs::Code::Partial: return common::OB_PARTIAL_LOG;
+    case wal_rs::Code::Duplicate: return OB_ENTRY_EXIST;
+    case wal_rs::Code::Corrupt:
+    case wal_rs::Code::UnknownVersion: return OB_INVALID_DATA;
+    case wal_rs::Code::Io: return OB_IO_ERROR;
+    case wal_rs::Code::NoSpace: return common::OB_LOG_OUTOF_DISK_SPACE;
+    case wal_rs::Code::NoMemory: return OB_ALLOCATE_MEMORY_FAILED;
+    case wal_rs::Code::Closed: return OB_NOT_RUNNING;
+    default: return OB_ERR_UNEXPECTED;
+  }
+}
+
+inline share::SCN from_rust_scn(const uint64_t value)
+{
+  share::SCN scn;
+  (void)scn.convert_for_logservice(value);
+  return scn;
+}
+
+template <class EntryKind>
+class Iterator
+{
+public:
+  Iterator() = default;
+  ~Iterator() { destroy(); }
+
+  int init(::rust::Box<wal_rs::Cursor> cursor)
+  {
+    int ret = OB_SUCCESS;
+    if (cursor_.has_value()) {
+      ret = OB_INIT_TWICE;
+    } else {
+      cursor_.emplace(std::move(cursor));
+      is_inited_ = true;
+    }
+    return ret;
+  }
+
+  int reuse(const LSN &start_lsn)
+  {
+    int ret = OB_SUCCESS;
+    if (!is_inited_ || !start_lsn.is_valid()) {
+      ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
+    } else {
+      ret = from_rust_code(wal_rs::reuse_ffi(**cursor_, start_lsn.val_));
+      has_entry_ = false;
+    }
+    return ret;
+  }
+
+  void destroy()
+  {
+    cursor_.reset();
+    has_entry_ = false;
+    is_inited_ = false;
+  }
+
+  int next()
+  {
+    return next(share::SCN::max_scn());
+  }
+
+  int next(const share::SCN &replayable_point_scn)
+  {
+    share::SCN next_min_scn;
+    bool iterate_end_by_replayable_point = false;
+    return next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point);
+  }
+
+  int next(const share::SCN &replayable_point_scn,
+           share::SCN &next_min_scn,
+           bool &iterate_end_by_replayable_point)
+  {
+    int ret = OB_SUCCESS;
+    next_min_scn.reset();
+    iterate_end_by_replayable_point = false;
+    if (!is_inited_ || !replayable_point_scn.is_valid()) {
+      ret = is_inited_ ? OB_INVALID_ARGUMENT : OB_NOT_INIT;
+    } else {
+      ret = from_rust_code(wal_rs::next_ffi(**cursor_, replayable_point_scn.get_val_for_logservice()));
+      has_entry_ = OB_SUCCESS == ret;
+      if (OB_ITER_END == ret) {
+        const uint64_t next_scn = wal_rs::next_min_scn(**cursor_);
+        if (0 != next_scn) {
+          next_min_scn = from_rust_scn(next_scn);
+          iterate_end_by_replayable_point = true;
+        }
+      }
+    }
+    return ret;
+  }
+
+  int get_entry(const char *&buffer, int64_t &nbytes, share::SCN &scn, LSN &lsn)
+  {
+    int ret = OB_SUCCESS;
+    if (!is_inited_ || !has_entry_) {
+      ret = is_inited_ ? OB_ITER_END : OB_NOT_INIT;
+    } else {
+      constexpr bool group_mode = std::is_same<EntryKind, GroupEntry>::value;
+      const auto data = group_mode ? wal_rs::bytes(**cursor_) : wal_rs::payload(**cursor_);
+      buffer = reinterpret_cast<const char *>(data.data());
+      nbytes = data.size();
+      scn = from_rust_scn(wal_rs::scn(**cursor_));
+      lsn = LSN(wal_rs::lsn(**cursor_));
+    }
+    return ret;
+  }
+
+  LSN get_entry_end_lsn() const
+  {
+    return is_valid() ? LSN(wal_rs::end_lsn(**cursor_)) : LSN();
+  }
+
+  uint32_t get_zero_padding_before() const
+  {
+    return is_valid() ? wal_rs::zero_padding_before(**cursor_) : 0;
+  }
+
+  LSN get_next_lsn() const
+  {
+    return is_inited_ && cursor_.has_value() ? LSN(wal_rs::next_lsn(**cursor_)) : LSN();
+  }
+
+  bool is_inited() const { return is_inited_; }
+  bool is_valid() const { return is_inited_ && cursor_.has_value() && has_entry_; }
+
+  TO_STRING_KV(K_(is_inited), K_(has_entry));
+
+private:
+  std::optional<::rust::Box<wal_rs::Cursor>> cursor_;
+  bool has_entry_ = false;
+  bool is_inited_ = false;
+};
+
+typedef Iterator<PayloadEntry> EntryIterator;
+typedef Iterator<GroupEntry> GroupIterator;
+} // namespace wal
+} // namespace oceanbase
+#endif

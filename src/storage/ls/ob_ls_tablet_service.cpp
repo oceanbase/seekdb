@@ -150,7 +150,7 @@ int ObLSTabletService::online()
 int ObLSTabletService::replay(
     const void *buffer,
     const int64_t nbytes,
-    const palf::LSN &lsn,
+    const wal::LSN &lsn,
     const SCN &scn)
 {
   int ret = OB_SUCCESS;

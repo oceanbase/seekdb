@@ -368,14 +368,8 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_server_clog_dir(ctx->clog_dir_))) {
   } else {
-    ctx->palf_options_.disk_options_.log_disk_usage_limit_size_ = meta.runtime_config_.resource_config_.log_disk_size();
-    ctx->palf_options_.disk_options_.log_disk_utilization_threshold_ = 80;
-    ctx->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
-    ctx->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
-    ctx->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
-    ctx->palf_options_.enable_log_cache_ = config::_enable_log_cache();
-    LOG_INFO("construct_module_init_ctx success", "palf_options", ctx->palf_options_.disk_options_
-             );
+    ctx->wal_disk_soft_target_ = meta.runtime_config_.resource_config_.log_disk_size();
+    LOG_INFO("construct_module_init_ctx success", "wal_disk_soft_target", ctx->wal_disk_soft_target_);
   }
   return ret;
 }

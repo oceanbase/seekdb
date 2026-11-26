@@ -22,7 +22,7 @@ namespace oceanbase
 {
 using namespace share;
 using namespace blocksstable;
-using namespace palf;
+using namespace wal;
 using namespace transaction;
 namespace storage
 {

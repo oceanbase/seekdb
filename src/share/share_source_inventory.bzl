@@ -416,10 +416,9 @@ SHARE_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/share/log/ob_log_base_header.cpp",
-            "src/share/log/palf/log_define.cpp",
-            "src/share/log/palf/lsn.cpp",
-            "src/share/log/palf/palf_base_info.cpp",
-            "src/share/log/palf/palf_options.cpp",
+            "src/share/log/types/log_define.cpp",
+            "src/share/log/types/lsn.cpp",
+            "src/share/log/types/base_info.cpp",
         ],
     ),
     struct(

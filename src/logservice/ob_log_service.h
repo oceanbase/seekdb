@@ -20,17 +20,14 @@
 #include "common/ob_role.h"
 #include "lib/ob_define.h"
 #include "applyservice/ob_log_apply_service.h"
-#include "palf/log_block_pool_interface.h"             // ILogBlockPool
-#include "share/log/palf/log_define.h"
+#include "share/log/types/log_define.h"
 #include "localservice/ob_local_log_handler_set.h"
 #include "replayservice/ob_log_replay_service.h"
 #include "ob_i_log_storage.h"
 #include "ob_log_handler.h"
-#include "ob_log_monitor.h"
 
 namespace oceanbase
 {
-namespace storage_io { struct NamedOwnerHandle; }
 namespace common
 {
 class ObAddr;
@@ -42,25 +39,14 @@ namespace share
 class SCN;
 }
 
-namespace palf
+namespace wal
 {
-class PalfHandleGuard;
-class PalfDiskOptions;
-class PalfEnv;
+class HandleGuard;
+class Env;
 }
 
 namespace logservice
 {
-
-struct ObLogRuntimeConfig
-{
-  int64_t log_disk_utilization_threshold_;
-  int64_t log_disk_utilization_limit_threshold_;
-  int64_t log_disk_throttling_percentage_;
-  int64_t log_disk_throttling_maximum_duration_;
-  int64_t log_storage_warning_tolerance_time_;
-  bool enable_log_cache_;
-};
 
 class ObLogService
 {
@@ -69,98 +55,55 @@ public:
   virtual ~ObLogService();
   static int server_module_init(
       ObLogService *&logservice,
-      const palf::PalfOptions &options,
-      share::LocalStore &store,
+      int64_t wal_disk_soft_target,
       const char *runtime_clog_dir,
       const char *clog_dir,
       const common::ObAddr &self,
       ObILogStorage *log_storage,
-      palf::ILogBlockPool *log_block_pool,
-      const storage_io::NamedOwnerHandle *log_files,
-
       bool is_shared_storage_mode,
-      int64_t replay_thread_quota,
-      const ObLogRuntimeConfig &runtime_config);
+      int64_t replay_thread_quota);
   static void server_module_destroy(ObLogService* &logservice);
   int start();
   void stop();
   void wait();
   void destroy();
 public:
-  int init(const palf::PalfOptions &options,
-           share::LocalStore &store,
+  int init(int64_t wal_disk_soft_target,
            const char *base_dir,
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,
            ObILogStorage *log_storage,
-           palf::ILogBlockPool *log_block_pool,
-           const storage_io::NamedOwnerHandle *log_files,
-
            bool is_shared_storage_mode,
-           int64_t replay_thread_quota,
-           const ObLogRuntimeConfig &runtime_config);
+           int64_t replay_thread_quota);
   // Create the unique log stream from its persisted base point.
-  int create_ls(const palf::PalfBaseInfo &palf_base_info,
+  int create_ls(const wal::BaseInfo &wal_base_info,
                 ObLogHandler &log_handler);
   //Delete log stream interface: After the outer call to create_ls(), if subsequent processes fail, remove_ls() needs to be called
   int remove_ls(ObLogHandler &log_handler);
 
-  int check_palf_exist(bool &exist) const;
+  int check_wal_exist(bool &exist) const;
   // Restart recovery interface for the single log stream.
   int add_ls(ObLogHandler &log_handler);
 
-  int open_palf(palf::PalfHandleGuard &palf_handle);
+  int open_wal(wal::HandleGuard &wal_handle);
 
   int update_replayable_point(const share::SCN &replayable_point);
 
-  // @brief get palf disk usage
+  // @brief get wal disk usage
   // @param [out] used_size_byte
-  // @param [out] total_size_byte, if in shrinking status, total_size_byte is the value after shrinking.
-  // NB: total_size_byte may be smaller than used_size_byte.
-  int get_palf_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
+  // @param [out] total_size_byte, the configured soft target for checkpoint and recycling.
+  int get_wal_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
 
-  // @brief get palf disk usage
-  // @param [out] used_size_byte
-  // @param [out] total_size_byte, if in shrinking status, total_size_byte is the value before shrinking.
-  int get_palf_stable_disk_usage(int64_t &used_size_byte, int64_t &total_size_byte);
-  // why we need update 'log_disk_size_' and 'log_disk_util_threshold' separately.
-  //
-  // 'log_disk_size' is part of the server resource configuration.
-  // 'log_disk_util_threshold' and 'log_disk_util_limit_threshold' are runtime parameters.
-  // If we just only provide 'update_disk_options', the correctness of PalfDiskOptions can not be guaranteed.
-  // for example, original PalfDiskOptions is that
-  // {
-  //   log_disk_size = 100G,
-  //   log_disk_util_limit_threshold = 95,
-  //   log_disk_util_threshold = 80
-  // }
-  //
-  // 1. thread1 update 'log_disk_size' with 50G, and it will used 'update_disk_options' with PalfDiskOptions
-  // {
-  //   log_disk_size = 50G,
-  //   log_disk_util_limit_threshold = 95,
-  //   log_disk_util_threshold = 80
-  // }
-  // 2. thread2 updaet 'log_disk_util_limit_threshold' with 85, and it will used 'update_disk_options' with PalfDiskOptions
-  // {
-  //   log_disk_size = 100G,
-  //   log_disk_util_limit_threshold = 85,
-  //   log_disk_util_threshold = 80
-  // }.
-  int update_palf_options_except_disk_usage_limit_size(
-      const ObLogRuntimeConfig &runtime_config);
   int update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size);
-  int get_palf_options(palf::PalfOptions &options);
-  int stat_palf(palf::PalfStat &palf_stat);
+  int get_wal_disk_soft_target(int64_t &disk_soft_target);
+  int stat_wal(wal::Stat &wal_stat);
   int stat_apply(LSApplyStat &apply_stat);
   int stat_replay(LSReplayStat &replay_stat);
 
   int diagnose_replay(ReplayDiagnoseInfo &diagnose_info);
   int diagnose_apply(ApplyDiagnoseInfo &diagnose_info);
-  int get_io_start_time(int64_t &last_working_time);
-  int check_disk_space_enough(bool &is_disk_enough);
 
-  palf::PalfEnv *get_palf_env() { return palf_env_; }
+  wal::Env *get_wal_env() { return wal_env_; }
   bool is_replay_enabled() const;
   // The recovered watermark has been handed to apply and replay status detached.
   bool is_replay_handoff_complete() const;
@@ -168,11 +111,11 @@ public:
   int get_max_replayed_scn(share::SCN &scn);
   int get_min_unreplayed_scn(share::SCN &scn);
   int has_replay_fatal_error(bool &has_error);
-  int enable_replay(const palf::LSN &lsn, const share::SCN &scn);
+  int enable_replay(const wal::LSN &lsn, const share::SCN &scn);
   int disable_replay();
   int finish_replay(int64_t deadline_us);
   // Query live replay progress; returns OB_STATE_NOT_MATCH after status retirement.
-  int is_replayed_to(const palf::LSN &target_lsn, bool &reached);
+  int is_replayed_to(const wal::LSN &target_lsn, bool &reached);
   int block_submit_replay();
   int unblock_submit_replay();
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
@@ -182,15 +125,11 @@ public:
   ObLogRestoreNetDriver *get_restore_net_driver();
   int check_need_do_checkpoint(bool &need_do_checkpoint);
   ObILogStorage *get_log_storage() const { return log_storage_; }
-  int64_t get_log_storage_warning_tolerance_time() const
-  {
-    return runtime_config_.log_storage_warning_tolerance_time_;
-  }
 
 private:
   void destroy_replay_();
   int get_replay_status_(ObReplayStatusGuard &guard) const;
-  int create_ls_(const palf::PalfBaseInfo &palf_base_info,
+  int create_ls_(const wal::BaseInfo &wal_base_info,
                  ObLogHandler &log_handler);
   int get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_size);
 private:
@@ -199,7 +138,7 @@ private:
   bool enable_shared_storage_;
 
   common::ObAddr self_;
-  palf::PalfEnv *palf_env_;
+  wal::Env *wal_env_;
   common::ObILogAllocator *alloc_mgr_;
 
   ObLogApplyService apply_service_;
@@ -212,9 +151,7 @@ private:
   ObLogReplayService *replay_service_;
   int64_t replay_thread_quota_;
   ObILogStorage *log_storage_;
-  ObLogRuntimeConfig runtime_config_;
-  ObLogMonitor monitor_;
-  ObSpinLock update_palf_opts_lock_;
+  ObSpinLock update_wal_opts_lock_;
   // Restore service for standby log sync
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogService);
@@ -222,16 +159,5 @@ private:
 
 } // end namespace logservice
 } // end namespace oceanbase
-namespace oceanbase
-{
-namespace logservice
-{
-// Checks whether the clog disk is full or hung through the server log module.
-int check_clog_disk_full_or_hang(
-    ObLogService &log_service,
-    bool &clog_disk_is_full,
-    bool &clog_disk_is_hang);
-}
-}
 
 #endif // OCEANBASE_LOGSERVICE_OB_LOG_SERVICE_

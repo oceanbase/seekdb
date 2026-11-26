@@ -19,7 +19,7 @@
 
 #include "lib/lock/ob_tc_rwlock.h"
 #include "share/log/ob_log_base_type.h"
-#include "share/log/palf/lsn.h"
+#include "share/log/types/lsn.h"
 
 namespace oceanbase
 {
@@ -44,7 +44,7 @@ public:
   int replay(const ObLogBaseType &type,
              const void *buffer,
              const int64_t nbytes,
-             const palf::LSN &lsn,
+             const wal::LSN &lsn,
              const share::SCN &scn);
 private:
   typedef common::RWLock::WLockGuard WLockGuard;

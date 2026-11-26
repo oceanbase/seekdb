@@ -185,3 +185,16 @@ pub fn read_exact_at(file: &File, bytes: &mut [u8], offset: u64) -> io::Result<(
 pub fn write_all_at(file: &File, bytes: &[u8], offset: u64) -> io::Result<()> {
     write_fully_at(file, bytes, offset).result
 }
+
+/// Writes all bytes and ensures data and data-retrieval metadata durability.
+/// The file must have been opened with a synchronous write mode, for example
+/// [`crate::open_data_synchronous_read_write_prefer_direct`].
+pub fn write_all_data_synchronous_at(file: &File, bytes: &[u8], offset: u64) -> io::Result<()> {
+    write_all_at(file, bytes, offset)?;
+    #[cfg(target_os = "emscripten")]
+    if !bytes.is_empty() {
+        // WasmFS strips synchronous open flags.
+        file.sync_data()?;
+    }
+    Ok(())
+}

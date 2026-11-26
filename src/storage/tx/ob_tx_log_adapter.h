@@ -27,11 +27,11 @@ namespace share
 {
 class SCN;
 }
-namespace palf
+namespace wal
 {
 class LSN;
-class PalfHandle;
-} // namespace palf
+class Handle;
+} // namespace wal
 namespace transaction
 {
 
@@ -42,10 +42,10 @@ private:
   // nothing, base struct for test
 };
 
-class ObTxPalfParam : public ObITxLogParam
+class ObTxWalParam : public ObITxLogParam
 {
 public:
-  ObTxPalfParam(logservice::ObLogHandler *handler)
+  ObTxWalParam(logservice::ObLogHandler *handler)
       : handler_(handler)
   {}
   logservice::ObLogHandler *get_log_handler() { return handler_; }
@@ -63,12 +63,9 @@ public:
   virtual int submit_log(const char *buf,
                          const int64_t size,
                          const share::SCN &base_ts,
-                         ObTxBaseLogCb *cb,
-                         const bool need_nonblock,
-                         const int64_t retry_timeout_us = 1000) = 0;
+                         ObTxBaseLogCb *cb) = 0;
 
   virtual int get_max_decided_scn(share::SCN &scn) = 0;
-  virtual int get_append_mode_initial_scn(share::SCN &ref_scn) = 0;
 };
 
 class ObLSTxLogAdapter : public ObITxLogAdapter
@@ -82,12 +79,8 @@ public:
   int submit_log(const char *buf,
                  const int64_t size,
                  const share::SCN &base_ts,
-                 ObTxBaseLogCb *cb,
-                 const bool need_nonblock,
-                 const int64_t retry_timeout_us = 1000);
+                 ObTxBaseLogCb *cb);
   int get_max_decided_scn(share::SCN &scn);
-
-  int get_append_mode_initial_scn(share::SCN &ref_scn);
 
 private:
   logservice::ObLogHandler *log_handler_;

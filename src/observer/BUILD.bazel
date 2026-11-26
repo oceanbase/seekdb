@@ -29,7 +29,6 @@ _OBSERVER_GENERATED_SOURCE_REPLACEMENTS = {
 
 
 _OBSERVER_NATIVE_DEPS = [
-    "//src/share:startup_result",
     "//rust:sql_nio_headers",
     "//src/oblib/easy:easy",
     "//src/oblib:common_sql_mode",

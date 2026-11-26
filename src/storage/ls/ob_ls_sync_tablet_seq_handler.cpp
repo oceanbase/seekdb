@@ -23,7 +23,7 @@
 namespace oceanbase
 {
 
-using namespace palf;
+using namespace wal;
 using namespace share;
 
 namespace storage
@@ -51,7 +51,7 @@ void ObLSSyncTabletSeqHandler::reset()
 
 int ObLSSyncTabletSeqHandler::replay(const void *buffer,
                                      const int64_t nbytes,
-                                     const palf::LSN &lsn,
+                                     const wal::LSN &lsn,
                                      const SCN &scn)
 {
   int ret = OB_SUCCESS;

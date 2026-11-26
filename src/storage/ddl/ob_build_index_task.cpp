@@ -34,7 +34,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::compaction;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::palf;
+using namespace oceanbase::wal;
 
 ObUniqueIndexChecker::ObUniqueIndexChecker()
   : is_inited_(false), param_(nullptr), context_(nullptr)

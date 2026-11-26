@@ -167,6 +167,7 @@ public:
   int init();
   void stop();
   void wait();
+  void flush();
   void destroy();
 
   bool is_inited() const { return logger::option(logger::OptionKey::Initialized, 0, 0) != 0; }
