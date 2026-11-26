@@ -48,8 +48,8 @@
 
 ### Downstream integration tests
 
-Before submitting a PR that changes any of these areas, check the relevant
-cases in the `seekdb_test` repository. The paths below are examples.
+Check the relevant `seekdb_test` cases when a PR can affect any behavior
+below. The listed paths are examples.
 
 - Instance parameter definitions in `rust/config/parameters.yaml`, or code
   that changes a parameter's default, accepted values, or when it takes
@@ -62,6 +62,10 @@ cases in the `seekdb_test` repository. The paths below are examples.
   execution plans, metadata, or protocol responses. Examples include
   `src/sql/parser/`, `src/sql/optimizer/`, `src/sql/engine/`, and
   `src/observer/mysql/`.
+- Shared runtime behavior such as thread or coroutine startup and teardown,
+  stack management, scheduling, synchronization, memory allocation, and
+  resource limits. For example, trace changes in `src/oblib/lib/thread/` to
+  their effects on instance startup, concurrent workloads, and shutdown.
 - Critical runtime paths such as transaction commit and rollback in
   `src/storage/tx/`, MVCC in `src/storage/memtable/mvcc/`, compaction in
   `src/storage/compaction/`, and log replay in `src/logservice/replayservice/`.
@@ -70,15 +74,23 @@ cases in the `seekdb_test` repository. The paths below are examples.
   `src/observer/ob_server.cpp`. Check changes to binaries, startup options,
   or deployment that affect how `seekdb_test` starts or connects to seekdb.
 
-Update affected cases and preserve assertions that still apply. In the PR's
-`验证` section, provide one of the following.
+Decide whether existing `seekdb_test` cases need updates. If they do, preserve
+assertions that still apply and link the test MR or commit in the PR's `验证`
+section. If the cases need no update, name the cases or scenarios you checked
+and explain why their assertions still apply.
 
-- A link to the `seekdb_test` MR or commit that updates the affected cases.
-  List the cases and report the result of running them against a build that
-  includes the seekdb PR changes.
-- An explicit statement that `seekdb_test` needs no update. Identify the
-  relevant suite, case, or behavior you checked and explain why no update
-  is needed.
+Record the regression decision in `验证` even when the cases need no update.
 
-If you lack access to `seekdb_test`, ask a maintainer with access to confirm
-the test impact. Record any pending validation.
+- **Run the relevant regression jobs.** Link the `seekdb_test` pipeline and
+  record the tested SeekDB SHA, the jobs or cases that ran, and their results.
+  Choose jobs that exercise the affected behavior. Record relevant platforms
+  and runtime conditions. If the tested SHA differs from the PR head, show
+  that the tested source and relevant build inputs match the current head.
+- **Request a skip.** Name the affected behavior and the cases you checked.
+  Explain why the available jobs are unnecessary or cannot exercise that
+  behavior. If you rely on an equivalent test, link its result for the same
+  behavior, revision, and runtime conditions. State any remaining coverage gaps.
+
+Mark missing access, a queued run, or an infrastructure failure as pending.
+Ask a maintainer with access to help when needed. Reviewers must verify the
+test result or confirm the skip justification before approval.

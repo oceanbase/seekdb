@@ -79,6 +79,11 @@ or results.
   identical source without proof, and disclose cross-baseline comparisons.
 - Keep builds, static checks, local runs, and CI separate. Do not claim CI
   is green without checking it live.
+- Fill the template's visible `seekdb_test` field when the
+  [downstream integration test policy](../../../AGENTS.md#downstream-integration-tests)
+  applies. Record the case-update decision separately. Add the pipeline
+  result or a specific skip justification, and mark unfinished validation
+  as pending.
 - For introduction analysis, distinguish author date, committer date,
   release date, earliest measured failing version, and the commit that
   actually introduced the defect. An old version failing only proves the
