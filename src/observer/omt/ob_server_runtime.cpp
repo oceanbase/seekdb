@@ -21,7 +21,6 @@
 #include "observer/ob_server.h"   // T3d
 #include "share/rc/ob_server_runtime.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "lib/utility/ob_common_utility.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
 #include "share/ob_cpu_share_calculator.h"
@@ -573,11 +572,9 @@ int64_t ObServerRuntime::min_worker_cnt() const
 
 int64_t ObServerRuntime::max_worker_cnt() const
 {
-  // Worker threads run on platform default stacks. Derive the per-thread
-  // memory estimate from the real default instead of a fixed size: on glibc
-  // Linux the default follows the launcher's RLIMIT_STACK (an unlimited limit
-  // gives 2 MiB, while the common 8 MiB limit gives 8 MiB).
-  static const int64_t estimated_thread_stack_size = get_default_thread_stack_size();
+  // Worker threads run on platform default stacks (for example 2 MiB on glibc
+  // Linux); keep the per-thread memory estimate conservative for this heuristic.
+  constexpr int64_t estimated_thread_stack_size = 2L << 20;
   int64_t cnt = std::max(runtime_meta_.runtime_config_.resource_config_.memory_size() / 20 / (estimated_thread_stack_size + (3 << 20) + (512 << 10)),
                   static_cast<int64_t>(150L));
   return cnt;

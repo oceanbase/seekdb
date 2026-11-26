@@ -34,11 +34,6 @@ extern int check_stack_overflow(
     int64_t *used_size = nullptr);
 extern int get_stackattr(void *&stackaddr, size_t &stacksize);
 extern void set_stackattr(void *stackaddr, size_t stacksize);
-// The platform's default stack size for newly created threads. On glibc Linux
-// it follows RLIMIT_STACK captured at process start (for example an unlimited
-// limit gives 2 MiB while the common 8 MiB limit gives 8 MiB); platforms
-// without a queryable default fall back to a conservative bound.
-extern int64_t get_default_thread_stack_size();
 
 // return OB_SIZE_OVERFLOW if stack overflow
 inline int check_stack_overflow(void)
