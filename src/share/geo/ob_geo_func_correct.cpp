@@ -18,6 +18,7 @@
 
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_correct.h"
+#include "share/geo/ob_geo_area_geographic.h"
 #include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
@@ -62,7 +63,7 @@ private:
       ret = OB_ERR_NULL_VALUE;
     } else {
       boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-      boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
+      ObGeoAreaStrategy<> area_strategy(geog_sphere);
       GeoType *geo_candidate = NULL;
       if (!g->is_tree()) {
         geo_candidate = reinterpret_cast<GeoType *>(const_cast<char *>(g->val()));
