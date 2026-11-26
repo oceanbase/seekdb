@@ -144,7 +144,7 @@ int main(int argc, char **argv)
     if (options.parameters_.push_back({ObString::make_string(names[i]), ObString::make_string(values[i])}) != OB_SUCCESS) return 1;
   }
   const char *settings[][2] = {{"net_thread_count", "1"}, {"sql_net_thread_count", "1"},
-    {"mysql_port_mode", "disabled"}, {"stack_size", "1M"}};
+    {"mysql_port_mode", "disabled"}};
   for (const auto &setting : settings) {
     if (options.parameters_.push_back({ObString::make_string(setting[0]), ObString::make_string(setting[1])}) != OB_SUCCESS) return 1;
   }
