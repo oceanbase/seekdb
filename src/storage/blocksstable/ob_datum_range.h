@@ -56,7 +56,7 @@ public:
   OB_INLINE void set_whole_range();
   OB_INLINE bool is_whole_range() const { return start_key_.is_min_rowkey() && end_key_.is_max_rowkey(); }
   OB_INLINE int is_single_rowkey(const ObStorageDatumUtils &datum_utils, bool &is_single) const;
-  OB_INLINE void change_boundary(const ObDatumRowkey &rowkey, bool is_reverse, bool is_closed = false);
+  OB_INLINE void change_boundary(const ObDatumRowkey &rowkey, bool is_reverse);
   OB_INLINE int from_range(const common::ObStoreRange &range, ObIAllocator &allocator);
   OB_INLINE int from_range(const common::ObNewRange &range, ObIAllocator &allocator, bool enable_new_false_range = false);
   OB_INLINE int to_store_range(const common::ObIArray<share::schema::ObColDesc> &col_descs,
@@ -302,22 +302,14 @@ OB_INLINE int ObDatumRange::compare(const ObDatumRange &rhs, const ObStorageDatu
   return ret;
 }
 
-OB_INLINE void ObDatumRange::change_boundary(const ObDatumRowkey &rowkey, bool is_reverse, bool is_closed)
+OB_INLINE void ObDatumRange::change_boundary(const ObDatumRowkey &rowkey, bool is_reverse)
 {
   if (is_reverse) {
     end_key_ = rowkey;
-    if (is_closed) {
-      border_flag_.set_inclusive_end();
-    } else {
-      border_flag_.unset_inclusive_end();
-    }
-  }  else {
+    border_flag_.unset_inclusive_end();
+  } else {
     start_key_ = rowkey;
-    if (is_closed) {
-      border_flag_.set_inclusive_start();
-    } else {
-      border_flag_.unset_inclusive_start();
-    }
+    border_flag_.unset_inclusive_start();
   }
 }
 

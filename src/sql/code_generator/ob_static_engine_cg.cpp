@@ -2626,7 +2626,6 @@ int ObStaticEngineCG::generate_spec(ObLogGranuleIterator &op, ObGranuleIteratorS
   }
 
   if (OB_SUCC(ret)) {
-    spec.enable_adaptive_task_splitting_ = op.enable_adaptive_task_splitting();
     spec.hash_part_ = op.is_hash_part();
   }
 
@@ -3692,7 +3691,6 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
     }
   }
   if (OB_SUCC(ret)) {
-    spec.is_scan_resumable_ = op.is_scan_resumable();
   }
   return ret;
 }

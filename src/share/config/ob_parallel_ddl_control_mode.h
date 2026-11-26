@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SHARE_CONFIG_OB_PARALLEL_DDL_CONTROL_MODE_H_
 #define OCEANBASE_SHARE_CONFIG_OB_PARALLEL_DDL_CONTROL_MODE_H_
 
-#include "lib/string/ob_sql_string.h"
+#include "lib/string/ob_string.h"
 
 namespace oceanbase
 {
@@ -34,8 +34,7 @@ public:
     TRUNCATE_TABLE = 0,
     SET_COMMENT = 1,
     CREATE_INDEX = 2,
-    CREATE_VIEW = 3,
-    DROP_TABLE = 4,
+    DROP_TABLE = 3,
     MAX_TYPE // can not > 32
   };
 
@@ -49,7 +48,6 @@ public:
   int is_parallel_ddl(const ObParallelDDLType type, bool &is_parallel);
   static int is_parallel_ddl_enable(const ObParallelDDLType ddl_type, bool &is_parallel);
   static int string_to_ddl_type(const common::ObString &ddl_string, ObParallelDDLType &ddl_type);
-  static int generate_parallel_ddl_control_config_for_create_tenant(common::ObSqlString &config_value);
 private:
   bool check_mode_valid_(uint8_t mode) { return mode > MASK ? false : true; }
   uint64_t value_;

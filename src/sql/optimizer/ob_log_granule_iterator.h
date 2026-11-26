@@ -39,9 +39,7 @@ public:
   bf_info_(),
   tablet_id_expr_(NULL),
   repartition_ref_table_id_(OB_INVALID_ID),
-  px_rf_info_(),
-  enable_adaptive_task_splitting_(false),
-  controlled_tsc_(nullptr)
+  px_rf_info_()
   { }
   virtual ~ObLogGranuleIterator()
   { }
@@ -89,13 +87,6 @@ public:
                                 ObSqlPlanItem &plan_item) override;
   virtual int allocate_expr_post(ObAllocExprContext &ctx) override;
 
-  bool is_rescanable();
-  void set_enable_adaptive_task_splitting(bool value) { enable_adaptive_task_splitting_ = value; }
-  bool enable_adaptive_task_splitting() const { return enable_adaptive_task_splitting_; }
-  int check_adaptive_task_splitting(ObLogTableScan *tsc);
-private:
-  int check_exist_deadlock_condition(const ObLogicalOperator *op, bool &exist);
-  int branch_has_exchange(const ObLogicalOperator *op, bool &has_exchange);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogGranuleIterator);
   int64_t tablet_size_;
@@ -106,8 +97,6 @@ private:
   ObOpPseudoColumnRawExpr *tablet_id_expr_;
   int64_t repartition_ref_table_id_;
   ObPxRFStaticInfo px_rf_info_; // for runtime filter extract query range
-  bool enable_adaptive_task_splitting_;
-  ObLogicalOperator *controlled_tsc_; // only when gi is directly add above tsc.
 };
 
 }

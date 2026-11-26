@@ -44,66 +44,6 @@ public:
   }
 };
 
-class ObGITaskReBalancer
-{
-public:
-  int init(ObExecContext *ctx, ObGranulePump *gi_pump, int64_t total_worker_count,
-           int64_t split_gi_task_cost, int64_t initial_task_count, int64_t gi_op_id);
-  inline void scale_total_worker_count(int64_t total_worker_count)
-  {
-    total_worker_count_ = total_worker_count;
-  }
-  bool *get_worker_paused_flag(int64_t worker_id) {
-    return &worker_paused_flags_[worker_id];
-  }
-
-  bool is_worker_paused(int64_t worker_id) {
-    return ATOMIC_LOAD(&worker_paused_flags_[worker_id]);
-  }
-
-  void clear_worker_paused(int64_t worker_id) {
-    ATOMIC_STORE(&worker_paused_flags_[worker_id], false);
-  }
-
-  void pause_all_workers() {
-    for (int64_t i = 0; i < total_worker_count_; ++i) {
-      ATOMIC_STORE(&worker_paused_flags_[i], true);
-    }
-  }
-
-  bool all_worker_finished() {
-    return total_worker_count_ == ATOMIC_LOAD(&finished_workers_);
-  }
-
-  int wait_for_rebalance(ObGranuleIteratorOp *gi_op, bool wait_new_task);
-  int notify_new_task_ready();
-
-  void set_thread_id(int64_t worker_id, int64_t thread_id)
-  {
-    threads_id_[worker_id] = thread_id;
-  }
-
-private:
-  int process_finished_count(ObGranuleIteratorOp *gi_op);
-  int trigger_rebalance(ObGranuleIteratorOp *gi_op, bool &need_wait_new_task);
-  int wait_new_task(ObGranuleIteratorOp *gi_op);
-
-private:
-  static constexpr uint64_t COND_WAIT_TIME_USEC = 1000; // 1ms
-private:
-  ObGranulePump *gi_pump_{nullptr};
-  int64_t total_worker_count_{0};
-  int finished_workers_{0};
-  int64_t split_gi_task_cost_{0};
-  int64_t initial_task_count_{0};
-  int64_t gi_op_id_{-1};
-  bool *worker_paused_flags_{nullptr};
-  bool *maybe_has_new_task_{nullptr};
-  int64_t *threads_id_{nullptr};
-  ObThreadCond cond_; // for who is responsibility for detect
-  common::ObSpinLock pullup_version_lock_{common::ObLatchIds::SQL_GI_SHARE_POOL_LOCK};
-};
-
 class ObGIOpInput : public ObOpInput
 {
   OB_UNIS_VERSION_V(1);
@@ -139,11 +79,6 @@ public:
   common::ObSEArray<uint64_t, 2> table_ref_ids_;
   int64_t px_sequence_id_;
   int64_t rf_max_wait_time_;
-
-  union {
-    ObGITaskReBalancer *task_balancer_;
-    uint64_t ser_task_balancer_;
-  };
 private:
   common::ObIAllocator *deserialize_allocator_;
 };
@@ -201,7 +136,6 @@ public:
   // for runtime filter extract query range
   ObPxRFStaticInfo px_rf_info_;
   bool hash_part_;
-  bool enable_adaptive_task_splitting_;
 };
 
 class ObGranuleIteratorOp : public ObOperator
@@ -246,7 +180,6 @@ public:
   virtual int inner_get_next_batch(const int64_t max_row_cnt) override;
   virtual void destroy() override;
   virtual int inner_close() override;
-  int do_drain_exch() override;
 
   void reset();
   void reuse();
@@ -254,15 +187,7 @@ public:
   virtual OperatorOpenOrder get_operator_open_order() const override
   { return OPEN_SELF_FIRST; }
   int get_next_granule_task(bool prepare = false, bool round_robin = false);
-  int64_t get_worker_id() const { return worker_id_; }
-  storage::ScanResumePoint &get_resume_point() { return scan_resume_point_; }
-  inline void set_paused() { scan_resume_point_.set_paused(); }
-  inline bool is_paused() const { return scan_resume_point_.is_paused(); }
-  inline void clear_paused() { scan_resume_point_.clear_paused(); }
-  bool has_add_to_finished_worker() { return has_add_to_finished_worker_; }
-  void set_has_add_to_finished_worker(bool value) { has_add_to_finished_worker_ = value; }
   const common::ObIArray<int64_t> &get_pw_dml_tsc_ids() const { return MY_SPEC.pw_dml_tsc_ids_; }
-  ObGranulePumpArgs *pump_arg() { return pump_arg_; }
 private:
   int parameters_init();
   // Non-full partition wise way to obtain task
@@ -327,12 +252,6 @@ private:
   int do_single_runtime_filter_extract_query_range(ObGranuleTaskInfo &gi_task_info);
   int do_parallel_runtime_filter_extract_query_range(bool need_regenerate_gi_task = true);
   // ---end----
-  bool enable_adaptive_task_splitting()
-  {
-    return MY_SPEC.enable_adaptive_task_splitting_ && parallelism_ > 1;
-  }
-  int wait_task_rebalance(bool wait_new_task = true);
-  int gi_task_pause_process();
 private:
   typedef common::hash::ObHashMap<int64_t, int64_t,
       common::hash::NoPthreadDefendMode> ObPxTablet2PartIdMap;
@@ -370,11 +289,6 @@ private:
   ObSEArray<ObP2PDhKey, 2> query_range_rf_keys_;
   ObSEArray<ObP2PDatahubMsgBase *, 2> query_range_rf_msgs_;
   ObGranuleSplitterType splitter_type_;
-  // worker may enter gi pause sync point multiple times, use has_add_to_finished_worker_ to
-  // distinguish whether the counter has record it.
-  bool has_add_to_finished_worker_;
-  storage::ScanResumePoint scan_resume_point_;
-  int64_t latest_pause_output_;
   ObGranulePumpArgs *pump_arg_;
 };
 

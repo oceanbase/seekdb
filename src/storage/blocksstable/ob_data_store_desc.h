@@ -278,7 +278,6 @@ private:
   int cal_row_store_type(
       const ObRowStoreType row_store_type,
       const compaction::ObMergeType merge_type);
-  int get_emergency_row_store_type();
 public:
   ObStaticDataStoreDesc *static_desc_;
   ObColDataStoreDesc *col_desc_;

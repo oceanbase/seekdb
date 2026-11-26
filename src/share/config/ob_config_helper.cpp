@@ -441,8 +441,6 @@ bool ObConfigSQLTlsVersionChecker::check(const char *text) const
 {
   const ObString tmp_str(text);
   return 0 == tmp_str.case_compare("NONE")    ||
-         0 == tmp_str.case_compare("TLSV1")   ||
-         0 == tmp_str.case_compare("TLSV1.1") ||
          0 == tmp_str.case_compare("TLSV1.2") ||
          0 == tmp_str.case_compare("TLSV1.3");
 }
@@ -510,12 +508,7 @@ static const char *const DDL_TYPES[] = {
   "TRUNCATE_TABLE",
   "SET_COMMENT",
   "CREATE_INDEX",
-  "CREATE_VIEW",
   "DROP_TABLE"
-};
-
-static const char *const UNSUPPORTED_DDL_TYPES[] = {
-  "CREATE_VIEW"
 };
 
 int ObParallelDDLControlMode::string_to_ddl_type(const ObString &ddl_string, ObParallelDDLType &ddl_type)
@@ -627,27 +620,6 @@ int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl
   if (OB_FAIL(cfg.parse_config(config_value))) {
     OB_LOG(WARN, "invalid parallel DDL control", KR(ret), K(config_value));
   } else if (OB_FAIL(cfg.is_parallel_ddl(ddl_type, is_parallel))) {
-  }
-  return ret;
-}
-
-int ObParallelDDLControlMode::generate_parallel_ddl_control_config_for_create_tenant(ObSqlString &config_value)
-{
-  int ret = OB_SUCCESS;
-  config_value.reset();
-  for (int i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(DDL_TYPES); ++i) {
-    const ObString ddl_type = DDL_TYPES[i];
-    bool unsupported = false;
-    for (int j = 0; !unsupported && j < ARRAYSIZEOF(UNSUPPORTED_DDL_TYPES); ++j) {
-      unsupported = 0 == ddl_type.case_compare(UNSUPPORTED_DDL_TYPES[j]);
-    }
-    if (unsupported) {
-      // skip
-    } else if (OB_FAIL(config_value.append_fmt("%s:ON, ", DDL_TYPES[i]))) {
-    }
-  }
-  if (config_value.is_valid()) {
-    config_value.set_length(config_value.length() - 2);
   }
   return ret;
 }

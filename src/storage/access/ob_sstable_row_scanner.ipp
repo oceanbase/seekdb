@@ -499,47 +499,6 @@ inline int ObSSTableRowScanner<PrefetchType>::fetch_rows(ObSSTableReadHandle &re
 }
 
 
-template<typename PrefetchType>
-inline int ObSSTableRowScanner<PrefetchType>::get_next_rowkey(const bool need_set_border_rowkey,
-                                                       int64_t &curr_scan_index,
-                                                       blocksstable::ObDatumRowkey& rowkey,
-                                                       blocksstable::ObDatumRowkey &border_rowkey,
-                                                       common::ObIAllocator &allocator)
-{
-  int ret = OB_SUCCESS;
-  const ObDatumRow *row = nullptr;
-  ObDatumRowkey tmp_rowkey;
-  border_rowkey.reset();
-  rowkey.reset();
-  block_row_store_->disable();
-
-  // get next row
-  if (OB_FAIL(get_next_row(row))) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
-    } else {
-      // range_idx_ maybe -1 for empty range
-      curr_scan_index = MAX(cur_range_idx_, 0);
-      if (access_ctx_->query_flag_.is_reverse_scan()) {
-        rowkey.set_min_rowkey();
-      } else {
-        rowkey.set_max_rowkey();
-      }
-      ret = OB_SUCCESS;
-    }
-  } else if (OB_FAIL(tmp_rowkey.assign(row->storage_datums_, iter_param_->get_schema_rowkey_count()))) {
-  } else if (OB_UNLIKELY(!tmp_rowkey.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(tmp_rowkey.deep_copy(rowkey, allocator))) {
-  } else {
-    curr_scan_index = cur_range_idx_;
-  }
-
-  if (OB_SUCC(ret) && need_set_border_rowkey) {
-    border_rowkey = prefetcher_.get_border_rowkey();
-  }
-  return ret;
-}
-
 // Explicit instantiations.
 template class ObSSTableRowScanner<ObIndexTreeMultiPassPrefetcher<32, 3>>;
 template class ObSSTableRowScanner<ObIndexTreeMultiPassPrefetcher<2, 2>>;

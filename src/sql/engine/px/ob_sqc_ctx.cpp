@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/px/ob_sqc_ctx.h"
-#include "sql/engine/px/ob_granule_iterator_op.h"
 
 using namespace oceanbase::sql;
 
@@ -38,38 +37,6 @@ ObSqcCtx::ObSqcCtx(ObPxInitSqcArgs &sqc_arg) : msg_loop_(),
       interrupted_(false),
       join_filter_count_row_whole_msg_proc_(msg_proc_)
 {
-}
-
-int ObSqcCtx::create_gi_task_rebalancer(ObExecContext &ctx, int64_t parallelism,
-                                      int64_t split_gi_task_cost, int64_t initial_task_count,
-                                      int64_t op_id, ObGITaskReBalancer *&rebalancer)
-{
-  int ret = OB_SUCCESS;
-  rebalancer = nullptr;
-  void *buf = ctx.get_allocator().alloc(sizeof(ObGITaskReBalancer));
-  if (OB_ISNULL(buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    ObGITaskReBalancer *created = new (buf) ObGITaskReBalancer;
-    if (OB_FAIL(created->init(&ctx, &gi_pump_, parallelism, split_gi_task_cost,
-                             initial_task_count, op_id))) {
-    } else if (OB_FAIL(gi_task_rebalancers_.push_back(created))) {
-    }
-    if (OB_FAIL(ret)) {
-      created->~ObGITaskReBalancer();
-    } else {
-      rebalancer = created;
-    }
-  }
-  return ret;
-}
-
-void ObSqcCtx::destroy_gi_task_rebalancers()
-{
-  for (int64_t i = 0; i < gi_task_rebalancers_.count(); ++i) {
-    gi_task_rebalancers_.at(i)->~ObGITaskReBalancer();
-  }
-  gi_task_rebalancers_.reset();
 }
 
 int ObSqcCtx::add_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type, ObPxDatahubDataProvider &provider)

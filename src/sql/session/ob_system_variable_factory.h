@@ -1046,10 +1046,10 @@ public:
   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_CURSOR_SHARING; }
   inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(142); }
 };
-class ObSysVarAggregationOptimizationSettings : public ObIntSysVar
+class ObSysVarAggregationOptimizationSettings : public AggregationOptimizationSettingsSysVar
 {
 public:
-  ObSysVarAggregationOptimizationSettings() : ObIntSysVar(NULL, NULL, NULL, NULL, NULL) {}
+  ObSysVarAggregationOptimizationSettings() : AggregationOptimizationSettingsSysVar(NULL, NULL, NULL, NULL, NULL) {}
   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR__AGGREGATION_OPTIMIZATION_SETTINGS; }
   inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(143); }
 };

@@ -3722,13 +3722,6 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
         }
       }
 
-      if (OB_FAIL(ret)) {
-      } else if (LOG_TABLE_SCAN == get_type()
-                 && OB_FAIL(gi_op->check_adaptive_task_splitting(
-                        static_cast<ObLogTableScan *>(this)))) {
-        LOG_WARN("failed to check adaptive task splitting");
-      }
-
       LOG_TRACE("succ to allocate granule iterator nodes above operator", K(get_name()),
                 K(get_cost()), K(get_card()), K(ctx.is_in_pw_affinity_state()),
                 K(ctx.is_in_partition_wise_state()));

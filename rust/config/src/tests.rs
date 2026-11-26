@@ -250,6 +250,10 @@ fn rust_validation_checks_types_and_ranges_without_business_checkers() {
     assert!(crate::config::validate("server_create_time", "123").is_err());
     assert!(crate::config::validate("major_freeze_duty_time", "24:00").is_err());
     assert!(crate::config::validate("major_freeze_duty_time", "disable").is_ok());
+    assert!(crate::config::validate("_force_skip_encoding_partition_id", "0").is_ok());
+    assert!(crate::config::validate("_force_skip_encoding_partition_id", "200001").is_ok());
+    assert!(crate::config::validate("_force_skip_encoding_partition_id", "200001@1").is_err());
+    assert!(crate::config::validate("_force_skip_encoding_partition_id", "-1").is_err());
     assert!(crate::config::validate("_parallel_ddl_control", "CREATE_INDEX:on").is_ok());
     assert!(crate::config::validate("_parallel_ddl_control", "UNKNOWN:on").is_ok());
     assert!(crate::config::validate("default_table_organization", "HEAP").is_ok());

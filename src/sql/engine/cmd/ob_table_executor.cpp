@@ -461,12 +461,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
   } else {
     create_table_arg.is_inner_ = my_session->is_inner();
     const_cast<obcall::ObCreateTableArg&>(create_table_arg).ddl_stmt_str_ = first_stmt;
-    bool enable_parallel_create_table = false;
-    {
-      enable_parallel_create_table = true
-                                     && config::_enable_parallel_table_creation();
-
-    }
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(ObPartitionExecutorUtils::calc_values_exprs(ctx, stmt))) {
@@ -477,8 +471,7 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
       } else if (table_schema.is_view_table()) {
         is_parallel_create = false;
       } else {
-        is_parallel_create = true
-                             && config::_enable_parallel_table_creation();
+        is_parallel_create = config::_enable_parallel_table_creation();
       }
       if (OB_FAIL(ret)) {
         // do nothing
