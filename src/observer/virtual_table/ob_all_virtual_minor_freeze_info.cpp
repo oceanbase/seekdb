@@ -191,7 +191,6 @@ int ObAllVirtualMinorFreezeInfo::generate_memtables_info()
       const char *end_scn_str = nullptr;
       const char *write_ref_cnt_str = nullptr;
       const char *unsubmitted_cnt_str = nullptr;
-      const char *unsynced_cnt_str = nullptr;
       const char *current_right_boundary_str = nullptr;
       if (OB_FAIL(helper.convert(memtables_info_[i].tablet_id_.id(), tablet_id_str))) {
       } else if (OB_FAIL(helper.convert(memtables_info_[i].start_scn_, start_scn_str))) {

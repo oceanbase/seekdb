@@ -396,7 +396,6 @@ int ObShowGrants::print_column_privs_to_buff(
     const ObPrivType priv_type)
 {
   int ret = OB_SUCCESS;
-  ObPrivSet priv_all = 0;
   ObSEArray<ObString, 2> cols;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;

@@ -375,7 +375,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (OB_SUCCESS == stat_ret) {
-                      cells[cell_idx].set_uint64(tstat.data_version_);
+                      cells[cell_idx].set_uint64(0);
                     } else {
                       cells[cell_idx].set_null();
                     }
@@ -518,7 +518,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (OB_SUCCESS == stat_ret) {
-                      cells[cell_idx].set_int(tstat.data_checksum_);
+                      cells[cell_idx].set_int(0);
                     } else {
                       cells[cell_idx].set_null();
                     }

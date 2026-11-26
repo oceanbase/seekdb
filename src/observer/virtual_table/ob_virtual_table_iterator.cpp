@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "observer/virtual_table/ob_virtual_table_iterator.h"
-#include "observer/virtual_table/ob_virtual_table_iterator.h"
 
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -47,200 +46,21 @@ void ObVirtualTableIterator::reset()
   cur_row_.count_ = 0;
   key_ranges_.reset();
   row_calc_buf_.reset();
-  reset_convert_ctx();
+  convert_alloc_.reset();
   allocator_ = NULL;
   session_ = NULL;
   sql_schema_guard_.reset();
 }
 
-void ObVirtualTableIterator::reset_convert_ctx()
-{
-  if (OB_LIKELY(NULL != allocator_ && NULL != convert_row_.cells_)) {
-    allocator_->free(convert_row_.cells_);
-  }
-  saved_key_ranges_.reset();
-  cols_schema_.reset();
-  convert_row_.cells_ = NULL;
-  convert_row_.count_ = 0;
-  need_convert_ = false;
-  convert_alloc_.reset();
-}
-
-int ObVirtualTableIterator::free_convert_ctx()
-{
-  int ret = OB_SUCCESS;
-  if (!need_convert_) {
-  } else if (OB_UNLIKELY(convert_row_.count_ < 0 || NULL == convert_row_.cells_)) {
-    ret = OB_NOT_INIT;
-  } else {
-    if (OB_ISNULL(allocator_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      key_ranges_.reset();
-      if (OB_FAIL(key_ranges_.assign(saved_key_ranges_))) {
-      }
-      saved_key_ranges_.reset();
-      //Since ObObj's destructor does not do meaningful operations, in order to save performance, ObObj's destructor call is omitted, and the cells_memory is directly released.
-      allocator_->free(convert_row_.cells_);
-      convert_row_.cells_ = NULL;
-      convert_row_.count_ = 0;
-      convert_alloc_.reset();
-      cols_schema_.reset();
-    }
-  }
-  return ret;
-}
-
-int ObVirtualTableIterator::convert_key(const ObRowkey &src, ObRowkey &dst, common::ObIArray<const ObColumnSchemaV2*> &key_cols)
-{
-  int ret = OB_SUCCESS;
-  if (src.get_obj_cnt() > 0) {
-    const ObObj *src_key_objs = src.get_obj_ptr();
-    void *tmp_ptr = NULL;
-    ObObj *new_key_obj = NULL;
-    tmp_ptr = allocator_->alloc(src.get_obj_cnt() * sizeof(ObObj));
-    if (OB_ISNULL(tmp_ptr)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(new_key_obj = new (tmp_ptr) ObObj[src.get_obj_cnt()])) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (src.get_obj_cnt() > key_cols.count()) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-    const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
-    ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-    for (uint64_t nth_obj = 0; OB_SUCC(ret) && nth_obj < src.get_obj_cnt(); ++nth_obj) {
-      const ObObj &src_obj = src_key_objs[nth_obj];
-      if (src_obj.is_min_value()) {
-        new_key_obj[nth_obj].set_min_value();
-      } else if (src_obj.is_max_value()) {
-        new_key_obj[nth_obj].set_max_value();
-      } else if (src_obj.is_null()) {
-        new_key_obj[nth_obj].set_null();
-      } else {
-        if (OB_FAIL(ObObjCaster::to_type(key_cols.at(nth_obj)->get_data_type(),
-                                        cast_ctx,
-                                        src_key_objs[nth_obj],
-                                        new_key_obj[nth_obj]))) {
-        }
-      }
-    }//end for
-    if (OB_SUCC(ret)) {
-      dst.assign(new_key_obj, src.get_obj_cnt());
-    }
-  }
-  return ret;
-}
-
 // Get key types from the mapped origin virtual table by matching column names.
-int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2*> &key_cols)
-{
-  int ret = OB_SUCCESS;
-  common::ObArray<uint64_t> column_ids;
-  key_cols.reset();
-  if (need_convert_ && !key_ranges_.empty()) {
-    if (index_schema_->get_rowkey_info().is_valid()
-        && index_schema_->get_rowkey_info().get_column_ids(column_ids)) {
-    }
-    if (OB_SUCC(ret)) {
-      common::ObArray<const ObString*> column_names;
-      for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
-        const ObColumnSchemaV2 * col_schema = table_schema_->get_column_schema(column_ids.at(i));
-        if (OB_ISNULL(col_schema)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(column_names.push_back(&col_schema->get_column_name_str()))) {
-        }
-      }
-      if (OB_SUCC(ret) && column_ids.count() != column_names.count()) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-      // get origin key type by column name
-      if (OB_SUCC(ret)) {
-        const ObTableSchema *org_table_schema = table_schema_;
-        if (OB_ISNULL(org_table_schema)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
-            const ObString *column_name = column_names.at(i);
-            const ObColumnSchemaV2 *col_schema = org_table_schema->get_column_schema(*column_name);
-            if (OB_ISNULL(col_schema)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(key_cols.push_back(col_schema))) {
-            }
-          }
-          if (OB_SUCC(ret) && key_cols.count() != column_names.count()) {
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
 
 // Extended virtual table keys are converted using the matching MySQL virtual table
 // column types. Every extended virtual table must map to one MySQL virtual table.
-int ObVirtualTableIterator::convert_key_ranges()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(table_schema_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (!key_ranges_.empty()) {
-    common::ObSEArray<common::ObNewRange, 16> tmp_range;
-    common::ObArray<const ObColumnSchemaV2*> key_cols;
-    if (OB_FAIL(get_key_cols(key_cols))) {
-    } else if (key_cols.empty() && 1 == key_ranges_.count() && key_ranges_.at(0).is_whole_range()) {
-      ObNewRange new_range;
-      new_range.table_id_ = key_ranges_.at(0).table_id_;
-      new_range.set_whole_range();
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < key_ranges_.count(); ++i) {
-        ObNewRange new_range;
-        new_range.table_id_ = key_ranges_.at(i).table_id_;
-        new_range.border_flag_ = key_ranges_.at(i).border_flag_;
-        if (OB_FAIL(convert_key(key_ranges_.at(i).start_key_, new_range.start_key_, key_cols))) {
-        } else if (OB_FAIL(convert_key(key_ranges_.at(i).end_key_, new_range.end_key_, key_cols))) {
-        } else if (OB_FAIL(tmp_range.push_back(new_range))) {
-        }
-      }//end for
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(saved_key_ranges_.assign(key_ranges_))) {
-      } else {
-        key_ranges_.reset();
-        if (OB_FAIL(key_ranges_.assign(tmp_range))) {
-        }
-      }
-    }
-  }
-  return ret;
-}
 
-int ObVirtualTableIterator::init_convert_ctx()
+void ObVirtualTableIterator::init_cast_ctx()
 {
-  int ret = OB_SUCCESS;
-  
-  
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
-  ObCastCtx cast_ctx(&convert_alloc_, &dtc_params, CM_NONE, table_schema_->get_collation_type());
-  cast_ctx_ = cast_ctx;
-
-  if (need_convert_) {
-    ObObj *cells = NULL;
-    void *tmp_ptr = NULL;
-    if (OB_UNLIKELY(NULL == allocator_ || NULL == table_schema_ || NULL == session_)) {
-      ret = OB_NOT_INIT;
-    } else if (OB_ISNULL(tmp_ptr = allocator_->alloc(reserved_column_cnt_ <= 0 ? 1 * sizeof(ObObj): reserved_column_cnt_ * sizeof(ObObj)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      COMMON_LOG(ERROR, "fail to alloc cells", K(ret), K(reserved_column_cnt_));
-    } else if (OB_ISNULL(cells = new (tmp_ptr) ObObj[reserved_column_cnt_ <= 0 ? 1 : reserved_column_cnt_])) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      convert_row_.cells_ = cells;
-      convert_row_.count_ = reserved_column_cnt_;
-      if (OB_FAIL(convert_key_ranges())) {
-      }
-    }
-  }
-  return ret;
+  cast_ctx_ = ObCastCtx(&convert_alloc_, &dtc_params, CM_NONE, table_schema_->get_collation_type());
 }
 
 int ObVirtualTableIterator::open()
@@ -262,55 +82,8 @@ int ObVirtualTableIterator::open()
   } else {
     cur_row_.cells_ = cells;
     cur_row_.count_ = reserved_column_cnt_;
-    if (OB_FAIL(init_convert_ctx())) {
-    } else if (OB_FAIL(inner_open())) {
-    }
-  }
-  return ret;
-}
-
-int ObVirtualTableIterator::get_all_columns_schema()
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
-    const uint64_t column_id = output_column_ids_.at(i);
-    const ObColumnSchemaV2 *col_schema = table_schema_->get_column_schema(column_id);
-    if (OB_ISNULL(col_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("col_schema is NULL", K(ret), K(column_id));
-    } else if (OB_FAIL(cols_schema_.push_back(col_schema))) {
-    }
-  }
-  return ret;
-}
-
-int ObVirtualTableIterator::convert_output_row(ObNewRow *&cur_row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(cur_row)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (!need_convert_) {
-    // don't convert
-  } else {
-    convert_alloc_.reuse();
-    if (cols_schema_.empty() && OB_FAIL(get_all_columns_schema())) {
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
-      const uint64_t column_id = output_column_ids_.at(i);
-      const ObColumnSchemaV2 *col_schema = cols_schema_.at(i);
-      if (cur_row->get_cell(i).is_null()
-          || (cur_row->get_cell(i).is_string_type() && 0 == cur_row->get_cell(i).get_data_length())
-          || ob_is_empty_lob(cur_row->get_cell(i))
-          || (cur_row->get_cell(i).is_timestamp() && cur_row->get_cell(i).get_timestamp() <= 0)) {
-        convert_row_.cells_[i].set_null();
-      } else if (OB_FAIL(ObObjCaster::to_type(col_schema->get_data_type(),
-                                              col_schema->get_collation_type(),
-                                              cast_ctx_,
-                                              cur_row->get_cell(i),
-                                              convert_row_.cells_[i]))) {
-      }
-    }
-    cur_row = &convert_row_;
+    init_cast_ctx();
+    ret = inner_open();
   }
   return ret;
 }
@@ -341,7 +114,6 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
   } else if (OB_ISNULL(table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("table schema is NULL", K(ret));
-  } else if (OB_FAIL(convert_output_row(cur_row))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
     const uint64_t column_id = output_column_ids_.at(i);
@@ -455,7 +227,6 @@ int ObVirtualTableIterator::close()
   if (OB_UNLIKELY(cur_row_.count_ > 0 && NULL == cur_row_.cells_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(inner_close())) {
-  } else if (OB_FAIL(free_convert_ctx())) {
   } else {
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;

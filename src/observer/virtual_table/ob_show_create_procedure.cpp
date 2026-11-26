@@ -228,8 +228,6 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
 int ObShowCreateProcedure::has_show_create_function_priv(const ObRoutineInfo &proc_info,
                                                          bool &print_create_function_column_priv) const {
   int ret = OB_SUCCESS;
-  const ObString &db = session_priv_.db_;
-  const ObString &routine = proc_info.get_routine_name();
 
   ObArenaAllocator alloc;
   ObStmtNeedPrivs stmt_need_privs(alloc);

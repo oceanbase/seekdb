@@ -49,7 +49,6 @@ int ObMPSetOption::process()
   int ret = common::OB_SUCCESS;
   bool need_disconnect = true;
   ObSQLSessionInfo *session = NULL;
-  bool need_response_error = true;
   ObSMConnection *conn = NULL;
   if (OB_FAIL(get_session(session))) {
   } else if (OB_ISNULL(session)) {

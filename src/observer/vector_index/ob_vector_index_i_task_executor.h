@@ -32,8 +32,7 @@ public:
   ObVecITaskExecutor() 
     : is_inited_(false),
       vector_index_service_(nullptr),
-      ls_(nullptr),
-      async_task_ref_cnt_(0)
+      ls_(nullptr)
   {}
   virtual ~ObVecITaskExecutor() {}
   virtual int init(storage::ObLS *ls);
@@ -58,7 +57,6 @@ protected:
   bool is_inited_;
   ObPluginVectorIndexService *vector_index_service_;
   storage::ObLS *ls_;
-  volatile int64_t async_task_ref_cnt_;
 };
 
 } // namespace share

@@ -91,8 +91,6 @@ int ObMPStmtSendLongData::process()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *sess = NULL;
-  bool need_response_error = true;
-  bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
   ObSMConnection *conn = get_conn();
 
@@ -161,7 +159,6 @@ int ObMPStmtSendLongData::process()
 int ObMPStmtSendLongData::process_send_long_data_stmt(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-  bool need_response_error = true;
   setup_wb(session);
 
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
@@ -221,7 +218,6 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
   {
     audit_record.exec_record_.record_end();
     audit_record.update_event_stage_state();
-    const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
   }
   if (enable_sqlstat) {
     sqlstat_record.record_sqlstat_end_value(

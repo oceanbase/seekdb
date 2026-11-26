@@ -46,9 +46,6 @@ public:
                    ObSchemaGetterGuard *schema_guard = NULL) {
     return ObMPBase::response_row(session, row, fields, is_packed, exec_ctx, true, schema_guard);
   }
-  bool need_close_cursor() { return need_close_cursor_; }
-  void set_close_cursor() { need_close_cursor_ = true; }
-  void reset_close_cursor() { need_close_cursor_ = false; }
   
 protected:
   virtual int deserialize()  { return common::OB_SUCCESS; }
@@ -69,7 +66,6 @@ private:
   int64_t single_process_timestamp_;
   int64_t exec_start_timestamp_;
   int64_t exec_end_timestamp_;
-  bool    need_close_cursor_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPStmtFetch);
 }; //end of class

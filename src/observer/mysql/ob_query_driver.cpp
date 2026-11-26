@@ -136,7 +136,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
   const ObNewRow *result_row = NULL;
   bool is_cac_found_rows =  result.is_calc_found_rows();
   int64_t row_num = 0;
-  ObSqlCtx *sql_ctx = result.get_exec_context().get_sql_ctx();
   bool is_packed = result.get_physical_plan() ? result.get_physical_plan()->is_packed() : false;
   MYSQL_PROTOCOL_TYPE protocol_type = is_ps_protocol ? MYSQL_PROTOCOL_TYPE::BINARY : MYSQL_PROTOCOL_TYPE::TEXT;
 

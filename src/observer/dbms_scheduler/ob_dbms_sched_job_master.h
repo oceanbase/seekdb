@@ -58,13 +58,7 @@ public:
   OB_INLINE common::ObString &get_job_name() { return job_name_; }
   OB_INLINE uint64_t get_execute_at() const { return execute_at_;}
   
-  OB_INLINE void set_job_id(uint64_t job_id) { job_id_ = job_id; }
   OB_INLINE void set_execute_at(uint64_t execute_at) { execute_at_ = execute_at; }
-  OB_INLINE uint64_t get_adjust_delay() const
-  {
-    uint64_t now = ObTimeUtility::current_time();
-    return (execute_at_ < now) ? 0 : (execute_at_ - now);
-  }
 
   OB_INLINE bool is_valid()
   {
@@ -125,10 +119,8 @@ public:
   int64_t calc_next_date(ObDBMSSchedJobInfo &job_info);
   int64_t run_job(ObDBMSSchedJobInfo &job_info, ObDBMSSchedJobKey *job_key, int64_t next_date);
 private:
-  const static int MAX_READY_JOBS_CAPACITY = 1024 * 1024;
   const static int MIN_SCHEDULER_INTERVAL = 1 * 1000 * 1000;
   const static int CHECK_NEW_INTERVAL = 20 * 1000 * 1000;
-  const static int CHECK_JOB_LOST_THRESHOLD = 60 * 1000 * 1000;
 
   bool inited_;
   bool stoped_;

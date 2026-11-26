@@ -36,7 +36,6 @@ namespace omt
 // Forward declarations
 class ObServerRuntime;
 
-static const int64_t WORKER_CHECK_PERIOD = 500L;
 
 // Quick Queue Priorities
 enum { QQ_HIGH = 0, QQ_NORMAL, QQ_LOW, QQ_MAX_PRIO };
@@ -80,10 +79,8 @@ public:
   OB_INLINE void pause() { pause_flag_ = true; }
 
   OB_INLINE int64_t get_query_start_time() const { return query_start_time_; }
-  OB_INLINE int64_t get_query_enqueue_time() const { return query_enqueue_time_; }
   OB_INLINE ObServerRuntime *get_runtime() { return runtime_; }
   OB_INLINE const char *get_module_name() const { return module_name_; }
-  OB_INLINE bool is_doing_ddl() const { return OB_NOT_NULL(is_doing_ddl_) ? (*is_doing_ddl_) : false; }
 
   static thread_local bool thread_name_set_;
 private:
@@ -100,7 +97,6 @@ private:
 
   bool pause_flag_;
   int64_t query_start_time_;
-  int64_t query_enqueue_time_;
   int64_t last_check_time_;
 
   // indicate whether upper scheduler support retry mechanism or not.
@@ -108,10 +104,8 @@ private:
   // if upper scheduler support retry, need this request retry?
   bool need_retry_;
 
-  int64_t idle_us_;
   static const int64_t MAX_MODULE_NAME_LEN = 23; //no more than 3 int64_t
   char module_name_[MAX_MODULE_NAME_LEN];
-  bool* is_doing_ddl_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObThWorker);
 }; // end of class ObThWorker
@@ -123,7 +117,6 @@ inline void ObThWorker::reset()
   group_ = nullptr;
   pause_flag_ = false;
   query_start_time_ = 0;
-  query_enqueue_time_ = 0;
   can_retry_ = true;
   need_retry_ = false;
 }

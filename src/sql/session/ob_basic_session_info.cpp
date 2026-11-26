@@ -1159,7 +1159,6 @@ int ObBasicSessionInfo::change_value_for_special_sys_var(const ObSysVarClassType
   return ret;
 }
 // This function will call ObBasicSessionInfo::change_value_for_special_sys_var to change some values,
-// Only used in ObMPBase::load_system_variables,
 // Use with caution elsewhere
 int ObBasicSessionInfo::load_sys_variable(ObIAllocator &calc_buf,
                                           const ObString &name,
@@ -1211,7 +1210,6 @@ int ObBasicSessionInfo::load_sys_variable(ObIAllocator &calc_buf,
   return ret;
 }
 // This function will call ObBasicSessionInfo::change_value_for_special_sys_var to change some values,
-// Only used in ObMPBase::load_system_variables,
 // Use with caution elsewhere
 int ObBasicSessionInfo::load_sys_variable(ObIAllocator &calc_buf,
                                           const ObString &name,

@@ -113,10 +113,7 @@ void ObDBMSSchedService::stop()
 
 void ObDBMSSchedService::wait()
 {
-  int ret = OB_SUCCESS;
-  if (!job_master_.is_inited()) {
-    ret = OB_NOT_INIT;
-  } else {
+  if (job_master_.is_inited()) {
     ObServerThreadHelper::wait();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService wait success");
   }
@@ -156,7 +153,6 @@ int ObDBMSSchedService::activate()
 }
 void ObDBMSSchedService::wakeup_scheduler()
 {
-  int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
     rootserver::ObDBMSSchedService *svc = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDBMSSchedService>();
     if (OB_NOT_NULL(svc)) {

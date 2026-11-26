@@ -230,7 +230,6 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
 
   ObAddr execute_addr;
   ObDBMSSchedJobInfo job_info;
-  bool can_running = false;
 
   CK (OB_LIKELY(inited_));
   CK (OB_NOT_NULL(job_key));

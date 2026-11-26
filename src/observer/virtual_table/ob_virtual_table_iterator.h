@@ -58,8 +58,6 @@ public:
       row_calc_buf_("VTITER_CALC_BUF"),
       convert_alloc_(),
       cast_ctx_(),
-      convert_row_(),
-      need_convert_(false),
       scan_param_(NULL)
     {}
   virtual ~ObVirtualTableIterator() {}
@@ -82,7 +80,6 @@ public:
   virtual int close();
   virtual int inner_close() { return common::OB_SUCCESS; }
   virtual inline void set_session(sql::ObSQLSessionInfo *session) { session_ = session; }
-  virtual inline void set_convert_flag() { need_convert_ = true; }
   virtual inline int set_key_ranges(const common::ObIArray<common::ObNewRange> &key_ranges)
   {
     return key_ranges_.assign(key_ranges);
@@ -94,14 +91,7 @@ public:
   bool is_reverse_scan() const { return common::ObQueryFlag::Reverse == scan_flag_.scan_order_; }
   VIRTUAL_TO_STRING_KV(K_(output_column_ids));
 private:
-  int init_convert_ctx();
-  int convert_key_ranges();
-  int get_key_cols(common::ObIArray<const share::schema::ObColumnSchemaV2*> &key_cols);
-  int convert_key(const common::ObRowkey &src, common::ObRowkey &dst, common::ObIArray<const share::schema::ObColumnSchemaV2*> &key_cols);
-  int free_convert_ctx();
-  void reset_convert_ctx();
-  int convert_output_row(ObNewRow *&cur_row);
-  int get_all_columns_schema();
+  void init_cast_ctx();
   int init_sql_schema_guard_();
 protected:
   common::ObIAllocator *allocator_;
@@ -115,15 +105,11 @@ protected:
   common::ObQueryFlag scan_flag_;
   sql::ObSQLSessionInfo *session_;
   common::ObSEArray<common::ObNewRange, 16> key_ranges_;
-  common::ObSEArray<common::ObNewRange, 16> saved_key_ranges_;
   common::ObArenaAllocator row_calc_buf_;
   
 private:
   common::ObArenaAllocator convert_alloc_;
   common::ObCastCtx cast_ctx_;
-  common::ObNewRow convert_row_;
-  bool need_convert_;
-  common::ObSEArray<const share::schema::ObColumnSchemaV2 *, 16> cols_schema_;
   const ObVTableScanParam *scan_param_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObVirtualTableIterator);

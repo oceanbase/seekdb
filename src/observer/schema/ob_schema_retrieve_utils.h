@@ -564,7 +564,6 @@ public:
 private:
   template<typename T>
   static bool compare_table_id(const T *table_schema, const uint64_t table_id);
-  static inline int retrieve_generated_column(const ObTableSchema &table_schema, ObColumnSchemaV2 &column);
 
   template<typename S>
   static int push_prev_array_if_has(

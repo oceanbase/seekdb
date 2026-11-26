@@ -82,7 +82,6 @@ private:
                      ObVecIndexTaskCtxArray &task_status_array,
                      ObSchemaGetterGuard &schema_guard, uint64_t &task_trace_base_num)
         : task_opt_(task_opt),
-          trace_base_num_(0),
           ls_(&ls),
           task_status_array_(task_status_array),
           schema_guard_(schema_guard),
@@ -94,12 +93,10 @@ private:
     int operator()(IvfCacheMgrEntry &entry);
     int is_cache_mgr_deprecated(ObIvfCacheMgr &cache_mgr, bool &is_deprecated);
     int is_cache_writable(const ObIvfAuxTableInfo &table_info, int64_t idx, bool &is_writable);
-    TO_STRING_KV(K(task_opt_), K(trace_base_num_), K(1UL), KP(ls_));
+    TO_STRING_KV(K(task_opt_), K(1UL), KP(ls_));
 
   public:
     ObVecIndexAsyncTaskOption &task_opt_;
-    uint64_t trace_base_num_;
-    
     storage::ObLS *ls_;
     ObVecIndexTaskCtxArray &task_status_array_;
     ObSchemaGetterGuard &schema_guard_;
@@ -114,7 +111,6 @@ private:
                             ObIvfAuxTableInfo &aux_table_info);
   int get_tablet_ids_by_ls(const ObTableSchema &index_table_schema,
                            common::ObIArray<ObTabletID> &tablet_id_array);
-  int check_need_load_task(ObSchemaGetterGuard &schema_guard, bool &need_load_task);
 private:
   int64_t local_schema_version_;
 };

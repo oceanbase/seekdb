@@ -47,7 +47,6 @@ DEF_TO_STRING(ObGlobalContext)
   J_COMMA();
   J_KV(K_(status),
        K_(start_service_time),
-       KP_(diag),
        KP_(scramble_rand),
        KP_(schema_status_proxy),
        K_(ssl_key_expired_time),

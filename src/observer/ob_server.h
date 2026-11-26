@@ -43,7 +43,6 @@
 #include "rootserver/ob_debug_sync_broadcaster_adapter.h"
 #include "rootserver/freeze/ob_major_freeze_coordinator_adapter.h"
 
-#include "observer/mysql/ob_diag.h"
 
 #include "observer/omt/ob_server_runtime_controller.h"
 #include "observer/omt/ob_worker_processor.h"
@@ -244,7 +243,6 @@ class ObServer : public share::ObIMemstoreRuntime,
 {
 public:
   static const int64_t DEFAULT_ETHERNET_SPEED = 10000LL / 8 * 1024 * 1024;
-  static const int64_t DISK_USAGE_REPORT_INTERVAL = 1000L * 1000L * 60L; // 1min
   static const uint64_t DEFAULT_CPU_FREQUENCY = 2500 * 1000; // 2500 * 1000 khz
   static ObServer &get_instance();
 
@@ -260,7 +258,6 @@ public:
   int start();
   int wait();
   void prepare_stop();
-  bool is_prepare_stopped();
   void set_stop();
   bool is_stopped();
   int wait_until_refreshed(
@@ -324,7 +321,6 @@ public:
     DISALLOW_COPY_AND_ASSIGN(ObCTASCleanUp);
   };
   share::schema::ObMultiVersionSchemaService &get_schema_service() { return schema_service_; }
-  ObInOutBandwidthThrottle &get_bandwidth_throttle() { return bandwidth_throttle_; }
   uint64_t get_cpu_frequency_khz() { return cpu_frequency_; }
   int64_t get_network_speed() const { return ethernet_speed_; }
   const common::ObAddr &get_self() const { return self_addr_; }
@@ -336,10 +332,8 @@ public:
   bool is_log_dir_empty() const { return is_log_dir_empty_; }
   sql::ObSQLSessionMgr &get_sql_session_mgr() { return session_mgr_; }
   sql::ObSql &get_sql_engine() { return sql_engine_; }
-  rootserver::ObLocalManagementService &get_local_management_service() { return local_management_service_; }
   common::ObMySQLProxy &get_mysql_proxy() { return sql_proxy_; }
   int64_t get_start_time() const { return start_time_; }
-  sql::ObConnectResourceMgr& get_conn_res_mgr() { return conn_res_mgr_; }
 private:
   int stop();
   int wait_no_client();
@@ -362,11 +356,9 @@ private:
   int init_sql_proxy();
   int init_io();
   int init_schema();
-  int init_inner_table_monitor();
   int init_autoincrement_service();
   int init_tablet_autoincrement_service();
   int init_global_kvcache();
-  int init_global_session_info();
   int init_ob_service(bool need_bootstrap);
   int init_local_management_service(const bool need_bootstrap);
   int init_sql();
@@ -377,11 +369,8 @@ private:
   int init_px_target_mgr();
   int init_storage();
   int init_tx_data_cache();
-  int init_gc_partition_adapter();
   int init_loaddata_global_stat();
   int init_bandwidth_throttle();
-  int start_log_mgr();
-  int stop_log_mgr();
   int refresh_cpu_frequency();
   int clean_up_invalid_tables();
   int init_ctas_clean_up_task(); //Regularly clean up the residuals related to querying and building tables and temporary tables
@@ -412,7 +401,6 @@ private:
 
   // self addr
   common::ObAddr self_addr_;
-  bool prepare_stop_;
   bool stop_;
   bool need_bootstrap_;
   volatile bool has_stopped_;
@@ -480,7 +468,6 @@ private:
   //observer start time
   int64_t start_time_;
   int64_t warm_up_start_time_;
-  obmysql::ObDiag diag_;
   common::ObMysqlRandom scramble_rand_;
   common::ObTimer server_gtimer_;
   common::ObTimer sql_mem_timer_;
@@ -553,7 +540,6 @@ public:
   compaction::ObDiagnoseTabletMgr * diagnose_tablet_mgr() { return mods_diagnose_tablet_mgr_; }
   storage::ObLobManager * lob_manager() { return mods_lob_manager_; }
   common::ObILobReadService * lob_read_service();
-  int get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info);
   share::detector::ObDeadLockDetectorMgr * dead_lock_detector_mgr() { return mods_dead_lock_detector_mgr_; }
   transaction::ObTimestampService * timestamp_service() { return mods_timestamp_service_; }
   transaction::ObTimestampAccess * timestamp_access() { return mods_timestamp_access_; }
@@ -575,7 +561,6 @@ public:
   storage::ObCompactionMemPool * compaction_mem_pool() { return mods_compaction_mem_pool_; }
   share::ObDagScheduler * dag_scheduler() { return mods_dag_scheduler_; }
   storage::ObFreezeInfoMgr * freeze_info_mgr() { return mods_freeze_info_mgr_; }
-  transaction::ObTxLoopWorker * tx_loop_worker() { return mods_tx_loop_worker_; }
   storage::ObAccessService * access_service() { return mods_access_service_; }
   data_plane::ObIOptimizerStorageService * optimizer_storage_service()
   {

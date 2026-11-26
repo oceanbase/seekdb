@@ -73,7 +73,6 @@ public:
   static ObAdapterCreateType index_type_to_create_type(schema::ObIndexType type);
   static int get_vector_index_prefix_inner(const ObTableSchema &index_schema, const ObString index_name, ObString &prefix);
   static int get_vector_index_prefix(const ObTableSchema &index_schema, ObString &prefix);
-  static int get_vector_index_name_prefix(const ObTableSchema &index_schema, ObString &prefix);
   static int split_snapshot_prefix(const ObString &src, const ObString &item, ObString &dst);
   static int get_split_snapshot_prefix(const ObVectorIndexAlgorithmType index_type, 
                                        const ObString &src, 
@@ -176,7 +175,6 @@ private:
                               ObIArray<uint64_t> *out_column_ids = nullptr,
                               const bool need_all_columns = false,
                               const bool need_ora_scn = false);
-  static int get_non_shared_index_aux_table_colum_count(schema::ObIndexType type, uint32 &col_cnt);
   static int get_non_shared_index_aux_table_rowkey_colum_count(schema::ObIndexType type, uint32 &col_cnt);
   static int get_special_index_aux_table_column_count(schema::ObIndexType type,
                                                       uint64_t table_id,

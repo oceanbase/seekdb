@@ -386,7 +386,6 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
       audit_record.exec_record_.record_end();
       audit_record.update_event_stage_state();
       if (!THIS_THWORKER.need_retry()) {
-        const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
       }
     }
     if (enable_sqlstat) {
@@ -426,8 +425,6 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         }
       }
     }
-    bool need_retry = (THIS_THWORKER.need_retry()
-                       || RETRY_TYPE_NONE != retry_ctrl_.get_retry_type());
   }
 
   // reset thread waring buffer in sync mode

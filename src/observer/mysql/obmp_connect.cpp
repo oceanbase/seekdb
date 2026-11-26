@@ -258,7 +258,6 @@ int ObMPConnect::process()
       ok_param.affected_rows_ = 0;
       const int login_warning_buf_len = 50;
       char login_warning[login_warning_buf_len];
-      int tmp_ret = OB_SUCCESS;
       login_warning[0] = '\0';
       ok_param.message_ = login_warning;
       if (OB_FAIL(send_ok_packet(*session, ok_param))) {

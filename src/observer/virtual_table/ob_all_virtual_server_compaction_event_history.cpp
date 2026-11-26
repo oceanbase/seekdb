@@ -71,7 +71,6 @@ int ObAllVirtualServerCompactionEventHistory::fill_cells()
   int tmp_ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
-  int64_t compression_ratio = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {

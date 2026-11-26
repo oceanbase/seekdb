@@ -43,7 +43,6 @@ enum CS_PLUGIN_TYPE
 class ObCSPlugin
 {
 public:
-  ObCSPlugin() : plugin_type_(CS_PLUGIN_MAX_TYPE) {}
   virtual ~ObCSPlugin() = default;
 
   virtual int init() { return common::OB_SUCCESS; }
@@ -53,12 +52,6 @@ public:
   virtual int process(common::ObIArray<ObCSRow> &rows, ObCSExecCtx &ctx) = 0;
   /// Called when all subtasks of the batch are done (output, advance scn, commit).
   virtual int commit() = 0;
-
-  CS_PLUGIN_TYPE get_plugin_type() const { return plugin_type_; }
-  void set_plugin_type(CS_PLUGIN_TYPE type) { plugin_type_ = type; }
-
-private:
-  CS_PLUGIN_TYPE plugin_type_;
 };
 
 typedef ObCSPlugin *(*ObCSPluginFactoryFunc)();

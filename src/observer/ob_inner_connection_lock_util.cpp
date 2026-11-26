@@ -286,7 +286,6 @@ int ObInnerConnectionLockRuntime::process_lock_table_(
     observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
-  int64_t pos = 0;
   ObTabletID no_used;
 
   REQUEST_LOCK(ObLockTableRequest, operation_type, arg, conn);
@@ -300,7 +299,6 @@ int ObInnerConnectionLockRuntime::process_lock_tablet_(
     observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
-  int64_t pos = 0;
 
   REQUEST_LOCK(ObLockTabletsRequest, operation_type, arg, conn);
 

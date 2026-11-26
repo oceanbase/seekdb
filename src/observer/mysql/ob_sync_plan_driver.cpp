@@ -34,10 +34,8 @@ ObSyncPlanDriver::ObSyncPlanDriver(const share::ObGlobalContext &gctx,
                                    const ObSqlCtx &ctx,
                                    sql::ObSQLSessionInfo &session,
                                    ObQueryRetryCtrl &retry_ctrl,
-                                   ObMPPacketSender &sender,
-                                   int32_t iteration_count)
-    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender),
-    iteration_count_(iteration_count)
+                                   ObMPPacketSender &sender)
+    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender)
 {
 }
 

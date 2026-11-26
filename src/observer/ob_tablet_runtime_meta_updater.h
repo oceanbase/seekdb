@@ -154,7 +154,6 @@ public:
       const common::ObIArray<ObTabletRuntimeMetaUpdateTask> &tasks,
       bool &stopped);
 
-  int64_t get_tablet_runtime_meta_updater_update_queue_size() const { return update_queue_.task_count(); }
   // TODO: need to realize barrier related functions
   int process_barrier(const ObTabletRuntimeMetaUpdateTask &task, bool &stopped);
   int set_thread_count();

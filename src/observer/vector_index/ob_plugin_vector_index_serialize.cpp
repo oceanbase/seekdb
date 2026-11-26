@@ -209,7 +209,6 @@ int ObVectorIndexSerializer::serialize(void *index, ObOStreamBuf::CbParam &cb_pa
 int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb_param, ObIStreamBuf::Callback &cb)
 {
   int ret = OB_SUCCESS;
-  char *data = nullptr;
   ObIStreamBuf streambuf(nullptr, 0, cb_param, cb);
   std::istream in(&streambuf);
   if (OB_FAIL(streambuf.init())) {

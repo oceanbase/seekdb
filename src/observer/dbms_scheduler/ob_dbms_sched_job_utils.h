@@ -54,10 +54,6 @@ public:
       common::ObISQLClient &sql_client,
       const common::ObString &job_name,
       bool if_exists = false);
-  static int stop_dbms_sched_job(
-      common::ObISQLClient &sql_client,
-      const ObDBMSSchedJobInfo &job_info,
-      bool is_delete_after_stop);
   static int update_dbms_sched_job_info(
       common::ObISQLClient &sql_client,
       const ObDBMSSchedJobInfo &job_info,
@@ -69,9 +65,6 @@ public:
       const common::ObString &job_name,
       common::ObIAllocator &allocator,
       ObDBMSSchedJobInfo &job_info);
-  static int check_dbms_sched_job_priv(
-      const share::schema::ObUserInfo *user_info,
-      const ObDBMSSchedJobInfo &job_info);
   static int calc_dbms_sched_repeat_expr(
       const ObDBMSSchedJobInfo &job_info, int64_t &next_run_time);
   static int job_class_check_impl(const common::ObString &job_class_name);

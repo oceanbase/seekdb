@@ -43,9 +43,7 @@ ObMPQuery::ObMPQuery(const oceanbase::share::ObGlobalContext &gctx)
       single_process_timestamp_(0),
       exec_start_timestamp_(0),
       exec_end_timestamp_(0),
-      is_com_filed_list_(false),
-      params_value_len_(0),
-      params_value_(NULL)
+      is_com_filed_list_(false)
 {
   ctx_.exec_type_ = MpQuery;
 }
@@ -67,7 +65,6 @@ int ObMPQuery::process()
   int64_t query_timeout = 0;
   const ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
   ObSMConnection *conn = get_conn();
-  bool do_ins_batch_opt = false;
   if (OB_ISNULL(req_) || OB_ISNULL(conn) || OB_ISNULL(cur_trace_id)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
@@ -431,9 +428,8 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
     }
   }
   //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
-  int tmp_ret = OB_SUCCESS;
   //Clear WARNING BUFFER
-  tmp_ret = do_after_process(session, async_resp_used, ret);
+  (void)do_after_process(session, async_resp_used, ret);
   // Set the end time of the previous statement, since here it is only used to implement the execution timeout between statements within a transaction,
   // Therefore, first, it is necessary to determine whether a transaction execution process is in progress. Then for the asynchronous response at the time of transaction submission,
   // It is also not necessary to set the end time here, because this is already equivalent to the last statement of the transaction.
@@ -564,20 +560,13 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
   bool need_response_error = true;
   const ObString &sql = ctx_.multi_stmt_item_.get_sql();
   const bool enable_sqlstat = session.is_sqlstat_enabled();
-  bool is_rollback = false;
-  bool is_commit = false;
-  if (0 == sql.case_compare("commit")) {
-    is_commit = true;
-  } else if (0 == sql.case_compare("rollback")) {
-    is_rollback = true;
-  }
+  const bool is_rollback = (0 == sql.case_compare("rollback"));
   single_process_timestamp_ = ObTimeUtility::current_time();
   /* !!!
    * Note that req_timeinfo_guard must be placed before result
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
-  ObCachedSchemaGuardInfo &cached_schema_info = session.get_cached_schema_guard_info();
   need_disconnect = false;
 
   session.reset_plsql_exec_time();
@@ -684,10 +673,6 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
   }
 
   need_disconnect = (need_disconnect && !is_query_killed_return(ret)); // Clearly it is a kill query, the connection should not be disconnected
-  if (need_disconnect) {
-  }
-  bool is_need_retry = false;
-
   return ret;
 }
 
@@ -997,149 +982,10 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
 
     need_disconnect = (result.get_exec_context().need_disconnect()
                        && !is_query_killed_return(ret));//Explicitly when it is a kill query, the connection should not be dropped
-    if (need_disconnect) {
-    }
-    bool is_need_retry = THIS_THWORKER.need_retry() ||
-        RETRY_TYPE_NONE != retry_ctrl_.get_retry_type();
   }
   return ret;
 }
 
-int ObMPQuery::store_params_value_to_str(ObIAllocator &allocator,
-                                         sql::ObSQLSessionInfo &session,
-                                         common::ParamStore &params)
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  int64_t length = OB_MAX_SQL_LENGTH;
-  CK (OB_NOT_NULL(params_value_ = static_cast<char *>(allocator.alloc(OB_MAX_SQL_LENGTH))));
-  for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
-    const common::ObObjParam &param = params.at(i);
-    if (param.is_ext()) {
-      pos = 0;
-      params_value_ = NULL;
-      params_value_len_ = 0;
-      break;
-    } else {
-      OZ (param.print_sql_literal(params_value_, length, pos, allocator, TZ_INFO(&session)));
-      if (i != params.count() - 1) {
-        OZ (databuff_printf(params_value_, length, pos, allocator, ","));
-      }
-    }
-  }
-  if (OB_FAIL(ret)) {
-    params_value_ = NULL;
-    params_value_len_ = 0;
-    ret = OB_SUCCESS;
-  } else {
-    params_value_len_ = pos;
-  }
-  return ret;
-}
-
-int ObMPQuery::check_readonly_stmt(ObMySQLResultSet &result)
-{
-  int ret = OB_SUCCESS;
-  bool is_readonly = false;
-  //In this phase, the show statement will be converted to a select statement,
-  //if literal_stmt_type is not stmt::T_NONE, then it indicates the original type show
-  const stmt::StmtType type = stmt::T_NONE == result.get_literal_stmt_type() ?
-                              result.get_stmt_type() :
-                              result.get_literal_stmt_type();
-  ObConsistencyLevel consistency = INVALID_CONSISTENCY;
-  if (OB_FAIL(is_readonly_stmt(result, is_readonly))) {
-  } else if (!is_readonly) {
-    ret = OB_ERR_READ_ONLY;
-  } else if (stmt::T_SELECT == type) {
-    //For the select statement, strong consistency read needs to be disabled
-    //Through setting /*+read_consistency()*/ hint
-    //or specify session-level ob_read_consistency = 2
-    // to set weak consistency read
-    const int64_t table_count = DAS_CTX(result.get_exec_context()).get_table_accesses().size();
-    if (0 == table_count) {
-      //This case is special, jdbc will send a special statement select @@session.tx_read_only when sending the query statement;
-      //For convenience of obtest testing, the restriction on the select statement for no table_access_plans needs to be removed
-    } else if (OB_FAIL(result.get_read_consistency(consistency))) {
-    } else if (WEAK != consistency) {
-      ret = OB_ERR_READ_ONLY;
-    }
-  }
-  return ret;
-}
-
-int ObMPQuery::is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly)
-{
-  int ret = OB_SUCCESS;
-  is_readonly = false;
-  const stmt::StmtType type = stmt::T_NONE == result.get_literal_stmt_type() ?
-                              result.get_stmt_type() :
-                              result.get_literal_stmt_type();
-  switch (type) {
-    case stmt::T_SELECT: {
-      //Forbid the select...for update statement as well
-      ObPhysicalPlan *physical_plan = result.get_physical_plan();
-      if (NULL == physical_plan) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (physical_plan->has_for_update()) {
-        is_readonly = false;
-      } else {
-        is_readonly = true;
-      }
-      break;
-    }
-    case stmt::T_VARIABLE_SET: {
-      //Prohibit set @@global.variable statement
-      if (result.has_global_variable()) {
-        is_readonly = false;
-      } else {
-        is_readonly = true;
-      }
-      break;
-    }
-    case stmt::T_EXPLAIN:
-    case stmt::T_SHOW_TABLES:
-    case stmt::T_SHOW_DATABASES:
-    case stmt::T_SHOW_COLUMNS:
-    case stmt::T_SHOW_VARIABLES:
-    case stmt::T_SHOW_TABLE_STATUS:
-    case stmt::T_SHOW_SCHEMA:
-    case stmt::T_SHOW_CREATE_DATABASE:
-    case stmt::T_SHOW_CREATE_TABLE:
-    case stmt::T_SHOW_CREATE_VIEW:
-    case stmt::T_SHOW_PARAMETERS:
-    case stmt::T_SHOW_SERVER_STATUS:
-    case stmt::T_SHOW_INDEXES:
-    case stmt::T_SHOW_WARNINGS:
-    case stmt::T_SHOW_ERRORS:
-    case stmt::T_SHOW_PROCESSLIST:
-    case stmt::T_SHOW_CHARSET:
-    case stmt::T_SHOW_COLLATION:
-    case stmt::T_SHOW_STATUS:
-    case stmt::T_SHOW_TRACE:
-    case stmt::T_SHOW_TRIGGERS:
-    case stmt::T_SHOW_ENGINES:
-    case stmt::T_SHOW_PROFILE:
-    case stmt::T_SHOW_ENGINE:
-    case stmt::T_SHOW_OPEN_TABLES:
-    case stmt::T_SHOW_PRIVILEGES:
-    case stmt::T_SHOW_GRANTS:
-    case stmt::T_SHOW_RECYCLEBIN:
-    case stmt::T_USE_DATABASE:
-    case stmt::T_SET_NAMES: //read only not restrict it
-    case stmt::T_START_TRANS:
-    case stmt::T_END_TRANS:
-    case stmt::T_SHOW_CHECK_TABLE:
-    case stmt::T_SHOW_CREATE_USER: {
-      is_readonly = true;
-      break;
-    }
-    default: {
-      is_readonly = false;
-      break;
-    }
-  }
-  return ret;
-}
 int ObMPQuery::deserialize()
 {
   int ret = OB_SUCCESS;

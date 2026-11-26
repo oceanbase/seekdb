@@ -115,7 +115,6 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  const ObSysVariableSchema *sys_variable_schema = NULL;
   ObSEArray<const ObUserInfo *, 1> user_infos;
   const ObUserInfo* user_info = NULL;
   const ObDatabaseSchema *database_schema = NULL;

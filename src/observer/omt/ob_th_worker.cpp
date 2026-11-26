@@ -88,9 +88,8 @@ ObThWorker::ObThWorker()
       is_inited_(false), runtime_(nullptr),
       run_cond_(),
       pause_flag_(false),
-      query_start_time_(0), query_enqueue_time_(0), last_check_time_(0),
-      can_retry_(true), need_retry_(false),
-      idle_us_(0), is_doing_ddl_(nullptr)
+      query_start_time_(0), last_check_time_(0),
+      can_retry_(true), need_retry_(false)
 {
   module_name_[0] = '\0';
 }
@@ -210,10 +209,8 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
 {
   int ret = OB_SUCCESS;
   Worker::set_worker_to_thread_local(static_cast<lib::Worker*>(this));
-  int64_t wait_start_time = 0;
   int64_t wait_end_time = 0;
   procor_.th_created();
-  is_doing_ddl_ = &Thread::is_doing_ddl_;
   static constexpr int64_t POLL_INTERVAL = 100 * 1000L;
   // Avoid adding and deleting entities from the root node for every request, the parameters are meaningless
   CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, OB_SERVER_RUNTIME_ID) {
@@ -253,7 +250,6 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
           bool expand = false;
           {
             // get request from queue and process it
-            wait_start_time = ObTimeUtility::current_time();
             ret = runtime_->pop_with_idle([&]() {
               return runtime_->get_new_request(POLL_INTERVAL, req);
             }, expand);
@@ -270,11 +266,9 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
               EVENT_ADD(REQUEST_QUEUE_TIME, wait_end_time - req->get_enqueue_timestamp());
               req->set_push_pop_diff(wait_end_time);
               query_start_time_ = wait_end_time;
-              query_enqueue_time_ = req->get_enqueue_timestamp();
               last_check_time_ = wait_end_time;
               process_request(*req);
               runtime_->completion_cnt_.fetch_add(1, std::memory_order_relaxed);
-              query_enqueue_time_ = INT64_MAX;
               query_start_time_ = INT64_MAX;
             } else {
                 ret = OB_ERR_UNEXPECTED;
@@ -294,7 +288,6 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
               }
               ret = OB_SUCCESS;
             }
-            IGNORE_RETURN ATOMIC_FAA(&idle_us_, (wait_end_time - wait_start_time));
           }
         }
       }

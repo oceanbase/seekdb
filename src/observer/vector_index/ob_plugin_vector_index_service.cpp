@@ -48,7 +48,6 @@ void ObPluginVectorIndexMgr::destroy()
   if (IS_INIT) {
     LOG_INFO("vector index manager destroy");
     is_inited_ = false;
-    need_check_ = false;
     release_all_adapters();
     partial_index_adpt_map_.destroy();
     complete_index_adpt_map_.destroy();
@@ -113,7 +112,6 @@ int ObPluginVectorIndexMgr::init(lib::MemoryContext &memory_context,
     task_ctx_.non_memdata_task_cycle_ = 0;
     task_ctx_.need_memdata_sync_ = false;
     task_ctx_.state_ = OB_VECTOR_INDEX_TASK_PREPARE;
-    need_check_ = false;
 
     memory_context_ = memory_context;
     all_vsag_use_mem_ = all_vsag_use_mem;
@@ -791,9 +789,6 @@ void ObPluginVectorIndexService::destroy()
   if (IS_INIT) {
     FLOG_INFO("destroy vector index service");
     is_inited_ = false;
-    has_start_ = false;
-
-    is_ls_or_tablet_changed_ = false;
     schema_service_ = NULL;
     ls_service_ = NULL;
     sql_proxy_ = NULL;
@@ -905,7 +900,6 @@ int ObPluginVectorIndexService::alloc_vec_async_task_sched()
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  int64_t len = sizeof(ObVecAsyncTaskScheduler);
   ObMemAttr attr("VecIdxAsyncTask");
 
   if (IS_NOT_INIT) {
@@ -977,7 +971,6 @@ void ObPluginVectorIndexService::wait()
 // for debug
 void ObPluginVectorIndexMgr::dump_all_inst()
 {
-  int ret = OB_SUCCESS;
   RLockGuard lock_guard(adapter_map_rwlock_);
   FOREACH(iter, partial_index_adpt_map_) {
     const ObTabletID &tablet_id = iter->first;
@@ -1219,7 +1212,6 @@ int ObPluginVectorIndexMgr::replace_with_full_partial_adapter(ObVectorIndexAcqui
       } else if (OB_FAIL(ctx.embedded_tablet_id_.is_valid() && set_partial_adapter_(ctx.embedded_tablet_id_, new_adapter, overwrite))) {
       } else if (OB_FAIL(adapter_guard.set_adapter(new_adapter))) {
       } else {
-        bool set_success = false;
         // release because they are removed from hashmap
         ObPluginVectorIndexAdaptor *inc_adapter = old_inc_adapter_guard.get_adatper();
         ObPluginVectorIndexAdaptor *bitmap_adapter = old_bitmap_adapter_guard.get_adatper();

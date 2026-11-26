@@ -678,8 +678,6 @@ int ObCSExecCtx::init_plugins()
       if (OB_ISNULL(plugins_[i])) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(plugins_[i]->init())) {
-      } else {
-        plugins_[i]->set_plugin_type(static_cast<CS_PLUGIN_TYPE>(i));
       }
     }
   }

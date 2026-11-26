@@ -902,7 +902,6 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
                                                 const SCN *min_scn)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   scan_iter = nullptr;
 
   // init scan param refer to ObLocalIndexLookupOp::init_scan_param()
@@ -1132,7 +1131,6 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
                                                const bool need_ora_scn)
 {
   int ret = OB_SUCCESS;
-  int64_t schema_version = OB_INVALID_VERSION;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
@@ -1673,17 +1671,6 @@ int ObPluginVectorIndexUtils::get_vector_index_prefix(const ObTableSchema &index
   int ret = OB_SUCCESS;
   ObString tmp_table_name = index_schema.get_table_name();
   if (OB_FAIL(get_vector_index_prefix_inner(index_schema, tmp_table_name, prefix))) {
-  }
-  return ret;
-}
-
-int ObPluginVectorIndexUtils::get_vector_index_name_prefix(const ObTableSchema &index_schema,
-                                                      ObString &prefix)
-{
-  int ret = OB_SUCCESS;
-  ObString index_name;
-  if (OB_FAIL(index_schema.get_index_name(index_name))) {
-  } else if (OB_FAIL(get_vector_index_prefix_inner(index_schema, index_name, prefix))) {
   }
   return ret;
 }

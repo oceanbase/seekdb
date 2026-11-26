@@ -44,8 +44,7 @@ public:
                    const sql::ObSqlCtx &ctx,
                    sql::ObSQLSessionInfo &session,
                    sql::ObQueryRetryCtrl &retry_ctrl,
-                   ObMPPacketSender &sender,
-                   int32_t iteration_count = common::OB_INVALID_COUNT);
+                   ObMPPacketSender &sender);
   virtual ~ObSyncPlanDriver();
 
   virtual int response_result(ObMySQLResultSet &result);
@@ -57,7 +56,6 @@ protected:
   void exit_query_admission(int64_t worker_count);
 
   /* disallow copy & assign */
-  int32_t iteration_count_;
   DISALLOW_COPY_AND_ASSIGN(ObSyncPlanDriver);
 };
 }

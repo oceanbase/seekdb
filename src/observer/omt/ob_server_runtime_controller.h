@@ -138,8 +138,7 @@ private:
 protected:
       enum class ObRuntimeCreateStep {
         STEP_BEGIN = 0,
-        STEP_CREATION_PREPARED,
-        STEP_RUNTIME_CREATED,
+        STEP_RUNTIME_CREATED = 2,
         STEP_FINISH,
       };
 

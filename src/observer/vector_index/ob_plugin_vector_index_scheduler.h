@@ -111,7 +111,6 @@ public:
   int on_failure();
 
   TO_STRING_KV(K_(is_callback_invoked), K_(is_success), KP_(log_buffer));
-  OB_INLINE bool is_invoked() const { return ATOMIC_LOAD(&is_callback_invoked_); }
   OB_INLINE bool is_success() const { return ATOMIC_LOAD(&is_success_); }
   const char *get_cb_name() const override { return "VectorIndexSyncLogCb"; }
 
@@ -131,10 +130,8 @@ enum ObVectorIndexTaskStatus
 {
   OB_VECTOR_INDEX_TASK_PREPARE = 0,
   OB_VECTOR_INDEX_TASK_RUNNING = 1,
-  OB_VECTOR_INDEX_TASK_PENDING = 2,
   OB_VECTOR_INDEX_TASK_CANCEL = 3,
   OB_VECTOR_INDEX_TASK_FINISH = 4,
-  OB_VECTOR_INDEX_TASK_INVALID
 };
 
 // Scheduling state shared by the tenant's vector-index tablet tasks.
@@ -164,21 +161,17 @@ struct ObPluginVectorIndexTaskCtx
     : index_tablet_id_(index_tablet_id),
       index_table_id_(index_table_id),
       task_start_time_(0),
-      last_modify_time_(0),
       failure_times_(0),
       err_code_(OB_SUCCESS),
-      in_queue_(false),
       task_status_(ObVectorIndexTaskStatus::OB_VECTOR_INDEX_TASK_PREPARE)
   {}
-  TO_STRING_KV(K_(index_table_id), K_(index_tablet_id), K_(task_start_time), K_(last_modify_time), 
-               K_(failure_times), K_(err_code), K_(in_queue), K_(task_status));
+  TO_STRING_KV(K_(index_table_id), K_(index_tablet_id), K_(task_start_time),
+               K_(failure_times), K_(err_code), K_(task_status));
   ObTabletID index_tablet_id_;  
   uint64_t index_table_id_;
   int64_t task_start_time_;
-  int64_t last_modify_time_;
   int64_t failure_times_;
   int64_t err_code_;
-  bool in_queue_; // whether in dag queue or not
   ObVectorIndexTaskStatus task_status_;
   common::ObSpinLock lock_; // lock for update task_status_
 };
@@ -199,7 +192,6 @@ public:
       is_stopped_(false),
       is_logging_(false),
       need_refresh_(true),
-      interval_factor_(1),
       basic_period_(VEC_INDEX_SCHEDULAR_BASIC_PERIOD),
       current_memory_config_(0),
       dag_ref_cnt_(0),
@@ -224,8 +216,6 @@ public:
   void run_task();
   bool is_inited() { return is_inited_; }
 
-  ObPluginVectorIndexService *get_vector_index_service() { return vector_index_service_; }
-
   int check_runtime_memory();
   int check_schema_version();
   void mark_runtime_need_check();
@@ -234,8 +224,6 @@ public:
   int check_and_execute_tasks(ObIArray<uint64_t> &vec_table_id_array); // was check_and_handle_event
   int check_and_execute_adapter_maintenance_task(ObPluginVectorIndexMgr *&mgr, ObIArray<uint64_t> &vec_table_id_array);
   int check_and_execute_memdata_sync_task(ObPluginVectorIndexMgr *mgr);
-  int sync_all_dirty_task(ObIArray<ObTabletID>& dirty_tasks);
-  int generate_batch_tablet_task();
 
   // core interfaces
   int execute_adapter_maintenance(ObIArray<uint64_t> &vec_table_id_array);
@@ -286,10 +274,9 @@ public:
   bool is_stopped() { return (is_stopped_ == true); };
   void inc_dag_ref() { ATOMIC_INC(&dag_ref_cnt_); }
   void dec_dag_ref() { ATOMIC_DEC(&dag_ref_cnt_); }
-  int64_t get_dag_ref() const { return ATOMIC_LOAD(&dag_ref_cnt_); }
 
   TO_STRING_KV(K_(is_inited), K_(is_leader), K_(need_do_for_switch), K_(is_stopped), K_(is_logging),
-               K_(need_refresh), K_(interval_factor),
+               K_(need_refresh),
                K_(basic_period), K_(current_memory_config), K_(dag_ref_cnt), 
                KP_(vector_index_service), KP_(ls), 
                K_(local_schema_version), K_(runtime_check_needed));
@@ -340,7 +327,6 @@ private:
   bool need_refresh_;
   common::ObSpinLock logging_lock_;
   
-  int interval_factor_;
   int64_t basic_period_;
   int64_t current_memory_config_;
   volatile int64_t dag_ref_cnt_;

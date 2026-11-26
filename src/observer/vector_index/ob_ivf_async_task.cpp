@@ -91,7 +91,6 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
 int ObIvfAsyncTask::do_work()
 {
   int ret = OB_SUCCESS;
-  bool is_deprecated = false;
   ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   DEBUG_SYNC(HANDLE_VECTOR_INDEX_ASYNC_TASK);
   if (IS_NOT_INIT) {

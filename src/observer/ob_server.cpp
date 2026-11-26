@@ -43,8 +43,7 @@
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "share/ob_freeze_info_proxy.h"
-namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
-int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
+namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; } } }
 #include "share/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/ob_running_mode.h"
@@ -668,7 +667,7 @@ void ObServer::destroy_virtual_table_factory(
 ObServer::ObServer()
   : need_ctas_cleanup_(true),
     gctx_(GCTX),
-    prepare_stop_(true), stop_(true), need_bootstrap_(false), has_stopped_(true), has_destroy_(false),
+    stop_(true), need_bootstrap_(false), has_stopped_(true), has_destroy_(false),
     net_frame_(gctx_),
     sql_proxy_(),
     reload_config_(gctx_), config_mgr_(reload_config_),
@@ -691,7 +690,6 @@ ObServer::ObServer()
     server_runtime_controller_(), vt_data_service_(local_management_service_, self_addr_),
     start_time_(ObTimeUtility::current_time()),
     warm_up_start_time_(0),
-    diag_(),
     scramble_rand_(),
     server_gtimer_(),
     sql_mem_timer_(),
@@ -1325,7 +1323,6 @@ int ObServer::start()
       LOG_DBA_INFO_V2(OB_SERVER_INSTANCE_START_SUCCESS,
                       DBA_STEP_INC_INFO(server_start),
                       "observer instance start success.");
-      prepare_stop_ = false;
       stop_ = false;
       has_stopped_ = false;
     } else {
@@ -1532,14 +1529,8 @@ int ObServer::check_if_timezone_usable()
 }
 void ObServer::prepare_stop()
 {
-  prepare_stop_ = true;
   // reserve some time to switch leader
   ob_usleep(5 * 1000 * 1000);
-}
-
-bool ObServer::is_prepare_stopped()
-{
-  return prepare_stop_;
 }
 
 bool ObServer::is_stopped()
@@ -2405,7 +2396,6 @@ int ObServer::init_global_context()
   gctx_.rs_server_status_ = RSS_INVALID;
   gctx_.start_service_time_ = 0;
   gctx_.ssl_key_expired_time_ = 0;
-  gctx_.diag_ = &diag_;
   gctx_.scramble_rand_ = &scramble_rand_;
   gctx_.init();
   gctx_.schema_status_proxy_ = &schema_status_proxy_;
@@ -2801,11 +2791,6 @@ int ObServer::clean_up_invalid_tables()
     }
   }
   return ret;
-}
-
-void set_server_stop()
-{
-  ObServer::get_instance().set_stop();
 }
 
 } // end of namespace observer

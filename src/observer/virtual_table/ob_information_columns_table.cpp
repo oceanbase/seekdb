@@ -42,7 +42,6 @@ ObInfoSchemaColumnsTable::ObInfoSchemaColumnsTable() :
     column_type_str_len_(-1),
     is_filter_db_(false),
     last_filter_table_idx_(-1),
-    last_filter_column_idx_(-1),
     database_schema_array_(),
     filter_table_schema_array_(),
     mem_context_(nullptr),
@@ -326,7 +325,6 @@ int ObInfoSchemaColumnsTable::iterate_column_schema_array(
         if (OB_SIZE_OVERFLOW == ret) {
           if (is_filter_table_schema) {
             last_filter_table_idx_ = last_table_idx;
-            last_filter_column_idx_ = logical_index;
           } else {
             last_schema_idx_ = last_db_schema_idx;
             last_table_idx_ = last_table_idx;
@@ -1075,7 +1073,6 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                 }
               } else {
                 ObArray<common::ObString> extended_type_info;
-                const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
                 if (OB_FAIL(ObRawExprUtils::extract_extended_type_info(select_item.expr_,
                                                                        session_,
                                                                        extended_type_info))) {

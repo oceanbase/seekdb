@@ -88,11 +88,6 @@ static bool can_cast_to_int(const int64_t value)
   return value >= std::numeric_limits<int>::min() && value <= std::numeric_limits<int>::max();
 }
 
-static bool can_cast_to_int16(const int64_t value)
-{
-  return value >= std::numeric_limits<int16_t>::min() && value <= std::numeric_limits<int16_t>::max();
-}
-
 static int validate_vsag_create_index_param(
     const obvectorutil::CreateIndexParam &param,
     const char *validate_type)
@@ -809,7 +804,6 @@ int ObVectorIndexUtil::resolve_query_param(
     ObVectorIndexQueryParam &param)
 {
   int ret = OB_SUCCESS;
-  const ParseNode *param_node = nullptr;
   for (int32_t i = 0; OB_SUCC(ret) && i < param_list_node->num_child_; i+=2) {
     if (i + 1 >= param_list_node->num_child_) {
       ret = OB_ERR_UNEXPECTED;
@@ -1896,7 +1890,6 @@ int ObVectorIndexUtil::check_rowkey_cid_table_readable(
       } else if (!index_table_schema->is_vec_ivfflat_rowkey_cid_index() && !index_table_schema->is_vec_ivfpq_rowkey_cid_index() && !index_table_schema->is_vec_ivfsq8_rowkey_cid_index()) {
         // skip not spec index type
       } else {
-        int64_t last_shcema_version = OB_INVALID_ID;
         for (int64_t j = 0; OB_SUCC(ret) && j < index_table_schema->get_column_count(); j++) {
           const ObColumnSchemaV2 *col_schema = nullptr;
           if (OB_ISNULL(col_schema = index_table_schema->get_column_schema_by_idx(j))) {
@@ -1967,7 +1960,6 @@ int ObVectorIndexUtil::check_hybrid_embedded_vec_cid_table_readable(
       } else if (!index_table_schema->is_hybrid_vec_index_embedded_type()) {
         // skip not spec index type
       } else {
-        int64_t last_shcema_version = OB_INVALID_ID;
         for (int64_t j = 0; OB_SUCC(ret) && j < index_table_schema->get_column_count(); j++) {
           const ObColumnSchemaV2 *col_schema = nullptr;
           if (OB_ISNULL(col_schema = index_table_schema->get_column_schema_by_idx(j))) {
@@ -3093,7 +3085,6 @@ int ObVectorIndexUtil::check_index_param(
     bool bq_use_fht_is_set = false;    // hnsw_bq
     bool bq_bits_query_set = false;    // hnsw_bq
     bool type_sindi_is_set = false; // sparse index with vsag
-    bool type_spiv_is_set = false; // sparse index with ob
     bool prune_is_set = false;
     bool refine_is_set = false;
     bool drop_ratio_build_is_set = false;
@@ -4050,7 +4041,6 @@ int ObVectorIndexUtil::update_index_tables_attributes(
   } else {
     // switch new/old index name
     for (int64_t i = 0; OB_SUCC(ret) && i < new_table_names.count(); i++) {
-      const ObString *ddl_stmt_str = NULL;
       const ObTableSchema *index_schema = nullptr;
       const bool is_built_in_index = i == 0 ? false : true;
       const ObString &new_index_name = new_table_names.at(i);
@@ -4182,8 +4172,6 @@ int ObVectorIndexUtil::reconstruct_ivf_index_schema_in_rebuild(
   ObTableSchema &new_index_schema)
 {
   int ret = OB_SUCCESS;
-  const bool is_ivf_pq = new_index_schema.is_vec_ivfpq_index();
-  const bool is_ivf_sq = new_index_schema.is_vec_ivfsq8_index();
   const ObColumnSchemaV2 *old_cid_column = nullptr;
   const ObColumnSchemaV2 *new_cid_column = nullptr;
   const ObColumnSchemaV2 *old_pq_cids_column = nullptr;
@@ -4918,10 +4906,7 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
       const share::schema::ObTableSchema *pq_code_schema = nullptr;
 
       ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-      bool is_index = true;
       const int64_t database_id = data_table_schema->get_database_id();
-      const bool is_hidden_flag = false;
-      const bool is_built_in_flag = true;
       bool already_get_index_id_table = false;
       bool already_get_snapshot_data_table = false;
       bool already_get_embedded_vec_table = false;
@@ -5192,7 +5177,6 @@ int ObVectorIndexUtil::calc_residual_vector(
 {
   int ret = OB_SUCCESS;
   ObVectorKmeansClusterHelper helper;
-  int64_t center_idx = 1;
   float *center_vec = nullptr;
 
   if (OB_FAIL(helper.get_nearest_probe_centers(
@@ -5624,7 +5608,6 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
   int64_t dim = 0;
   ObSEArray<uint64_t , 1> col_ids;
   bool param_filled = false;
-  ObVectorIndexType index_type = ObVectorIndexType::VIT_IVF_INDEX;
   const uint64_t data_table_id = index_schema.get_data_table_id();
   if (row_count <= 0) {
   } else if (!index_schema.is_vec_ivfpq_pq_centroid_index() && !index_schema.is_vec_ivf_centroid_index()) {

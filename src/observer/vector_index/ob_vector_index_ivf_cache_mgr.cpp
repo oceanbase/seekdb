@@ -123,8 +123,7 @@ int ObIvfCacheMgr::init(lib::MemoryContext &parent_mem_ctx,
 
 void ObIvfCacheMgr::inc_ref()
 {
-  int64_t ref_count = ATOMIC_AAF(&ref_cnt_, 1);
-  // LOG_INFO("inc ref count", K(ref_count), KP(this), KPC(this), K(lbt())); // remove later
+  ATOMIC_INC(&ref_cnt_);
 }
 
 bool ObIvfCacheMgr::dec_ref_and_check_release()

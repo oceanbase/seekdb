@@ -59,7 +59,6 @@ private:
   {
     DATABASE_NAME = common::OB_APP_MIN_COLUMN_ID,
     READ_ONLY,
-    MAX_DATABASE_STATUS_COLUMN
   };
   static const int64_t DATABASE_STATUS_COLUMN_COUNT = 2;
   DISALLOW_COPY_AND_ASSIGN(ObShowDatabaseStatus);

@@ -194,7 +194,6 @@ int ObAiServiceProxy::build_ai_endpoint_(ObArenaAllocator &allocator, ObMySQLRes
   ObString arguments;
   ObString request_transform_fn;
   ObString response_transform_fn;
-  int64_t type = 0;
   EXTRACT_INT_FIELD_MYSQL(result, "endpoint_id", endpoint.endpoint_id_, uint64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "scope", scope);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "endpoint_name", name);

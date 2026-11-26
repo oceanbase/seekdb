@@ -45,11 +45,6 @@ namespace transaction
 {
 }
 
-namespace obmysql
-{
-class ObDiag;
-} // end of namespace obmysql
-
 namespace share
 {
 class ObTabletTableOperator;
@@ -77,7 +72,6 @@ struct ObGlobalContext
   ObServiceStatus status_;
   share::RSServerStatus rs_server_status_;
   int64_t start_service_time_;
-  obmysql::ObDiag *diag_;
   common::ObMysqlRandom *scramble_rand_;
   bool inited_;
   share::ObSchemaStatusProxy *schema_status_proxy_;

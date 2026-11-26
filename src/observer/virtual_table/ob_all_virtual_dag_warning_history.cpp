@@ -43,7 +43,6 @@ int ObAllVirtualDagWarningHistory::inner_get_next_row(common::ObNewRow *&row)
   row = nullptr;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
-  int64_t compression_ratio = 0;
   int n = 0;
   if (!dag_warning_info_iter_.is_opened()) {
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagWarningHistoryManager>()->open_iter(dag_warning_info_iter_))) {

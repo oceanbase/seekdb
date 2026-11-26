@@ -224,34 +224,6 @@ int ObMPBase::send_error_packet(int err,
   return packet_sender_.send_error_packet(err, errmsg, extra_err_info);
 }
 
-int ObMPBase::load_system_variables(const ObSysVariableSchema &sys_variable_schema, ObSQLSessionInfo &session) const
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator calc_buf(ObModIds::OB_SQL_SESSION);
-  for (int64_t i = 0; OB_SUCC(ret) && i < sys_variable_schema.get_sysvar_count(); ++i) {
-    const ObSysVarSchema *sysvar = NULL;
-    sysvar = sys_variable_schema.get_sysvar_schema(i);
-    if (sysvar != NULL) {
-      if (OB_FAIL(session.load_sys_variable(calc_buf, sysvar->get_name(), sysvar->get_data_type(),
-                                            sysvar->get_value(), sysvar->get_min_val(),
-                                            sysvar->get_max_val(), sysvar->get_flags(), true))) {
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    //Set the maximum version number of the system variable
-    //Serialize and cache the system variable sequence that affects the plan
-    if (OB_FAIL(session.gen_sys_var_in_pc_str())) {
-    } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
-    } else {
-      session.set_global_vars_version(sys_variable_schema.get_schema_version());
-      session.set_enable_mysql_compatible_dates(
-        session.get_enable_mysql_compatible_dates_from_config());
-    }
-  }
-  return ret;
-}
-
 int ObMPBase::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_param, obmysql::ObMySQLPacket* pkt)
 {
   return packet_sender_.send_ok_packet(session, ok_param, pkt);
@@ -328,7 +300,6 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
     // construct sql context
     ctx.multi_stmt_item_ = multi_stmt_item;
     ctx.session_info_ = &session;
-    const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
     ctx.set_enable_strict_defensive_check((config::_enable_defensive_check() == 2));
     LOG_DEBUG("protocol flag info", K(ctx.get_enable_strict_defensive_check()));
@@ -418,7 +389,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator;
   ObNewRow tmp_row;
-  bool has_charset_convert = false;
   if (OB_ISNULL(fields) || row.get_count() != fields->count()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ob_write_row(allocator, row, tmp_row))) {

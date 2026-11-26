@@ -277,34 +277,6 @@ int ObVTIterCreator::get_latest_expected_schema(
   return ret;
 }
 
-// %table.get_index_name() contain the name of table name, to simplify the check logic,
-// we only check if %index_name is a suffix of %table.get_index_name()
-int ObVTIterCreator::check_is_index(const share::schema::ObTableSchema &table,
-    const char *index_name, bool &is_index) const
-{
-  int ret = OB_SUCCESS;
-  if (NULL == index_name) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    is_index = false;
-    int64_t index_name_len = strlen(index_name);
-    if (table.is_index_table()) {
-      ObString name;
-      if (OB_FAIL(table.get_index_name(name))) {
-      } else {
-        if (name.case_compare(index_name) == 0) {
-          is_index = true;
-        } else if (name.length() > index_name_len + 1
-            && '_' == name.ptr()[name.length() - index_name_len - 1]) {
-          is_index = (0 == strncasecmp(name.ptr() + name.length() - index_name_len,
-              index_name, index_name_len));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                                     ObVirtualTableIterator *&vt_iter)
 {
@@ -366,7 +338,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                    K(ret), K(pure_tid));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "access extended virtual table/sys view through mysql virtual table iterator");
       } else {
-        void *tmp_ptr = NULL;
         ObIAllocator &allocator = *params.scan_allocator_;
         ObSQLSessionInfo *session = params.op_->get_eval_ctx().exec_ctx_.get_my_session();
 

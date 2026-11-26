@@ -106,17 +106,12 @@ public:
       share::ObTabletLocalChecksumItem &tablet_checksum);
 
   int update_baseline_schema_version(const int64_t schema_version);
-  virtual const common::ObAddr &get_self_addr();
 
   ////////////////////////////////////////////////////////////////
-  int check_frozen_scn(const obcall::ObCheckFrozenScnArg &arg);
   int calc_column_checksum_request(const obcall::ObCalcColumnChecksumRequestArg &arg, obcall::ObCalcColumnChecksumRequestRes &res);
   int build_ddl_local(const obcall::ObDDLLocalBuildArg &arg, obcall::ObDDLLocalBuildResult &res);
   int check_and_cancel_ddl_complement_data_dag(const obcall::ObDDLLocalBuildArg &arg, bool &is_dag_exist);
   int check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLLocalBuildArg &arg, bool &is_dag_exist);
-  int stop_partition_write(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result);
-  int check_partition_log(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result);
-  int get_wrs_info(const obcall::ObGetWRSArg &arg, obcall::ObGetWRSResult &result);
   ////////////////////////////////////////////////////////////////
   // ObCallMinorFreezeP @RS minor freeze
   int minor_freeze(const obcall::ObMinorFreezeArg &arg,
@@ -142,7 +137,6 @@ public:
   int get_build_version(char *buf, int64_t buf_len) override;
   int ensure_system_packages();
   int load_all_special_system_packages() override;
-  int load_leader_cluster_login_info();
   // ObCallSetDebugSyncActionP @RS::admin to set debug sync action
   int set_ds_action(const obcall::ObDebugSyncActionArg &arg) override;
   int refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg) override;

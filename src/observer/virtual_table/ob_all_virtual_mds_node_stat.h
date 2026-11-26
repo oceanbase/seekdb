@@ -48,17 +48,6 @@ private:
                                 common::ObNewRow &row);
   int get_primary_key_ranges_();
   int get_tablet_info_(ObLS &ls, const ObFunction<int(ObTablet &)> &apply_on_tablet_op);
-  template <typename T>
-  bool judege_in_ranges(const T &element, const ObArray<ObTuple<T, T>> &element_ranges) {
-    bool in_range = false;
-    for (auto &range : element_ranges) {
-      if (element >= range.template element<0>() && element <= range.template element<1>()) {
-        in_range = true;
-        break;
-      }
-    }
-    return in_range;
-  }
   int get_mds_table_handle_(ObTablet &tablet,
                             mds::MdsTableHandle &handle,
                             const bool create_if_not_exist);

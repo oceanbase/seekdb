@@ -974,8 +974,6 @@ int ObCSAsyncIndexProcessor::insert_vector_index_log_batch_(
             events, target_vec_info, tx_desc, insert_op, das_allocator))) {
     } else {
       if (OB_FAIL(insert_op->open_op())) {
-        const sql::ObDASInsCtDef *ctdef = static_cast<const sql::ObDASInsCtDef *>(insert_op->get_ctdef());
-        const sql::ObDASInsRtDef *rtdef = static_cast<sql::ObDASInsRtDef *>(insert_op->get_rtdef());
       } else {
         const int64_t affected_rows = insert_op->get_affected_rows();
         const int64_t expected_rows = events.count();
@@ -1164,7 +1162,6 @@ ObCSPluginAsyncIndex::ObCSPluginAsyncIndex()
   : ObCSPlugin(),
     is_inited_(false)
 {
-  set_plugin_type(CS_PLUGIN_ASYNC_INDEX);
 }
 
 ObCSPluginAsyncIndex::~ObCSPluginAsyncIndex()

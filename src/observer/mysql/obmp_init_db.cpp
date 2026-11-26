@@ -53,7 +53,6 @@ int ObMPInitDB::process()
   ObDataBuffer allocator(db_name_conv_buf, sizeof(db_name_conv_buf));
   int64_t query_timeout = 0;
   bool is_packet_retry = false;
-  bool need_response_error = true; //temporary placeholder
   if (OB_FAIL(get_session(session))) {
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;

@@ -52,7 +52,6 @@ int ObPluginVectorIndexLoadScheduler::init(ObLS *ls, common::ObTimer &scheduler_
     vector_index_service_ = vector_index_service;
     ls_ = ls;
     
-    interval_factor_ = 1;
     is_inited_ = true;
     basic_period_ = VEC_INDEX_SCHEDULAR_BASIC_PERIOD;
     cb_.scheduler_ = this;
@@ -216,7 +215,6 @@ int ObPluginVectorIndexLoadScheduler::check_index_adpter_exist(ObPluginVectorInd
 
 void ObPluginVectorIndexLoadScheduler::mark_runtime_need_check()
 {
-  int ret = OB_SUCCESS;
   if (ObVecIndexAsyncTaskUtil::check_runtime_ready()) {
     runtime_check_needed_ = true;
     FLOG_INFO("finish marking runtime for vector index check", K_(runtime_check_needed));
@@ -388,7 +386,6 @@ int ObPluginVectorIndexLoadScheduler::execute_adapter_maintenance(ObIArray<uint6
   int ret = OB_SUCCESS;
   ObTimeGuard guard("ObPluginVectorIndexLoadScheduler::check_and_generate_tablet_tasks",
                     VEC_INDEX_LOAD_TIME_NORMAL_THRESHOLD);
-  const schema::ObTableSchema *table_schema = nullptr;
 
   ObVecIdxSharedTableInfoMap shared_table_info_map;
   ObMemAttr memattr("VecIdxInfo");
@@ -592,7 +589,6 @@ int ObPluginVectorIndexLoadScheduler::try_schedule_task(ObPluginVectorIndexMgr *
       if (task_ctx->task_start_time_ == OB_INVALID_ID) {
         task_ctx->task_start_time_ = ObTimeUtility::current_time();
       }
-      task_ctx->in_queue_ = true;
       // dag maybe already finished, and set status to finish/cancel,
       // but here change it to running and could not be scheduler later
       task_ctx->task_status_ = OB_VECTOR_INDEX_TASK_RUNNING;
@@ -1214,7 +1210,6 @@ void ObPluginVectorIndexLoadScheduler::inner_switch_to_follower_()
 
 void ObPluginVectorIndexLoadScheduler::stop()
 {
-  int ret = OB_SUCCESS;
   is_stopped_= true;
   ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (OB_NOT_NULL(vector_index_service_) && OB_NOT_NULL(ls_)) {

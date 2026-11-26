@@ -121,7 +121,7 @@ ObHybridVectorRefreshTask::do_work()
 │   ├── ObPluginVectorIndexUtils::read_local_tablet()
 │   ├── init_endpoint()
 │   │   ├── get_ai_service_guard()
-│   │   └── get_ai_endpoint()
+│   │   └── get_ai_endpoint_by_ai_model_name()
 │   └── ObEmbeddingTask::init()
 └── after_embedding()
     ├── check_embedding_finish()
@@ -214,7 +214,6 @@ int ObHybridVectorRefreshTask::prepare_for_task()
 {
   int ret = OB_SUCCESS;
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
-  const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   if (OB_ISNULL(task_ctx)) {
     ret =  OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(task_ctx->adp_guard_.get_adatper()) && OB_FAIL(vec_idx_mgr_->get_adapter_inst_guard(ctx_->task_status_.tablet_id_, task_ctx->adp_guard_))) {
