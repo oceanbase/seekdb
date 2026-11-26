@@ -925,10 +925,12 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
                                  package_spec_info.get_schema_version(),
                                  NULL));
       OZ (package_spec->init(*package_spec_ast));
-      OZ (builder.build_package(package_spec_info,
+      // Use SMART_CALL_LARGE for PL package compilation
+      // Package resolving can consume a lot of stack space when SQL in the package is complex
+      OZ (SMART_CALL_LARGE(builder.build_package(package_spec_info,
                                 null_parent_ns,
                                 *package_spec_ast,
-                                *package_spec));
+                                *package_spec)));
       if (OB_SUCC(ret)) {
         if (package_spec->get_can_cached() && resolve_ctx.need_add_pl_cache_
             && OB_FAIL(add_package_to_plan_cache(resolve_ctx, package_spec))) {
@@ -1034,10 +1036,12 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
                                  package_spec_ast));
       OZ (package_body->init(*package_body_ast));
       OZ (ObPLDependencyUtil::add_dependency_objects(&package_body_ast->get_dependency_table(), package_spec_ast->get_dependency_table()));
-      OZ (builder.build_package(package_body_info,
+      // Use SMART_CALL_LARGE for PL package body compilation
+      // Package resolving can consume a lot of stack space when SQL in the package is complex
+      OZ (SMART_CALL_LARGE(builder.build_package(package_body_info,
                                 &(package_spec_ast->get_body()->get_namespace()),
                                 *package_body_ast,
-                                *package_body));
+                                *package_body)));
       if (OB_SUCC(ret)
           && package_body->get_can_cached() && resolve_ctx.need_add_pl_cache_
           && OB_FAIL(add_package_to_plan_cache(resolve_ctx, package_body))) {

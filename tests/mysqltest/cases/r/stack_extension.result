@@ -1,0 +1,3 @@
+SELECT @stack_extension_calls AS calls, @stack_extension_returns AS returns;
+calls	returns
+161	161

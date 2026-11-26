@@ -134,10 +134,6 @@ int get_stackattr(void *&stackaddr, size_t &stacksize)
       ret = OB_ERROR;
       COMMON_LOG(ERROR, "destroy thread attr failed", K(ret), KERRMSG);
     }
-    if (OB_SUCC(ret)) {
-      g_stackaddr = (char*)stackaddr;
-      g_stacksize = stacksize;
-    }
 #elif defined(__APPLE__)
     // macOS doesn't support pthread_getattr_np, use macOS specific APIs
     stacksize = pthread_get_stacksize_np(pthread_self());
@@ -145,15 +141,25 @@ int get_stackattr(void *&stackaddr, size_t &stacksize)
     // pthread_get_stackaddr_np returns the TOP of the stack.
     // OceanBase's check_stack_overflow expects stackaddr to be the BOTTOM (lowest address).
     stackaddr = (void*)((char*)stacktop - stacksize);
-    g_stackaddr = (char*)stackaddr;
-    g_stacksize = stacksize;
 #elif defined(_WIN32)
     ULONG_PTR low_limit = 0, high_limit = 0;
     GetCurrentThreadStackLimits(&low_limit, &high_limit);
     stackaddr = (void*)low_limit;
     stacksize = (size_t)(high_limit - low_limit);
-    g_stackaddr = (char*)stackaddr;
-    g_stacksize = stacksize;
+#endif
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
+    if (OB_SUCC(ret)) {
+#if defined(__x86_64__) || defined(__aarch64__)
+      // Keep the native stack top. Limit the initial probe to 256 KiB within
+      // the real stack. Explicit stack switches cache their full segment size.
+      constexpr size_t initial_stack_size = 256L << 10;
+      if (stacksize > initial_stack_size) {
+        stackaddr = static_cast<char *>(stackaddr) + (stacksize - initial_stack_size);
+        stacksize = initial_stack_size;
+      }
+#endif
+      set_stackattr(stackaddr, stacksize);
+    }
 #endif
   }
   return ret;

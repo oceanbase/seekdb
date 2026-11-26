@@ -1,0 +1,22 @@
+# Exercise stack extension through recursive stored procedure calls.
+--disable_query_log
+SET @old_sp_recursion_depth = @@max_sp_recursion_depth;
+SET SESSION max_sp_recursion_depth = 200;
+SET @stack_extension_calls = 0, @stack_extension_returns = 0;
+DELIMITER //;
+CREATE PROCEDURE stack_extension_recurse(IN remaining INT)
+BEGIN
+  SET @stack_extension_calls = @stack_extension_calls + 1;
+  IF remaining > 0 THEN
+    CALL stack_extension_recurse(remaining - 1);
+  END IF;
+  SET @stack_extension_returns = @stack_extension_returns + 1;
+END//
+DELIMITER ;//
+CALL stack_extension_recurse(160);
+--enable_query_log
+SELECT @stack_extension_calls AS calls, @stack_extension_returns AS returns;
+--disable_query_log
+DROP PROCEDURE stack_extension_recurse;
+SET SESSION max_sp_recursion_depth = @old_sp_recursion_depth;
+--enable_query_log

@@ -28,6 +28,8 @@ namespace common
 static constexpr int64_t ALL_STACK_LIMIT = 10L << 20;
 static constexpr int64_t STACK_PER_EXTEND = (2L << 20) - ACHUNK_PRESERVE_SIZE * 2;
 static constexpr int64_t STACK_RESERVED_SIZE = 64L << 10;
+
+static constexpr int64_t STACK_RESERVED_SIZE_LARGE = 192L << 10;
 RLOCAL_EXTERN(int64_t, all_stack_size);
 
 int jump_call(void * arg_, int(*func_) (void*), void* stack_addr);
@@ -132,6 +134,9 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
   })
 
 #define SMART_CALL(func) __SMART_CALL_IMPL(STACK_RESERVED_SIZE, func)
+// Switch earlier for deep entry points such as SQL plan generation and PL compilation.
+#define SMART_CALL_LARGE(func) __SMART_CALL_IMPL(STACK_RESERVED_SIZE_LARGE, func)
+
 } // end of namespace common
 } // end of namespace oceanbase
 
