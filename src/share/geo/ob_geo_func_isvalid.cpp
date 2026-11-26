@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_isvalid.h"
+#include "share/geo/ob_geo_area_geographic.h"
 #include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
@@ -26,6 +27,24 @@ namespace oceanbase
 {
 namespace common
 {
+
+// Keep the intersection checks, but use the same ring orientation as correct().
+class GeographicValidityStrategy : public bg::strategy::intersection::geographic_segments<>
+{
+public:
+  explicit GeographicValidityStrategy(const bg::srs::spheroid<double> &spheroid)
+      : bg::strategy::intersection::geographic_segments<>(spheroid), area_strategy_(spheroid)
+  {}
+
+  template <typename Geometry>
+  struct area_strategy { typedef ObGeoAreaStrategy<> type; };
+
+  template <typename Geometry>
+  typename area_strategy<Geometry>::type get_area_strategy() const { return area_strategy_; }
+
+private:
+  ObGeoAreaStrategy<> area_strategy_;
+};
 
 template <typename GeoType>
 static int eval_isvalid_without_strategy(const ObGeometry *g,
@@ -63,7 +82,7 @@ static int eval_isvalid_with_strategy(const ObGeometry *g,
     ret = OB_ERR_NULL_VALUE;
   } else {
     bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-    bg::strategy::intersection::geographic_segments<> m_geographic_ll_la_aa_strategy(geog_sphere);
+    GeographicValidityStrategy m_geographic_ll_la_aa_strategy(geog_sphere);
     const GeoType *geo_condidate = reinterpret_cast<const GeoType *>(const_cast<char *>(g->val()));
     bg::validity_failure_type reason;
     result = bg::is_valid(*geo_condidate, reason, m_geographic_ll_la_aa_strategy);

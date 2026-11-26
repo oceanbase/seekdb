@@ -1,0 +1,16 @@
+{
+  "name": "GeographicLib C",
+  "version": "2.2",
+  "source": "https://github.com/geographiclib/geographiclib-c/tree/v2.2",
+  "packaged_as": "Adapted C++ source linked into the engine",
+  "license": "MIT",
+  "modified": "Yes: private C++ namespace, thread-safe initialization, shared math backend; compiled without floating-point contraction.",
+  "license_files": [
+    "LICENSE"
+  ],
+  "redistribution": "Retain the upstream copyright and MIT permission notice. No source or relink offer is required.",
+  "evidence": "src/share/geo/geodesic.cpp and geodesic.h; upstream v2.2 src/geodesic.c SHA256 87a91e0e30e7db839cbd1ef5aafea77487524958070565ff9155e50e9bead550; src/geodesic.h SHA256 a964a747bc4f388fb3a93cc9bc379aebe4cdd78b3ee909c071be711b82db4b10",
+  "shipped_in": [
+    "engine"
+  ]
+}

@@ -34,6 +34,18 @@ load(
 
 declare_share_semantic_header_targets()
 
+cc_library(
+    name = "geodesic_area",
+    srcs = ["geo/geodesic.cpp"],
+    hdrs = ["geo/geodesic.h"],
+    deps = [":math_compat"],
+    cxxopts = select({
+        "@platforms//os:windows": ["/clang:-ffp-contract=off"],
+        "//conditions:default": ["-ffp-contract=off"],
+    }),
+    visibility = ["//visibility:private"],
+)
+
 _VECTOR_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "vector",
@@ -1719,7 +1731,7 @@ cc_library(
         allow_empty = True,
         exclude = ["ob_tenant_role_transition_service.h"],
     ),
-    deps = _SHARE_RUNTIME_COMPILE_DEPS,
+    deps = _SHARE_RUNTIME_COMPILE_DEPS + [":geodesic_area"],
     implementation_deps = _SHARE_RUNTIME_OBLIB_DEPS,
     features = ["layering_check"],
     tags = ["manual"],
@@ -1804,6 +1816,7 @@ grouped_unity_cc_library(
     implementation_deps = [
         ":_share_implementation_headers",
         ":math_compat",
+        ":geodesic_area",
         "//rust:config_headers",
         "//rust:mvt_headers",
         "//rust:json",
