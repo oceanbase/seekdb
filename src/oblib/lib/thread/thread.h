@@ -114,9 +114,6 @@ public:
     ObLatch::clear_lock();
     return 0;
   }
-  OB_INLINE static void set_doing_ddl(const bool v) { is_doing_ddl_ = v; }
-public:
-  static thread_local bool is_doing_ddl_;
 private:
   static void* __th_start(void *th);
   static thread_local Thread* current_thread_;

@@ -35,7 +35,6 @@
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
-thread_local bool Thread::is_doing_ddl_ = false;
 thread_local Thread* Thread::current_thread_ = nullptr;
 int64_t Thread::total_thread_count_ = 0;
 

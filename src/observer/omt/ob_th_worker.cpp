@@ -90,7 +90,7 @@ ObThWorker::ObThWorker()
       pause_flag_(false),
       query_start_time_(0), query_enqueue_time_(0), last_check_time_(0),
       can_retry_(true), need_retry_(false),
-      idle_us_(0), is_doing_ddl_(nullptr)
+      idle_us_(0)
 {
   module_name_[0] = '\0';
 }
@@ -213,7 +213,6 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
   int64_t wait_start_time = 0;
   int64_t wait_end_time = 0;
   procor_.th_created();
-  is_doing_ddl_ = &Thread::is_doing_ddl_;
   static constexpr int64_t POLL_INTERVAL = 100 * 1000L;
   // Avoid adding and deleting entities from the root node for every request, the parameters are meaningless
   CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, OB_SERVER_RUNTIME_ID) {

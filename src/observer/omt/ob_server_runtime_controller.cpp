@@ -1007,7 +1007,6 @@ int ObServerRuntimeController::inc_ddl_count(const int64_t cpu_quota_concurrency
       ret = OB_DDL_RESOURCE_NOT_ENOUGH;
       LOG_WARN("runtime ddl task larger than limit, need retry", KR(ret), K(runtime->cur_ddl_thread_count()));
     } else {
-      lib::Thread::set_doing_ddl(true);
       runtime->inc_ddl_thread_count();
     }
   }
@@ -1022,7 +1021,6 @@ int ObServerRuntimeController::dec_ddl_count()
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    lib::Thread::set_doing_ddl(false);
     runtime->dec_ddl_thread_count();
     if (runtime->cur_ddl_thread_count() < 0) {
       LOG_ERROR("runtime ddl count is less than 0, please check", K(runtime->cur_ddl_thread_count()));
