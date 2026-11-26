@@ -62,6 +62,7 @@
 
 #include "observer/ob_signal_handle.h"
 #include "observer/ob_internal_table_refresh_adapter.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "observer/ob_ls_runtime_adapter.h"
 #include "observer/ob_server_duty_task.h"
 #include "observer/ob_srv_network_frame.h"
@@ -409,6 +410,7 @@ private:
   // once they're assigned. So other class can only get a reference of
   // constant gctx.
   ObGlobalContext &gctx_;
+  share::InternalTableChangeNotifier internal_table_change_notifier_;
 
   // self addr
   common::ObAddr self_addr_;

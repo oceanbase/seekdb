@@ -52,6 +52,7 @@ class ObDiag;
 
 namespace share
 {
+class InternalTableChangeNotifier;
 class ObTabletTableOperator;
 class LocalStore;
 class ObRsMgr;
@@ -71,6 +72,8 @@ struct ObGlobalContext
   share::LocalStore *local_store_;
   common::ObMySQLProxy *sql_proxy_;
   common::ObMySQLProxy *ddl_sql_proxy_;
+  // Owned by ObServer; exposed here for process-wide consumers.
+  InternalTableChangeNotifier *internal_table_change_notifier_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
   int64_t start_time_;
   int64_t *warm_up_start_time_;

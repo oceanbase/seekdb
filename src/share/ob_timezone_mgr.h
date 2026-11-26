@@ -18,10 +18,10 @@
 #define OCEANBASE_TIMEZONE_MGR_H_
 
 #include "lib/task/ob_timer.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/ob_lease_struct.h"
-#include "share/rc/ob_context.h"
 #include "share/ob_time_zone_info_manager.h"
-
+#include "share/rc/ob_context.h"
 
 namespace oceanbase {
 namespace share
@@ -72,6 +72,7 @@ public:
   int schedule_retry();
 private:
   int init_timezone(common::ObMySQLProxy &sql_proxy);
+  int refresh_timezone_info_if_changed_();
 private:
   ObTimezoneMgr();
   bool is_inited_;
@@ -79,6 +80,8 @@ private:
   common::ObTimer timer_;
   common::ObTimeZoneInfoManager *tz_info_mgr_ = nullptr;
   bool usable_;
+  share::InternalTableChangeWatcher table_change_watcher_;
+
 public:
   const uint64_t SLEEP_USECONDS = 5000000;
 };

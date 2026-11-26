@@ -18,6 +18,7 @@
 
 #include "ob_table_lock_callback.h"
 #include "storage/tablelock/ob_lock_memtable.h"
+#include "storage/tablelock/ob_mem_ctx_table_lock.h"
 #include "storage/tx/ob_tx_ctx.h"
 
 namespace oceanbase
@@ -61,6 +62,7 @@ int ObOBJLockCallback::trans_commit()
       ret = OB_ERR_UNEXPECTED;
     } else {
       memtable_->remove_lock_record(lock_op_->lock_op_);
+      notify_internal_table_change_on_commit(lock_op_->lock_op_, ctx_->get_commit_version());
       // TODO: yanyuan.cxf maybe we need only use mem_ctx toremove.
       mem_ctx->remove_lock_record(lock_op_);
       lock_op_ = NULL;
