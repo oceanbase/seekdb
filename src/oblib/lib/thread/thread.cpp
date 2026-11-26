@@ -18,6 +18,7 @@
 
 #include "thread.h"
 #include <inttypes.h>
+#include <pthread.h>
 #ifdef _WIN32
 #include <windows.h>
 #ifdef ERROR
@@ -28,7 +29,6 @@
 #endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/rc/context.h"
-#include "lib/thread/protected_stack_allocator.h"
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/thread_local/ob_tsi_factory.h"
 
@@ -45,7 +45,7 @@ Thread &Thread::current()
   return *current_thread_;
 }
 
-Thread::Thread(Threads *threads, int64_t idx, int64_t stack_size)
+Thread::Thread(Threads *threads, int64_t idx)
 #ifdef _WIN32
     : pth_(pthread_null()),
 #else
@@ -53,12 +53,8 @@ Thread::Thread(Threads *threads, int64_t idx, int64_t stack_size)
 #endif
       threads_(threads),
       idx_(idx),
-      stack_addr_(nullptr),
-      stack_size_(stack_size),
       stop_(true),
       join_concurrency_(0),
-      pid_before_stop_(0),
-      tid_before_stop_(0),
       tid_(0),
       thread_list_node_(this),
       cpu_time_(0),
@@ -77,18 +73,6 @@ int Thread::start()
   if (count >= get_max_thread_num() - OB_RESERVED_THREAD_NUM) {
     ret = OB_SIZE_OVERFLOW;
     LOG_ERROR("thread count reach limit", K(ret), "current count", count);
-  } else if (stack_size_ <= 0
-#ifdef __EMSCRIPTEN__
-             || static_cast<uint64_t>(stack_size_) > SIZE_MAX
-#endif
-            ) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid stack_size", K(ret), K(stack_size_));
-#if !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32) && !defined(__EMSCRIPTEN__)
-  } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(stack_size_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc stack memory failed", K(stack_size_));
-#endif
   } else {
     pthread_attr_t attr;
     bool need_destroy = false;
@@ -102,25 +86,10 @@ int Thread::start()
         LOG_WARN("ob_pthread_attr_set_qos failed", K(qos_ret));
         // Continue even if QoS setting failed
       }
-#if defined(__APPLE__) || defined(__ANDROID__)
-      // On macOS/Android, pthread_attr_setstack often fails with EINVAL if address/size
-      // are not perfectly aligned or if the memory is already managed in a way
-      // that pthread doesn't like. Use setstacksize instead and let the system
-      // allocate the stack.
-      pret = pthread_attr_setstacksize(&attr, stack_size_);
-      if (pret != 0) {
-        // Fallback to default if setstacksize fails
-        pret = 0; 
-      } else {
-        size_t actual_stack_size = 0;
-        pthread_attr_getstacksize(&attr, &actual_stack_size);
-        LOG_INFO("successfully set stack size", K_(stack_size), K(actual_stack_size));
-      }
-#elif defined(_WIN32) || defined(__EMSCRIPTEN__)
-      pret = pthread_attr_setstacksize(&attr, stack_size_);
-#else
-      pret = pthread_attr_setstack(&attr, stack_addr_, stack_size_);
-#endif
+      // Threads use the stack provided by the platform's default thread attributes.
+      // SMART_CALL based stack checks keep working: they query the real stack
+      // bounds with pthread_getattr_np()/GetCurrentThreadStackLimits(), so they
+      // now see the larger default stack.
     }
     if (pret == 0) {
       ATOMIC_STORE(&stop_, false);
@@ -139,9 +108,6 @@ int Thread::start()
         if (OB_FAIL(create_ret_)) {
         }
       }
-    } else {
-      int64_t total_size = stack_size_;
-      LOG_ERROR("pthread_attr_setstack failed", K(pret), K(total_size), K_(stack_size), KP(stack_addr_));
     }
     if (0 != pret) {
       ret = OB_ERR_SYS;
@@ -160,32 +126,8 @@ int Thread::start()
 
 void Thread::stop()
 {
-  bool stack_addr_flag = (stack_addr_ != NULL);
-#if defined(ERRSIM) && !defined(_WIN32) && !defined(__EMSCRIPTEN__)
-  if (!ATOMIC_LOAD(&stop_)
-      && stack_addr_flag
-      && 0 != (OB_E(EventTable::EN_THREAD_HANG) 0)) {
-    int tid_offset = 720;
-    int tid = *(pid_t*)((char*)pth_ + tid_offset);
-    LOG_WARN_RET(OB_SUCCESS, "stop was ignored", K(tid));
-    return;
-  }
-#endif
-#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
-  if (!ATOMIC_LOAD(&stop_) && stack_addr_ != NULL) {
-    int tid_offset = 720;
-    int pid_offset = 724;
-    int len = (char*)stack_addr_ + stack_size_ - (char*)pth_;
-    if (len >= (max(tid_offset, pid_offset) + sizeof(pid_t))) {
-      tid_before_stop_ = *(pid_t*)((char*)pth_ + tid_offset);
-      pid_before_stop_ = *(pid_t*)((char*)pth_ + pid_offset);
-    }
-  }
-#endif
   ATOMIC_STORE(&stop_, true);
 }
-
-
 
 void Thread::run()
 {
@@ -209,39 +151,50 @@ void Thread::dump_pth() // for debug pthread join faileds
 {
 #ifdef __EMSCRIPTEN__
   LOG_WARN_RET(OB_NOT_SUPPORTED, "native pthread memory dumps are unavailable in WebAssembly");
-#elif !defined(_WIN32)
+#elif defined(__linux__)
+  // The custom stack layout is gone; query the hung thread's stack bounds from
+  // pthread and dump that region for debugging the join failure.
   int ret = OB_SUCCESS;
   int fd = 0;
-  int64_t len = 0;
   ssize_t size = 0;
   char path[PATH_SIZE];
-  len = (char*)stack_addr_ + stack_size_ - (char*)pth_;
-#ifdef __APPLE__
-  uint64_t thread_id = 0;
-  pthread_threadid_np(NULL, &thread_id);
-  snprintf(path, PATH_SIZE, "log/dump_pth.%p.%d", (char*)pth_, static_cast<pid_t>(thread_id));
-#else
-  snprintf(path, PATH_SIZE, "log/dump_pth.%p.%d", (char*)pth_, static_cast<pid_t>(syscall(__NR_gettid)));
-#endif
-  LOG_WARN("dump pth start", K(path), K(pth_), K(len), K(stack_addr_), K(stack_size_));
-  if (NULL == (char*)pth_ || len >= stack_size_ || len <= 0) {
-    LOG_WARN("invalid member", K(pth_), K(stack_addr_), K(stack_size_));
-  } else if ((fd = ::open(path, O_WRONLY | O_CREAT | O_TRUNC,
-                          S_IRUSR  | S_IWUSR | S_IRGRP)) < 0) {
-    ret = OB_IO_ERROR;
-  } else if (len != (size = write(fd, (char*)(pth_), len))) {
-    ret = OB_IO_ERROR;
-    if (0 != close(fd)) {
-    }
-  } else if (::fsync(fd) != 0) {
-    ret = OB_IO_ERROR;
-    if (0 != close(fd)) {
-    }
-  } else if (0 != close(fd)) {
-    ret = OB_IO_ERROR;
+  pthread_attr_t attr;
+  void *stack_addr = nullptr;
+  size_t stack_size = 0;
+  if (NULL == (char*)pth_) {
+    LOG_WARN("invalid member", K(pth_));
+  } else if (0 != pthread_getattr_np(pth_, &attr)) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("pthread_getattr_np failed", K(pth_), K(errno), K(ret));
   } else {
-    LOG_WARN("dump pth done", K(path), K(pth_), K(size));
+    if (0 != pthread_attr_getstack(&attr, &stack_addr, &stack_size)
+        || NULL == stack_addr || 0 == stack_size) {
+      ret = OB_ERR_SYS;
+      LOG_WARN("pthread_attr_getstack failed", K(pth_), K(errno), K(ret), K(stack_addr), K(stack_size));
+    } else {
+      snprintf(path, PATH_SIZE, "log/dump_pth.%p.%ld", (char*)pth_, tid_);
+      LOG_WARN("dump pth start", K(path), K(pth_), K(tid_), K(stack_addr), K(stack_size));
+      if ((fd = ::open(path, O_WRONLY | O_CREAT | O_TRUNC,
+                       S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
+        ret = OB_IO_ERROR;
+      } else if (static_cast<ssize_t>(stack_size) != (size = write(fd, stack_addr, stack_size))) {
+        ret = OB_IO_ERROR;
+        if (0 != close(fd)) {
+        }
+      } else if (::fsync(fd) != 0) {
+        ret = OB_IO_ERROR;
+        if (0 != close(fd)) {
+        }
+      } else if (0 != close(fd)) {
+        ret = OB_IO_ERROR;
+      } else {
+        LOG_WARN("dump pth done", K(path), K(pth_), K(size));
+      }
+    }
+    pthread_attr_destroy(&attr);
   }
+#else
+  LOG_WARN_RET(OB_NOT_SUPPORTED, "pthread stack dump is unavailable on this platform");
 #endif
 }
 
@@ -257,9 +210,19 @@ void Thread::wait()
       LOG_ERROR("pthread_join failed", K(ret), K(errno));
       dump_pth();
       ob_abort();
+    } else {
+      reset_pth();
     }
-    destroy_stack();
   }
+}
+
+void Thread::reset_pth()
+{
+#ifdef _WIN32
+  pth_ = pthread_null();
+#else
+  pth_ = 0;
+#endif
 }
 
 int Thread::try_wait()
@@ -279,7 +242,7 @@ int Thread::try_wait()
         ret = OB_EAGAIN;
         LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
       } else {
-        destroy_stack();
+        reset_pth();
       }
     }
 #elif defined(_WIN32)
@@ -291,7 +254,7 @@ int Thread::try_wait()
           ret = OB_EAGAIN;
           LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
         } else {
-          destroy_stack();
+          reset_pth();
         }
       } else {
         ret = OB_EAGAIN;
@@ -304,7 +267,7 @@ int Thread::try_wait()
         LOG_WARN("pthread_tryjoin_np failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
       }
     } else {
-      destroy_stack();
+      reset_pth();
     }
 #endif
   }
@@ -318,25 +281,8 @@ void Thread::destroy()
 #else
   if (pth_ != 0) {
 #endif
-    /* NOTE: must wait pthread quit before release user_stack
-       because the pthread's tcb was allocated from it */
     wait();
-  } else {
-    destroy_stack();
   }
-}
-
-void Thread::destroy_stack()
-{
-#ifdef _WIN32
-  pth_ = pthread_null();
-#else
-  if (stack_addr_ != nullptr) {
-    g_stack_allocer.dealloc(stack_addr_);
-    stack_addr_ = nullptr;
-  }
-  pth_ = 0;
-#endif
 }
 
 void* Thread::__th_start(void *arg)
@@ -353,18 +299,6 @@ void* Thread::__th_start(void *arg)
 #endif
   current_thread_ = th;
   th->tid_ = gettid();
-
-#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-  ObStackHeader *stack_header = nullptr;
-  if (th->stack_addr_ != nullptr) {
-    stack_header = ProtectedStackAllocator::stack_header(th->stack_addr_);
-    abort_unless(stack_header->check_magic());
-  }
-
-  if (stack_header != nullptr) {
-    stack_header->pth_ = (uint64_t)pthread_self();
-  }
-#endif
 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(th)) {

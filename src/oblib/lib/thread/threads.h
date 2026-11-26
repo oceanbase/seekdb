@@ -24,8 +24,6 @@
 #include "lib/utility/alloc_assist.h"
 #include "lib/lock/ob_spin_rwlock.h"
 
-extern int64_t global_thread_stack_size;
-extern const int64_t THREAD_STACK_RESERVED_SIZE;
 namespace oceanbase {
 namespace lib {
 class ObPThread;
@@ -39,7 +37,6 @@ public:
       : n_threads_(n_threads),
         init_threads_(n_threads),
         threads_(nullptr),
-        stack_size_(global_thread_stack_size),
         stop_(true),
         run_wrapper_(nullptr)
   {}
@@ -134,7 +131,6 @@ private:
   int64_t n_threads_;
   int64_t init_threads_;
   Thread **threads_;
-  int64_t stack_size_;
   bool stop_;
   // protect for thread count changing.
   common::SpinRWLock lock_ __attribute__((__aligned__(16)));

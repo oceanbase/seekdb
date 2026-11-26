@@ -74,7 +74,7 @@ class Thread {
 public:
   friend class ObPThread;
   static constexpr int PATH_SIZE = 128;
-  Thread(Threads *threads, int64_t idx, int64_t stack_size);
+  Thread(Threads *threads, int64_t idx);
   ~Thread();
 
   int start();
@@ -83,6 +83,9 @@ public:
   void wait();
   void destroy();
   void dump_pth();
+  // Mark the thread as reaped after a successful join, so wait() and destroy()
+  // never join the same pthread handle twice.
+  void reset_pth();
   pthread_t get_pthread() { return pth_; }
   int try_wait();
 
@@ -116,7 +119,6 @@ public:
   static thread_local bool is_doing_ddl_;
 private:
   static void* __th_start(void *th);
-  void destroy_stack();
   static thread_local Thread* current_thread_;
 
 private:
@@ -125,12 +127,8 @@ private:
   pthread_t pth_;
   Threads *threads_;
   int64_t idx_;
-  void *stack_addr_;
-  int64_t stack_size_;
   bool stop_;
   int64_t join_concurrency_;
-  pid_t pid_before_stop_;
-  pid_t tid_before_stop_;
   int64_t tid_;
   ThreadListNode thread_list_node_;
   int64_t cpu_time_;
