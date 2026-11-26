@@ -73,7 +73,6 @@ public:
 class Thread {
 public:
   friend class ObPThread;
-  static constexpr int PATH_SIZE = 128;
   Thread(Threads *threads, int64_t idx);
   ~Thread();
 
@@ -82,7 +81,6 @@ public:
   void run();
   void wait();
   void destroy();
-  void dump_pth();
   // Mark the thread as reaped after a successful join, so wait() and destroy()
   // never join the same pthread handle twice.
   void reset_pth();

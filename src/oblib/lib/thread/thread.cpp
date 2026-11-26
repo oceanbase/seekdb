@@ -146,57 +146,6 @@ void Thread::run()
   }
 }
 
-void Thread::dump_pth() // for debug pthread join faileds
-{
-#ifdef __EMSCRIPTEN__
-  LOG_WARN_RET(OB_NOT_SUPPORTED, "native pthread memory dumps are unavailable in WebAssembly");
-#elif defined(__linux__)
-  // The custom stack layout is gone; query the hung thread's stack bounds from
-  // pthread and dump that region for debugging the join failure.
-  int ret = OB_SUCCESS;
-  int fd = 0;
-  ssize_t size = 0;
-  char path[PATH_SIZE];
-  pthread_attr_t attr;
-  void *stack_addr = nullptr;
-  size_t stack_size = 0;
-  if (NULL == (char*)pth_) {
-    LOG_WARN("invalid member", K(pth_));
-  } else if (0 != pthread_getattr_np(pth_, &attr)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("pthread_getattr_np failed", K(pth_), K(errno), K(ret));
-  } else {
-    if (0 != pthread_attr_getstack(&attr, &stack_addr, &stack_size)
-        || NULL == stack_addr || 0 == stack_size) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("pthread_attr_getstack failed", K(pth_), K(errno), K(ret), K(stack_addr), K(stack_size));
-    } else {
-      snprintf(path, PATH_SIZE, "log/dump_pth.%p.%ld", (char*)pth_, tid_);
-      LOG_WARN("dump pth start", K(path), K(pth_), K(tid_), K(stack_addr), K(stack_size));
-      if ((fd = ::open(path, O_WRONLY | O_CREAT | O_TRUNC,
-                       S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
-        ret = OB_IO_ERROR;
-      } else if (static_cast<ssize_t>(stack_size) != (size = write(fd, stack_addr, stack_size))) {
-        ret = OB_IO_ERROR;
-        if (0 != close(fd)) {
-        }
-      } else if (::fsync(fd) != 0) {
-        ret = OB_IO_ERROR;
-        if (0 != close(fd)) {
-        }
-      } else if (0 != close(fd)) {
-        ret = OB_IO_ERROR;
-      } else {
-        LOG_WARN("dump pth done", K(path), K(pth_), K(size));
-      }
-    }
-    pthread_attr_destroy(&attr);
-  }
-#else
-  LOG_WARN_RET(OB_NOT_SUPPORTED, "pthread stack dump is unavailable on this platform");
-#endif
-}
-
 void Thread::wait()
 {
   int ret = 0;
@@ -207,7 +156,6 @@ void Thread::wait()
 #endif
     if (0 != (ret = pthread_join(pth_, nullptr))) {
       LOG_ERROR("pthread_join failed", K(ret), K(errno));
-      dump_pth();
       ob_abort();
     } else {
       reset_pth();
