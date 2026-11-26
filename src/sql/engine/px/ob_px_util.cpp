@@ -1027,18 +1027,6 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
   return ret;
 }
 
-int ObPxTreeSerializer::deserialize_tree(const char *buf,
-                                         int64_t data_len,
-                                         int64_t &pos,
-                                         ObPhysicalPlan &phy_plan,
-                                         ObOpSpec *&root)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<const ObTableScanSpec*, 8> tsc_ops;
-  ret = deserialize_tree(buf, data_len, pos, phy_plan, root, tsc_ops);
-  return ret;
-}
-
 int64_t ObPxTreeSerializer::get_tree_serialize_size(const ObOpSpec &root, bool is_fulltree)
 {
   int ret = OB_SUCCESS;

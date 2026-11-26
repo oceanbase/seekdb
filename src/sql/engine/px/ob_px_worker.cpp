@@ -28,75 +28,6 @@ using namespace oceanbase::sql::dtl;
 using namespace oceanbase::lib;
 using namespace oceanbase::share;
 
-
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-
-ObPxCoroWorker::ObPxCoroWorker(const share::ObGlobalContext &gctx,
-                               common::ObIAllocator &alloc)
-  : gctx_(gctx),
-    alloc_(alloc),
-    exec_ctx_(alloc, share::server_service<ObSQLSessionMgr>()),
-    phy_plan_(),
-    task_arg_(),
-    task_proc_(gctx, task_arg_),
-    task_co_id_(0)
-{
-}
-
-int ObPxCoroWorker::run(ObPxInitTaskArgs &arg)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(deep_copy_assign(arg, task_arg_))) {
-  } else {
-  }
-  return ret;
-}
-
-int ObPxCoroWorker::exit()
-{
-  int ret = OB_SUCCESS;
-  ret = OB_NOT_INIT;
-  return ret;
-}
-
-int ObPxCoroWorker::deep_copy_assign(const ObPxInitTaskArgs &src,
-                                     ObPxInitTaskArgs &dest)
-{
-  int ret = OB_SUCCESS;
-  dest.set_deserialize_param(exec_ctx_, phy_plan_, &alloc_);
-  // Deep copy all elements in arg, into session, op tree, etc.
-  // Temporarily complete through serialization+deserialization
-  int64_t ser_pos = 0;
-  int64_t des_pos = 0;
-  void *ser_ptr = NULL;
-  int64_t ser_arg_len = src.get_serialize_size();
-
-  if (OB_ISNULL(ser_ptr = alloc_.alloc(ser_arg_len))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(src.serialize(static_cast<char *>(ser_ptr), ser_arg_len, ser_pos))) {
-  } else if (OB_FAIL(dest.deserialize(static_cast<const char *>(ser_ptr), ser_pos, des_pos))) {
-  } else if (ser_pos != des_pos) {
-    ret = OB_DESERIALIZE_ERROR;
-  } else {
-    dest.exec_ctx_->set_runtime_services(
-        src.exec_ctx_->get_runtime_services());
-    // PLACE_HOLDER: if want to shared trans_desc
-    // dest.exec_ctx_->get_my_session()->set_effective_trans_desc(src.exec_ctx_->get_my_session()->get_effective_trans_desc());
-  }
-  return ret;
-}
-
-
-
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
 class SQCHandlerGuard
 {
 public:
@@ -163,8 +94,7 @@ void PxWorkerFunctor::operator ()(bool need_exec)
             lib::ContextTLOptGuard guard(true);
             // In the worker thread, perform a deep copy of args to alleviate the burden on the sqc thread.
             ObPxInitTaskArgs runtime_arg;
-            if (OB_FAIL(runtime_arg.init_deserialize_param(
-                    task_arg_, mem_context, *env_arg_.get_gctx()))) {
+            if (OB_FAIL(runtime_arg.init_deserialize_param(task_arg_, mem_context))) {
             } else if (OB_FAIL(runtime_arg.deep_copy_assign(task_arg_, mem_context->get_arena_allocator()))) {
             } else {
               // Bind sqc_handler, convenient for the operator to get sqc_handle anywhere
@@ -315,31 +245,6 @@ ObPxThreadWorkerFactory::~ObPxThreadWorkerFactory()
 {
   destroy();
 }
-
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-
-
-
-
-void ObPxCoroWorkerFactory::destroy()
-{
-  for (int64_t i = 0; i < workers_.count(); ++i) {
-    workers_.at(i)->~ObPxCoroWorker();
-  }
-}
-
-ObPxCoroWorkerFactory::~ObPxCoroWorkerFactory()
-{
-  destroy();
-}
-
-
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-
 
 ObPxWorkerRunnable *ObPxLocalWorkerFactory::create_worker()
 {

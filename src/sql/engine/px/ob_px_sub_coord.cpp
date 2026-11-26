@@ -537,7 +537,7 @@ int ObPxSubCoord::dispatch_task_to_local_thread(ObPxInitSqcArgs &sqc_arg,
     args.exec_ctx_ = sqc_arg.exec_ctx_;
     args.op_spec_root_ = sqc_arg.op_spec_root_;
     args.static_engine_root_ = sqc_arg.static_engine_root_;
-    args.des_phy_plan_ = sqc_arg.des_phy_plan_;
+    args.phy_plan_ = sqc_arg.des_phy_plan_;
     args.task_ = *task_ptr;
     args.sqc_task_ptr_ = task_ptr; // pass memory address to task execution thread for directly updating task state
     // Record the start time of scheduling the task

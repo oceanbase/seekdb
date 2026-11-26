@@ -292,11 +292,6 @@ public:
                               ObPhysicalPlan &phy_plan,
                               ObOpSpec *&root,
                               ObIArray<const ObTableScanSpec *> &tsc_ops);
-  static int deserialize_tree(const char *buf,
-                              int64_t data_len,
-                              int64_t &pos,
-                              ObPhysicalPlan &phy_plan,
-                              ObOpSpec *&root);
   static int serialize_op_input(char *buf,
                                 int64_t buf_len,
                                 int64_t &pos,
