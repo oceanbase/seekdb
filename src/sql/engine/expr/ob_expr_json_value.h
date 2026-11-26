@@ -135,7 +135,7 @@ private:
   // old sql engine
   static inline void set_val(ObObj &res, ObObj *val)
   { res = *val; }                     
-  static int get_default_value(ObExpr *expr,
+  static int get_default_value(const ObExpr *expr,
                                   ObEvalCtx &ctx,
                                   const ObAccuracy &accuracy,
                                   ObDatum **default_value);                         
