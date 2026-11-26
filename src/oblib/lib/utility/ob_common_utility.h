@@ -34,6 +34,7 @@ extern int check_stack_overflow(
     int64_t *used_size = nullptr);
 extern int get_stackattr(void *&stackaddr, size_t &stacksize);
 extern void set_stackattr(void *stackaddr, size_t stacksize);
+extern int check_startup_stack();
 
 // return OB_SIZE_OVERFLOW if stack overflow
 inline int check_stack_overflow(void)

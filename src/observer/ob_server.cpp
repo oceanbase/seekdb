@@ -2020,16 +2020,6 @@ int ObServer::init_pre_setting()
     LOG_INFO("set memory config", K(memory_budget));
     set_memory_budget(memory_budget);
   }
-  if (OB_SUCC(ret)) {
-    const int64_t default_stack_size = 1L << 18; // 256KB
-    const int64_t stack_size = std::max(static_cast<int64_t>(default_stack_size), static_cast<int64_t>(config::stack_size()));
-    LOG_INFO("set stack_size", K(stack_size));
-    global_thread_stack_size = stack_size - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
-#ifdef __APPLE__
-    const long ps = sysconf(_SC_PAGESIZE);
-    global_thread_stack_size = (global_thread_stack_size + ps - 1) & ~(ps - 1);
-#endif
-  }
   if (OB_SUCC(ret) && config::use_ipv6()) {
     enable_use_ipv6();
   }

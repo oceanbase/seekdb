@@ -56,6 +56,7 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #include "lib/oblog/ob_easy_log.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_warning_buffer.h"
+#include "lib/utility/ob_common_utility.h"
 #include "lib/utility/ob_defer.h"
 #include "observer/ob_command_line_parser.h"
 #include "observer/ob_server.h"
@@ -810,7 +811,6 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
   ::oceanbase::common::g_ob_log_main_entered = true;
 #endif
-  int ret = OB_SUCCESS;
 #ifdef _WIN32
   if (has_arg(argc, argv, "--install-service")) {
     return oceanbase::observer::ob_install_win_service(
@@ -818,7 +818,14 @@ int main(int argc, char *argv[])
   } else if (has_arg(argc, argv, "--remove-service")) {
     return oceanbase::observer::ob_remove_win_service(
         get_arg_value(argc, argv, "--remove-service"));
-  } else if (has_arg(argc, argv, "--service")) {
+  }
+#endif
+  int ret = check_startup_stack();
+  if (OB_SUCCESS != ret) {
+    return ret;
+  }
+#ifdef _WIN32
+  if (has_arg(argc, argv, "--service")) {
     return oceanbase::observer::ob_start_as_win_service(
         oceanbase::observer::OB_DEFAULT_SERVICE_NAME, inner_main, argc, argv);
   }

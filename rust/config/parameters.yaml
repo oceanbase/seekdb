@@ -1115,14 +1115,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "to be removed"
 
-- name: stack_size
-  type: CAP
-  default: "256K"
-  range: "[256K, 20M]"
-  section: OBSERVER
-  edit_level: STATIC_EFFECTIVE
-  description: "the size of routine execution stackRange: [256K, 20M]"
-
 - name: _px_max_pipeline_depth
   type: INT
   default: "2"

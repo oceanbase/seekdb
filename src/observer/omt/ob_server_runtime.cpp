@@ -566,7 +566,10 @@ int64_t ObServerRuntime::min_worker_cnt() const
 
 int64_t ObServerRuntime::max_worker_cnt() const
 {
-  int64_t cnt = std::max(runtime_meta_.runtime_config_.resource_config_.memory_size() / 20 / (config::stack_size() + (3 << 20) + (512 << 10)),
+  // Worker threads run on platform default stacks (for example 2 MiB on glibc
+  // Linux); keep the per-thread memory estimate conservative for this heuristic.
+  constexpr int64_t estimated_thread_stack_size = 2L << 20;
+  int64_t cnt = std::max(runtime_meta_.runtime_config_.resource_config_.memory_size() / 20 / (estimated_thread_stack_size + (3 << 20) + (512 << 10)),
                   static_cast<int64_t>(150L));
   return cnt;
 }
