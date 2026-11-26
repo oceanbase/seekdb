@@ -326,7 +326,6 @@ int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction 
 {
   int ret = OB_SUCCESS;
   
-  uint64_t new_endpoint_version = OB_INVALID_VERSION;
   int64_t affected_rows = 0;
 
   ObDMLSqlSplicer sql;

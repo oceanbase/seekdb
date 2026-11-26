@@ -33,7 +33,6 @@ public:
   virtual void reset();
   virtual void destroy() { reset(); }
   virtual int inner_get_next_row(common::ObNewRow *&row);
-  static const int64_t ID_SERVICE_NUM = 2;
   TO_STRING_KV("service_type", service_types_index_,
                "last_id", last_id_,
                "limit_id", limit_id_,

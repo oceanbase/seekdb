@@ -106,8 +106,6 @@ int ObServerUtils::get_data_disk_info_in_config(int64_t& data_disk_size,
   int64_t data_disk_total_size = 0;
   int64_t clog_disk_total_size = 0;
   bool same_filesystem = false;
-  const char* data_dir = OB_FILE_SYSTEM_ROUTER.get_sstable_dir();
-  const char* clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
   if (OB_FAIL(calculate_disk_layout_defaults(data_disk_total_size,
                                              data_default_disk_percentage,
                                              clog_disk_total_size,

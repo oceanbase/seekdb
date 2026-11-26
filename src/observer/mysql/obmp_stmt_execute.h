@@ -148,13 +148,8 @@ public:
   int64_t get_exec_end_timestamp() const { return exec_end_timestamp_; }
   int64_t get_send_timestamp() const { return get_receive_timestamp(); }
   int init_for_arraybinding(ObIAllocator &alloc);
-  int init_arraybinding_paramstore(ObIAllocator &alloc);
   int set_session_active(sql::ObSQLSessionInfo &session) const;
   int after_do_process_for_arraybinding(ObMySQLResultSet &result);
-  inline void set_arraybounding(bool is_arraybinding) { is_arraybinding_ = is_arraybinding; }
-  inline bool get_arraybounding() { return is_arraybinding_; }
-  inline void set_save_exception(bool is_save_exception) { is_save_exception_ = is_save_exception; }
-  inline bool get_save_exception() { return is_save_exception_; }
   // response need send long data
   virtual bool is_send_long_data() { return false;}
   inline bool support_send_long_data(const uint32_t type) {
@@ -194,15 +189,9 @@ protected:
                       sql::ObSQLSessionInfo &session,
                       bool force_sync_resp,
                       bool &async_resp_used);
-  inline void set_single_process_timestamp(int64_t single_process_timestamp)
-  {
-    single_process_timestamp_ = single_process_timestamp;
-  }
-  inline void set_exec_start_timestamp(int64_t time) { exec_start_timestamp_ = time; }
   ParamStore *get_params() { return params_; }
   inline void set_param(ParamStore *params) { params_ = params; }
   sql::ObSqlCtx &get_ctx() { return ctx_; }
-  ObQueryRetryCtrl &get_retry_ctrl() { return retry_ctrl_; }
   int request_params(sql::ObSQLSessionInfo *session,
                      const char* &pos,
                      uint32_t ps_stmt_checksum,
@@ -262,8 +251,6 @@ protected:
   {
     return (sql::stmt::T_CALL_PROCEDURE  == stmt_type || sql::stmt::T_ANONYMOUS_BLOCK == stmt_type);
   }
-  void set_curr_sql_idx(int64_t curr_sql_idx) { curr_sql_idx_ = curr_sql_idx; }
-  int64_t get_curr_sql_idx() { return curr_sql_idx_; }
 
 private:
   // for arraybinding
@@ -365,9 +352,7 @@ protected:
   int64_t single_process_timestamp_;
   int64_t exec_start_timestamp_;
   int64_t exec_end_timestamp_;
-  bool prepare_packet_sent_;
   uint64_t params_num_; 
-  int64_t curr_sql_idx_; // only for arraybinding
   ObPSAnalysisChecker analysis_checker_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPStmtExecute);

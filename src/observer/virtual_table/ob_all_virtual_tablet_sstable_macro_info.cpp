@@ -571,7 +571,6 @@ int ObAllVirtualTabletSSTableMacroInfo::get_next_tablet()
 int ObAllVirtualTabletSSTableMacroInfo::get_next_sstable()
 {
   int ret = OB_SUCCESS;
-  bool need_ignore = false;
   clean_cur_sstable();
   blocksstable::ObDatumRange curr_range;
   ObITable *table = nullptr;

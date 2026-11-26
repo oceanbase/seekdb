@@ -70,7 +70,6 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
   const ObMergeStaticInfo &static_info = merge_history_.static_info_;
   const ObMergeRunningInfo &running_info = merge_history_.running_info_;
   const ObMergeBlockInfo &block_info = merge_history_.block_info_;
-  const ObMergeDiagnoseInfo &diagnose_info = merge_history_.diagnose_info_;
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {

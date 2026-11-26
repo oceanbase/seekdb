@@ -114,7 +114,6 @@ private:
   void clean_cur_sstable();
   bool check_tablet_need_ignore(const ObTabletMeta &tablet_meta);
   bool check_sstable_need_ignore(const ObITable::TableKey &table_key);
-  int gen_sstable_range(common::ObNewRange &range);
   int get_macro_info(const blocksstable::MacroBlockId &macro_id, MacroInfo &info);
   int get_macro_info(const blocksstable::ObMacroBlockDesc &macro_desc, MacroInfo &info);
 private:

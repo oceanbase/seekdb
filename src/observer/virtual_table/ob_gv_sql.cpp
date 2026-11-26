@@ -223,7 +223,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::STATEMENT: {
       ObString statement;
       ObString src_stmt;
-      ObCollationType tmp_sql_cs_type;
       if (!cache_stat_updated) {
         cells[i].set_null();
       } else if (cache_obj->is_sql_crsr()) {

@@ -176,7 +176,6 @@ int ObService::init(common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVICE_NOTICE] init ob_service begin");
-  const static int64_t REBUILD_FLAG_REPORT_THREAD_CNT = 1;
 
   if (inited_) {
     ret = OB_INIT_TWICE;
@@ -306,11 +305,6 @@ int ObService::update_baseline_schema_version(const int64_t schema_version)
   return ret;
 }
 
-const ObAddr &ObService::get_self_addr()
-{
-  return gctx_.self_addr();
-}
-
 int ObService::submit_async_refresh_schema_task(const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
@@ -322,20 +316,6 @@ int ObService::submit_async_refresh_schema_task(const int64_t schema_version)
 }
 
 // should return success if all partition have merge to specific frozen_version
-int ObService::check_frozen_scn(const obcall::ObCheckFrozenScnArg &arg)
-{
-  LOG_INFO("receive check frozen SCN request", K(arg));
-  int ret = OB_SUCCESS;
-  SCN last_merged_scn = SCN::min_scn();
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (arg.frozen_scn_ != last_merged_scn) {
-    ret = OB_ERR_CHECK_DROP_COLUMN_FAILED;
-  }
-  return ret;
-}
 
 int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRequestArg &arg, obcall::ObCalcColumnChecksumRequestRes &res)
 {
@@ -955,32 +935,6 @@ int ObService::cancel_sys_task(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(SYS_TASK_STATUS_MGR.cancel_task(task_id))) {
   }
-  return ret;
-}
-
-int ObService::stop_partition_write(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result)
-{
-  //TODO for switchover
-  int ret = OB_SUCCESS;
-  result = switchover_timestamp;
-  return ret;
-}
-
-int ObService::check_partition_log(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result)
-{
-  UNUSEDx(switchover_timestamp, result);
-  // Check that the log of all replicas in local have reached synchronization status
-  // The primary has stopped writing
-  int ret = OB_NOT_SUPPORTED;
-
-  return ret;
-}
-
-int ObService::get_wrs_info(const obcall::ObGetWRSArg &arg,
-                            obcall::ObGetWRSResult &result)
-{
-  UNUSEDx(arg, result);
-  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

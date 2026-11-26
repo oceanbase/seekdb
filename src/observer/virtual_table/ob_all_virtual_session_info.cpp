@@ -103,9 +103,7 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
                    K(cur_row_->count_),
                    K(output_column_ids_.count()));
   } else {
-    ObServer &server = ObServer::get_instance();
     uint64_t cell_idx = 0;
-    char ip_buf[common::OB_IP_STR_BUFF];
     char peer_buf[common::OB_IP_PORT_STR_BUFF];
     char sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
     ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());

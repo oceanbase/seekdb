@@ -130,10 +130,8 @@ private:
   int64_t column_type_str_len_;
   bool is_filter_db_;
   int64_t last_filter_table_idx_;
-  int64_t last_filter_column_idx_;
   common::ObSEArray<const share::schema::ObDatabaseSchema *, 8> database_schema_array_;
   common::ObSEArray<const share::schema::ObTableSchema *, 16> filter_table_schema_array_;
-  ObArenaAllocator view_resolve_alloc_;
   lib::MemoryContext mem_context_;
   int64_t iter_cnt_;
 };

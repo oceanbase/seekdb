@@ -86,7 +86,6 @@ int ObAllVirtualMemstoreInfo::get_next_memtable(ObITabletMemtable *&mt)
       tables_handle_.reset();
       memtable_array_pos_ = 0;
       ObTabletHandle tablet_handle;
-      ObIMemtableMgr *memtable_mgr = nullptr;
 
       if (OB_FAIL(get_next_tablet(tablet_handle))) {
         if (OB_ITER_END != ret) {

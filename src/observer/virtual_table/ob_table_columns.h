@@ -119,10 +119,6 @@ private:
   int fill_row_cells(const ObTableSchema &table_schema,
                      const sql::ObSelectStmt *select_stmt,
                      const sql::SelectItem &select_item);
-  int set_null_and_default_according_binary_expr(const sql::ObSelectStmt *select_stmt,
-                                                 const sql::ObRawExpr *expr,
-                                                 bool &nullable,
-                                                 bool &has_default);
   int get_key_type(const share::schema::ObTableSchema &table_schema,
                    const share::schema::ObColumnSchemaV2 &column_schema,
                    KeyType &key_type) const;

@@ -95,9 +95,7 @@ public:
 
   sql::ObResultSet *get_result_set() { return result_set_; }
 
-  void set_execute_start_ts(int64_t ts) { execute_start_ts_ = ts; }
   int64_t get_execute_start_ts() { return execute_start_ts_; }
-  void set_execute_end_ts(int64_t ts) { execute_end_ts_ = ts; }
   int64_t get_execute_end_ts() { return execute_end_ts_; }
 
   int get_obj(const int64_t col_idx, const common::ObObj *&obj) const;
@@ -106,8 +104,6 @@ public:
   bool is_inited() const { return is_inited_; }
   void set_is_read(const bool is_read) { is_read_ = is_read; }
   bool is_inner_session() const { return is_inner_session_; }
-  void set_is_inner_session(bool is_inner_session)
-  { is_inner_session_ = is_inner_session; }
 private:
   virtual int inner_get_number(const int64_t col_idx, common::number::ObNumber &nmb_val,
       IAllocator &allocator) const;

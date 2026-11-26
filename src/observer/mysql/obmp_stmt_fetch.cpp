@@ -196,11 +196,9 @@ int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session,
 {
   // TODO: Add handling for com type
   int ret = OB_SUCCESS;
-  bool ac = true;
   ObSqlCtx ctx;
   ObQueryRetryCtrl retry_ctrl;
-  ObSyncPlanDriver drv(gctx_, ctx, session, retry_ctrl, packet_sender_,
-                       OB_INVALID_COUNT);
+  ObSyncPlanDriver drv(gctx_, ctx, session, retry_ctrl, packet_sender_);
   if (NULL == fields) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(drv.response_query_header(*fields, false, false))) {
@@ -409,7 +407,6 @@ int ObMPStmtFetch::process()
   const ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
   ObSMConnection *conn = get_conn();
   bool cursor_fetched = false;
-  reset_close_cursor();
   if (OB_ISNULL(req_) || OB_ISNULL(conn) || OB_ISNULL(cur_trace_id)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
@@ -448,13 +445,6 @@ int ObMPStmtFetch::process()
       cursor = session.get_cursor(cursor_id_);
       if (OB_NOT_NULL(cursor) && cursor->get_fetched()) {
         cursor_fetched = true;
-      }
-      if (need_close_cursor()) {
-        // close at here because after do_process, need read some cursor info for log in process_fetch_stmt
-        int tmp_ret = session.close_cursor(cursor_id_);
-        ret = ret == OB_SUCCESS ? tmp_ret : ret;
-        if (OB_SUCCESS != tmp_ret) {
-        }
       }
     }
     session.check_and_reset_retry_info(*cur_trace_id, THIS_WORKER.need_retry());

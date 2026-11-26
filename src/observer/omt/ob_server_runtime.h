@@ -71,7 +71,6 @@ public:
   {
     group_id_ = group_id;
   }
-  int64_t get_pool_size() const { return get_thread_count(); }
   int submit(const RunFuncT &func);
   void set_px_thread_name();
   int64_t get_queue_size() const { return queue_.size(); }
@@ -255,7 +254,6 @@ public:
                "server_role", role())
 public:
   void periodically_check();
-  ReqQueue& get_req_queue() { return req_queue_; }
   int acquire_more_worker(int64_t num, int64_t &succ_num, bool force = false);
   bool do_add_worker();
   int64_t queue_size() const { return req_queue_.size(); }
@@ -264,8 +262,6 @@ private:
   static void* wait(void* runtime);
   // acquire workers if runtime doesn't have sufficient worker.
   void check_worker_count();
-
-  OB_INLINE int pop_req(common::ObLink *&req, int64_t timeout) { return req_queue_.pop(req, timeout); }
 
   // read runtime variable PARALLEL_SERVERS_TARGET
   void check_parallel_servers_target();

@@ -62,7 +62,6 @@ private:
   uint64_t buffer_len_;
   common::ObString buffer_;
   bool need_disconnect_;
-  ObPSAnalysisChecker defender_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPStmtSendLongData);

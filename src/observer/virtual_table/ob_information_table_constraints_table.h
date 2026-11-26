@@ -88,7 +88,6 @@ private:
     TABLE_NAME,
     CONSTRAINT_TYPE,
     ENFORCED,
-    MAX_TABLE_CONSTRAINTS_COLUMN
   };
   static const int64_t TABLE_CONSTRAINTS_COLUMN_COUNT = 7;
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaTableConstraintsTable);

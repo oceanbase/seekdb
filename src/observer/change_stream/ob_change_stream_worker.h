@@ -52,7 +52,6 @@ public:
   /// Push a subtask directly (ObCSExecSubTask IS a LinkTask; owned by exec_ctx).
   int push_subtask(ObCSExecSubTask *sub_task);
 
-  int64_t get_executor_id() const { return executor_id_; }
   char *get_name() { return name_; }
 
 protected:

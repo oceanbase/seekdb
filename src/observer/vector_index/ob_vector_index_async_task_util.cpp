@@ -44,92 +44,6 @@ using namespace sql;
 using namespace common;
 namespace share
 {
-namespace
-{
-struct VecDutyTime
-{
-  int32_t hour_ = 0;
-  int32_t minute_ = 0;
-  int32_t second_ = 0;
-
-  bool is_valid() const
-  {
-    return hour_ >= 0 && hour_ <= 24
-        && minute_ >= 0 && minute_ <= 60
-        && second_ >= 0 && second_ <= 60;
-  }
-};
-
-bool extract_time_value(const char *ptr, const int64_t len, int32_t &value)
-{
-  bool found = false;
-  value = 0;
-  for (int64_t i = 0; i < len; ++i) {
-    if (' ' == ptr[i]) {
-      continue;
-    } else if (ptr[i] >= '0' && ptr[i] <= '9') {
-      found = true;
-      for (; i < len && ptr[i] >= '0' && ptr[i] <= '9'; ++i) {
-        value = value * 10 + ptr[i] - '0';
-      }
-      break;
-    } else {
-      break;
-    }
-  }
-  return found;
-}
-
-int parse_duty_time(const ObString &input, VecDutyTime &time)
-{
-  int ret = OB_SUCCESS;
-  const char *first_colon = input.find(':');
-  const char *last_colon = input.reverse_find(':');
-  if (OB_ISNULL(first_colon) || OB_ISNULL(last_colon) || first_colon >= last_colon
-      || !extract_time_value(input.ptr(), first_colon - input.ptr(), time.hour_)
-      || !extract_time_value(first_colon + 1, last_colon - first_colon - 1, time.minute_)
-      || !extract_time_value(last_colon + 1, input.ptr() + input.length() - last_colon - 1, time.second_)
-      || !time.is_valid()) {
-    ret = OB_INVALID_CONFIG;
-  }
-  return ret;
-}
-
-int parse_duty_window(const char *str, VecDutyTime &begin, VecDutyTime &end, bool &not_set)
-{
-  int ret = OB_SUCCESS;
-  not_set = OB_ISNULL(str) || '\0' == str[0];
-  if (!not_set) {
-    const ObString input(str);
-    const char *left = input.find('[');
-    const char *comma = input.find(',');
-    const char *right = input.reverse_find(']');
-    if (OB_ISNULL(left) || OB_ISNULL(comma) || OB_ISNULL(right)
-        || left >= comma || comma >= right) {
-      ret = OB_INVALID_CONFIG;
-    } else {
-      ObString begin_str(static_cast<int32_t>(comma - left - 1), left + 1);
-      ObString end_str(static_cast<int32_t>(right - comma - 1), comma + 1);
-      if (OB_FAIL(parse_duty_time(begin_str, begin))) {
-      } else if (OB_FAIL(parse_duty_time(end_str, end))) {
-      }
-    }
-  }
-  return ret;
-}
-
-bool current_in_duty_window(const VecDutyTime &begin, const VecDutyTime &end)
-{
-  time_t now = 0;
-  time(&now);
-  const struct tm *local = localtime(&now);
-  const int32_t begin_second = begin.second_ + 60 * (begin.minute_ + 60 * begin.hour_);
-  const int32_t end_second = end.second_ + 60 * (end.minute_ + 60 * end.hour_);
-  const int32_t current_second = local->tm_sec + 60 * (local->tm_min + 60 * local->tm_hour);
-  return begin_second <= current_second && current_second <= end_second;
-}
-} // namespace
-
 ObVecIndexAsyncTaskCtx::~ObVecIndexAsyncTaskCtx()
 {
   if (OB_NOT_NULL(extra_data_)) {
@@ -607,46 +521,6 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
   return ret;
 }
 
-int ObVecIndexAsyncTaskUtil::read_vec_tasks(const char* tname,
-    const bool for_update /*false*/,
-    const ObVecIndexFieldArray& filters,
-    ObLS *ls, /* null means get all global tasks */
-    common::ObISQLClient& proxy,
-    ObVecIndexTaskStatusArray& result_arr,
-    common::ObIAllocator *allocator /*NULL*/)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const bool is_read_global_task = OB_ISNULL(ls);
-
-  if (OB_ISNULL(allocator)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(construct_read_task_sql(tname, for_update, is_read_global_task, filters, proxy, sql))) {
-  } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      sqlclient::ObMySQLResult* result = nullptr;
-      if (OB_FAIL(proxy.read(res, sql.ptr()))) {
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        while (OB_SUCC(ret)) {
-          if (OB_FAIL(result->next())) {
-          } else {
-            ObVecIndexTaskStatus task_result;
-            if (OB_FAIL(extract_one_task_sql_result(result, task_result))) {
-            } else if (OB_FAIL(result_arr.push_back(task_result))) {
-            }
-          }
-        }
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObVecIndexAsyncTaskUtil::construct_read_task_sql(const char *tname,
     const bool for_update /* select for update*/,
     const bool is_read_global_task,
@@ -810,7 +684,6 @@ int ObVecIndexAsyncTaskUtil::fetch_new_trace_id(
 ObVecIndexAsyncTaskHandler::ObVecIndexAsyncTaskHandler()
   : common::ObSimpleThreadPool(),
     is_inited_(false),
-    async_task_ref_cnt_(0),
     stopped_(false)
 {
 }
@@ -892,7 +765,6 @@ int ObVecIndexAsyncTaskHandler::push_task(
     } else if (OB_FAIL(common::ObSimpleThreadPool::push(async_task))) {
     } else {
       // !!!! inc async task ref cnt;
-      inc_async_task_ref();
     }
     // free memory
     if (OB_FAIL(ret) && OB_NOT_NULL(async_task)) {
@@ -923,7 +795,6 @@ int ObVecIndexAsyncTaskHandler::push_task(
         (task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_PREPARE || task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_FINISH)) {
       task->reset_status();
       update_processing_task_count(true);
-      inc_async_task_ref();
     }
   } else if (ctx->task_status_.task_type_ == OB_VECTOR_ASYNC_INDEX_IVF_LOAD
           || ctx->task_status_.task_type_ == OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
@@ -934,7 +805,6 @@ int ObVecIndexAsyncTaskHandler::push_task(
     } else if (OB_FAIL(common::ObSimpleThreadPool::push(ivf_task))) {
     } else {
       // !!!! inc async task ref cnt;
-      inc_async_task_ref();
     }
     // free memory
     if (OB_FAIL(ret) && OB_NOT_NULL(ivf_task)) {
@@ -1005,7 +875,6 @@ void ObVecIndexAsyncTaskHandler::handle(void *task)
   if (OB_NOT_NULL(async_task) 
       && (async_task->get_task_type() != ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING || async_task->all_finished())) {
     update_processing_task_count(false);
-    dec_async_task_ref();
   }
   // free memory
   if (OB_NOT_NULL(async_task)) {
@@ -1048,7 +917,6 @@ void ObVecIndexAsyncTaskHandler::handle_drop(void *task)
       }
     }
     // !!!!! desc async task ref cnt
-    dec_async_task_ref();
   }
 }
 
@@ -1553,7 +1421,6 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
   int64_t pk_increment_col_idx = -1;
   ObSEArray<int64_t, 4> extra_column_idxs;
   int64_t key_col_id = -1;
-  int64_t data_col_id = -1;
   const int64_t snapshot_column_count = 4;
   common::ObCollationType cs_type = CS_TYPE_INVALID;
   const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
@@ -1602,7 +1469,6 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
             key_col_id = all_column_ids.at(i);
           } else if (column_schema->is_vec_hnsw_data_column()) {
             vector_data_col_idx = i;
-            data_col_id = all_column_ids.at(i);
             cs_type = column_schema->get_collation_type();
           } else { // set extra column id
             if (OB_FAIL(extra_column_idxs.push_back(i))) {

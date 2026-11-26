@@ -884,7 +884,6 @@ int ObTableColumns::deduce_column_attributes(
     //TODO(yts): should get types_info from expr, wait for yyy
     const ObRawExprResType &result_type = select_item.expr_->get_result_type();
     ObLength char_len = result_type.get_length();
-    const ObLengthSemantics default_length_semantics = session->get_default_length_semantics();
     int16_t precision_or_length_semantics = result_type.get_precision();
     uint64_t sub_type = static_cast<uint64_t>(ObGeoType::GEOTYPEMAX);
     ObArray<ObString> extend_type_info;

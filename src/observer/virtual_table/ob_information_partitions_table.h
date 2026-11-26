@@ -87,7 +87,6 @@ private:
     PARTITION_COMMENT,
     NODEGROUP,
     TABLESPACE_NAME,
-    MAX_PARTITIONS_COLUMN
   };
   static const int64_t PARTITION_COLUMN_COUNT = 25;
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaPartitionsTable);

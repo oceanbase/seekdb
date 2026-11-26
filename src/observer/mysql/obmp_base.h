@@ -42,8 +42,6 @@ protected:
   virtual int before_process();
   virtual int response(const int retcode) final;
   virtual int after_process(int error_code);
-  int load_system_variables(const share::schema::ObSysVariableSchema &sys_variable_schema,
-                            sql::ObSQLSessionInfo &session) const;
   void disconnect();
   void force_disconnect();
 
@@ -68,7 +66,6 @@ protected:
   int send_ok_packet(sql::ObSQLSessionInfo &session, ObOKPParam &ok_param, obmysql::ObMySQLPacket* pkt=NULL);
   int send_eof_packet(const sql::ObSQLSessionInfo &session, const ObMySQLResultSet &result, ObOKPParam *ok_param = NULL);
 
-  int send_null_packet(sql::ObSQLSessionInfo &session, ObOKPParam &ok_param);
 
   ObSMConnection *get_conn() const;
   int get_conn_id(uint32_t &sessid) const;
@@ -107,9 +104,6 @@ protected:
                    ObSchemaGetterGuard *schema_guard = NULL);
   int load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session);
 protected:
-  static const int64_t MAX_TRY_STEPS = 5;
-  static int64_t TRY_EZ_BUF_SIZES[MAX_TRY_STEPS];
-
   const share::ObGlobalContext &gctx_;
   ObMPPacketSender packet_sender_;
 private:

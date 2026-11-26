@@ -414,14 +414,6 @@ const char  LOG_DIR[]  = "log";
 const char  PID_DIR[]  = "run";
 const char  CONF_DIR[] = "etc";
 
-static void print_args(int argc, char *argv[])
-{
-  for (int i = 0; i < argc - 1; ++i) {
-    fprintf(stderr, "%s ", argv[i]);
-  }
-  fprintf(stderr, "%s\n", argv[argc - 1]);
-}
-
 /**
  * Parse command-line arguments
  * @details Parse command-line arguments，and initialize ObServerOptions。

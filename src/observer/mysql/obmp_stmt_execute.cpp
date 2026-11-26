@@ -153,9 +153,7 @@ ObMPStmtExecute::ObMPStmtExecute(const share::ObGlobalContext &gctx)
       single_process_timestamp_(0),
       exec_start_timestamp_(0),
       exec_end_timestamp_(0),
-      prepare_packet_sent_(false),
-      params_num_(0),
-      curr_sql_idx_(0)
+      params_num_(0)
 {
   ctx_.exec_type_ = MpQuery;
 }
@@ -211,17 +209,6 @@ int ObMPStmtExecute::init_row_for_arraybinding(ObIAllocator &alloc, int64_t arra
     }
     arraybinding_row_->assign(obj, array_binding_row_num);
   }
-  return ret;
-}
-
-int ObMPStmtExecute::init_arraybinding_paramstore(ObIAllocator &alloc)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(arraybinding_params_
-      = static_cast<ParamStore*>(alloc.alloc(sizeof(ParamStore))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  }
-  OX (arraybinding_params_ = new(arraybinding_params_)ParamStore((ObWrapperAllocator(alloc))));
   return ret;
 }
 
@@ -1403,7 +1390,6 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
 {
   int ret = OB_SUCCESS;
   inner_stmt_id = OB_INVALID_ID;
-  ObIAllocator &alloc = CURRENT_CONTEXT->get_arena_allocator();
   ObPsCache *ps_cache = OB_ISNULL(get_observer_sql_engine())
       ? nullptr : &get_observer_sql_engine()->get_ps_cache();
   if (OB_ISNULL(ps_cache)) {
@@ -1631,7 +1617,6 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
-      ObString sql_id = ObString::make_string(ctx_.sql_id_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
                                                  get_observer_sql_engine()->get_plan_cache(),
                                                  get_observer_sql_engine()->get_plan_cache_access_service(),
@@ -1680,8 +1665,6 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       clear_wb_content(session);
     }
 
-    bool need_retry = (THIS_THWORKER.need_retry()
-                       || RETRY_TYPE_NONE != retry_ctrl_.get_retry_type());
   }
   return ret;
 }
@@ -1711,9 +1694,7 @@ int ObMPStmtExecute::response_result(
       }
       async_resp_used = result.is_async_end_trans_submitted();
     } else {
-      int32_t iteration_count = OB_INVALID_COUNT;
-      ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_,
-                           iteration_count);
+      ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);
       ret = drv.response_result(result);
     }
   } else {
@@ -1838,7 +1819,6 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
   // After executing setup_wb, all WARNINGS will be written to the WARNING BUFFER of the current session
   setup_wb(session);
   //============================ Note the lifecycle of these variables ================================
-  ObSMConnection *conn = get_conn();
   if (OB_FAIL(init_process_var(ctx_, multi_stmt_item, session))) {
   } else {
     //set session log_level.Must use ObThreadLogLevelUtils::clear() in pair
@@ -1857,7 +1837,6 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
         ctx_.multi_stmt_item_.set_ps_mode(true);
         ctx_.multi_stmt_item_.set_ab_cnt(0);
         for (int64_t i = 0; OB_SUCC(ret) && i < arraybinding_size_; ++i) {
-          set_curr_sql_idx(i);
           OZ (construct_execute_param_for_arraybinding(i));
           OZ (do_process_single(session, params_, has_more_result, force_sync_resp, async_resp_used));
           if (OB_FAIL(ret)) {
@@ -2486,7 +2465,6 @@ int ObMPStmtExecute::copy_or_convert_str(common::ObIAllocator &allocator,
     int64_t maxmb_len = 0;
     OZ(ObCharset::get_mbmaxlen_by_coll(dst_type, maxmb_len));
     const int64_t len = maxmb_len * src.length() + 1 + extra_buf_len;
-    uint32_t res_len = 0;
     if (OB_SUCC(ret)) {
       char *buf = static_cast<char *>(allocator.alloc(len));
       if (NULL == buf) {
@@ -2759,8 +2737,7 @@ int ObMPStmtExecute::parse_mysql_time_value(const char *&data, ObObj &param, ObP
 int ObMPStmtExecute::response_query_header(ObSQLSessionInfo &session, pl::ObPLServerCursorInfo &cursor)
 {
   int ret = OB_SUCCESS;
-  ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_,
-                       OB_INVALID_COUNT);
+  ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);
   if (0 == cursor.get_field_columns().count()) {
     // SELECT * INTO OUTFILE return null field, and only response ok packet
     ObOKPParam ok_param;

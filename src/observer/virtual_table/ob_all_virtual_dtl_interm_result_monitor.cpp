@@ -181,7 +181,6 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
 int ObAllDtlIntermResultMonitor::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
     } else {

@@ -79,7 +79,6 @@ int ObPxPools::get_or_create(int64_t group_id, ObPxPool *&pool)
 
 int ObPxPools::create_pool(int64_t group_id, ObPxPool *&pool)
 {
-  static constexpr uint64_t MAX_TASKS_PER_CPU = 1;
   int ret = OB_SUCCESS;
   common::SpinWLockGuard g(lock_);
   if (OB_FAIL(pool_map_.get_refactored(group_id, pool))) {
@@ -114,7 +113,6 @@ int ObPxPools::thread_recycle()
 int ObPxPools::ThreadRecyclePoolFunc::operator() (common::hash::HashMapPair<int64_t, ObPxPool*> &kv)
 {
   int ret = OB_SUCCESS;
-  int64_t &group_id = kv.first;
   ObPxPool *pool = kv.second;
   if (NULL == pool) {
   } else {

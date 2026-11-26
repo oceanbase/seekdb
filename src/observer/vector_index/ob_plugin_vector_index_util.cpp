@@ -117,7 +117,6 @@ int ObVectorQueryRowkeyIterator::get_next_rows(ObIArray<common::ObRowkey>& rowke
   if (!is_init_) {
     ret = OB_NOT_INIT;
   } else if (cur_pos_ < total_) {
-    ObObj *obj = nullptr;
     if (batch_size_ > 0) {
       if (OB_FAIL(rowkeys.reserve(batch_size_))) {
       } else {

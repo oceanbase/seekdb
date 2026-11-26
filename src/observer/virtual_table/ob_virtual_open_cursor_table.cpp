@@ -132,7 +132,6 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
                 K(cur_row_->count_),
                 K(output_column_ids_.count()));
   } else {
-    uint64_t cell_idx = 0;
     bool display_non_session_cursor = config::_display_non_session_cursor();
     if (sess_info->is_shadow()) {
       //this session info is logical free, shouldn't be added to scanner

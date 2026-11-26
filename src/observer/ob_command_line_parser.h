@@ -55,7 +55,6 @@ private:
   // 处理选项值
   int handle_option(int option, const char* value, ObServerOptions& opts);
   // 设置字符串到ObString
-  int set_ob_string(ObIAllocator& allocator, const char* value, ObString& target);
 
 private:
   // 解析结果状态

@@ -75,10 +75,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     // } else {
     //   After result.close() ends, the process flow should end cleanly, leave everything else to be done in the callback
     // }
-    int cret = result.close();
-    if (retry_ctrl_.need_retry()) {
-    } else {
-    }
+    (void)result.close();
     ret = cli_ret;
   } else if (result.is_with_rows()) {
     ret = OB_ERR_UNEXPECTED;

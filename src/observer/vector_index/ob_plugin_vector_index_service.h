@@ -111,13 +111,11 @@ class ObPluginVectorIndexMgr
 public:
   ObPluginVectorIndexMgr(lib::MemoryContext &memory_context)
       : is_inited_(false),
-      need_check_(false),
       complete_index_adpt_map_(),
       partial_index_adpt_map_(),
       ivf_index_helper_map_(),
       adapter_map_rwlock_(),
       task_ctx_(),
-      interval_factor_(0),
       vector_index_service_(nullptr),
       mem_sync_info_{},
       memory_context_(memory_context),
@@ -133,7 +131,6 @@ public:
   VectorIndexAdaptorMap& get_partial_adapter_map() { return partial_index_adpt_map_; }
   VectorIndexAdaptorMap& get_complete_adapter_map() { return complete_index_adpt_map_; }
   IvfCacheMgrMap& get_ivf_cache_mgr_map() { return ivf_cache_mgr_map_; }
-  IvfVectorIndexHelperMap& get_ivf_helper_map() { return ivf_index_helper_map_; }
   lib::MemoryContext& get_memory_context() { return memory_context_; }
   uint64_t *get_all_vsag_use_mem() { return all_vsag_use_mem_; }
 
@@ -167,12 +164,6 @@ public:
                                         ObString *vec_index_param,
                                         int64_t dim,
                                         ObVectorIndexAdapterCandiate *candidate);
-
-  int get_or_create_partial_adapter(ObTabletID tablet_id,
-                                    ObIndexType type,
-                                    ObPluginVectorIndexAdapterGuard &adapter_guard,
-                                    ObString *vec_index_param,
-                                    int64_t dim);
 
   int get_adapter_inst_by_ctx(ObVectorIndexAcquireCtx &ctx,
                               bool &need_merge,
@@ -215,7 +206,7 @@ public:
   int get_snapshot_tablet_ids(ObIArray<obcall::ObTabletPair> &complete_tablet_ids,  ObIArray<obcall::ObTabletPair> &partial_tablet_ids);
   int get_cache_tablet_ids(ObIArray<obcall::ObTabletPair> &cache_tablet_ids);
 
-  TO_STRING_KV(K_(is_inited), K_(need_check), K_(task_ctx));
+  TO_STRING_KV(K_(is_inited), K_(task_ctx));
 
 private:
   // non-thread save inner functions
@@ -248,7 +239,6 @@ private:
   typedef RWLock::WLockGuard WLockGuard;
 
   bool is_inited_;
-  bool need_check_; // schema version changed or storage is unavailable
   VectorIndexAdaptorMap complete_index_adpt_map_; // map of complete index adapters with full info
   VectorIndexAdaptorMap partial_index_adpt_map_; // map of passive created index adapters
   IvfVectorIndexHelperMap ivf_index_helper_map_; // map of ivf inder build helper
@@ -256,7 +246,6 @@ private:
   TCRWLock adapter_map_rwlock_; // lock for adapter maps
   ObPluginVectorIndexScheduleCtx task_ctx_;
 
-  uint32_t interval_factor_; // used to expand real execute interval
   ObPluginVectorIndexService *vector_index_service_;
   int64_t local_schema_version_; // detect schema change
   ObVectorIndexMemSyncInfo mem_sync_info_; // handle follower memdata sync
@@ -310,8 +299,6 @@ class ObPluginVectorIndexService : public ::oceanbase::query::ObIVectorIndexServ
 public:
   ObPluginVectorIndexService()
   : is_inited_(false),
-    has_start_(false),
-    is_ls_or_tablet_changed_(false),
     schema_service_(NULL),
     ls_service_(NULL),
     lob_read_service_(NULL),
@@ -437,8 +424,7 @@ public:
   lib::MemoryContext &get_memory_context() { return memory_context_; }
   uint64_t *get_all_vsag_use_mem() { return all_vsag_use_mem_; }
 
-  TO_STRING_KV(K_(is_inited), K_(has_start),
-               K_(is_ls_or_tablet_changed), KP_(schema_service), KP_(ls_service));
+  TO_STRING_KV(K_(is_inited), KP_(schema_service), KP_(ls_service));
 private:
   // for ivf
   int generate_get_aux_info_sql(
@@ -447,11 +433,7 @@ private:
       bool &is_hidden_table,
       ObSqlString &sql_string);
 private:
-  static const int64_t BASIC_TIMER_INTERVAL = 30 * 1000 * 1000; // 30s
-  static const int64_t VEC_INDEX_LOAD_TIME_TASKER_THRESHOLD = 30 * 1000 * 1000; // 30s
   bool is_inited_;
-  bool has_start_;
-  bool is_ls_or_tablet_changed_;
 
   share::schema::ObMultiVersionSchemaService *schema_service_;
   storage::ObLSService *ls_service_;

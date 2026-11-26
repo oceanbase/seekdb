@@ -158,13 +158,10 @@ public:
   virtual int commit() override;
   sql::ObSQLSessionInfo &get_session() { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
   const sql::ObSQLSessionInfo &get_session() const { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
-  const sql::ObSQLSessionInfo *get_extern_session() const { return extern_session_; }
   // session environment
   virtual int get_session_variable(const ObString &name, int64_t &val) override;
   virtual int set_session_variable(const ObString &name, int64_t val) override;
   virtual int set_session_variable(const ObString &name, const ObString &val) override;
-  inline void set_spi_connection(bool is_spi_conn) { is_spi_conn_ = is_spi_conn; }
-  int set_primary_schema_version(const common::ObIArray<int64_t> &primary_schema_versions);
 
   virtual int set_ddl_info(const void *ddl_info);
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap);
@@ -253,7 +250,6 @@ public:
                                const bool is_ddl);
 
 public:
-  static const int64_t LOCK_RETRY_TIME = 1L * 1000 * 1000;
   static const uint32_t INNER_SQL_SESS_ID = 1;
 private:
   int init_session(sql::ObSQLSessionInfo* session_info = NULL, const bool is_ddl = false);

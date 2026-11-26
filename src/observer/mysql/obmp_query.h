@@ -58,8 +58,6 @@ public:
 protected:
   int process();
   int deserialize();
-  int check_readonly_stmt(ObMySQLResultSet &result);
-  int is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly);
   void assign_sql(const char * sql, int64_t sql_length) { sql_.assign_ptr(sql, sql_length); }
 private:
   int response_result(ObMySQLResultSet &result, bool force_sync_resp, bool &async_resp_used);
@@ -99,8 +97,6 @@ private:
                                bool &is_trans_ctrl_cmd,
                                stmt::StmtType &stmt_type);
 
-  void update_audit_info(const ObWaitEventStat &total_wait_desc,
-                         ObAuditRecordData &record);
   int try_batched_multi_stmt_optimization(sql::ObSQLSessionInfo &session,
                                           ObSMConnection *conn,
                                           common::ObIArray<ObString> &queries,
@@ -110,9 +106,6 @@ private:
                                           bool &need_disconnect,
                                           bool is_ins_multi_val_opt);
   int deserialize_com_field_list();
-  int store_params_value_to_str(ObIAllocator &allocator,
-                                sql::ObSQLSessionInfo &session,
-                                common::ParamStore &params);
 public:
   static const int64_t MAX_SELF_OBJ_SIZE = 2.5 * 1024L;
 private:
@@ -128,8 +121,6 @@ private:
   //Since the MySQL COM_FIELD_LIST command essentially retrieves column definition information, only the column definitions need to be returned
   bool is_com_filed_list_;
   common::ObString wild_str_;//used to save wildware string in COM_FIELD_LIST
-  int64_t params_value_len_;
-  char *params_value_;
 }; // end of class ObMPQuery
 STATIC_ASSERT(sizeof(ObMPQuery) < ObMPQuery::MAX_SELF_OBJ_SIZE, "sizeof ObMPQuery not great to 2KB");
 } // end of namespace observer

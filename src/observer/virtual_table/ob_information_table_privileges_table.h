@@ -62,10 +62,8 @@ private:
     TABLE_NAME,
     PRIVILEGE_TYPE,
     IS_GRANTABLE,
-    MAX_TABLE_PRIVS_COLUMN
   };
   enum {
-    MAX_COL_COUNT = 6,
     USERNAME_AUX_LEN = 6// "''@''" + '\0'
   };
 

@@ -210,7 +210,6 @@ int ObIvfAsyncTaskExector::check_and_set_thread_pool()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(get_index_mgr(index_mgr))) {
   } else {
-    ObIAllocator *allocator = index_mgr->get_async_task_opt().get_allocator();
     ObVecIndexAsyncTaskHandler &thread_pool_handle =
         vector_index_service_->get_vec_async_task_handle();
     if (thread_pool_handle.is_inited()) {  // no need to init twice, skip

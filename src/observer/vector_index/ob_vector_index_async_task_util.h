@@ -43,7 +43,6 @@ class ObPluginVectorIndexMgr;
 #define CHECK_TASK_CANCELLED_IN_PROCESS(ret, loop_cnt, ctx_)  \
   if (OB_FAIL(ret)) { \
   } else if (++loop_cnt > 20) { \
-    ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>(); \
     bool is_cancel = false; \
     if (OB_FAIL(ObVecIndexAsyncTaskUtil::check_task_is_cancel(ctx_, is_cancel))) { \
       LOG_WARN("fail to check task is cancel", KPC(ctx_));  \
@@ -245,9 +244,6 @@ public:
   int get_allocator(ObIAllocator *&allocator);
   bool is_inited() const { return is_inited_; }
 
-  void inc_async_task_ref() { ATOMIC_INC(&async_task_ref_cnt_); }
-  void dec_async_task_ref() { ATOMIC_DEC(&async_task_ref_cnt_); }
-  int64_t get_async_task_ref() const { return ATOMIC_LOAD(&async_task_ref_cnt_); }
   void update_processing_task_count(const bool is_inc);
   bool is_stopped() { return stopped_; }
   void set_stop() { stopped_ = true; }
@@ -263,7 +259,6 @@ public:
 
 private:
   bool is_inited_;
-  volatile int64_t async_task_ref_cnt_;
   bool stopped_;
 };
 
@@ -279,7 +274,6 @@ public:
         old_adapter_(nullptr),
         mem_attr_(mem_attr),
         allocator_(ObMemAttr("VecIdxASyTask")),
-        vid_obj_(),
         all_finished_(false)
   {}
   virtual ~ObVecIndexIAsyncTask() {}
@@ -302,7 +296,6 @@ protected:
   ObPluginVectorIndexAdaptor* old_adapter_;
   ObMemAttr mem_attr_;
   common::ObArenaAllocator allocator_;
-  ObObj vid_obj_;
   bool all_finished_;
   DISALLOW_COPY_AND_ASSIGN(ObVecIndexIAsyncTask);
 };
@@ -349,7 +342,6 @@ public:
 
 private:
   static const int BATCH_CNT = 2000; // 8M / 4(sizeof(float)) / 1000(dim)
-  int build_inc_index(ObPluginVectorIndexAdaptor &adaptor);
   int process_data_for_index(ObPluginVectorIndexAdaptor &adaptor);
   int optimize_vector_index(ObPluginVectorIndexAdaptor &adaptor);
   int refresh_snapshot_index_data(ObPluginVectorIndexAdaptor &adaptor, transaction::ObTxDesc *tx_desc, transaction::ObTxReadSnapshot &snapshot);
@@ -427,13 +419,6 @@ public:
   static int fetch_new_trace_id(const uint64_t basic_num, ObIAllocator *allocator, TraceId &new_trace_id);
   static int in_active_time(bool& is_active_time);
   static int check_task_is_cancel(ObVecIndexAsyncTaskCtx *task, bool &is_cancel);
-  static int read_vec_tasks(const char* tname,
-      const bool for_update,
-      const ObVecIndexFieldArray& filters,
-      storage::ObLS *ls,
-      common::ObISQLClient& proxy,
-      ObVecIndexTaskStatusArray& result_arr,
-      common::ObIAllocator *allocator);
   static int insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array);
   static int construct_read_task_sql(const char *tname,
       const bool for_update /* select for update*/,

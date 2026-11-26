@@ -65,7 +65,6 @@ public:
     ObDBMSSchedJobInfo &job_info);
 
   int update_for_enddate(ObDBMSSchedJobInfo &job_info);
-  int update_for_rollback(ObDBMSSchedJobInfo &job_info);
   int update_for_timeout(ObDBMSSchedJobInfo &job_info);
   int update_for_end(ObDBMSSchedJobInfo &job_info, int err, const common::ObString &errmsg);
   int update_for_kill(ObDBMSSchedJobInfo &job_info);
@@ -76,26 +75,15 @@ public:
   int get_dbms_sched_job_infos_in_runtime(
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSSchedJobInfo> &job_infos);
 
-  int get_dbms_sched_job_class_info(
-    const common::ObString job_class_name,
-    common::ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info);
-
-  int get_dbms_sched_job_class_infos_in_runtime(
-    common::ObIAllocator &allocator, common::ObIArray<ObDBMSSchedJobClassInfo> &job_class_infos);
-
   int extract_info(
     common::sqlclient::ObMySQLResult &result,
     common::ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info);
-  int extract_job_class_info(
-    sqlclient::ObMySQLResult &result,
-    ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info);
 
   int check_job_can_running(int64_t alive_job_count, bool &can_running);
 
 private:
   int _build_job_drop_dml(int64_t now, ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
   int _build_job_finished_dml(int64_t now, ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
-  int _build_job_rollback_start_dml(ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
   DISALLOW_COPY_AND_ASSIGN(ObDBMSSchedTableOperator);
 
 private:

@@ -36,7 +36,6 @@ int ObMPResetConnection::process()
 {
   int ret = OB_SUCCESS;
   bool need_disconnect = false;
-  bool need_response_error = false;
   ObSQLSessionInfo *session = NULL;
   ObSMConnection *conn = NULL;
   ObSchemaGetterGuard schema_guard;
@@ -214,9 +213,8 @@ int ObMPResetConnection::process()
     }
     force_disconnect();
   }
-  int tmp_ret = OB_SUCCESS;
   if (OB_NOT_NULL(session)) {
-    tmp_ret = do_after_process(*session, false/*async_resp_used*/, ret);
+    (void)do_after_process(*session, false/*async_resp_used*/, ret);
   }
   
   THIS_WORKER.set_session(NULL);

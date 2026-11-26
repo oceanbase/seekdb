@@ -93,27 +93,6 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
   return ret;
 }
 
-int ObMPUtils::get_user_sql_literal(ObIAllocator &allocator, const ObObj &obj, ObString &value_str,
-                                    const common::ObObjPrintParams &print_param)
-{
-  int ret = OB_SUCCESS;
-  char *data = NULL;
-  int64_t pos = 0;
-  const bool is_plain = false;
-  int64_t user_sql_print_length = 0;
-  if (OB_FAIL(get_literal_print_length(obj, is_plain, user_sql_print_length, print_param))) {
-  } else if (OB_UNLIKELY(user_sql_print_length <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (NULL == (data = static_cast<char *>(allocator.alloc(user_sql_print_length)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("fail to alloc mem", K(user_sql_print_length), K(ret));
-  } else if (OB_FAIL(obj.print_sql_literal(data, user_sql_print_length, pos, print_param))) {
-  } else {
-    value_str.assign_ptr(data, static_cast<uint32_t>(pos));
-  }
-  return ret;
-}
-
 int ObMPUtils::get_literal_print_length(const ObObj &obj, bool is_plain, int64_t &len,
                                         const common::ObObjPrintParams &print_param)
 {

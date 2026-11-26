@@ -149,7 +149,6 @@ int ObDBMSSchedJobUtils::check_is_valid_max_run_duration(const int64_t max_run_d
 int ObDBMSSchedJobUtils::job_class_check_impl(const ObString &job_class_name)
 {
   int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
   ObSqlString sql;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   int64_t rows = 0;
@@ -194,7 +193,7 @@ int ObDBMSSchedJobUtils::get_max_failures_value(const ObString &src_str, int64_t
 
   const int64_t MAX_SRC_STR_LEN = 16;
   char src_str_buf[MAX_SRC_STR_LEN];
-  int64_t pos = src_str.to_string(src_str_buf, MAX_SRC_STR_LEN);
+  (void)src_str.to_string(src_str_buf, MAX_SRC_STR_LEN);
   value = atoll(src_str_buf);
   if (value < 0 || value > MAX_FAILURES_LIMIT) {
     ret = OB_NOT_SUPPORTED;
@@ -232,102 +231,6 @@ int ObDBMSSchedJobUtils::generate_job_id(int64_t &max_job_id)
   if (OB_FAIL(storage::ObCommonIDUtils::gen_unique_id(raw_id))) {
   } else {
     max_job_id = raw_id.id() + ObDBMSSchedTableOperator::JOB_ID_OFFSET;
-  }
-  return ret;
-}
-
-int ObDBMSSchedJobUtils::stop_dbms_sched_job(
-    common::ObISQLClient &sql_client,
-    const ObDBMSSchedJobInfo &job_info,
-    const bool is_delete_after_stop)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-
-  if (OB_SUCC(ret)) {
-    if (is_delete_after_stop) {
-      ObObj state_obj;
-      state_obj.set_char("KILLED");
-      if(OB_FAIL(update_dbms_sched_job_info(sql_client, job_info, ObString("state"), state_obj))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      // The virtual table reports jobs running in this process.
-      if (OB_FAIL(sql.append_fmt("select session_id from %s where job_name = \'%.*s\'",
-        OB_ALL_VIRTUAL_SCHEDULER_RUNNING_JOB_TNAME, job_info.job_name_.length(),job_info.job_name_.ptr()))) {
-      } else {
-        SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-          if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
-          } else if (OB_ISNULL(result.get_result())) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            bool result_empty = true;
-            do {
-              if (OB_FAIL(result.get_result()->next())) {
-                if (ret == OB_ITER_END) {
-                  //do nothing
-                } else {
-                }
-              } else {
-                result_empty = false;
-                uint64_t session_id = OB_INVALID_ID;
-                ObAddr svr = GCTX.self_addr();
-                EXTRACT_UINT_FIELD_MYSQL(*(result.get_result()), "session_id", session_id, uint64_t);
-                if (OB_SUCC(ret)) {
-                  LOG_INFO("send rpc", K(job_info.job_name_), K(svr), K(session_id));
-                  ObString stop_job_name = ObString(job_info.job_name_);
-                  const int64_t stop_rpc_send_time = ObTimeUtility::current_time();
-                  // Stop the local target in-process while preserving the session reuse guard.
-                  OZ (ex_rpc::sync_call([&stop_job_name, session_id, stop_rpc_send_time]() -> int {
-                    int ret = OB_SUCCESS;
-                    ObSQLSessionInfo *kill_session = NULL;
-                    ObSQLSessionMgr &session_mgr =
-                        OBSERVER.get_sql_session_mgr();
-                    {
-                      sql::ObSessionGetterGuard sess_guard(
-                          session_mgr, session_id);
-                      if (OB_FAIL(sess_guard.get_session(kill_session))) {
-                        LOG_WARN("failed to get session", K(session_id), K(stop_job_name));
-                      } else if (OB_ISNULL(kill_session)) {
-                        ret = OB_ERR_UNEXPECTED;
-                      } else {
-                        {
-                          ObSQLSessionInfo::LockGuard lock_guard(kill_session->get_thread_data_lock());
-                          ObDBMSSchedJobInfo *cur_job_info = kill_session->get_job_info();
-                          if (OB_ISNULL(cur_job_info)) {
-                            ret = OB_ENTRY_NOT_EXIST;
-                          } else if (0 != cur_job_info->get_job_name().case_compare(stop_job_name)) {
-                            ret = OB_ERR_UNEXPECTED;
-                          }
-                        }
-                        if (OB_SUCC(ret)) {
-                          if (stop_rpc_send_time <= kill_session->get_sess_create_time()) {
-                            ret = OB_ERR_UNEXPECTED;
-                            LOG_WARN("session maybe reused by later round", K(ret), K(stop_job_name),
-                                K(session_id), K(kill_session->get_sess_create_time()), KPC(kill_session));
-                          } else if (OB_FAIL(session_mgr.kill_session(*kill_session))) {
-                          } else {
-                            LOG_INFO("stop job finish", K(stop_job_name), K(session_id));
-                          }
-                        }
-                      }
-                    }
-                    return ret;
-                  }));
-                }
-              }
-            } while (OB_SUCC(ret));
-            if (OB_ITER_END == ret) {
-              if (result_empty) {
-                ret = OB_ENTRY_NOT_EXIST;
-              } else {
-                ret = OB_SUCCESS;
-              }
-            }
-          }
-        }
-      }
-    }
   }
   return ret;
 }
@@ -524,7 +427,7 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
   } else if (0 == job_attribute_name.case_compare("max_run_duration") || 0 == job_attribute_name.case_compare("duration")) {
     const int MAX_RUN_DURATION_LEN = 16;
     char max_run_duration_buf[MAX_RUN_DURATION_LEN];
-    int64_t pos = job_attribute_value.get_string().to_string(max_run_duration_buf, MAX_RUN_DURATION_LEN);
+    (void)job_attribute_value.get_string().to_string(max_run_duration_buf, MAX_RUN_DURATION_LEN);
     int64_t max_run_duration = atoll(max_run_duration_buf);
     max_run_duration = max_run_duration < 0 ? INT64_MAX : max_run_duration;
     if (OB_FAIL(dml.add_column("max_run_duration", max_run_duration))) {
@@ -605,39 +508,6 @@ int ObDBMSSchedJobUtils::get_dbms_sched_job_info(common::ObISQLClient &sql_clien
   return ret;  
 }
 
-int ObDBMSSchedJobUtils::check_dbms_sched_job_priv(const ObUserInfo *user_info,
-                                                   const ObDBMSSchedJobInfo &job_info)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(user_info)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (is_root_user(user_info->get_user_id())) {
-    // do nothing
-  } else if (job_info.user_id_ != OB_INVALID_ID) { // If the job has a user_id, prioritize its use
-    if (job_info.user_id_ != user_info->get_user_id()) {
-      ret = OB_ERR_NO_PRIVILEGE;
-    }
-  } else {
-    if (0 != job_info.powner_.case_compare(user_info->get_user_name())) { // job saved owner might be root@% or root (old)
-      const char *c = job_info.powner_.reverse_find('@');
-      if (OB_ISNULL(c)) {
-        ret = OB_ERR_NO_PRIVILEGE;
-      } else {
-        ObString user = job_info.powner_;
-        ObString user_name;
-        ObString host_name;
-        user_name = user.split_on(c);
-        host_name = user;
-        if (0 != user_name.case_compare(user_info->get_user_name()) || 0 != host_name.case_compare(user_info->get_host_name())) {
-          ret = OB_ERR_NO_PRIVILEGE;
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObDBMSSchedJobUtils::calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &job_info, int64_t &next_run_time)
 {
   int ret = OB_SUCCESS;
@@ -666,7 +536,7 @@ int ObDBMSSchedJobUtils::calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &j
       next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE; //non-numeric/number too large
     } else {
       char repeat_num_buf[MAX_REPTAT_NUM_LEN];
-      int64_t pos = repeat_num_str.to_string(repeat_num_buf, MAX_REPTAT_NUM_LEN);
+      (void)repeat_num_str.to_string(repeat_num_buf, MAX_REPTAT_NUM_LEN);
       repeat_num = atoll(repeat_num_buf);
       if (0 >= repeat_num) { //The job might have this error before parameter checking was added
         next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;

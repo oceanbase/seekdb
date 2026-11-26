@@ -2546,8 +2546,6 @@ int ObPluginVectorIndexAdaptor::build_temp_bitmap_from_index_id_table(
     ret = OB_ERR_UNEXPECTED;
   } else {
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapAsync"));
-    int64_t insert_cnt = 0;
-    int64_t delete_cnt = 0;
 
     // First process the first_row which has already been read
     if (first_row->get_column_count() < 3) {
@@ -2560,12 +2558,10 @@ int ObPluginVectorIndexAdaptor::build_temp_bitmap_from_index_id_table(
       } else if (op.ptr()[0] == sql::ObVecIndexDMLIterator::VEC_DELTA_INSERT[0]) {
         if (!roaring::api::roaring64_bitmap_contains(ctx->bitmaps_->delete_bitmap_, vid)) {
           CROARING_TRY_CATCH(roaring::api::roaring64_bitmap_add(ctx->bitmaps_->insert_bitmap_, vid));
-          insert_cnt++;
         }
       } else if (op.ptr()[0] == sql::ObVecIndexDMLIterator::VEC_DELTA_DELETE[0]) {
         CROARING_TRY_CATCH(roaring::api::roaring64_bitmap_remove(ctx->bitmaps_->insert_bitmap_, vid));
         CROARING_TRY_CATCH(roaring::api::roaring64_bitmap_add(ctx->bitmaps_->delete_bitmap_, vid));
-        delete_cnt++;
       } else {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -2589,12 +2585,10 @@ int ObPluginVectorIndexAdaptor::build_temp_bitmap_from_index_id_table(
         } else if (op.ptr()[0] == sql::ObVecIndexDMLIterator::VEC_DELTA_INSERT[0]) {
           if (!roaring::api::roaring64_bitmap_contains(ctx->bitmaps_->delete_bitmap_, vid)) {
             CROARING_TRY_CATCH(roaring::api::roaring64_bitmap_add(ctx->bitmaps_->insert_bitmap_, vid));
-            insert_cnt++;
           }
         } else if (op.ptr()[0] == sql::ObVecIndexDMLIterator::VEC_DELTA_DELETE[0]) {
           CROARING_TRY_CATCH(roaring::api::roaring64_bitmap_remove(ctx->bitmaps_->insert_bitmap_, vid));
           CROARING_TRY_CATCH(roaring::api::roaring64_bitmap_add(ctx->bitmaps_->delete_bitmap_, vid));
-          delete_cnt++;
         } else {
           ret = OB_ERR_UNEXPECTED;
         }
@@ -4362,8 +4356,7 @@ int ObPluginVectorIndexAdaptor::merge_parital_index_adapter(ObPluginVectorIndexA
 
 void ObPluginVectorIndexAdaptor::inc_ref()
 {
-  int64_t ref_count = ATOMIC_AAF(&ref_cnt_, 1);
-  // LOG_INFO("inc ref count", K(ref_count), KP(this), KPC(this), K(lbt())); // remove later
+  ATOMIC_INC(&ref_cnt_);
 }
 
 bool ObPluginVectorIndexAdaptor::dec_ref_and_check_release()
