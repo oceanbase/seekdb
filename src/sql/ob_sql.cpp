@@ -1232,9 +1232,7 @@ int ObSql::handle_sql_execute(const ObString &sql,
       if (mode == PC_PS_MODE || mode == PC_PL_MODE) {
         pctx->get_param_store_for_update().reset();
       }
-      // Use SMART_CALL_LARGE for complex SQL plan generation when plan cache misses
-      // This prevents frequent stack extending during physical plan generation
-      if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err)))) {
+      if (OB_FAIL(SMART_CALL(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err)))) {
       }
     }
   }
@@ -1864,8 +1862,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
           } else if (!result.get_is_from_plan_cache()) {
             pctx->set_original_param_cnt(origin_params_count);
             pctx->get_param_store_for_update().reset();
-            // Use SMART_CALL_LARGE for complex SQL plan generation when plan cache misses
-            if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err)))) {
+            if (OB_FAIL(SMART_CALL(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err)))) {
             }
           }
           if (OB_SUCC(ret) && (OB_FAIL(after_get_plan(pc_ctx,
@@ -1996,7 +1993,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
   }
 
   if (OB_SUCC(ret) && !result.get_is_from_plan_cache()) { // did not get plan from plan cache, take the long path to generate plan
-    if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(trimed_stmt, context, result, *pc_ctx, get_plan_err)))) {
+    if (OB_FAIL(SMART_CALL(handle_physical_plan(trimed_stmt, context, result, *pc_ctx, get_plan_err)))) {
     }
   }
 

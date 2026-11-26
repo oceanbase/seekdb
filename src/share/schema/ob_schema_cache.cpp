@@ -979,7 +979,7 @@ int ObSchemaFetcher::fetch_##OBJECT_NAME##_info(const ObRefreshSchemaStatus &sch
     if (OB_FAIL(object_ids.push_back(object_id))) { \
       LOG_WARN("fail to push back object_id for " #OBJECT_NAME, \
                K(object_id), K(ret)); \
-    } else if (OB_FAIL(SMART_CALL_LARGE(schema_service_->get_batch_##OBJECT_NAME##s(schema_status, \
+    } else if (OB_FAIL(SMART_CALL(schema_service_->get_batch_##OBJECT_NAME##s(schema_status, \
                                                                                     schema_version, \
                                                                                     object_ids, \
                                                                                     *sql_client_, \
