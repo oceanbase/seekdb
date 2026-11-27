@@ -138,6 +138,11 @@ jobs:
       - name: Compile
         id: compile
         shell: bash
+        # Match the Rust mirror already used by build.py outside GitHub Actions.
+        env:
+          RUSTUP_INIT_URL: https://rsproxy.cn/rustup-init.sh
+          RUSTUP_DIST_SERVER: https://rsproxy.cn
+          RUSTUP_UPDATE_ROOT: https://rsproxy.cn/rustup
         run: |
           chmod +x .github/script/seekdb/compile.sh
           export GITHUB_RUN_ID="${{ github.run_id }}"
