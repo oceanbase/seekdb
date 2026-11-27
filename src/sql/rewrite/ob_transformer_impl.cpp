@@ -536,8 +536,11 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // Simplify filters without changing the ANN query's tables, ordering or limit.
+      disable_list = ObTransformRule::ALL_TRANSFORM_RULES & ~(1ULL << SIMPLIFY_EXPR);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
