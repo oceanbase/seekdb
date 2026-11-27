@@ -32,6 +32,7 @@ struct FPContext
   bool is_format_ = false;
   bool parameterize_ = true;
   bool ignore_hint_ = false;
+  bool preserve_case_in_format_ = false;
 };
 
 struct ObFastParser final

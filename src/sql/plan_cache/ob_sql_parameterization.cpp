@@ -466,7 +466,8 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
                                                     bool is_transform_outline,
                                                     ObPlanCacheCtx &pc_ctx,
                                                     const ParsedSql &parsed,
-                                                    ParamStore &params)
+                                                    ParamStore &params,
+                                                    bool preserve_case_in_format)
 {
   int ret = OB_SUCCESS;
   if (pc_ctx.select_item_param_infos_.created()) {
@@ -493,6 +494,7 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
     fp_ctx.enable_batched_multi_stmt_ = pc_ctx.sql_ctx_.handle_batched_multi_stmt();
     fp_ctx.sql_mode_ = session->get_sql_mode();
     fp_ctx.is_format_ = false;
+    fp_ctx.preserve_case_in_format_ = preserve_case_in_format;
   }
 
   if (OB_FAIL(ret)) {

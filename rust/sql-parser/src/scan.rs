@@ -147,7 +147,7 @@ impl Scanner<'_> {
             return;
         }
         let bytes = &self.sql[start..self.pos];
-        if !preserve_case {
+        if !preserve_case && !self.options.preserve_case {
             if let Ok(text) = std::str::from_utf8(bytes) {
                 for ch in text.chars() {
                     let mut uppercase = ch.to_uppercase();

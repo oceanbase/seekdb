@@ -36,7 +36,8 @@ int scan(const ObString &stmt, const FPContext &context, ObIAllocator &allocator
       peg::SqlMode{bool(context.sql_mode_ & SMO_ANSI_QUOTES), bool(context.sql_mode_ & SMO_NO_BACKSLASH_ESCAPES),
                    bool(context.sql_mode_ & SMO_PIPES_AS_CONCAT), bool(context.sql_mode_ & SMO_HIGH_NOT_PRECEDENCE),
                    bool(context.sql_mode_ & SMO_REAL_AS_FLOAT)},
-      context.parameterize_, context.ignore_hint_, context.is_format_, context.enable_batched_multi_stmt_};
+      context.parameterize_, context.ignore_hint_, context.is_format_, context.enable_batched_multi_stmt_,
+      context.preserve_case_in_format_};
   int ret = OB_SUCCESS;
   auto scanned = peg::scan_sql(
       rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(stmt.ptr()), stmt.length()), options);

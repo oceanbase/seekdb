@@ -2568,7 +2568,8 @@ int ObRawExprResolverImpl::process_agg_node(const peg::Node &node, ObRawExpr *&e
       && (type == T_FUN_APPROX_COUNT_DISTINCT || type == T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS
           || type == T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE || type == T_FUN_TOP_FRE_HIST
           || type == T_FUN_HYBRID_HIST || type == T_FUN_SUM_OPNSIZE || type == T_FUN_JSON_OBJECTAGG
-          || type == T_FUN_GROUPING || type == T_FUN_SYS_ST_ASMVT)) {
+          || type == T_FUN_GROUPING || type == T_FUN_SYS_ST_ASMVT
+          || (type == T_FUN_GROUP_PERCENTILE_CONT && !distinct))) {
     ret = OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT;
     LOG_USER_ERROR(OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT, int(name.size()), name.data());
   }
@@ -2639,7 +2640,8 @@ int ObRawExprResolverImpl::process_agg_node(const peg::Node &node, ObRawExpr *&e
       if (position <= 0 || position > aggregate->get_real_param_count()) ret = OB_ERR_BAD_FIELD_ERROR;
       else order.expr_ = aggregate->get_real_param_exprs().at(position - 1);
     } else if (type == T_FUN_GROUP_CONCAT && key.kind() == peg::NodeKind::Parameter) {
-      ret = OB_ERR_PARSE_SQL;
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "A parameter marker in GROUP_CONCAT ORDER BY is");
     } else {
       OZ(SMART_CALL(recursive_resolve(key, order.expr_)));
     }
@@ -2991,7 +2993,8 @@ int ObRawExprResolverImpl::process_json_value_node(const peg::Node &node, ObRawE
        && peg::expression_literal(peg::json_empty_default(node)).kind == peg::LiteralKind::Null)
       || (options.on_error == peg::JsonResponse::Default && peg::is_literal(peg::json_error_default(node))
           && peg::expression_literal(peg::json_error_default(node)).kind == peg::LiteralKind::Null)) {
-    ret = OB_ERR_PARSER_SYNTAX;
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "JSON_VALUE DEFAULT NULL is");
   }
   OZ(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_JSON_VALUE, function));
   OX(function->set_func_name(ObString::make_string("json_value")));
@@ -3071,7 +3074,10 @@ int ObRawExprResolverImpl::process_cast(const peg::Node &node, ObRawExpr *&expr)
   if (OB_SUCC(ret) && peg::cast_ignore(node)) {
     if (ctx_.session_info_->is_inner() || ctx_.is_in_system_view_ || ctx_.is_from_show_resolver_) {
       function->set_cast_mode(CM_INTERNAL_CAST_IGNORE);
-    } else ret = OB_ERR_PARSER_SYNTAX;
+    } else {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "CAST with IGNORE in user SQL is");
+    }
   }
   OZ(SMART_CALL(recursive_resolve(peg::cast_argument(node), value)));
   OZ(build_cast_type(syntax, type, target));

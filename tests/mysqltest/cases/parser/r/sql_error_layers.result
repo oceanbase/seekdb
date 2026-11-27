@@ -1,0 +1,24 @@
+SELECT X'01G2';
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'X'01G2'' at line 1
+SELECT EXTRACT(FOO FROM '2009-07-02');
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'FOO FROM '2009-07-02')' at line 1
+SELECT SUM(DISTINCT);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'SUM(DISTINCT)' at line 1
+SELECT ROW_NUMBER();
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'ROW_NUMBER()' at line 1
+SELECT ABS(DISTINCT 1);
+ERROR 42000: Incorrect parameters in the call to native function 'ABS'
+SELECT IF(DISTINCT 1,2,3);
+ERROR 42000: Incorrect parameters in the call to native function 'if'
+PREPARE st FROM 'SELECT GROUP_CONCAT(1 ORDER BY ?)';
+ERROR 0A000: A parameter marker in GROUP_CONCAT ORDER BY is not supported
+SELECT JSON_VALUE('{"x":1}', '$.x' DEFAULT NULL ON EMPTY);
+ERROR 0A000: JSON_VALUE DEFAULT NULL is not supported
+SELECT CAST(1 AS SIGNED IGNORE);
+ERROR 0A000: CAST with IGNORE in user SQL is not supported
+SELECT COUNT(DISTINCT 1) AS distinct_count, ROW_NUMBER() OVER () AS row_num;
+distinct_count	row_num
+1	1
+SELECT GROUP_CONCAT(1 ORDER BY 1) AS combined, JSON_VALUE('{"x":1}', '$.x') AS x, CAST(1 AS SIGNED) AS signed_value;
+combined	x	signed_value
+1	1	1
