@@ -156,27 +156,16 @@ jobs:
         run: |
           set -euo pipefail
           RUN_DIR=$(mktemp -d "${RUNNER_TEMP:?}/sqltest.XXXXXX")
-          DEST_DIR=$(mktemp -d "${RUNNER_TEMP:?}/seekdb-test-logs.XXXXXX")
-          echo "log_dir=$DEST_DIR" >> "$GITHUB_OUTPUT"
           TEST_ROOT="$GITHUB_WORKSPACE/tests/mysqltest"
           RESULT=0
-          "$GITHUB_WORKSPACE/tools/sqltest/bin/linux-amd64/sqltest" --seekdb "$GITHUB_WORKSPACE/$SEEKDB_BINARY_PATH" \
-            --test-root "$TEST_ROOT" --run-dir "$RUN_DIR" -j 24 --case-timeout 1h \
-            2>&1 | tee "$DEST_DIR/sqltest.log" || RESULT=$?
-          echo "SQL regression output: seekdb-sqltest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT artifact." >> "$GITHUB_STEP_SUMMARY"
-          if [[ -d "$TEST_ROOT/rejects" ]]; then
-            (cd "$TEST_ROOT" && find rejects -type f -exec cp --parents -t "$DEST_DIR" -- {} +)
+          SUMMARY=$(
+            "$GITHUB_WORKSPACE/tools/sqltest/bin/linux-amd64/sqltest" --seekdb "$GITHUB_WORKSPACE/$SEEKDB_BINARY_PATH" \
+              --test-root "$TEST_ROOT" --run-dir "$RUN_DIR" -j 24 --case-timeout 1h \
+              2>&1 | awk '/^\[SUMMARY\] / { summary = $0 } END { if (summary != "") print summary }'
+          ) || RESULT=$?
+          if [[ -z "$SUMMARY" ]]; then
+            SUMMARY="No mysqltest summary was produced (exit code $RESULT)."
           fi
-          if [[ "$RESULT" -ne 0 ]]; then
-            (cd "$RUN_DIR" && find . -type f -name console.log -exec cp --parents -t "$DEST_DIR" -- {} +)
-          fi
+          printf '%s\n' "$SUMMARY"
+          printf '### mysqltest\n\n%s\n' "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
           exit "$RESULT"
-
-      - name: Upload seekdb test logs
-        if: ${{ !cancelled() && steps.test.outputs.log_dir != '' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: seekdb-sqltest-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.test.outputs.log_dir }}
-          if-no-files-found: error
