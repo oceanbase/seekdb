@@ -1619,9 +1619,9 @@ int ObRawExprResolverImpl::check_lambda_params_duplicated(const peg::Node &lambd
   int ret = OB_SUCCESS;
   const auto parameters = peg::lambda_parameters(lambda);
   for (size_t i = 0; OB_SUCC(ret) && i < parameters.size(); ++i) {
-    const auto parameter_text = parameters[i].text();
+    const ObString parameter_name = syntax_text(parameters[i].text());
     for (size_t j = 0; OB_SUCC(ret) && j < i; ++j) {
-      if (strncmp(syntax_text(parameters[j].text()).ptr(), syntax_text(parameter_text).ptr(), parameter_text.size()) == 0) {
+      if (parameter_name.compare_equal(syntax_text(parameters[j].text()))) {
         ret = OB_ERR_PARAM_DUPLICATE;
       }
     }

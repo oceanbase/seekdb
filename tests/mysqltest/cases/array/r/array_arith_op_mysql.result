@@ -1751,6 +1751,10 @@ id	m	zipped	f	s
 1	[2,4]	[11,22]	[]	[2,1]
 2	[6,8]	[33,44]	[3,4]	[4,3]
 8	[18,20,22]	[99,110,121]	[9,10,11]	[11,10,9]
+lambda_parameter_names
+short_first	long_first
+[21]	[21]
+ERROR 42000: Duplicated parameters
 constant_lambda_without_bound_parameters
 id	m
 1	[42,42]

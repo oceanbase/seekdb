@@ -221,6 +221,12 @@ SELECT id, array_map((x)->(x*2),a) AS m, array_map((x,y)->(x+10*y),a,a) AS zippe
        array_filter((x)->(x>2),a) AS f, array_sortby((x)->(-x),a) AS s
 FROM lambda_capture_int WHERE id IN (1,2,8) ORDER BY id;
 
+--echo lambda_parameter_names
+SELECT array_map((item, item_count) -> (item + 10 * item_count), [1], [2]) AS short_first,
+       array_map((item_count, item) -> (item_count + 10 * item), [1], [2]) AS long_first;
+--error 5058
+SELECT array_map((item, item) -> item, [1], [2]);
+
 --echo constant_lambda_without_bound_parameters
 SELECT id, array_map((x)->42,a) AS m
 FROM lambda_capture_int WHERE id IN (1,4,5,8) ORDER BY id;
