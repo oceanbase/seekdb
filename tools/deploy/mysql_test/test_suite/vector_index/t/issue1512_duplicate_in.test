@@ -1,0 +1,122 @@
+
+# Regression test for seekdb Issue #1512
+# Duplicate integer IN values should not force a VALUES rewrite.
+
+--disable_warnings
+DROP TABLE IF EXISTS t_issue1512_regression;
+--enable_warnings
+
+CREATE TABLE t_issue1512_regression (
+  id INT PRIMARY KEY,
+  category5 INT,
+  embedding VECTOR(3),
+  VECTOR INDEX idx_embedding(embedding)
+  WITH (
+    distance=l2,
+    type=hnsw,
+    lib=vsag,
+    m=16,
+    ef_construction=128,
+    ef_search=64
+  )
+);
+
+INSERT INTO t_issue1512_regression VALUES
+(1, 1, '[1,0,0]'),
+(2, 2, '[0,1,0]'),
+(3, 3, '[0,0,1]'),
+(4, 4, '[1,1,0]'),
+(5, 5, '[0,1,1]'),
+(6, 1, '[1,0,1]');
+
+# Original membership filter
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3);
+
+# Equivalent duplicated membership filter
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3,1,2,3);
+
+# NOT IN must also remain correct
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 NOT IN (1,2,3,1,2,3);
+
+# NULL semantics must remain correct
+SELECT 4 NOT IN (1,2,NULL,1,2,NULL) AS result;
+
+# Check the query plan.
+# Threshold 4 makes this short test exercise the bug.
+EXPLAIN SELECT
+  /*+ opt_param('inlist_rewrite_threshold', 4) */
+  id
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3,1,2,3)
+ORDER BY l2_distance(embedding, '[1,0,0]')
+APPROXIMATE LIMIT 3;
+
+
+# Test 1: Four distinct integers should still
+# trigger the rewrite when the threshold is 4.
+
+EXPLAIN SELECT
+  /*+ opt_param('inlist_rewrite_threshold', 4) */
+  id
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3,4,1,2)
+ORDER BY l2_distance(embedding, '[1,0,0]')
+APPROXIMATE LIMIT 3;
+
+# Test 2: Check different values across queries.
+# Preserve all original membership positions.
+
+SET @issue1512_saved_cache = @@ob_enable_plan_cache;
+SET ob_enable_plan_cache = 1;
+
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */
+  GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,1,1,1,1,1);
+
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */
+  GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,2,3,4,5,5);
+
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */
+  GROUP_CONCAT(id ORDER BY id) AS ids
+FROM t_issue1512_regression
+WHERE category5 IN (1,1,1,1,1,1);
+
+SET ob_enable_plan_cache = @issue1512_saved_cache;
+
+# Test 3: Prepared-statement parameters must
+# continue to work when their values change.
+
+PREPARE issue1512_stmt FROM
+'SELECT /*+ opt_param(''inlist_rewrite_threshold'', 4) */
+ GROUP_CONCAT(id ORDER BY id) AS ids
+ FROM t_issue1512_regression
+ WHERE category5 IN (?,?,?,?,?,?)';
+
+SET @a=1, @b=2, @c=3, @d=1, @e=2, @f=3;
+
+EXECUTE issue1512_stmt
+USING @a,@b,@c,@d,@e,@f;
+
+SET @d=4, @e=5, @f=5;
+
+EXECUTE issue1512_stmt
+USING @a,@b,@c,@d,@e,@f;
+
+DEALLOCATE PREPARE issue1512_stmt;
+
+# Test 4: Duplicated NULL values in NOT IN.
+
+SELECT /*+ opt_param('inlist_rewrite_threshold', 4) */
+  4 NOT IN (1,2,NULL,1,2,NULL) AS result;
+
+DROP TABLE t_issue1512_regression;
+
