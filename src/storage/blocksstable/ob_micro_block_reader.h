@@ -130,8 +130,9 @@ public:
       ObDatumRow &row_buf,
       common::ObIArray<ObSqlDatumInfo> &datum_infos,
       const int64_t datum_offset,
-      sql::ObExprPtrIArray &exprs,
-      sql::ObEvalCtx &eval_ctx);
+      const sql::ObExprPtrIArray &exprs,
+      sql::ObEvalCtx &eval_ctx,
+      const bool use_scratch_datums);
   virtual int get_row_count(
       int32_t col,
       const int32_t *row_ids,

@@ -516,28 +516,19 @@ int ObIMicroBlockRowScanner::apply_white_filter(
   int64_t bitmap_offset = 0;
   const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
   const sql::ObExprPtrIArray *column_exprs = filter.get_column_exprs();
-  ObSEArray<ObSqlDatumInfo, 16> datum_infos;
-  sql::ObEvalCtx &eval_ctx = param_->op_->get_eval_ctx();
-  if (OB_UNLIKELY(nullptr == column_exprs || column_exprs->count() != filter.get_col_count()
-                  || (!filter.is_semistruct_filter_node() && 1 != filter.get_col_count())
-                  || (filter.is_semistruct_filter_node()
-                      && (pd_filter_info.col_capacity_ < filter.get_col_count()
-                          || (filter.get_col_count() > 0 && nullptr == pd_filter_info.datum_buf_))))) {
+  ObSEArray<ObSqlDatumInfo, 1> datum_infos;
+  if (OB_UNLIKELY(nullptr == column_exprs || 1 != column_exprs->count()
+                  || nullptr == column_exprs->at(0) || 1 != col_offsets.count())) {
     ret = OB_INVALID_ARGUMENT;
-  }
-  for (int64_t col = 0; OB_SUCC(ret) && col < column_exprs->count(); ++col) {
-    if (OB_ISNULL(column_exprs->at(col))) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(datum_infos.push_back(ObSqlDatumInfo(
-                   column_exprs->at(col)->locate_batch_datums(eval_ctx), column_exprs->at(col))))) {
-    }
+  } else if (OB_FAIL(datum_infos.push_back(ObSqlDatumInfo(nullptr, column_exprs->at(0))))) {
   }
   while (OB_SUCC(ret) && cur_row_index < end_row_index) {
     const int64_t row_cap = MIN(pd_filter_info.batch_size_, end_row_index - cur_row_index);
     for (int64_t i = 0; i < row_cap; ++i) {
       row_ids[i] = cur_row_index + i;
     }
-    if (OB_FAIL(get_rows_for_old_format(col_offsets,
+    if (OB_FAIL(pd_filter_info.get_col_datum(datum_infos.at(0).datum_ptr_))) {
+    } else if (OB_FAIL(get_rows_for_old_format(col_offsets,
                                         filter.get_col_params(),
                                         row_ids,
                                         row_cap,
@@ -546,22 +537,15 @@ int ObIMicroBlockRowScanner::apply_white_filter(
                                         filter.get_filter_node().column_exprs_,
                                         datum_infos,
                                         &filter.get_default_datums(),
-                                        filter.is_padding_mode()))) {
+                                        filter.is_padding_mode(),
+                                        true))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
       if (nullptr != parent && parent->can_skip_filter(bitmap_offset + i)) {
         continue;
       }
       bool filtered = false;
-      if (filter.is_semistruct_filter_node()) {
-        for (int64_t col = 0; col < filter.get_col_count(); ++col) {
-          pd_filter_info.datum_buf_[col].shallow_copy_from_datum(datum_infos.at(col).datum_ptr_[i]);
-        }
-        ret = static_cast<sql::ObPhysicalFilterExecutor &>(filter).filter(
-            pd_filter_info.datum_buf_, filter.get_col_count(), *pd_filter_info.skip_bit_, filtered);
-      } else {
-        ret = filter.filter_datum(datum_infos.at(0).datum_ptr_[i], filtered);
-      }
+      ret = filter.filter_datum(datum_infos.at(0).datum_ptr_[i], filtered);
       if (OB_FAIL(ret)) {
       } else if (!filtered && OB_FAIL(result_bitmap.set(bitmap_offset + i))) {
       }
@@ -574,6 +558,49 @@ int ObIMicroBlockRowScanner::apply_white_filter(
   return ret;
 }
 
+int ObIMicroBlockRowScanner::apply_scalar_filter(
+    sql::ObPushdownFilterExecutor *parent,
+    sql::ObPhysicalFilterExecutor &filter,
+    sql::PushdownFilterInfo &pd_filter_info,
+    common::ObBitmap &result_bitmap)
+{
+  int ret = OB_SUCCESS;
+  const sql::ObExprPtrIArray *column_exprs = filter.get_column_exprs();
+  sql::ObEvalCtx &eval_ctx = filter.get_op().get_eval_ctx();
+  uint64_t scalar_skip_word = 0;
+  const sql::ObBitVector &skip = pd_filter_info.skip_bit_ == nullptr
+      ? *sql::to_bit_vector(&scalar_skip_word) : *pd_filter_info.skip_bit_;
+  ObSEArray<ObSqlDatumInfo, 16> datum_infos;
+  if (OB_UNLIKELY(nullptr == column_exprs || column_exprs->count() != filter.get_col_count())) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t col = 0; OB_SUCC(ret) && col < column_exprs->count(); ++col) {
+    if (OB_ISNULL(column_exprs->at(col))) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(datum_infos.push_back(ObSqlDatumInfo(nullptr, column_exprs->at(col))))) {
+    }
+  }
+  for (int64_t offset = 0; OB_SUCC(ret) && offset < pd_filter_info.count_; ++offset) {
+    if (nullptr != parent && parent->can_skip_filter(offset)) {
+      continue;
+    }
+    // The current evaluation slot follows the rows already in the output batch.
+    for (int64_t col = 0; col < datum_infos.count(); ++col) {
+      datum_infos.at(col).datum_ptr_ = &column_exprs->at(col)->locate_datum_for_write(eval_ctx);
+    }
+    const int32_t row_id = static_cast<int32_t>(pd_filter_info.start_ + offset);
+    const char *cell_data = nullptr;
+    bool filtered = false;
+    if (!datum_infos.empty() && OB_FAIL(get_rows_for_old_format(
+            filter.get_col_offsets(), filter.get_col_params(), &row_id, 1, 0, &cell_data,
+            *column_exprs, datum_infos, &filter.get_default_datums(), filter.is_padding_mode(), true))) {
+    } else if (OB_FAIL(filter.filter(eval_ctx, skip, filtered))) {
+    } else if (!filtered && OB_FAIL(result_bitmap.set(offset))) {
+    }
+  }
+  return ret;
+}
+
 int ObIMicroBlockRowScanner::get_rows_for_old_format(
     const common::ObIArray<int32_t> &col_offsets,
     const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
@@ -581,10 +608,11 @@ int ObIMicroBlockRowScanner::get_rows_for_old_format(
     const int64_t row_cap,
     const int64_t vector_offset,
     const char **cell_datas,
-    sql::ObExprPtrIArray &exprs,
+    const sql::ObExprPtrIArray &exprs,
     common::ObIArray<ObSqlDatumInfo> &datum_infos,
     const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
-    const bool is_padding_mode)
+    const bool is_padding_mode,
+    const bool use_scratch_datums)
 {
   int ret = OB_SUCCESS;
   sql::ObEvalCtx &eval_ctx = param_->op_->get_eval_ctx();
@@ -600,7 +628,8 @@ int ObIMicroBlockRowScanner::get_rows_for_old_format(
                                       datum_infos,
                                       vector_offset,
                                       exprs,
-                                      eval_ctx))) {
+                                      eval_ctx,
+                                      use_scratch_datums))) {
     }
   } else if (ObIMicroBlockReader::Decoder == reader_->get_type()) {
     ObIMicroBlockDecoder *decoder = static_cast<ObIMicroBlockDecoder *>(reader_);
@@ -641,7 +670,6 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
     common::ObBitmap &bitmap)
 {
   int ret = OB_SUCCESS;
-  UNUSED(can_use_vectorize);
   if (OB_UNLIKELY(nullptr == reader_ || nullptr == filter || !filter->is_filter_node())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (filter->is_sample_node()) {
@@ -651,27 +679,21 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
                 bitmap))) {
     }
   } else if (filter->is_semistruct_filter_node()) {
-    if (OB_FAIL(apply_white_filter(
-                parent,
-                *static_cast<sql::ObWhiteFilterExecutor *>(filter),
-                pd_filter_info,
-                bitmap))) {
-    }
+    ret = apply_scalar_filter(parent, *static_cast<sql::ObPhysicalFilterExecutor *>(filter),
+                              pd_filter_info, bitmap);
   } else if (filter->is_filter_black_node()) {
-    sql::ObBlackFilterExecutor *black_filter = static_cast<sql::ObBlackFilterExecutor *>(filter);
-    if (OB_FAIL(apply_black_filter_batch(
-                parent,
-                *black_filter,
-                pd_filter_info,
-                bitmap))) {
+    auto &black_filter = *static_cast<sql::ObBlackFilterExecutor *>(filter);
+    if (can_use_vectorize && black_filter.can_vectorized()) {
+      ret = apply_black_filter_batch(parent, black_filter, pd_filter_info, bitmap);
+    } else {
+      ret = apply_scalar_filter(parent, black_filter, pd_filter_info, bitmap);
     }
+  } else if (0 < pd_filter_info.batch_size_) {
+    ret = apply_white_filter(parent, *static_cast<sql::ObWhiteFilterExecutor *>(filter),
+                             pd_filter_info, bitmap);
   } else {
-    if (OB_FAIL(apply_white_filter(
-                parent,
-                *static_cast<sql::ObWhiteFilterExecutor *>(filter),
-                pd_filter_info,
-                bitmap))) {
-    }
+    ret = apply_scalar_filter(parent, *static_cast<sql::ObPhysicalFilterExecutor *>(filter),
+                              pd_filter_info, bitmap);
   }
 
   return ret;
@@ -1510,6 +1532,7 @@ int ObMultiVersionMicroBlockRowScanner::inner_inner_get_next_row(
             if (OB_UNLIKELY(trans_idx >= row->count_ || 0 >= trans_version)) {
               ret = OB_ERR_UNEXPECTED;
             } else {
+              row->storage_datums_[trans_idx].reuse();
               row->storage_datums_[trans_idx].set_int(-trans_version);
             }
             if (OB_UNLIKELY(0 == version_range_.base_version_ &&

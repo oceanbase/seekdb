@@ -1030,9 +1030,11 @@ int ObMicroBlockDecoder::try_get_rows_rust(
 {
   int ret = OB_SUCCESS;
   UNUSED(cell_datas);
-  if (row_cap < 0 || row_cap > UINT32_MAX || cols.count() <= 0
-      || block_size_ <= 0 || nullptr == block_data_) {
+  if (row_cap < 0 || row_cap > UINT32_MAX || block_size_ <= 0 || nullptr == block_data_) {
     return OB_INVALID_ARGUMENT;
+  }
+  if (0 == cols.count()) {
+    return OB_SUCCESS;
   }
   std::vector<uint32_t> rust_rows;
   std::vector<uint32_t> rust_columns;

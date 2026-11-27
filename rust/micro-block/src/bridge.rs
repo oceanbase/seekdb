@@ -965,7 +965,7 @@ fn lookup_flat_hash(block: &[u8], hash: u64) -> ffi::FlatHashResult {
 
 fn project_flat_block(block: &[u8], rows: &[u32], columns: &[u32]) -> ffi::BatchResult {
     let result = (|| {
-        let parsed = FlatBlock::new(block)?;
+        let parsed = FlatBlock::open(block)?;
         let (projection, row_info) = parsed.project(rows, columns)?;
         let (cells, data) = describe_cells(block, projection);
         let row_meta = row_info.into_iter().map(flat_row_meta).collect();
@@ -1073,7 +1073,7 @@ fn locate_rowkey_by(
             ffi::RowkeySearch::Compare | ffi::RowkeySearch::EqualRunEnd
                 if row_store_type == crate::format::FLAT_ROW_STORE =>
             {
-                let parsed = FlatBlock::new(block)?;
+                let parsed = FlatBlock::open(block)?;
                 if search == ffi::RowkeySearch::Compare {
                     let ordering = parsed
                         .compare_rowkey_by(range.start, column_count, |key| compare(key, None))?;
@@ -1092,7 +1092,7 @@ fn locate_rowkey_by(
             _ => return Err(Error::InvalidArgument.into()),
         };
         let bound = match row_store_type {
-            crate::format::FLAT_ROW_STORE => FlatBlock::new(block)?.find_rowkey_bound_by(
+            crate::format::FLAT_ROW_STORE => FlatBlock::open(block)?.find_rowkey_bound_by(
                 column_count,
                 lower_bound,
                 range,

@@ -865,8 +865,9 @@ int ObMicroBlockReader::get_rows(
     ObDatumRow &row_buf,
     common::ObIArray<ObSqlDatumInfo> &datum_infos,
     const int64_t datum_offset,
-    sql::ObExprPtrIArray &exprs,
-    sql::ObEvalCtx &eval_ctx)
+    const sql::ObExprPtrIArray &exprs,
+    sql::ObEvalCtx &eval_ctx,
+    const bool use_scratch_datums)
 {
   int ret = OB_SUCCESS;
   int64_t row_idx = common::OB_INVALID_INDEX;
@@ -909,9 +910,14 @@ int ObMicroBlockReader::get_rows(
             bool need_copy = false;
             if (row_buf.storage_datums_[col_idx].need_copy_for_encoding_column_with_flat_format(datum_infos.at(i).get_obj_datum_map())) {
               need_copy = true;
-              datum.ptr_ = exprs.at(i)->get_str_res_mem(eval_ctx, row_buf.storage_datums_[col_idx].len_, idx);
+              const int64_t length = row_buf.storage_datums_[col_idx].len_;
+              datum.ptr_ = use_scratch_datums
+                  ? static_cast<char *>(allocator_.get_inner_allocator().alloc(length))
+                  : exprs.at(i)->get_str_res_mem(eval_ctx, length, idx + datum_offset);
             }
-            if (OB_FAIL(datum.from_storage_datum(row_buf.storage_datums_[col_idx], datum_infos.at(i).get_obj_datum_map(), need_copy))) {
+            if (need_copy && OB_ISNULL(datum.ptr_)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+            } else if (OB_FAIL(datum.from_storage_datum(row_buf.storage_datums_[col_idx], datum_infos.at(i).get_obj_datum_map(), need_copy))) {
             }
           }
         }

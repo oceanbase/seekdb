@@ -504,7 +504,9 @@ int ObGhostRowUtil::make_ghost_row(
     row.mvcc_row_flag_.set_ghost_row(true);
     row.mvcc_row_flag_.set_last_multi_version_row(true);
     row.trans_id_.reset();
+    row.storage_datums_[sql_sequence_col_idx - 1].reuse();
     row.storage_datums_[sql_sequence_col_idx - 1].set_int(GHOST_NUM);
+    row.storage_datums_[sql_sequence_col_idx].reuse();
     row.storage_datums_[sql_sequence_col_idx].set_int(GHOST_NUM);
     for (int i = sql_sequence_col_idx + 1; i < row.get_column_count(); ++i) {
       row.storage_datums_[i].set_nop();

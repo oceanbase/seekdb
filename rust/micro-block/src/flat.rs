@@ -81,10 +81,15 @@ impl<'a> FlatBlock<'a> {
         Ok(Self { bytes, header: parse_flat_header(bytes)? })
     }
 
+    pub(crate) fn open_checked(bytes: &'a [u8]) -> Result<Self> {
+        let block = Self::open(bytes)?;
+        block.header.check_expanded_record(bytes)?;
+        Ok(block)
+    }
+
     pub fn new(bytes: &'a [u8]) -> Result<Self> {
-        let header = parse_flat_header(bytes)?;
-        header.check_expanded_record(bytes)?;
-        let block = Self { bytes, header };
+        let block = Self::open_checked(bytes)?;
+        let header = block.header;
         let mut previous = 0usize;
         for row in 0..=block.row_count() {
             let offset = block.row_offset(row)?;
@@ -137,7 +142,7 @@ impl<'a> FlatBlock<'a> {
         usize::try_from(value).map_err(|_| Error::InvalidData)
     }
 
-    fn row(&self, row: usize) -> Result<FlatRow<'a>> {
+    fn open_row(&self, row: usize) -> Result<FlatRow<'a>> {
         if row >= self.row_count() {
             return Err(Error::InvalidArgument);
         }
@@ -151,7 +156,7 @@ impl<'a> FlatBlock<'a> {
             .header_size
             .checked_add(offset)
             .ok_or(Error::SizeOverflow)?;
-        let row = FlatRow::parse(checked_slice(
+        let row = FlatRow::open(checked_slice(
             self.bytes,
             start,
             end.checked_sub(offset).ok_or(Error::InvalidData)?,
@@ -159,6 +164,12 @@ impl<'a> FlatBlock<'a> {
         if row.info.column_count != self.column_count() {
             return Err(Error::InvalidData);
         }
+        Ok(row)
+    }
+
+    fn row(&self, row: usize) -> Result<FlatRow<'a>> {
+        let row = self.open_row(row)?;
+        row.validate_cells()?;
         Ok(row)
     }
 
@@ -180,14 +191,14 @@ impl<'a> FlatBlock<'a> {
         column_count: usize,
         key: &mut RowkeyCells<'a>,
     ) -> Result<()> {
-        let parsed = self.row(row)?;
+        let parsed = self.open_row(row)?;
         if column_count == 0 || column_count > parsed.info.rowkey_column_count {
             return Err(Error::InvalidArgument);
         }
         key.cells.clear();
-        for column in 0..column_count {
-            key.cells.push(ProjectionCell::Borrowed(parsed.cell(column)?));
-        }
+        parsed.project_cells(0..column_count, |cell| {
+            key.cells.push(ProjectionCell::Borrowed(cell));
+        })?;
         Ok(())
     }
 
@@ -293,20 +304,16 @@ impl<'a> FlatBlock<'a> {
         for &row in rows {
             let parsed = self.row(row as usize)?;
             row_info.push(parsed.info);
-            for &column in columns {
-                cells.push(if column as usize >= self.column_count() {
-                    Cell::Nop
-                } else {
-                    parsed.cell(column as usize)?
-                });
-            }
+            parsed.project_cells(columns.iter().map(|&column| column as usize), |cell| {
+                cells.push(cell);
+            })?;
         }
         Ok((Projection::new(rows.len(), columns.len(), cells), row_info))
     }
 }
 
 impl<'a> FlatRow<'a> {
-    fn parse(bytes: &'a [u8]) -> Result<Self> {
+    fn open(bytes: &'a [u8]) -> Result<Self> {
         if bytes.len() <= ROW_HEADER_SIZE || bytes[0] != 0 || bytes[6] & 0xf8 != 0 || bytes[7] != 0
         {
             return Err(Error::InvalidData);
@@ -342,18 +349,21 @@ impl<'a> FlatRow<'a> {
         {
             return Err(Error::InvalidData);
         }
-        let row = Self {
+        Ok(Self {
             bytes,
             info,
             cluster_count,
             cluster_offset_width,
             single_cluster,
             rowkey_independent_cluster,
-        };
-        for cluster in 0..cluster_count {
-            row.cluster(cluster)?;
+        })
+    }
+
+    fn validate_cells(&self) -> Result<()> {
+        for cluster in 0..self.cluster_count {
+            self.cluster(cluster)?.validate_cells()?;
         }
-        Ok(row)
+        Ok(())
     }
 
     fn cluster_column_count(&self, cluster: usize) -> Result<usize> {
@@ -401,7 +411,7 @@ impl<'a> FlatRow<'a> {
         if start < ROW_HEADER_SIZE || end < start || end > offset_array {
             return Err(Error::InvalidData);
         }
-        Cluster::parse(
+        Cluster::open(
             checked_slice(self.bytes, start, end - start)?,
             self.cluster_column_count(cluster)?,
             self.single_cluster,
@@ -412,7 +422,33 @@ impl<'a> FlatRow<'a> {
         if column >= self.info.column_count {
             return Ok(Cell::Nop);
         }
-        let (cluster, local_column) = if self.single_cluster {
+        let (cluster, local_column) = self.column_location(column);
+        self.cluster(cluster)?.cell(local_column)
+    }
+
+    fn project_cells(
+        &self,
+        columns: impl IntoIterator<Item = usize>,
+        mut push: impl FnMut(Cell<'a>),
+    ) -> Result<()> {
+        let mut cached_cluster = None;
+        for column in columns {
+            if column >= self.info.column_count {
+                push(Cell::Nop);
+                continue;
+            }
+            let (index, local_column) = self.column_location(column);
+            let cluster = match &mut cached_cluster {
+                Some((cached_index, cluster)) if *cached_index == index => cluster,
+                cache => &mut cache.insert((index, self.cluster(index)?)).1,
+            };
+            push(cluster.cell(local_column)?);
+        }
+        Ok(())
+    }
+
+    fn column_location(&self, column: usize) -> (usize, usize) {
+        if self.single_cluster {
             (0, column)
         } else if self.rowkey_independent_cluster && column < self.info.rowkey_column_count {
             (0, column)
@@ -421,13 +457,12 @@ impl<'a> FlatRow<'a> {
             (1 + column / CLUSTER_COLUMNS, column % CLUSTER_COLUMNS)
         } else {
             (column / CLUSTER_COLUMNS, column % CLUSTER_COLUMNS)
-        };
-        self.cluster(cluster)?.cell(local_column)
+        }
     }
 }
 
 impl<'a> Cluster<'a> {
-    fn parse(bytes: &'a [u8], column_count: usize, single_cluster: bool) -> Result<Self> {
+    fn open(bytes: &'a [u8], column_count: usize, single_cluster: bool) -> Result<Self> {
         if bytes.len() < 2 || column_count == 0 {
             return Err(Error::InvalidData);
         }
@@ -477,24 +512,24 @@ impl<'a> Cluster<'a> {
             offset_array,
             special_array: bytes.len() - special_length,
         };
-        let mut previous = 2usize;
-        for index in 0..serialized_count {
-            let offset = cluster.offset(index)?;
-            if offset < previous || offset > cell_end {
-                return Err(Error::InvalidData);
-            }
-            previous = offset;
-            if sparse {
+        if sparse {
+            let mut previous = None;
+            for index in 0..serialized_count {
                 let column = cluster.sparse_column(index)?;
-                if column >= column_count
-                    || (index > 0 && column <= cluster.sparse_column(index - 1)?)
-                {
+                if column >= column_count || previous.is_some_and(|prev| column <= prev) {
                     return Err(Error::InvalidData);
                 }
+                previous = Some(column);
             }
-            cluster.decode_serialized(index)?;
         }
         Ok(cluster)
+    }
+
+    fn validate_cells(&self) -> Result<()> {
+        for index in 0..self.serialized_count {
+            self.decode_serialized(index)?;
+        }
+        Ok(())
     }
 
     fn offset(&self, index: usize) -> Result<usize> {
@@ -531,6 +566,9 @@ impl<'a> Cluster<'a> {
         } else {
             self.cell_end
         };
+        if start < 2 || end > self.cell_end {
+            return Err(Error::InvalidData);
+        }
         let bytes = checked_slice(
             self.bytes,
             start,
@@ -596,7 +634,8 @@ mod tests {
     fn reads_dense_null_nop_and_compressed_integer() {
         let cluster = [255, 1, 7, b'x', b'y', 2, 3, 3, 3, 0x34, 0x02];
         let row = row_with_cluster(&cluster, 4);
-        let row = FlatRow::parse(&row).unwrap();
+        let row = FlatRow::open(&row).unwrap();
+        row.validate_cells().unwrap();
         assert_eq!(row.cell(0).unwrap(), Cell::UInt(7));
         assert_eq!(row.cell(1).unwrap(), Cell::Null);
         assert_eq!(row.cell(2).unwrap(), Cell::Nop);
@@ -607,7 +646,8 @@ mod tests {
     fn missing_sparse_cells_are_nop_not_null() {
         let cluster = [255, 0x2d, b'z', 1, 4, 2, 2, 0x03];
         let row = row_with_cluster(&cluster, 6);
-        let row = FlatRow::parse(&row).unwrap();
+        let row = FlatRow::open(&row).unwrap();
+        row.validate_cells().unwrap();
         assert_eq!(row.cell(0).unwrap(), Cell::Nop);
         assert_eq!(row.cell(1).unwrap(), Cell::Null);
         assert_eq!(row.cell(2).unwrap(), Cell::Nop);
@@ -619,10 +659,29 @@ mod tests {
     fn rejects_invalid_cluster_offsets_and_tags() {
         let mut cluster = vec![255, 1, 7, b'x', b'y', 2, 3, 3, 3, 0x34, 0x02];
         cluster[5] = 99;
-        assert!(FlatRow::parse(&row_with_cluster(&cluster, 4)).is_err());
+        let row = row_with_cluster(&cluster, 4);
+        let row = FlatRow::open(&row).unwrap();
+        assert!(row.cell(0).is_err());
+        assert!(row.validate_cells().is_err());
+        let cluster = [255, 1, 7, b'x', b'y', 1, 3, 3, 3, 0x34, 0x02];
+        let row = row_with_cluster(&cluster, 4);
+        let row = FlatRow::open(&row).unwrap();
+        assert!(row.cell(0).is_err());
+
         let mut cluster = vec![255, 1, 7, b'x', b'y', 2, 3, 3, 3, 0x34, 0x02];
         cluster[9] = 0xf4;
-        assert!(FlatRow::parse(&row_with_cluster(&cluster, 4)).is_err());
+        let row = row_with_cluster(&cluster, 4);
+        let row = FlatRow::open(&row).unwrap();
+        assert_eq!(row.cell(0).unwrap(), Cell::UInt(7));
+        assert!(row.validate_cells().is_err());
+    }
+
+    #[test]
+    fn rejects_unsorted_sparse_indices_during_selected_projection() {
+        let cluster = [255, 0x2d, b'z', 4, 1, 2, 2, 0x03];
+        let row = row_with_cluster(&cluster, 6);
+        let row = FlatRow::open(&row).unwrap();
+        assert!(row.cell(1).is_err());
     }
 
     #[test]

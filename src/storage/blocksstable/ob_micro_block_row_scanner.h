@@ -115,10 +115,11 @@ public:
       const int64_t row_cap,
       const int64_t vector_offset,
       const char **cell_datas,
-      sql::ObExprPtrIArray &exprs,
+      const sql::ObExprPtrIArray &exprs,
       common::ObIArray<ObSqlDatumInfo> &datum_infos,
       const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
-      const bool is_padding_mode);
+      const bool is_padding_mode,
+      const bool use_scratch_datums = false);
   int64_t get_current_pos() const
   { return current_; }
   OB_INLINE int64_t get_last_pos() const
@@ -177,6 +178,11 @@ private:
   int apply_white_filter(
       sql::ObPushdownFilterExecutor *parent,
       sql::ObWhiteFilterExecutor &filter,
+      sql::PushdownFilterInfo &pd_filter_info,
+      common::ObBitmap &result_bitmap);
+  int apply_scalar_filter(
+      sql::ObPushdownFilterExecutor *parent,
+      sql::ObPhysicalFilterExecutor &filter,
       sql::PushdownFilterInfo &pd_filter_info,
       common::ObBitmap &result_bitmap);
 protected:

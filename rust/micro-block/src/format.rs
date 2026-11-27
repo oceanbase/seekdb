@@ -511,7 +511,9 @@ pub(crate) fn parse_flat_header(bytes: &[u8]) -> Result<Header> {
 pub(crate) fn read_expanded_record_header(bytes: &[u8]) -> Result<Header> {
     let header = read_record_header(bytes)?;
     if header.row_store_type == FLAT_ROW_STORE {
-        validate_flat_header(bytes, header)?.validate_flat_hash_trailer(bytes)?;
+        let header = validate_flat_header(bytes, header)?;
+        header.check_expanded_record(bytes)?;
+        header.validate_flat_hash_trailer(bytes)?;
         Ok(header)
     } else {
         validate_pax_header(bytes, header)

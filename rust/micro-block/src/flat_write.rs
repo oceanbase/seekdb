@@ -729,6 +729,10 @@ mod tests {
             FlatBlock::new(&bad_payload),
             Err(Error::ChecksumMismatch)
         ));
+        assert!(matches!(
+            crate::format::read_expanded_record_header(&bad_payload),
+            Err(Error::ChecksumMismatch)
+        ));
 
         let header = parse_flat_header(&bytes).unwrap();
         let mut bad_offset = bytes.clone();
@@ -736,6 +740,10 @@ mod tests {
         reseal(&mut bad_offset);
         assert!(matches!(
             FlatBlock::new(&bad_offset),
+            Err(Error::InvalidData)
+        ));
+        assert!(matches!(
+            FlatBlock::open_checked(&bad_offset).unwrap().cell(0, 0),
             Err(Error::InvalidData)
         ));
 
