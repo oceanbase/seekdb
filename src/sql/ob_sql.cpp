@@ -3908,7 +3908,8 @@ int ObSql::calc_pre_calculable_exprs(const ObDMLStmt &stmt,
                                  exec_ctx.get_my_session(),
                                  exec_ctx.get_sql_ctx()->schema_guard_,
                                  phy_plan_ctx->get_original_param_cnt(),
-                                 datum_param_store.count());
+                                 datum_param_store.count(),
+                                 &exec_ctx.get_allocator());
     pre_calc_frame = new(frame_buf)ObPreCalcExprFrameInfo(phy_plan.get_allocator());
     if (OB_FAIL(expr_cg.generate_calculable_exprs(calculable_exprs,
                                                   *pre_calc_frame))) {
