@@ -1,0 +1,69 @@
+#owner: seekdb
+#owner group: vector
+
+--echo # Vector Index Adaptive Filter Path Test (issue #1471)
+
+alter system set vector_memory_limit = 0;
+sleep 1;
+
+--disable_warnings
+drop table if exists t_issue1471;
+--enable_warnings
+
+create table t_issue1471(
+  id int not null,
+  category5 int not null,
+  vec vector(3) not null,
+  primary key(id),
+  vector index vidx_issue1471(vec)
+    with (distance=cosine, lib=vsag, type=hnsw, m=16, ef_construction=128, ef_search=16)
+);
+
+insert into t_issue1471 values
+(1,2,'[0.970143,0.000000,0.242536]'),
+(2,3,'[0.955404,0.168463,0.242536]'),
+(3,4,'[0.911636,0.331808,0.242536]'),
+(4,5,'[0.840168,0.485071,0.242536]'),
+(5,1,'[0.743172,0.623596,0.242536]'),
+(6,2,'[0.623596,0.743172,0.242536]'),
+(7,3,'[0.485071,0.840168,0.242536]'),
+(8,4,'[0.331808,0.911636,0.242536]'),
+(9,5,'[0.168463,0.955404,0.242536]'),
+(10,1,'[0.000000,0.970143,0.242536]');
+
+analyze table t_issue1471;
+set ob_hnsw_ef_search = 16;
+
+--echo # A filter that keeps every row must not build a pre-filter candidate set.
+alter system flush plan cache;
+select id from t_issue1471
+where category5 between 1 and 5
+order by cosine_distance(vec, '[0.661636,0.709517,0.242536]') approximate limit 5;
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1471') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by length(s.statement), p.plan_id;
+
+--echo # A selective filter still uses the pre-filter.
+alter system flush plan cache;
+select id from t_issue1471
+where category5 = 1
+order by cosine_distance(vec, '[0.661636,0.709517,0.242536]') approximate limit 5;
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1471') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by length(s.statement), p.plan_id;
+
+--echo # The tautology filter must not change the top-k result.
+select id from t_issue1471
+order by cosine_distance(vec, '[0.661636,0.709517,0.242536]') approximate limit 5;
+select id from t_issue1471
+where category5 between 1 and 5
+order by cosine_distance(vec, '[0.661636,0.709517,0.242536]') approximate limit 5;
+
+drop table t_issue1471;
+alter system set vector_memory_limit = 0;
