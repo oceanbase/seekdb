@@ -112,10 +112,6 @@ private:
   int reserve_header(const ObDataStoreDesc &spec, const int64_t &cur_macro_seq);
   int check_micro_block(const ObMicroBlockDesc &micro_block_desc) const;
   int write_macro_header();
-  int add_column_checksum(
-      const int64_t *to_add_checksum,
-      const int64_t column_cnt,
-      int64_t *column_checksum);
 private:
   OB_INLINE const char *get_micro_block_data_ptr() const { return data_.data() + data_base_offset_; }
   OB_INLINE int64_t get_micro_block_data_size() const { return data_.length() - data_base_offset_; }

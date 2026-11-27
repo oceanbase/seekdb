@@ -14,246 +14,146 @@
  * limitations under the License.
  */
 
-#define USING_LOG_PREFIX STORAGE
-#include "lib/checksum/ob_checksum_utils.h"
+#include <cstring>
 #include "ob_micro_block_header.h"
-#include "ob_block_sstable_struct.h"
+#include "rust/micro_block.h"
 
 namespace oceanbase
 {
 namespace blocksstable
 {
-const int64_t ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET = 64;
-ObMicroBlockHeader::ObMicroBlockHeader()
-  : magic_(MICRO_BLOCK_HEADER_MAGIC),
-    version_(MICRO_BLOCK_HEADER_VERSION),
-    header_size_(0),
-    header_checksum_(0),
-    column_count_(0),
-    has_column_checksum_(0),
-    reserved16_(0),
-    row_count_(0),
-    row_store_type_(common::MAX_ROW_STORE),
-    opt_(0),
-    var_column_count_(0),
-    row_offset_(0),
-    original_length_(0),
-    max_merged_trans_version_(0),
-    data_length_(0),
-    data_zlength_(0),
-    data_checksum_(0),
-    column_checksums_(nullptr)
-	{
-    // COLUMN_CHECKSUM_PTR_OFFSET is the length of fixed component in micro header,
-    // column checksum will be stored from this offset. If assert failed, please check.
-    STATIC_ASSERT(COLUMN_CHECKSUM_PTR_OFFSET == sizeof(ObMicroBlockHeader), "checksum offset mismatch");
-  }
-
-bool ObMicroBlockHeader::is_valid() const
+namespace
 {
-  bool valid_data =
-      header_size_ == get_serialize_size(column_count_, has_column_checksum_)
-      && version_ == MICRO_BLOCK_HEADER_VERSION
-      && MICRO_BLOCK_HEADER_MAGIC == magic_
-      && column_count_ >= rowkey_column_count_
-      && rowkey_column_count_ >= 0
-      && row_store_type_ < common::MAX_ROW_STORE; // ObMicroBlockHeader::is_valid
-  return valid_data;
+int record_error(const micro_block::Code code)
+{
+  switch (code) {
+    case micro_block::Code::Ok: return OB_SUCCESS;
+    case micro_block::Code::InvalidArgument: return OB_INVALID_ARGUMENT;
+    case micro_block::Code::InvalidData: return OB_INVALID_DATA;
+    case micro_block::Code::ChecksumMismatch: return OB_PHYSIC_CHECKSUM_ERROR;
+    case micro_block::Code::Unsupported: return OB_NOT_SUPPORTED;
+    case micro_block::Code::OutputTooSmall: return OB_BUF_NOT_ENOUGH;
+    case micro_block::Code::SizeOverflow: return OB_SIZE_OVERFLOW;
+    default: return OB_ERR_UNEXPECTED;
+  }
 }
 
-void ObMicroBlockHeader::set_header_checksum()
+rust::Slice<const uint8_t> bytes(const char *buf, const int64_t size)
 {
-  int16_t checksum = 0;
-  header_checksum_ = 0;
-
-  checksum = checksum ^ magic_;
-  checksum = checksum ^ version_;
-  checksum = checksum ^ static_cast<int16_t>(row_store_type_);
-  checksum = checksum ^ static_cast<int16_t>(opt_);
-
-  format_i32(column_count_, checksum);
-  format_i32(rowkey_column_count_, checksum);
-  format_i32(has_column_checksum_, checksum);
-  format_i32(var_column_count_, checksum);
-
-  format_i64(header_size_, checksum);
-  format_i64(row_count_, checksum);
-  format_i64(row_offset_, checksum);
-  format_i64(original_length_, checksum);
-  format_i64(max_merged_trans_version_, checksum);
-  format_i64(data_length_, checksum);
-  format_i64(data_zlength_, checksum);
-  format_i64(data_checksum_, checksum);
-
-  if (has_column_checksum_) {
-    for (int64_t i = 0; i < column_count_; ++i) {
-      format_i64(column_checksums_[i], checksum);
-    }
-  }
-  header_checksum_ = checksum;
+  return {reinterpret_cast<const uint8_t *>(buf), static_cast<size_t>(size)};
 }
 
-int ObMicroBlockHeader::check_header_checksum() const
+void from_rust(const micro_block::RecordMetadata &meta, ObMicroBlockHeader &header)
+{
+  header.header_size_ = meta.header_size;
+  header.column_count_ = meta.column_count;
+  header.rowkey_column_count_ = meta.rowkey_column_count;
+  header.row_count_ = meta.row_count;
+  header.row_store_type_ = meta.row_store_type;
+  header.original_length_ = meta.original_length;
+  header.max_merged_trans_version_ = meta.max_merged_trans_version;
+  header.data_length_ = meta.data_length;
+  header.data_zlength_ = meta.data_zlength;
+  header.data_checksum_ = meta.data_checksum;
+  header.has_column_checksum_ = meta.has_column_checksum;
+  header.has_string_out_row_ = meta.has_string_out_row;
+  header.all_lob_in_row_ = meta.all_lob_in_row;
+  header.contains_hash_index_ = meta.contains_hash_index;
+  header.has_min_merged_trans_version_ = meta.has_min_merged_trans_version;
+  header.min_merged_trans_version_ = meta.min_merged_trans_version;
+  header.single_version_rows_ = meta.single_version_rows;
+  header.contain_uncommitted_rows_ = meta.contain_uncommitted_rows;
+  header.is_last_row_last_flag_ = meta.is_last_row_last_flag;
+}
+} // namespace
+
+uint32_t ObMicroBlockHeader::get_serialize_size(const int64_t column_count, const bool has_column_checksum)
+{
+  return column_count < 0 || column_count > UINT16_MAX
+      ? 0 : micro_block::record_header_size(column_count, has_column_checksum);
+}
+
+int ObMicroBlockHeader::read(const char *buf, const int64_t buf_len,
+    const ReadMode mode)
 {
   int ret = OB_SUCCESS;
-  int16_t checksum = 0;
-
-  checksum = checksum ^ magic_;
-  checksum = checksum ^ version_;
-  checksum = checksum ^ header_checksum_;
-  checksum = checksum ^ static_cast<int16_t>(row_store_type_);
-  checksum = checksum ^ static_cast<int16_t>(opt_);
-
-  format_i32(column_count_, checksum);
-  format_i32(rowkey_column_count_, checksum);
-  format_i32(has_column_checksum_, checksum);
-  format_i32(var_column_count_, checksum);
-
-  format_i64(header_size_, checksum);
-  format_i64(row_count_, checksum);
-  format_i64(row_offset_, checksum);
-  format_i64(original_length_, checksum);
-  format_i64(max_merged_trans_version_, checksum);
-  format_i64(data_length_, checksum);
-  format_i64(data_zlength_, checksum);
-  format_i64(data_checksum_, checksum);
-  if (has_column_checksum_) {
-    for (int64_t i = 0; i < column_count_; ++i) {
-      format_i64(column_checksums_[i], checksum);
-    }
-  }
-
-  if (0 != checksum) {
-    ret = OB_PHYSIC_CHECKSUM_ERROR;
-    LOG_DBA_ERROR(OB_PHYSIC_CHECKSUM_ERROR, "msg","record check checksum failed", K(ret), K(*this));
-  }
-  return ret;
-}
-
-int ObMicroBlockHeader::check_payload_checksum(const char *buf, const int64_t len) const
-{
-  int ret = OB_SUCCESS;
-  if (NULL == buf || len < 0 || data_zlength_ != len
-      || (0 == len && (0 != data_zlength_ || 0 != data_length_ || 0 != data_checksum_))) {
+  if (nullptr == buf || buf_len < 0) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const int64_t data_checksum = ob_crc64_sse42(buf, len);
-    if (data_checksum != data_checksum_) {
-      ret = OB_PHYSIC_CHECKSUM_ERROR;
-      LOG_DBA_ERROR(OB_PHYSIC_CHECKSUM_ERROR, "msg","checksum error", K(ret), K(data_checksum_), K(data_checksum));
+    const auto input = bytes(buf, buf_len);
+    micro_block::RecordResult result{};
+    switch (mode) {
+      case ReadMode::HEADER: result = micro_block::read_record_header(input); break;
+      case ReadMode::CHECKED_HEADER: result = micro_block::check_record_header(input); break;
+      case ReadMode::STORED_RECORD: result = micro_block::check_stored_record(input); break;
+      case ReadMode::EXPANDED: result = micro_block::read_expanded_record_header(input); break;
+      case ReadMode::STORED_PREFIX: result = micro_block::check_stored_record_prefix(input); break;
     }
-  }
-  return ret;
-}
-
-int ObMicroBlockHeader::deserialize_and_check_record(
-    const char *ptr, const int64_t size,
-    const int16_t magic, const char *&payload_ptr, int64_t &payload_size)
-{
-  int ret = OB_SUCCESS;
-  ObMicroBlockHeader header;
-  int64_t pos = 0;
-  if (NULL == ptr || size < 0 || magic < 0) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(header.deserialize(ptr, size, pos))) {
-  } else if (OB_FAIL(header.check_and_get_record(ptr, size, magic, payload_ptr, payload_size))) {
-  }
-
-  return ret;
-}
-
-int ObMicroBlockHeader::deserialize_and_check_header(const char *ptr, const int64_t size)
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  if (OB_ISNULL(ptr)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(deserialize(ptr, size, pos))) {
-  } else if (OB_FAIL(check_header_checksum())) {
-  }
-  return ret;
-}
-
-int ObMicroBlockHeader::check_and_get_record(
-    const char *ptr, const int64_t size, const int16_t magic,
-    const char *&payload_ptr, int64_t &payload_size) const
-{
-  int ret = OB_SUCCESS;
-  if (nullptr == ptr || magic < 0) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (magic != magic_) {
-    ret = OB_INVALID_DATA;
-    LOG_WARN("record header magic is not match", K(ret), K(magic), K(magic_));
-  } else if (OB_FAIL(check_header_checksum())) {
-  } else {
-    const int64_t header_size = header_size_;
-    if (size < header_size) {
-      ret = OB_BUF_NOT_ENOUGH;
+    if (OB_FAIL(record_error(result.code))) {
     } else {
-      payload_ptr = ptr;
-      payload_size = size;
-      if (OB_FAIL(check_payload_checksum(ptr + header_size, size - header_size))) {
-      }
+      from_rust(result.metadata, *this);
+      prefix_ = buf;
+      prefix_size_ = header_size_;
+      column_checksums_ = nullptr;
+      rewrite_column_checksums_ = false;
     }
   }
   return ret;
 }
 
-int ObMicroBlockHeader::check_record(const char *ptr, const int64_t size, const int16_t magic) const
+int ObMicroBlockHeader::deserialize(const char *buf, const int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  const char *payload_ptr = nullptr;
-  int64_t payload_size = 0;
-  if (nullptr == ptr || size < 0 || magic < 0) {
+  if (nullptr == buf || pos < 0 || pos > buf_len) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(check_and_get_record(ptr, size, magic, payload_ptr, payload_size))) {
-  }
-  return ret;
-}
-
-int ObMicroBlockHeader::deserialize_and_check_record(const char *ptr, const int64_t size, const int16_t magic)
-{
-  int ret = OB_SUCCESS;
-  const char *payload_buf = nullptr;
-  int64_t payload_size = 0;
-  if (nullptr == ptr || magic < 0) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(deserialize_and_check_record(ptr, size, magic, payload_buf, payload_size))) {
-  }
-  return ret;
-}
-
-int ObMicroBlockHeader::deep_copy(
-    char *buf, const int64_t buf_len, int64_t &pos, ObMicroBlockHeader *&header) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == buf
-              || this == reinterpret_cast<ObMicroBlockHeader *>(buf)
-              || buf_len < pos + COLUMN_CHECKSUM_PTR_OFFSET
-              || buf_len < pos + header_size_
-              || !is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(read(buf + pos, buf_len - pos, ReadMode::HEADER))) {
   } else {
-    buf += pos;
-    int64_t new_pos = 0;
+    pos += header_size_;
+  }
+  return ret;
+}
 
-    const int64_t serialize_size = header_size_;
-    header = reinterpret_cast<ObMicroBlockHeader *>(buf);
-    *header = *this;
-    new_pos += COLUMN_CHECKSUM_PTR_OFFSET ;
-    if (has_column_checksum_) {
-      header->column_checksums_ = reinterpret_cast<int64_t *>(buf + new_pos);
-      if (OB_ISNULL(column_checksums_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expect not null checksums", K(ret), KPC(this));
-      } else {
-        MEMCPY(header->column_checksums_, column_checksums_, column_count_ * sizeof(int64_t));
-        new_pos += column_count_ * sizeof(int64_t);
-      }
-    } else if (!has_min_merged_trans_version_) {
-      header->column_checksums_ = nullptr;
+int ObMicroBlockHeader::deserialize_expanded_record(const char *buf, const int64_t size)
+{
+  return read(buf, size, ReadMode::EXPANDED);
+}
+
+int ObMicroBlockHeader::deserialize_and_check_header(const char *buf, const int64_t size)
+{
+  return read(buf, size, ReadMode::CHECKED_HEADER);
+}
+
+int ObMicroBlockHeader::deserialize_and_check_record(const char *buf, const int64_t size)
+{
+  return read(buf, size, ReadMode::STORED_RECORD);
+}
+
+int ObMicroBlockHeader::deserialize_and_check_record_prefix(const char *buf, const int64_t size)
+{
+  return read(buf, size, ReadMode::STORED_PREFIX);
+}
+
+void ObMicroBlockHeader::set_column_checksums(const uint16_t column_count, const int64_t *checksums)
+{
+  column_count_ = column_count;
+  column_checksums_ = checksums;
+  has_column_checksum_ = checksums != nullptr;
+  header_size_ = get_serialize_size(column_count_, has_column_checksum_);
+  rewrite_column_checksums_ = true;
+}
+
+int ObMicroBlockHeader::accumulate_column_checksums(int64_t *sums) const
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == sums || !has_column_checksum_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (nullptr != column_checksums_) {
+    for (uint16_t i = 0; i < column_count_; ++i) {
+      sums[i] = static_cast<int64_t>(static_cast<uint64_t>(sums[i]) + column_checksums_[i]);
     }
-    pos += new_pos;
+  } else {
+    ret = record_error(micro_block::accumulate_record_column_checksums(
+        bytes(prefix_, prefix_size_), rust::Slice<int64_t>(sums, column_count_)));
   }
   return ret;
 }
@@ -261,50 +161,42 @@ int ObMicroBlockHeader::deep_copy(
 int ObMicroBlockHeader::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-   ObMicroBlockHeader *new_header = nullptr;
-  if (OB_FAIL(deep_copy(buf, buf_len, pos, new_header))) {
-  } else if (has_column_checksum_) {
-    new_header->column_checksums_ = nullptr; //always serialize nullptr
+  if (nullptr == buf || nullptr == prefix_ || pos < 0 || pos > buf_len || !is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (header_size_ > buf_len - pos) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else if (rewrite_column_checksums_) {
+    const auto *checksums = reinterpret_cast<const uint64_t *>(column_checksums_);
+    ret = record_error(micro_block::rewrite_record_column_checksums(
+        rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(buf + pos), header_size_),
+        bytes(prefix_, prefix_size_), column_count_, has_column_checksum_,
+        rust::Slice<const uint64_t>(checksums, has_column_checksum_ ? column_count_ : 0)));
+  } else {
+    std::memmove(buf + pos, prefix_, prefix_size_);
+  }
+  if (OB_SUCC(ret)) {
+    pos += header_size_;
   }
   return ret;
 }
 
-int ObMicroBlockHeader::deserialize(const char *buf, int64_t buf_len, int64_t &pos)
+int ObMicroBlockHeader::seal(char *prefix, const char *payload, const int64_t size)
 {
   int ret = OB_SUCCESS;
-  if (nullptr == buf || buf_len < pos + COLUMN_CHECKSUM_PTR_OFFSET) {
+  if (prefix != prefix_ || nullptr == prefix || nullptr == payload || size < 0
+      || rewrite_column_checksums_) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    buf += pos;
-    int64_t new_pos = 0;
-
-    const ObMicroBlockHeader *header = reinterpret_cast<const ObMicroBlockHeader *>(buf);
-    if (OB_UNLIKELY(nullptr == header
-                || !header->is_valid()
-                || buf_len < pos + header->header_size_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid header to deserialize", K(ret), K(buf_len), K(pos), KPC(header));
+    const auto result = micro_block::reseal_record_header_in_place(
+        rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(prefix), prefix_size_),
+        bytes(payload, size));
+    if (OB_FAIL(record_error(result.code))) {
     } else {
-      *this = *header;
-      new_pos += COLUMN_CHECKSUM_PTR_OFFSET ;
-      if (has_column_checksum_) {
-        const int64_t *column_checksums = nullptr;
-        column_checksums = reinterpret_cast<const int64_t *>(buf + new_pos);
-        column_checksums_ = const_cast<int64_t *>(column_checksums);
-        new_pos += column_count_ * sizeof(int64_t);
-      } else if (!has_min_merged_trans_version_) {
-        column_checksums_ = nullptr;
-      }
-      pos += new_pos;
+      from_rust(result.metadata, *this);
     }
   }
   return ret;
 }
 
-bool ObMicroBlockHeader::is_contain_hash_index() const
-{
-  return contains_hash_index_ == 1;
-}
-
-}//end namespace blocksstable
-}//end namespace oceanbase
+} // namespace blocksstable
+} // namespace oceanbase

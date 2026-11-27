@@ -95,7 +95,10 @@ public:
       char *&allocated_buf,
       const ObITableReadInfo *table_read_info = nullptr);
 
-  static int get_transformed_upper_mem_size(const ObITableReadInfo *table_read_info, const char *raw_block_data, int64_t &mem_limit);
+  static int get_transformed_upper_mem_size(
+      const ObITableReadInfo *table_read_info,
+      const ObMicroBlockHeader &micro_header,
+      int64_t &mem_limit);
 private:
   int get_reader(const ObRowStoreType store_type, ObIMicroBlockReader *&micro_reader);
 private:

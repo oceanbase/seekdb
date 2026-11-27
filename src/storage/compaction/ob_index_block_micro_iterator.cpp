@@ -95,20 +95,19 @@ int ObMacroBlockDataIterator::next_micro_block(ObMicroBlock &micro_block)
     const ObMicroIndexInfo &index_info = micro_block_infos_->at(cur_micro_cursor_);
   } else {
     const ObMicroIndexInfo &micro_block_info = micro_block_infos_->at(cur_micro_cursor_);
-    const char *micro_buf = macro_buf_ + micro_block_info.get_block_offset();
+    const int64_t offset = micro_block_info.get_block_offset();
     const int64_t micro_buf_size = micro_block_info.get_block_size();
-    int64_t pos = 0;
-    const char *payload_buf = nullptr;
-    int64_t payload_size = 0;
-    if (OB_FAIL(micro_block.header_.deserialize(micro_buf, micro_buf_size, pos))) {
-    } else if (OB_FAIL(micro_block.header_.check_and_get_record(
-        micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
+    if (OB_UNLIKELY(offset < 0 || offset > macro_buf_size_ || micro_buf_size <= 0
+        || micro_buf_size > macro_buf_size_ - offset)) {
+      ret = OB_INVALID_DATA;
+    } else if (OB_FAIL(micro_block.header_.deserialize_and_check_record(macro_buf_ + offset, micro_buf_size))) {
     } else {
+      const char *micro_buf = macro_buf_ + offset;
       ObDatumRange &micro_range = micro_block.range_;
       micro_block.data_.get_buf() = micro_buf;
       micro_block.data_.get_buf_size() = micro_buf_size;
-      micro_block.payload_data_.get_buf() = payload_buf;
-      micro_block.payload_data_.get_buf_size() = payload_size;
+      micro_block.payload_data_.get_buf() = micro_buf;
+      micro_block.payload_data_.get_buf_size() = micro_buf_size;
       if (0 == cur_micro_cursor_) {
         micro_range.start_key_ = range_.get_start_key();
       } else {

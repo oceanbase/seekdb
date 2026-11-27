@@ -29,26 +29,8 @@ class ObNewRow;
 }
 namespace blocksstable
 {
-// memory
-//  |- row data buffer
-//        |- ObMicroBlockHeader
-//        |- row data
-//  |- row index buffer
-//        |- ObRowIndex
-//  |- row hash index builder(optional) 
-//
-// build output
-//  |- compressed data
-//        |- ObMicroBlockHeader
-//        |- row data
-//        |- RowIndex
-//        |- RowHashIndex(optional)
 class ObMicroBlockWriter : public ObIMicroBlockWriter
 {
-  static const int64_t INDEX_ENTRY_SIZE = sizeof(int32_t);
-  static const int64_t DEFAULT_DATA_BUFFER_SIZE = common::OB_DEFAULT_MACRO_BLOCK_SIZE;
-  static const int64_t DEFAULT_INDEX_BUFFER_SIZE = 4 * 1024;
-  static const int64_t MIN_RESERVED_SIZE = 1024; //1KB;
 public:
   ObMicroBlockWriter();
   virtual ~ObMicroBlockWriter();
@@ -66,18 +48,14 @@ public:
   virtual int64_t get_row_count() const override;
   virtual int64_t get_column_count() const override;
   virtual int64_t get_original_size() const override;
-  virtual int append_hash_index(ObMicroBlockHashIndexBuilder& hash_index_builder);
   void reset();
 private:
   struct RustBlockBuffer;
   int inner_init();
   int process_out_row_columns(const ObDatumRow &row);
 
-  int init_hash_index_builder(const ObDataStoreDesc *data_store_desc = nullptr);
-
-  int append_row_to_hash_index(const ObDatumRow &row);
-
-  int build_hash_index_block();
+  int init_hash_index_policy(const ObDataStoreDesc &data_store_desc);
+  int append_row_to_hash_index(const ObDatumRow &row, bool hash_index_empty);
 
 private:
   int64_t micro_block_size_limit_;
@@ -87,9 +65,8 @@ private:
   int64_t row_count_;
   std::unique_ptr<RustBlockBuffer> rust_block_;
   common::ObArray<int64_t> column_checksums_;
-  ObMicroBufferWriter index_buffer_;
-  ObMicroBlockHashIndexBuilder hash_index_builder_;
-  bool reuse_hash_index_builder_;
+  const ObDataStoreDesc *hash_index_store_desc_;
+  bool previous_row_ended_key_;
   bool is_major_;
   bool is_inited_;
 };

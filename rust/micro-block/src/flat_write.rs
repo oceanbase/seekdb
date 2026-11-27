@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::checksum::crc32c;
 use crate::format::{
-    header_checksum, write_u16, write_u32, write_u64, Header, ALL_LOB_IN_ROW, CONTAINS_HASH_INDEX,
-    FIXED_HEADER_SIZE, FLAT_ROW_STORE, HASH_INDEX_OFFSET_SHIFT, HAS_COLUMN_CHECKSUM,
-    MICRO_BLOCK_MAGIC, MICRO_BLOCK_VERSION,
+    record_header_size, write_record_header, write_u32, Header, ALL_LOB_IN_ROW, CONTAINS_HASH_INDEX,
+    CONTAIN_UNCOMMITTED_ROWS, FLAT_ROW_STORE, HASH_INDEX_OFFSET_SHIFT, HAS_COLUMN_CHECKSUM,
+    HAS_MIN_MERGED_TRANS_VERSION, HAS_STRING_OUT_ROW, IS_LAST_ROW_LAST_FLAG, SINGLE_VERSION_ROWS,
 };
+use crate::hash_index;
 use crate::{AppendOutcome, Error, FlatRowInfo, Result};
 
 const ROW_HEADER_SIZE: usize = 16;
@@ -26,8 +26,6 @@ const ROWKEY_INDEPENDENT_MAX: usize = 48;
 const MAX_CLUSTER_COLUMN_COUNT: usize = 256;
 const MAX_SPARSE_COLUMNS: usize = 3;
 const SPARSE_NOP_THRESHOLD: usize = CLUSTER_COLUMNS - MAX_SPARSE_COLUMNS;
-const HAS_STRING_OUT_ROW: u16 = 1 << 1;
-const HAS_MIN_MERGED_TRANS_VERSION: u16 = 1 << 14;
 const VAL_NORMAL: u8 = 0;
 const VAL_OUTROW: u8 = 1;
 const VAL_NOP: u8 = 2;
@@ -54,6 +52,7 @@ pub struct FlatWriterConfig {
     pub micro_block_size_limit: usize,
     pub block_size_upper_bound: usize,
     pub need_column_checksums: bool,
+    pub build_hash_index: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -72,6 +71,8 @@ pub struct FlatWriter {
     config: FlatWriterConfig,
     row_data: Vec<u8>,
     row_offsets: Vec<u32>,
+    hash_index: Option<hash_index::Builder>,
+    finished_hash_index_size: usize,
     frozen: bool,
 }
 
@@ -84,9 +85,12 @@ impl Default for FlatWriter {
                 micro_block_size_limit: 0,
                 block_size_upper_bound: 0,
                 need_column_checksums: false,
+                build_hash_index: false,
             },
             row_data: Vec::new(),
             row_offsets: vec![0],
+            hash_index: None,
+            finished_hash_index_size: 0,
             frozen: false,
         }
     }
@@ -108,6 +112,8 @@ impl FlatWriter {
             config,
             row_data: Vec::new(),
             row_offsets: vec![0],
+            hash_index: config.build_hash_index.then(hash_index::Builder::new),
+            finished_hash_index_size: 0,
             frozen: false,
         })
     }
@@ -116,21 +122,61 @@ impl FlatWriter {
         self.row_offsets.len() - 1
     }
 
-    pub fn original_size(&self, hash_index_size: usize) -> Result<usize> {
+    pub(crate) fn empty_block_size(column_count: usize, need_column_checksums: bool) -> Result<usize> {
+        let header_size = record_header_size(column_count, need_column_checksums)?;
+        block_size(header_size, 0, 0, 0)
+    }
+
+    pub fn original_size(&self) -> Result<usize> {
         if 0 == self.row_count() {
             Ok(0)
         } else {
-            Ok(self.block_size(hash_index_size)? - header_size(self.config)?)
+            Ok(self.block_size()? - header_size(self.config)?)
         }
     }
 
-    pub fn block_size(&self, hash_index_size: usize) -> Result<usize> {
+    pub fn block_size(&self) -> Result<usize> {
         block_size(
-            self.config,
+            header_size(self.config)?,
             self.row_data.len(),
             self.row_count(),
-            hash_index_size,
+            self.hash_index_size(false),
         )
+    }
+
+    fn hash_index_size(&self, next_row: bool) -> usize {
+        if self.frozen {
+            self.finished_hash_index_size
+        } else {
+            self.hash_index
+                .as_ref()
+                .map_or(0, |index| index.estimated_size(next_row))
+        }
+    }
+
+    pub(crate) fn hash_index_empty(&self) -> Option<bool> {
+        self.hash_index.as_ref().map(hash_index::Builder::is_empty)
+    }
+
+    pub(crate) fn disable_hash_index(&mut self) {
+        self.hash_index = None;
+    }
+
+    pub fn add_hash_entry(&mut self, row: usize, hash: u64) -> Result<()> {
+        if self.frozen {
+            return Err(Error::Frozen);
+        }
+        if row.checked_add(1) != Some(self.row_count()) {
+            return Err(Error::InvalidArgument);
+        }
+        if let Some(index) = &mut self.hash_index {
+            match index.append(hash, row) {
+                Ok(()) => {}
+                Err(Error::Unsupported) => self.disable_hash_index(),
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
     }
 
     pub fn set_block_size_upper_bound(&mut self, block_size_upper_bound: usize) -> Result<()> {
@@ -145,7 +191,6 @@ impl FlatWriter {
         &mut self,
         cells: &[FlatDatum<'_>],
         info: FlatRowInfo,
-        hash_index_size: usize,
     ) -> Result<AppendOutcome> {
         if self.frozen {
             return Err(Error::Frozen);
@@ -165,10 +210,10 @@ impl FlatWriter {
             .checked_add(encoded.len())
             .ok_or(Error::SizeOverflow)?;
         let new_size = block_size(
-            self.config,
+            header_size(self.config)?,
             new_data_size,
             accepted_rows + 1,
-            hash_index_size,
+            self.hash_index_size(true),
         )?;
         if (accepted_rows > 0 && new_size > self.config.micro_block_size_limit)
             || new_size > self.config.block_size_upper_bound
@@ -201,7 +246,6 @@ impl FlatWriter {
         &mut self,
         options: FlatFinishOptions,
         column_checksums: &[u64],
-        hash_index: &[u8],
     ) -> Result<Vec<u8>> {
         if self.frozen {
             return Err(Error::Frozen);
@@ -210,10 +254,15 @@ impl FlatWriter {
             || (self.config.need_column_checksums
                 && column_checksums.len() != self.config.column_count)
             || (!self.config.need_column_checksums && !column_checksums.is_empty())
-            || hash_index.len() > 0x3ff
         {
             return Err(Error::InvalidArgument);
         }
+        let hash_index = self
+            .hash_index
+            .as_ref()
+            .filter(|_| !options.contain_uncommitted_rows)
+            .and_then(hash_index::Builder::build);
+        let hash_index = hash_index.as_ref().map_or(&[][..], hash_index::Trailer::as_bytes);
         let header_size = header_size(self.config)?;
         let row_index_offset = header_size
             .checked_add(self.row_data.len())
@@ -248,12 +297,17 @@ impl FlatWriter {
         } else {
             0
         };
-        let opt = u8::from(options.single_version_rows)
-            | (u8::from(options.contain_uncommitted_rows) << 1)
-            | (u8::from(options.is_last_row_last_flag) << 2);
-        let total_size = self.block_size(hash_index.len())?;
+        let opt = u8::from(options.single_version_rows) * SINGLE_VERSION_ROWS
+            | u8::from(options.contain_uncommitted_rows) * CONTAIN_UNCOMMITTED_ROWS
+            | u8::from(options.is_last_row_last_flag) * IS_LAST_ROW_LAST_FLAG;
+        let total_size = block_size(
+            header_size,
+            self.row_data.len(),
+            self.row_count(),
+            hash_index.len(),
+        )?;
         let data_length = total_size - header_size;
-        let mut header = Header {
+        let header = Header {
             header_size,
             column_count: self.config.column_count,
             rowkey_column_count: self.config.rowkey_column_count,
@@ -263,7 +317,7 @@ impl FlatWriter {
             opt,
             var_column_count: 0,
             row_data_offset: row_index_offset,
-            original_length: i32::try_from(self.row_data.len()).map_err(|_| Error::SizeOverflow)?,
+            original_length: i32::try_from(data_length).map_err(|_| Error::SizeOverflow)?,
             max_merged_trans_version: options.max_merged_trans_version,
             data_length,
             data_zlength: data_length,
@@ -274,27 +328,6 @@ impl FlatWriter {
             .try_reserve_exact(total_size)
             .map_err(|_| Error::SizeOverflow)?;
         block.resize(total_size, 0);
-        write_u16(&mut block, 0, MICRO_BLOCK_MAGIC)?;
-        write_u16(&mut block, 2, MICRO_BLOCK_VERSION)?;
-        write_u32(&mut block, 4, header_size as u32)?;
-        write_u16(&mut block, 10, self.config.column_count as u16)?;
-        write_u16(&mut block, 12, self.config.rowkey_column_count as u16)?;
-        write_u16(&mut block, 14, flags)?;
-        write_u32(&mut block, 16, self.row_count() as u32)?;
-        block[20] = FLAT_ROW_STORE;
-        block[21] = opt;
-        write_u32(&mut block, 24, row_index_offset as u32)?;
-        write_u32(&mut block, 28, header.original_length as u32)?;
-        write_u64(&mut block, 32, options.max_merged_trans_version as u64)?;
-        write_u32(&mut block, 40, data_length as u32)?;
-        write_u32(&mut block, 44, data_length as u32)?;
-        if self.config.need_column_checksums {
-            for (column, checksum) in column_checksums.iter().enumerate() {
-                write_u64(&mut block, FIXED_HEADER_SIZE + column * 8, *checksum)?;
-            }
-        } else if options.has_min_merged_trans_version {
-            write_u64(&mut block, 56, options.min_merged_trans_version as u64)?;
-        }
         let mut position = header_size;
         block[position..position + self.row_data.len()].copy_from_slice(&self.row_data);
         position += self.row_data.len();
@@ -303,30 +336,26 @@ impl FlatWriter {
             position += 4;
         }
         block[position..].copy_from_slice(hash_index);
-        header.data_checksum = crc32c(0, &block[header_size..]);
-        write_u64(&mut block, 48, header.data_checksum)?;
-        let checksum = header_checksum(&block, &header);
-        write_u16(&mut block, 8, checksum)?;
+        let (prefix, payload) = block.split_at_mut(header_size);
+        let header = header.with_stored_payload(payload)?;
+        write_record_header(
+            prefix,
+            &header,
+            options.min_merged_trans_version,
+            column_checksums.iter().copied().map(Ok),
+        )?;
+        self.finished_hash_index_size = hash_index.len();
         self.frozen = true;
         Ok(block)
     }
 }
 
 fn header_size(config: FlatWriterConfig) -> Result<usize> {
-    FIXED_HEADER_SIZE
-        .checked_add(if config.need_column_checksums {
-            config
-                .column_count
-                .checked_mul(8)
-                .ok_or(Error::SizeOverflow)?
-        } else {
-            0
-        })
-        .ok_or(Error::SizeOverflow)
+    record_header_size(config.column_count, config.need_column_checksums)
 }
 
 fn block_size(
-    config: FlatWriterConfig,
+    header_size: usize,
     data_size: usize,
     row_count: usize,
     hash_index_size: usize,
@@ -335,7 +364,7 @@ fn block_size(
         .checked_add(1)
         .and_then(|count| count.checked_mul(4))
         .ok_or(Error::SizeOverflow)?;
-    header_size(config)?
+    header_size
         .checked_add(data_size)
         .and_then(|size| size.checked_add(index_size))
         .and_then(|size| size.checked_add(hash_index_size))
@@ -602,6 +631,37 @@ mod tests {
         assert_eq!(crate::Cell::Outrow(&outrow), parsed.cell(0, 1).unwrap());
     }
 
+    #[test]
+    fn finds_bounds_using_the_physical_rowkey_prefix() {
+        let bytes = write_single(
+            &[
+                FlatDatum::Bytes(&2u64.to_le_bytes()),
+                FlatDatum::Bytes(b"key"),
+                FlatDatum::Bytes(&7u64.to_le_bytes()),
+                FlatDatum::Bytes(&1u64.to_le_bytes()),
+                FlatDatum::Null,
+            ],
+            4,
+        );
+        let block = FlatBlock::new(&bytes).unwrap();
+        let range = crate::RowRange::new(0, 1).unwrap();
+        for (lower, expected) in [(true, 0), (false, 1)] {
+            let bound = block
+                .find_rowkey_bound_by::<crate::Error>(3, lower, range, |key| {
+                    assert_eq!(key.len(), 3);
+                    assert_eq!(key.get(0)?.as_u64()?, 2);
+                    assert_eq!(key.get(1)?.bytes()?, b"key");
+                    Ok(7.cmp(&key.get(2)?.as_u64()?))
+                })
+                .unwrap();
+            assert_eq!(bound, crate::RowkeyBound { row: expected, equal: true });
+        }
+        assert_eq!(
+            block.find_rowkey_bound_by(3, true, range, |_| Err(crate::Error::InvalidData)),
+            Err(crate::Error::InvalidData),
+        );
+    }
+
     fn write_single(cells: &[FlatDatum<'_>], rowkey_column_count: usize) -> Vec<u8> {
         let config = FlatWriterConfig {
             column_count: cells.len(),
@@ -609,10 +669,11 @@ mod tests {
             micro_block_size_limit: usize::MAX,
             block_size_upper_bound: usize::MAX,
             need_column_checksums: false,
+            build_hash_index: false,
         };
         let mut writer = FlatWriter::new(config).unwrap();
         let outcome = writer
-            .append_row(cells, info(cells.len(), rowkey_column_count), 0)
+            .append_row(cells, info(cells.len(), rowkey_column_count))
             .unwrap();
         assert_eq!(1, outcome.accepted_rows);
         writer
@@ -627,7 +688,6 @@ mod tests {
                     min_merged_trans_version: 0,
                     max_merged_trans_version: 0,
                 },
-                &[],
                 &[],
             )
             .unwrap()
@@ -702,10 +762,11 @@ mod tests {
             micro_block_size_limit: 75,
             block_size_upper_bound: 1024,
             need_column_checksums: false,
+            build_hash_index: false,
         };
         let mut writer = FlatWriter::new(config).unwrap();
-        assert!(!writer.append_row(&cells, info(1, 1), 0).unwrap().is_full);
-        let full = writer.append_row(&cells, info(1, 1), 0).unwrap();
+        assert!(!writer.append_row(&cells, info(1, 1)).unwrap().is_full);
+        let full = writer.append_row(&cells, info(1, 1)).unwrap();
         assert!(full.is_full);
         assert_eq!(1, full.accepted_rows);
         assert_eq!(1, writer.row_count());
@@ -722,7 +783,6 @@ mod tests {
                     max_merged_trans_version: 0,
                 },
                 &[],
-                &[],
             )
             .unwrap();
         let parsed = FlatBlock::new(&block).unwrap();
@@ -738,19 +798,20 @@ mod tests {
             micro_block_size_limit: 1024,
             block_size_upper_bound: 1024,
             need_column_checksums: false,
+            build_hash_index: false,
         };
         let mut writer = FlatWriter::new(config).unwrap();
         writer
-            .append_row(&[FlatDatum::Bytes(b"first")], info(1, 1), 0)
+            .append_row(&[FlatDatum::Bytes(b"first")], info(1, 1))
             .unwrap();
         FAIL_NEXT_ROW_RESERVE.with(|fail| fail.set(true));
         assert_eq!(
-            writer.append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 0),
+            writer.append_row(&[FlatDatum::Bytes(b"second")], info(1, 1)),
             Err(Error::SizeOverflow)
         );
         assert_eq!(writer.row_count(), 1);
         let outcome = writer
-            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 0)
+            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1))
             .unwrap();
         assert_eq!(outcome.accepted_rows, 2);
         assert!(!outcome.is_full);
@@ -766,7 +827,6 @@ mod tests {
                     min_merged_trans_version: 0,
                     max_merged_trans_version: 0,
                 },
-                &[],
                 &[],
             )
             .unwrap();
@@ -785,9 +845,15 @@ mod tests {
             micro_block_size_limit: 1024,
             block_size_upper_bound: 1024,
             need_column_checksums: false,
+            build_hash_index: true,
         };
         let mut writer = FlatWriter::new(config).unwrap();
-        writer.append_row(&cells, info(1, 1), 3).unwrap();
+        for row in 0..17 {
+            writer.append_row(&cells, info(1, 1)).unwrap();
+            let hash = if row == 2 { 24 } else { row as u64 };
+            writer.add_hash_entry(row, hash).unwrap();
+        }
+        let estimated_size = writer.block_size().unwrap();
         let block = writer
             .finish(
                 FlatFinishOptions {
@@ -801,11 +867,32 @@ mod tests {
                     max_merged_trans_version: 0,
                 },
                 &[],
-                &[0, 2, 0xff],
             )
             .unwrap();
         let parsed = FlatBlock::new(&block).unwrap();
+        assert_eq!(estimated_size, block.len());
+        assert_eq!(block.len(), writer.block_size().unwrap());
+        let expected = [
+            0, 23, 0, 0, 254, 255, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 255, 255,
+            255, 255, 255, 255,
+        ];
+        let trailer_start = block.len() - expected.len();
+        assert_eq!(&block[trailer_start..], &expected);
         assert_eq!(crate::Cell::Bytes(b"row"), parsed.cell(0, 0).unwrap());
+        use crate::hash_index::Bucket;
+        let header = parse_flat_header(&block).unwrap();
+        assert_eq!(header.original_length as usize, block.len() - header.header_size);
+        assert!(matches!(parsed.hash_bucket(1u64 << 32), Ok(Bucket::Row(0))));
+        assert!(matches!(parsed.hash_bucket(1), Ok(Bucket::Collision)));
+        assert!(matches!(parsed.hash_bucket(2), Ok(Bucket::Vacant)));
+
+        let mut corrupt = block;
+        corrupt[trailer_start + 3] = 17;
+        assert!(matches!(FlatBlock::new(&corrupt), Err(Error::ChecksumMismatch)));
+        reseal(&mut corrupt);
+        assert!(matches!(FlatBlock::new(&corrupt), Err(Error::InvalidData)));
+        let corrupt = FlatBlock::open(&corrupt).unwrap();
+        assert!(matches!(corrupt.hash_bucket(0), Err(Error::InvalidData)));
     }
 
     #[test]
@@ -816,19 +903,20 @@ mod tests {
             micro_block_size_limit: 1024,
             block_size_upper_bound: 1024,
             need_column_checksums: false,
+            build_hash_index: false,
         };
         let mut writer = FlatWriter::new(config).unwrap();
-        assert_eq!(0, writer.original_size(0).unwrap());
+        assert_eq!(0, writer.original_size().unwrap());
         writer
-            .append_row(&[FlatDatum::Bytes(b"first")], info(1, 1), 3)
+            .append_row(&[FlatDatum::Bytes(b"first")], info(1, 1))
             .unwrap();
         writer
-            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 3)
+            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1))
             .unwrap();
-        assert_eq!(writer.row_data.len() + 15, writer.original_size(3).unwrap());
+        assert_eq!(writer.row_data.len() + 12, writer.original_size().unwrap());
         assert_eq!(
-            writer.block_size(3).unwrap() - 64,
-            writer.original_size(3).unwrap()
+            writer.block_size().unwrap() - 64,
+            writer.original_size().unwrap()
         );
     }
 
@@ -840,22 +928,23 @@ mod tests {
             micro_block_size_limit: 1024,
             block_size_upper_bound: 1024,
             need_column_checksums: false,
+            build_hash_index: false,
         };
         let mut writer = FlatWriter::new(config).unwrap();
         writer
-            .append_row(&[FlatDatum::Bytes(b"first")], info(1, 1), 0)
+            .append_row(&[FlatDatum::Bytes(b"first")], info(1, 1))
             .unwrap();
         writer
-            .set_block_size_upper_bound(writer.block_size(0).unwrap())
+            .set_block_size_upper_bound(writer.block_size().unwrap())
             .unwrap();
         let full = writer
-            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 0)
+            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1))
             .unwrap();
         assert!(full.is_full);
         assert_eq!(1, full.accepted_rows);
         writer.set_block_size_upper_bound(1024).unwrap();
         let retry = writer
-            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1), 0)
+            .append_row(&[FlatDatum::Bytes(b"second")], info(1, 1))
             .unwrap();
         assert!(!retry.is_full);
         assert_eq!(2, retry.accepted_rows);

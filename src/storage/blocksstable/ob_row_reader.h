@@ -134,12 +134,6 @@ public:
       const int64_t row_len,
       const int64_t col_index,
       ObStorageDatum &datum);
-  int compare_meta_rowkey(
-      const ObDatumRowkey &rhs,
-      const blocksstable::ObStorageDatumUtils &datum_utils,
-      const char *buf,
-      const int64_t row_len,
-      int32_t &cmp_result);
   void reset();
   TO_STRING_KV(KP_(buf), K_(row_len), KPC_(row_header), K_(cluster_cnt),
       K_(cur_read_cluster_idx), K_(cluster_reader));

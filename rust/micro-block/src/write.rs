@@ -14,11 +14,10 @@
 
 use crate::checksum::crc32c;
 use crate::format::{
-    header_checksum, integer_store_size, is_signed_store_type, write_u16, write_u32, write_u64,
-    ColumnHeader, Header, ALL_LOB_IN_ROW, COLUMN_BIT_PACKING, COLUMN_FIX_LENGTH,
+    integer_store_size, is_signed_store_type, record_header_size, write_record_header, write_u16,
+    write_u32, ColumnHeader, Header, ALL_LOB_IN_ROW, COLUMN_BIT_PACKING, COLUMN_FIX_LENGTH,
     COLUMN_HAS_EXTEND_VALUE, COLUMN_HEADER_SIZE, COLUMN_LAST_VAR_FIELD, ENCODING_ROW_STORE,
-    FIXED_HEADER_SIZE, HAS_COLUMN_CHECKSUM, MICRO_BLOCK_MAGIC, MICRO_BLOCK_VERSION,
-    SELECTIVE_ENCODING_ROW_STORE,
+    HAS_COLUMN_CHECKSUM, SELECTIVE_ENCODING_ROW_STORE,
 };
 use crate::{Error, Result};
 
@@ -610,18 +609,8 @@ impl BlockWriter {
     }
 
     pub(crate) fn total_header_size(&self) -> Result<usize> {
-        let checksum_bytes = if self.config.need_column_checksums {
-            self.config
-                .columns
-                .len()
-                .checked_mul(8)
-                .ok_or(Error::SizeOverflow)?
-        } else {
-            0
-        };
-        FIXED_HEADER_SIZE
-            .checked_add(checksum_bytes)
-            .and_then(|size| size.checked_add(self.config.columns.len() * COLUMN_HEADER_SIZE))
+        record_header_size(self.config.columns.len(), self.config.need_column_checksums)?
+            .checked_add(self.config.columns.len() * COLUMN_HEADER_SIZE)
             .ok_or(Error::SizeOverflow)
     }
 
@@ -2272,18 +2261,12 @@ impl BlockWriter {
         extend_width: usize,
         column_checksums: Option<&[u64]>,
     ) -> Result<Vec<u8>> {
-        let header_size = FIXED_HEADER_SIZE
-            + if self.config.need_column_checksums {
-                columns.len() * 8
-            } else {
-                0
-            };
+        let header_size = record_header_size(columns.len(), self.config.need_column_checksums)?;
         let row_data_offset = header_size + columns.len() * COLUMN_HEADER_SIZE + meta.len();
         let total_size = row_data_offset
             .checked_add(row_data.len())
             .ok_or(Error::SizeOverflow)?;
         let data_length = total_size - header_size;
-        let payload_checksum_offset = header_size;
         let flags = if self.config.need_column_checksums {
             HAS_COLUMN_CHECKSUM
         } else {
@@ -2293,7 +2276,7 @@ impl BlockWriter {
         } else {
             0
         };
-        let mut header = Header {
+        let header = Header {
             header_size,
             column_count: columns.len(),
             rowkey_column_count: self.config.rowkey_column_count,
@@ -2315,46 +2298,6 @@ impl BlockWriter {
             data_checksum: 0,
         };
         let mut block = vec![0u8; total_size];
-        write_u16(&mut block, 0, MICRO_BLOCK_MAGIC)?;
-        write_u16(&mut block, 2, MICRO_BLOCK_VERSION)?;
-        write_u32(
-            &mut block,
-            4,
-            u32::try_from(header_size).map_err(|_| Error::SizeOverflow)?,
-        )?;
-        write_u16(&mut block, 10, columns.len() as u16)?;
-        write_u16(&mut block, 12, self.config.rowkey_column_count as u16)?;
-        write_u16(&mut block, 14, flags)?;
-        write_u32(&mut block, 16, self.rows.len() as u32)?;
-        block[20] = self.config.row_store_type as u8;
-        block[21] = header.opt;
-        write_u16(&mut block, 22, var_column_count as u16)?;
-        write_u32(
-            &mut block,
-            24,
-            u32::try_from(row_data_offset).map_err(|_| Error::SizeOverflow)?,
-        )?;
-        write_u32(&mut block, 28, header.original_length as u32)?;
-        write_u64(&mut block, 32, self.config.max_merged_trans_version as u64)?;
-        write_u32(
-            &mut block,
-            40,
-            u32::try_from(data_length).map_err(|_| Error::SizeOverflow)?,
-        )?;
-        write_u32(
-            &mut block,
-            44,
-            u32::try_from(data_length).map_err(|_| Error::SizeOverflow)?,
-        )?;
-        if self.config.need_column_checksums {
-            for column in 0..columns.len() {
-                let checksum = match column_checksums {
-                    Some(checksums) => checksums[column],
-                    None => self.column_checksum(column)?,
-                };
-                write_u64(&mut block, FIXED_HEADER_SIZE + column * 8, checksum)?;
-            }
-        }
         for (index, column) in columns.iter().enumerate() {
             let offset = header_size + index * COLUMN_HEADER_SIZE;
             block[offset] = 0;
@@ -2368,10 +2311,13 @@ impl BlockWriter {
         let meta_offset = header_size + columns.len() * COLUMN_HEADER_SIZE;
         block[meta_offset..row_data_offset].copy_from_slice(&meta);
         block[row_data_offset..].copy_from_slice(&row_data);
-        header.data_checksum = crc32c(0, &block[payload_checksum_offset..]);
-        write_u64(&mut block, 48, header.data_checksum)?;
-        let checksum = header_checksum(&block, &header);
-        write_u16(&mut block, 8, checksum)?;
+        let (prefix, payload) = block.split_at_mut(header_size);
+        let header = header.with_stored_payload(payload)?;
+        let checksums = (0..header.column_checksum_count()).map(|column| match column_checksums {
+            Some(checksums) => Ok(checksums[column]),
+            None => self.column_checksum(column),
+        });
+        write_record_header(prefix, &header, 0, checksums)?;
         self.frozen = true;
         Ok(block)
     }

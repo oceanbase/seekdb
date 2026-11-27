@@ -480,18 +480,18 @@ int ObSSTableRowWholeScanner::open_micro_block()
     MacroScanHandle &scan_handle = scan_handles_[cur_macro_cursor_ % PREFETCH_DEPTH];
     bool is_left_border = scan_handle.is_left_border_ && micro_block_iter_.is_left_border();
     bool is_right_border = scan_handle.is_right_border_ && micro_block_iter_.is_right_border();
-    const ObMicroBlockHeader *micro_header = nullptr;
+    ObMicroBlockHeader micro_header;
     if (OB_FAIL(micro_block_iter_.get_next_micro_block_data(block_data))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
       }
-    } else if (OB_ISNULL(micro_header = block_data.get_micro_header()))  {
+    } else if (OB_UNLIKELY(OB_SUCCESS != block_data.get_micro_header(micro_header))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (access_ctx_->query_flag_.is_multi_version_minor_merge() &&
-        OB_FAIL(check_micro_block_recycle(*micro_header, can_recycle))) {
+        OB_FAIL(check_micro_block_recycle(micro_header, can_recycle))) {
     } else if (can_recycle) {
       last_micro_block_recycled_ = true;
-      last_mvcc_row_already_output_ = micro_header->is_last_row_last_flag();
-      FLOG_INFO("micro block recycled", KPC(micro_header));
+      last_mvcc_row_already_output_ = micro_header.is_last_row_last_flag();
+      FLOG_INFO("micro block recycled", K(micro_header));
     } else if (OB_FAIL(micro_scanner_->open(
             scan_handle.macro_io_handle_.get_macro_id(),
             block_data,
@@ -503,7 +503,7 @@ int ObSSTableRowWholeScanner::open_micro_block()
         }
       }
       last_micro_block_recycled_ = false;
-      last_mvcc_row_already_output_ = micro_header->is_last_row_last_flag();
+      last_mvcc_row_already_output_ = micro_header.is_last_row_last_flag();
       break;
     }
   }

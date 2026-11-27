@@ -1201,26 +1201,14 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
   
 
   idx_row_header.fill_deserialize_meta(block_des_meta);
+  bool is_compressed = false;
   if (OB_FAIL(ObObjectManager::read_object(read_info, macro_handle))) {
+  } else if (OB_FAIL(macro_reader.decompress_data(
+      block_des_meta, macro_handle.get_buffer(), idx_row_header.get_block_size(),
+      curr_path_item_->block_data_.get_buf(), curr_path_item_->block_data_.get_buf_size(),
+      is_compressed, true, cursor_path_.get_allocator()))) {
   } else {
-    const char *src_block_buf = macro_handle.get_buffer();
-    const int64_t src_buf_size = idx_row_header.get_block_size();
-    ObMicroBlockHeader header;
-    if (OB_FAIL(header.deserialize_and_check_header(src_block_buf, src_buf_size))) {
-    } else {
-      bool is_compressed = false;
-      if (OB_FAIL(macro_reader.do_decompress_data(
-          header, block_des_meta,
-          src_block_buf, src_buf_size,
-          curr_path_item_->block_data_.get_buf(),
-          curr_path_item_->block_data_.get_buf_size(),
-          is_compressed,
-          true, /* need deep copy */
-          cursor_path_.get_allocator()))) {
-      } else {
-        curr_path_item_->is_block_allocated_ = true;
-      }
-    }
+    curr_path_item_->is_block_allocated_ = true;
   }
 
   macro_handle.reset();

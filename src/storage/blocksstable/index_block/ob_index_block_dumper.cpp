@@ -580,15 +580,18 @@ int ObIndexBlockLoader::prefetch()
 int ObIndexBlockLoader::open_mem_block()
 {
   int ret = OB_SUCCESS;
-  ObMicroBlockDesc *micro_block_desc = index_block_info_->micro_block_desc_;
-  ObMicroBlockHeader *header = const_cast<ObMicroBlockHeader *>(micro_block_desc->header_);
-  int64_t size = header->get_serialize_size() + micro_block_desc->buf_size_;
-  int64_t pos = 0;
-  if (OB_FAIL(header->serialize(micro_buf_, header->header_size_, pos))) {
+  const ObMicroBlockDesc *micro_block_desc = index_block_info_->micro_block_desc_;
+  if (OB_ISNULL(micro_block_desc) || OB_UNLIKELY(!micro_block_desc->is_complete_micro_block_memory())) {
+    ret = OB_ERR_UNEXPECTED;
   } else {
-    MEMCPY(micro_buf_ + pos, micro_block_desc->buf_, micro_block_desc->buf_size_);
-    cur_micro_block_.get_buf() = micro_buf_;
-    cur_micro_block_.get_buf_size() = size;
+    const int64_t size = micro_block_desc->get_block_size();
+    if (OB_UNLIKELY(size <= 0 || size > common::OB_DEFAULT_MACRO_BLOCK_SIZE)) {
+      ret = OB_INVALID_DATA;
+    } else {
+      MEMCPY(micro_buf_, micro_block_desc->get_block_buf(), size);
+      cur_micro_block_.get_buf() = micro_buf_;
+      cur_micro_block_.get_buf_size() = size;
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(open_micro_block(cur_micro_block_))) {

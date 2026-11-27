@@ -111,7 +111,6 @@ STORAGE_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/storage/blocksstable/ob_micro_block_checksum_helper.cpp",
-            "src/storage/blocksstable/ob_micro_block_hash_index.cpp",
             "src/storage/blocksstable/ob_micro_block_reader.cpp",
             "src/storage/blocksstable/ob_micro_block_row_getter.cpp",
             "src/storage/blocksstable/ob_micro_block_row_lock_checker.cpp",
@@ -128,7 +127,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/blocksstable/ob_simplified_sstable_macro_block_header.cpp",
             "src/storage/blocksstable/ob_sstable_meta.cpp",
             "src/storage/blocksstable/ob_logic_macro_id.cpp",
-            "src/storage/blocksstable/ob_sstable_printer.cpp",
             "src/storage/blocksstable/ob_storage_cache_suite.cpp",
             "src/storage/blocksstable/ob_storage_datum.cpp",
             "src/storage/blocksstable/ob_datum_row.cpp",
@@ -160,7 +158,6 @@ STORAGE_UNITY_GROUPS = [
         name = "ob_storage_blocksstable_encoding2_0",
         language = "c++",
         srcs = [
-            "src/storage/blocksstable/encoding/ob_imicro_block_decoder.cpp",
             "src/storage/blocksstable/encoding/ob_micro_block_decoder.cpp",
             "src/storage/blocksstable/encoding/ob_micro_block_encoder.cpp",
         ],

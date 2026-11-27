@@ -20,6 +20,7 @@ mod checksum;
 mod flat;
 mod flat_write;
 mod format;
+mod hash_index;
 mod read;
 mod rowkey;
 mod write;
@@ -27,7 +28,7 @@ mod write;
 pub use flat::{FlatBlock, FlatRowInfo};
 pub use flat_write::{FlatDatum, FlatFinishOptions, FlatWriter, FlatWriterConfig};
 pub use read::{Block, Cell, Projection, RowRange, RowkeyBound};
-pub use rowkey::{compare_unicode_ci, RowkeyKind, RowkeyValue, UcaTable};
+pub use rowkey::{compare_unicode_ci, RowkeyCells, RowkeyKind, RowkeyValue, UcaTable};
 pub use write::{
     AppendOutcome, BlockWriter, BorrowedDatum, ColumnSpec, OwnedDatum, RowStoreType, WriterConfig,
 };

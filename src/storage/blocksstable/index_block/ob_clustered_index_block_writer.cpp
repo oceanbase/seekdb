@@ -370,12 +370,11 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_rewrite(
   compaction::ObLocalArena temp_allocator("MakeClusterMic");
   ObMicroBlockReaderHelper micro_reader_helper;
   ObIMicroBlockReader *micro_block_reader = nullptr;
-  const ObMicroBlockHeader *micro_block_header =
-      reinterpret_cast<const ObMicroBlockHeader *>(micro_block_data.get_buf());
-  const int64_t rowkey_column_count = micro_block_header->rowkey_column_count_;
-  if (OB_FAIL(micro_reader_helper.init(temp_allocator))) {
+  ObMicroBlockHeader micro_block_header;
+  if (OB_FAIL(micro_block_data.get_micro_header(micro_block_header))) {
+  } else if (OB_FAIL(micro_reader_helper.init(temp_allocator))) {
   } else if (OB_FAIL(micro_reader_helper.get_reader(
-                 micro_block_data.get_store_type(), micro_block_reader))) {
+                 static_cast<ObRowStoreType>(micro_block_header.row_store_type_), micro_block_reader))) {
   } else if (OB_FAIL(micro_block_reader->init(micro_block_data, nullptr))) {
   }
   // Defensive check, no row should be in micro writer.
@@ -384,6 +383,7 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_rewrite(
     ret = OB_ERR_UNEXPECTED;
   }
   // Iterate index row and transfer it to clustered index row.
+  const int64_t rowkey_column_count = micro_block_header.rowkey_column_count_;
   int64_t row_count = 0;
   ObDatumRow row;
   if (OB_FAIL(ret)) {
@@ -450,9 +450,7 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
 {
   int ret = OB_SUCCESS;
   compaction::ObLocalArena temp_allocator("MakeClusterMic");
-  const ObMicroBlockHeader *micro_block_header =
-      reinterpret_cast<const ObMicroBlockHeader *>(micro_block_data.get_buf());
-  int64_t rowkey_column_count = micro_block_header->rowkey_column_count_;
+  ObMicroBlockHeader micro_block_header;
   const ObStorageDatumUtils *datum_utils;
   ObIndexBlockRowScanner index_block_row_scanner;
   // Init and open index block row scanner for reused clustered micro block
@@ -461,7 +459,8 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
   mock_query_flag.multi_version_minor_merge_ = compaction::is_mini_merge(clustered_index_store_desc_.get_merge_type());
   datum_utils = &(clustered_index_store_desc_.get_datum_utils());
 
-  if (FAILEDx(index_block_row_scanner.init(*datum_utils,
+  if (OB_FAIL(micro_block_data.get_micro_header(micro_block_header))) {
+  } else if (OB_FAIL(index_block_row_scanner.init(*datum_utils,
                                            temp_allocator,
                                            mock_query_flag,
                                            0 /* nested offset */))) {
@@ -475,6 +474,7 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
   // Iterator index info and transfer it to clustered index row. We cannot reuse clustered index micro block through
   // `append_micro_block` or `append_index_micro_block`, because this clustered micro block is transformed in
   // `ObIndexBlockTreeCursor` (dispatch IO + reuse clustered micro block is worse).
+  const int64_t rowkey_column_count = micro_block_header.rowkey_column_count_;
   ObMicroIndexInfo index_info;
   ObArenaAllocator row_key_allocator(common::ObMemAttr("MakeClustRK"));
   while (OB_SUCC(ret)) {
@@ -566,16 +566,14 @@ int ObClusteredIndexBlockWriter::decompress_micro_block_data(
   bool is_compressed = false;
   ObMacroBlockReader macro_reader;
   ObMicroBlockDesMeta block_des_meta;
-  ObMicroBlockHeader header;
 
   block_des_meta.compressor_type_ = macro_meta.get_meta_val().compressor_type_;
 
   const char * micro_block_buf = micro_block_data.get_buf();
   const int64_t micro_block_size = micro_block_data.get_buf_size();
 
-  if (OB_FAIL(header.deserialize_and_check_header(micro_block_buf, micro_block_size))) {
-  } else if (OB_FAIL(macro_reader.do_decompress_data(
-                 header, block_des_meta, micro_block_buf, micro_block_size,
+  if (OB_FAIL(macro_reader.decompress_data(
+                 block_des_meta, micro_block_buf, micro_block_size,
                  micro_block_data.get_buf(), micro_block_data.get_buf_size(),
                  is_compressed, true /* need deep copy */,
                  &decompress_allocator_ /* allocator */))) {

@@ -29,7 +29,7 @@ namespace blocksstable
 {
 struct ColumnReadInfo
 {
-  const ObColumnHeader *col_header_ = nullptr;
+  int64_t store_idx_ = -1;
   const ObColumnParam *col_param_ = nullptr;
 };
 
@@ -40,11 +40,6 @@ public:
   virtual ~ObIEncodeBlockReader();
   void reset();
   void reuse();
-  static int get_micro_metas(
-      const ObMicroBlockHeader *&header,
-      const ObColumnHeader *&col_header,
-      const char *block,
-      const int64_t block_size);
 protected:
   int prepare(const int64_t column_cnt);
   int do_init(const ObMicroBlockData &block_data, const int64_t request_cnt);
@@ -52,8 +47,7 @@ protected:
   static const int64_t DEFAULT_DECODER_CNT = 16;
 
   int64_t request_cnt_; // request column count
-  const ObMicroBlockHeader *header_;
-  const ObColumnHeader *col_header_;
+  ObMicroBlockHeader header_;
   const char *block_data_;
   int64_t block_size_;
   common::ObArenaAllocator decoder_allocator_;
@@ -128,25 +122,20 @@ public:
   //when the incoming datum_utils is nullptr, it indicates not calling locate_range or find_bound
   virtual int init(const ObMicroBlockData &block_data, const ObStorageDatumUtils *datum_utils) override;
   virtual int get_row(const int64_t index, ObDatumRow &row) override;
-  virtual int get_row_header(
+  virtual int get_row_metadata(
       const int64_t row_idx,
-      const ObRowHeader *&row_header) override;
+      MicroBlockRowMeta &row_meta) override;
   virtual int get_row_count(int64_t &row_count) override;
   virtual int get_multi_version_info(
       const int64_t row_idx,
       const int64_t schema_rowkey_cnt,
-      const ObRowHeader *&row_header,
+      MicroBlockRowMeta &row_meta,
       int64_t &trans_version,
       int64_t &sql_sequence);
   virtual int compare_rowkey(
       const ObDatumRowkey &rowkey,
       const int64_t index,
       int32_t &compare_result) override;
-  virtual int compare_rowkey(
-      const ObDatumRange &range,
-      const int64_t index,
-      int32_t &start_key_compare_result,
-      int32_t &end_key_compare_result) override;
   virtual int find_bound(
       const ObDatumRowkey &key,
       const bool lower_bound,
@@ -188,8 +177,8 @@ public:
       storage::ObAggCell &agg_cell) override;
   virtual int64_t get_column_count() const override
   {
-    OB_ASSERT(nullptr != header_);
-    return header_->column_count_;
+    OB_ASSERT(nullptr != block_data_);
+    return header_.column_count_;
   }
   virtual int get_column_datum(
       const ObTableIterParam &iter_param,
@@ -204,7 +193,7 @@ public:
     decoder_allocator_.set_reserve_memory(reserve);
   }
   virtual bool has_lob_out_row() const override final
-  { return nullptr != header_ && header_->has_lob_out_row(); }
+  { return nullptr != block_data_ && header_.has_lob_out_row(); }
 
 private:
   // use inner_reset to reuse the decoder buffer
@@ -242,23 +231,12 @@ private:
       const bool preserve_nop = false,
       const bool reverse_trans_version = false);
   int get_row_impl(int64_t index, ObDatumRow &row);
-  OB_INLINE static const ObRowHeader &get_major_store_row_header()
-  {
-    static ObRowHeader rh = init_major_store_row_header();
-    return rh;
-  }
-  static const ObRowHeader init_major_store_row_header();
-  static int get_micro_metas(
-      const ObMicroBlockHeader *&header, const ObColumnHeader *&col_header,
-      const char *block, const int64_t block_size);
 private:
-  const ObMicroBlockHeader *header_;
+  ObMicroBlockHeader header_;
   int64_t request_cnt_; // request column count
-  const ObColumnHeader *col_header_;
   const char *block_data_;
   int64_t block_size_;
   ColumnReadInfo *columns_;
-  ObRowReader flat_row_reader_;
   ObBlockReaderAllocator decoder_allocator_;
   common::ObArenaAllocator buf_allocator_;
   char *column_buf_;

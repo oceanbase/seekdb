@@ -212,11 +212,12 @@ int ObRootBlockInfo::transform_root_block_extra_buf(common::ObArenaAllocator &al
       && OB_NOT_NULL(block_data_.get_buf())) {
     ObIndexBlockDataTransformer transformer;
     char *allocated_buf = nullptr;
-    const ObMicroBlockHeader *micro_header = block_data_.get_micro_header();
-    if (addr_.is_memory()
-        && 0 == micro_header->original_length_
-        && 0 == micro_header->data_zlength_
-        && 0 == micro_header->data_length_) {
+    ObMicroBlockHeader micro_header;
+    if (OB_FAIL(block_data_.get_micro_header(micro_header))) {
+    } else if (addr_.is_memory()
+        && 0 == micro_header.original_length_
+        && 0 == micro_header.data_zlength_
+        && 0 == micro_header.data_length_) {
       ret = OB_VERSION_NOT_MATCH;
     } else if (OB_FAIL(transformer.transform(block_data_, block_data_, allocator, allocated_buf))) {
     }
@@ -276,15 +277,17 @@ int ObRootBlockInfo::serialize_(
       ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(addr.serialize(buf, buf_len, pos))) {
   } else if (addr.is_memory()) {
-    const ObMicroBlockHeader *micro_header = reinterpret_cast<const ObMicroBlockHeader *>(orig_block_buf_);
-    const char *data_buf = orig_block_buf_ + micro_header->header_size_;
-    const int64_t data_size = addr.size() - micro_header->header_size_;
-    if (OB_UNLIKELY(data_size <= 0)) {
+    ObMicroBlockHeader micro_header;
+    const int64_t block_size = addr.size();
+    const ObMicroBlockData block_data(orig_block_buf_, block_size);
+    if (OB_FAIL(block_data.get_micro_header(micro_header))) {
+    } else if (OB_UNLIKELY(block_size <= micro_header.header_size_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(micro_header->serialize(buf, buf_len, pos))) {
+    } else if (OB_UNLIKELY(block_size > buf_len - pos)) {
+      ret = OB_BUF_NOT_ENOUGH;
     } else {
-      MEMCPY(buf + pos, data_buf, data_size);
-      pos += data_size;
+      MEMCPY(buf + pos, orig_block_buf_, block_size);
+      pos += block_size;
     }
   }
   return ret;
@@ -377,7 +380,7 @@ int ObRootBlockInfo::deep_copy(
   } else {
     dest.addr_ = addr_;
     if (OB_NOT_NULL(block_data_.buf_)) {
-      if (OB_FAIL(deep_copy_micro_buf(block_data_.buf_, block_data_.size_, buf + pos, buf_len - pos, false))) {
+      if (OB_FAIL(deep_copy_micro_buf(block_data_.buf_, block_data_.size_, buf + pos, buf_len - pos))) {
       } else {
         dest.block_data_.buf_ = buf + pos;
         dest.block_data_.size_ = block_data_.size_;
@@ -390,7 +393,7 @@ int ObRootBlockInfo::deep_copy(
       } else if (orig_block_buf_ != nullptr) {
         if (!addr_.is_memory()) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(deep_copy_micro_buf(orig_block_buf_, addr_.size(), buf + pos, buf_len - pos, false))) {
+        } else if (OB_FAIL(deep_copy_micro_buf(orig_block_buf_, addr_.size(), buf + pos, buf_len - pos))) {
         } else {
           dest.orig_block_buf_ = buf + pos;
           pos += addr_.size();
@@ -423,39 +426,16 @@ int ObRootBlockInfo::deep_copy_micro_buf(
     const char *src_buf,
     const int64_t src_buf_len,
     char *dst_buf,
-    const int64_t dst_buf_len,
-    bool need_deserialize_header) const
+    const int64_t dst_buf_len) const
 {
   int ret = OB_SUCCESS;
-  int64_t copy_pos = 0;
-  if (OB_ISNULL(src_buf) || OB_ISNULL(dst_buf) || OB_UNLIKELY(dst_buf_len < src_buf_len)) {
+  ObMicroBlockHeader header;
+  const ObMicroBlockData block_data(src_buf, src_buf_len);
+  if (OB_ISNULL(dst_buf) || OB_UNLIKELY(dst_buf_len < src_buf_len)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(block_data.get_micro_header(header))) {
   } else {
-    ObMicroBlockHeader deserialized_header;
-    const ObMicroBlockHeader *micro_header = nullptr;
-    ObMicroBlockHeader *copied_micro_haeder = nullptr;
-    int64_t header_offset = 0;
-    if (need_deserialize_header) {
-      int64_t des_pos = 0;
-      if (OB_FAIL(deserialized_header.deserialize(src_buf, src_buf_len, des_pos))) {
-      } else {
-        micro_header = &deserialized_header;
-        header_offset = des_pos;
-      }
-    } else {
-      micro_header = reinterpret_cast<const ObMicroBlockHeader *>(src_buf);
-      header_offset = micro_header->get_serialize_size();
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(micro_header) || OB_UNLIKELY(!micro_header->is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(micro_header->deep_copy(dst_buf, dst_buf_len, copy_pos, copied_micro_haeder))) {
-    } else if (OB_UNLIKELY(copy_pos != header_offset)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      MEMCPY(dst_buf + copy_pos, src_buf + header_offset, src_buf_len - header_offset);
-    }
+    MEMCPY(dst_buf, src_buf, src_buf_len);
   }
   return ret;
 }

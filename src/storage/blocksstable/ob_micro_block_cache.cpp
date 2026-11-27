@@ -387,14 +387,9 @@ int ObIMicroBlockIOCallback::process_block(
   int ret = OB_SUCCESS;
   ObMicroBlockData block_data;
   ObMicroBlockHeader header;
-  int64_t pos = 0;
-  int64_t payload_size = 0;
-  const char *payload_buf = nullptr;
   if (OB_UNLIKELY(NULL == reader || NULL == buffer || offset < 0 || size < 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(header.deserialize(buffer, size, pos))) {
-  } else if (OB_FAIL(header.check_and_get_record(
-        buffer, size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
+  } else if (OB_FAIL(header.deserialize_and_check_record(buffer, size))) {
   } else {
     if (OB_UNLIKELY(!use_block_cache_)) {
       // Won't put in cache
@@ -739,7 +734,7 @@ int ObSyncSingleMicroBLockIOCallback::process(const char *data_buffer, const int
       const char *src_block_buf = data_buffer;
       const int64_t src_buf_size = size;
       ObMicroBlockHeader header;
-      if (OB_FAIL(header.deserialize_and_check_header(src_block_buf, src_buf_size))) {
+      if (OB_FAIL(header.deserialize_and_check_record(src_block_buf, src_buf_size))) {
       } else {
         if (OB_FAIL(macro_reader_->do_decompress_data(
             header, block_des_meta_, src_block_buf, src_buf_size, block_data_->get_buf(),
@@ -929,16 +924,11 @@ int ObMicroBlockBufTransformer::transfrom(char *block_buf, const int64_t buf_siz
   } else if (OB_UNLIKELY(nullptr == block_buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObMicroBlockHeader *micro_header = nullptr;
     int64_t pos = 0;
-    if (OB_FAIL(header_.deep_copy(block_buf, buf_size, pos, micro_header))) {
-    } else {
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(reader_->decompress_data_with_prealloc_buf(
-            block_des_meta_.compressor_type_, payload_buf_, payload_size_,
-            block_buf + pos, buf_size - pos))) {
-        }
-      }
+    if (OB_FAIL(header_.serialize(block_buf, buf_size, pos))) {
+    } else if (OB_FAIL(reader_->decompress_data_with_prealloc_buf(
+        block_des_meta_.compressor_type_, payload_buf_, payload_size_,
+        block_buf + pos, buf_size - pos))) {
     }
   }
 
@@ -1080,15 +1070,10 @@ int ObDataMicroBlockCache::put_cache_block(
   UNUSED(allocator);
   int ret = OB_SUCCESS;
   ObMicroBlockHeader header;
-  int64_t pos = 0;
-  int64_t payload_size = 0;
-  const char *payload_buf = nullptr;
   ObIMicroBlockCache::BaseBlockCache *kvcache = nullptr;
   if (OB_UNLIKELY(!des_meta.is_valid() || !key.is_valid()) || OB_ISNULL(raw_block_buf)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(header.deserialize(raw_block_buf, buf_size, pos))) {
-  } else if (OB_FAIL(header.check_and_get_record(
-        raw_block_buf, buf_size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
+  } else if (OB_FAIL(header.deserialize_and_check_record(raw_block_buf, buf_size))) {
   } else if (OB_FAIL(get_cache(kvcache))) {
   } else {
     ObKVCacheInstHandle inst_handle;
@@ -1096,7 +1081,7 @@ int ObDataMicroBlockCache::put_cache_block(
     int64_t block_size = 0;
     int64_t value_size = 0;
     int64_t extra_size = 0;
-    ObMicroBlockBufTransformer buf_transformer(des_meta, &reader, header, payload_buf, payload_size);
+    ObMicroBlockBufTransformer buf_transformer(des_meta, &reader, header, raw_block_buf, buf_size);
     if (OB_FAIL(buf_transformer.init())) {
     } else if (OB_FAIL(buf_transformer.get_buf_size(block_size))) {
     } else if (FALSE_IT(value_size = calc_value_size(block_size))) {
@@ -1159,8 +1144,11 @@ int ObDataMicroBlockCache::reserve_kvpair(
       char *block_buf = reinterpret_cast<char *>(kvpair->value_) + sizeof(ObMicroBlockCacheValue);
       kvpair->key_ = new (kvpair->key_) ObMicroBlockCacheKey();
       ObMicroBlockCacheValue *cache_value = new (kvpair->value_) ObMicroBlockCacheValue(block_buf, block_size);
-      MEMCPY(block_buf, micro_block_desc.header_, micro_block_desc.header_->header_size_);
-      MEMCPY(block_buf + micro_block_desc.header_->header_size_, micro_block_desc.buf_, micro_block_desc.buf_size_);
+      int64_t pos = 0;
+      if (OB_FAIL(micro_block_desc.header_->serialize(block_buf, block_size, pos))) {
+      } else {
+        MEMCPY(block_buf + pos, micro_block_desc.buf_, micro_block_desc.buf_size_);
+      }
     }
   }
 
@@ -1288,21 +1276,16 @@ int ObIndexMicroBlockCache::put_cache_block(
 {
   int ret = OB_SUCCESS;
   ObMicroBlockHeader header;
-  int64_t pos = 0;
-  int64_t payload_size = 0;
-  const char *payload_buf = nullptr;
   ObIMicroBlockCache::BaseBlockCache *kvcache = nullptr;
   if (OB_UNLIKELY(!des_meta.is_valid() || !key.is_valid()) || OB_ISNULL(raw_block_buf)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(header.deserialize(raw_block_buf, buf_size, pos))) {
-  } else if (OB_FAIL(header.check_and_get_record(
-        raw_block_buf, buf_size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
+  } else if (OB_FAIL(header.deserialize_and_check_record(raw_block_buf, buf_size))) {
   } else if (OB_FAIL(get_cache(kvcache))) {
   } else {
     int64_t block_size = 0;
     int64_t value_size = 0;
     char *block_buf = nullptr;
-    ObMicroBlockBufTransformer buf_transformer(des_meta, &reader, header, payload_buf, payload_size);
+    ObMicroBlockBufTransformer buf_transformer(des_meta, &reader, header, raw_block_buf, buf_size);
     ObIndexBlockDataTransformer idx_transformer;
     if (OB_FAIL(buf_transformer.init())) {
     } else if (OB_FAIL(buf_transformer.get_buf_size(block_size))) {

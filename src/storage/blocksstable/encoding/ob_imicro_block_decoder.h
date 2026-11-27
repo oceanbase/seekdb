@@ -39,9 +39,6 @@ public:
   virtual ~ObIMicroBlockDecoder() {}
   virtual int compare_rowkey(
     const ObDatumRowkey &rowkey, const int64_t index, int32_t &compare_result) override = 0;
-  virtual int compare_rowkey(const ObDatumRange &range, const int64_t index,
-    int32_t &start_key_compare_result, int32_t &end_key_compare_result) = 0;
-
   virtual int filter_truncate_evaluator(
       storage::ObTruncateFilterEvaluator &evaluator,
       const int64_t start,
@@ -52,18 +49,7 @@ public:
     const common::ObIArray<const share::schema::ObColumnParam *> &col_params, const bool is_padding_mode,
     const int32_t *row_ids, const char **cell_datas, const int64_t row_cap,
     common::ObIArray<ObSqlDatumInfo> &datum_infos, const int64_t datum_offset = 0) = 0;
-  virtual int find_bound(
-      const ObDatumRowkey &key,
-      const bool lower_bound,
-      const int64_t begin_idx,
-      int64_t &row_idx,
-      bool &equal) override;
-protected:
-  virtual int find_bound(const ObDatumRange &range, const int64_t begin_idx, int64_t &row_idx,
-    bool &equal, int64_t &end_key_begin_idx, int64_t &end_key_end_idx) override;
 
-  virtual int find_bound(const ObDatumRowkey &key, const bool lower_bound, const int64_t begin_idx,
-    const int64_t end_idx, int64_t &row_idx, bool &equal) override;
 };
 
 }  // namespace blocksstable

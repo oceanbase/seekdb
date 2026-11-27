@@ -336,11 +336,11 @@ protected:
       int64_t &trans_version,
       int64_t &sql_sequence,
       const int64_t index,
-      const ObRowHeader *&row_header);
+      MicroBlockRowMeta &row_meta);
   int check_foreign_key(
       const int64_t trans_version,
       const int64_t sql_sequence,
-      const ObRowHeader *row_header);
+      const MicroBlockRowMeta &row_meta);
   void reuse_cur_micro_row();
 private:
   void reuse_prev_micro_row();

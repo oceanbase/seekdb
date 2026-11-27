@@ -77,8 +77,7 @@ public:
       ObIAllocator &rowkey_allocator);
   int get_macro_block_header(ObSSTableMacroBlockHeader &macro_header);
   int get_micro_block_count(int64_t &micro_block_count);
-  int get_index_block(ObMicroBlockData &micro_block, const bool force_deserialize, const bool is_macro_meta_block = false);
-  int get_macro_meta_block(ObMicroBlockData &micro_block);
+  int get_index_block(ObMicroBlockData &micro_block, const bool force_deserialize);
   bool is_left_border() const { return iter_idx_ == begin_idx_; }
   bool is_right_border() const { return iter_idx_ == end_idx_; }
   TO_STRING_KV(KP_(macro_block_buf), K_(macro_block_buf_size), K_(common_header),
@@ -111,7 +110,9 @@ private:
     const ObMicroBlockHeader *header,
     ObIAllocator &allocator,
     ObMicroBlockDesc &micro_block_desc);
-  int get_micro_block_header(const char *buf, int64_t buf_len, ObMicroBlockHeader *&header) const;
+  int read_stored_record(const int64_t offset, ObMicroBlockHeader &header) const;
+  int expand_record(ObMacroBlockReader &reader, const ObMicroBlockHeader &header,
+      const char *buf, const int64_t size, const bool need_copy, ObMicroBlockData &block);
 protected:
   ObArenaAllocator allocator_;
   const char *macro_block_buf_;
@@ -147,7 +148,7 @@ public:
       const bool need_check_integrity = false);
   int get_next_row(const ObDatumRow *&row);
   // switch to iterate leaf index block in data macro block
-  int open_leaf_index_micro_block(const bool is_macro_meta = false);
+  int open_leaf_index_micro_block();
   int open_next_micro_block();
 
   int get_macro_block_header(ObSSTableMacroBlockHeader &macro_header);

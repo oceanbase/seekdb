@@ -85,7 +85,7 @@ int ObMicroBlockBufferHelper::compress_micro_block(ObMicroBlockDesc &micro_block
   int64_t block_size = micro_block_desc.buf_size_;
   const char *compress_buf = NULL;
   int64_t compress_buf_size = 0;
-  if (OB_UNLIKELY(!micro_block_desc.is_valid())) {
+  if (OB_UNLIKELY(!micro_block_desc.is_valid() || block_size != micro_block_desc.header_->data_length_)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid micro block desc", K(ret), K(micro_block_desc));
   } else if (OB_FAIL(compressor_.compress(block_buffer, block_size, compress_buf, compress_buf_size))) {
@@ -93,15 +93,8 @@ int ObMicroBlockBufferHelper::compress_micro_block(ObMicroBlockDesc &micro_block
       && OB_FAIL(check_micro_block(compress_buf, compress_buf_size,
             block_buffer, block_size, micro_block_desc))) {
     STORAGE_LOG(WARN, "failed to check micro block", K(ret));
-  } else {
-    ObMicroBlockHeader *header = const_cast<ObMicroBlockHeader *>(micro_block_desc.header_);
-    micro_block_desc.buf_ = compress_buf;
-    micro_block_desc.buf_size_ = compress_buf_size;
-    header->data_length_ = block_size;
-    header->data_zlength_ = micro_block_desc.buf_size_;
-    header->data_checksum_ = ob_crc64_sse42(0, micro_block_desc.buf_, micro_block_desc.buf_size_);
-    header->original_length_ = micro_block_desc.original_size_;
-    header->set_header_checksum();
+  } else if (compress_buf != block_buffer || compress_buf_size != micro_block_desc.header_->data_zlength_) {
+    ret = micro_block_desc.seal(compress_buf, compress_buf_size, allocator_);
   }
   return ret;
 }
@@ -194,9 +187,10 @@ int ObMicroBlockBufferHelper::prepare_micro_block_reader(
   ObMicroBlockData block_data;
   block_data.buf_ = buf;
   block_data.size_ = size;
-  const ObMicroBlockHeader *header = reinterpret_cast<const ObMicroBlockHeader *>(buf);
-  ObRowStoreType row_store_type = static_cast<ObRowStoreType>(header->row_store_type_);
-  if (OB_FAIL(check_reader_helper_.get_reader(row_store_type, micro_reader))) {
+  ObMicroBlockHeader header;
+  if (OB_FAIL(block_data.get_micro_header(header))) {
+  } else if (OB_FAIL(check_reader_helper_.get_reader(
+      static_cast<ObRowStoreType>(header.row_store_type_), micro_reader))) {
   } else if (OB_ISNULL(micro_reader)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected null micro reader", K(ret), KP(micro_reader));
@@ -808,13 +802,13 @@ int ObMacroBlockWriter::append(const ObDatumRow &row)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(append_row_and_hash_index(row))) {
+  if (OB_FAIL(append_row_to_micro_block(row))) {
     if (OB_BUF_NOT_ENOUGH == ret) {
       if (0 == micro_writer_->get_row_count()) {
         ret = OB_NOT_SUPPORTED;
         STORAGE_LOG(ERROR, "The single row is too large, ", K(ret), K(row));
       } else if (OB_FAIL(build_micro_block())) {
-      } else if (OB_FAIL(append_row_and_hash_index(row))) {
+      } else if (OB_FAIL(append_row_to_micro_block(row))) {
       }
     }
   }
@@ -1266,7 +1260,7 @@ int ObMacroBlockWriter::append_batch_to_micro_block(const ObBatchDatumRows &datu
   return ret;
 }
 
-int ObMacroBlockWriter::append_row_and_hash_index(const ObDatumRow &row)
+int ObMacroBlockWriter::append_row_to_micro_block(const ObDatumRow &row)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(micro_writer_->append_row(row))) {
@@ -1397,7 +1391,7 @@ int ObMacroBlockWriter::build_micro_block_desc_with_reuse(
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(save_last_key(micro_block.range_.get_end_key()))) {
   } else {
-    micro_block_desc.header_ = &header;
+    micro_block_desc.set_header(header, micro_block.payload_data_.get_buf());
     micro_block_desc.last_rowkey_ = micro_block.range_.get_end_key();
     micro_block_desc.data_size_ = header.data_length_;
     micro_block_desc.column_count_ = header.column_count_;
@@ -1444,14 +1438,11 @@ int ObMacroBlockWriter::build_micro_block_desc_with_rewrite(
     } else if (OB_FAIL(reader->init(decompressed_data, nullptr))) {
     } else if (OB_FAIL(save_last_key(micro_block.range_.get_end_key()))) {
     } else {
-      micro_block_desc.header_ = &header;
-      micro_block_desc.buf_ = micro_block.payload_data_.get_buf() + header.header_size_; // get original data_buf
+      micro_block_desc.buf_ = micro_block.payload_data_.get_buf() + header.header_size_;
       micro_block_desc.buf_size_ = header.data_zlength_;
-      // rewrite column_count, column_checksum, and header_size
-      header.column_count_ = data_store_desc_->get_row_column_count();
-      header.has_column_checksum_ = data_store_desc_->is_major_merge_type();
-      header.column_checksums_ = header.has_column_checksum_ ? curr_micro_column_checksum_ : NULL;
-      header.header_size_ = header.get_serialize_size();
+      header.set_column_checksums(data_store_desc_->get_row_column_count(),
+          data_store_desc_->is_major_merge_type() ? curr_micro_column_checksum_ : nullptr);
+      micro_block_desc.set_header(header);
 
       micro_block_desc.last_rowkey_ = micro_block.range_.get_end_key();
       micro_block_desc.data_size_ = header.data_length_;
@@ -1599,19 +1590,8 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
         macro_block.get_data_size()
   ))) {
   } else {
-    /* The pre-warm mechanism requires two types of micro-block:
-    1. Uncompressed index micro-blocks are used for executing prewarm->reserve(), which requires the header and payload of
-        the micro-block to be in contiguous memory. To meet this requirement, an additional memory block is allocated
-        specifically for this uncompressed micro-block.
-        1.1 Although the header and payload of a data micro-block before compression are not required to be in contiguous
-        memory, we still uniformly store them in a single contiguous memory block for consistency.
-        1.2 The micro block header in ObMicroBlockDesc has not been deserialized yet. At this point, 
-        the column_checksums_ pointer in ObMicroBlockHeader is invalid, and should not be accessed.
-    2.  micro-blocks stored within the macro block (maybe not compressed) are used for executing prewarm->add() and
-        generating clustered index rows, and do not require the header and payload to be in contiguous memory.
-        2.1 The header is allocated in a separate memory block.
-        2.2 The payload reuses memory from the macro block, without requiring contiguous storage between the header and payload.
-    */
+    // Cache reservation uses the contiguous expanded block. Index rows and
+    // cache keys use the stored record and its checksum from the macro block.
     ObMicroBlockDesc uncompressed_micro_block_desc;
     ObMicroBlockDesc micro_block_desc;
     int micro_block_idx = 0;
@@ -2017,7 +1997,8 @@ int ObMacroBlockWriter::check_micro_block_need_merge(
   } else {
     const int64_t data_version = data_store_desc_->get_data_format_version();
     const ObRowStoreType row_store_type = static_cast<ObRowStoreType>(micro_block.header_.row_store_type_);
-    if (row_store_type == data_store_desc_->get_row_store_type()) {
+    if (row_store_type == data_store_desc_->get_row_store_type()
+        && micro_block.header_.column_count_ == data_store_desc_->get_row_column_count()) {
       const int64_t max_block_row_count = data_store_desc_->static_desc_->encoding_granularity_;
       if (micro_writer_->get_row_count() <= 0) {
         need_merge = false;
@@ -2270,12 +2251,11 @@ void ObMacroBlockWriter::dump_macro_block(ObMacroBlock &macro_block)
     int64_t block_idx = 0;
     while (OB_SUCC(ret) && pos < data_size && block_idx < block_cnt) {
       const char *buf = data_buf + pos;
-      if (OB_FAIL(header.deserialize(data_buf, data_size, pos))) {
-      } else if (OB_FAIL(header.check_header_checksum())) {
+      if (OB_FAIL(header.deserialize_and_check_record_prefix(buf, data_size - pos))) {
       } else {
         FLOG_WARN("error micro block header (not flushed)", K(header), K(block_idx));
         micro_data.buf_ = buf;
-        micro_data.size_ = header.header_size_ + header.data_zlength_;
+        micro_data.size_ = header.get_stored_size();
         bool is_compressed = false;
         if (OB_FAIL(macro_reader_.decompress_data(micro_des_meta,
             micro_data.get_buf(), micro_data.get_buf_size(),
@@ -2283,7 +2263,7 @@ void ObMacroBlockWriter::dump_macro_block(ObMacroBlock &macro_block)
         } else if (OB_FAIL(micro_helper_.dump_micro_block_writer_buffer(
             decompressed_data.get_buf(), decompressed_data.get_buf_size()))) {
         } else {
-          pos += header.data_zlength_;
+          pos += micro_data.size_;
         }
       }
     }

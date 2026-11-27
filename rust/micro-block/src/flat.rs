@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::checksum::crc32c;
 use crate::format::{
-    checked_slice, header_checksum, i32_at, parse_flat_header, read_uint, stored_header_checksum,
-    u16_at, u64_at, Header,
+    checked_slice, i32_at, parse_flat_header, read_uint, u16_at, u64_at, Header,
 };
-use crate::{Cell, Error, Projection, Result, RowRange, RowkeyBound};
+use crate::hash_index::{Bucket, Buckets};
+use crate::read::ProjectionCell;
+use crate::{Cell, Error, Projection, Result, RowRange, RowkeyBound, RowkeyCells};
 
 const ROW_HEADER_SIZE: usize = 16;
 const CLUSTER_COLUMNS: usize = 32;
@@ -75,15 +75,15 @@ fn width_from_kind(kind: u8) -> Result<usize> {
 }
 
 impl<'a> FlatBlock<'a> {
+    // Storage verifies the block on ingest. A row metadata read validates
+    // the layout and the requested row without walking unrelated rows.
+    pub(crate) fn open(bytes: &'a [u8]) -> Result<Self> {
+        Ok(Self { bytes, header: parse_flat_header(bytes)? })
+    }
+
     pub fn new(bytes: &'a [u8]) -> Result<Self> {
         let header = parse_flat_header(bytes)?;
-        if stored_header_checksum(bytes)? != header_checksum(bytes, &header) {
-            return Err(Error::ChecksumMismatch);
-        }
-        let payload = checked_slice(bytes, header.header_size, header.data_length)?;
-        if header.data_zlength == header.data_length && crc32c(0, payload) != header.data_checksum {
-            return Err(Error::ChecksumMismatch);
-        }
+        header.check_expanded_record(bytes)?;
         let block = Self { bytes, header };
         let mut previous = 0usize;
         for row in 0..=block.row_count() {
@@ -96,6 +96,7 @@ impl<'a> FlatBlock<'a> {
         if previous != header.row_data_offset - header.header_size {
             return Err(Error::InvalidData);
         }
+        header.validate_flat_hash_trailer(bytes)?;
         for row in 0..block.row_count() {
             let parsed = block.row(row)?;
             if parsed.info.column_count != header.column_count {
@@ -118,6 +119,14 @@ impl<'a> FlatBlock<'a> {
         0
     }
 
+    pub(crate) fn hash_bucket(&self, hash: u64) -> Result<Bucket> {
+        Buckets::parse(self.hash_trailer()?)?.lookup(hash, self.row_count())
+    }
+
+    fn hash_trailer(&self) -> Result<&'a [u8]> {
+        self.header.flat_hash_trailer(self.bytes)
+    }
+
     fn row_offset(&self, row: usize) -> Result<usize> {
         let offset = self
             .header
@@ -132,19 +141,25 @@ impl<'a> FlatBlock<'a> {
         if row >= self.row_count() {
             return Err(Error::InvalidArgument);
         }
-        let start = self.row_offset(row)?;
+        let offset = self.row_offset(row)?;
         let end = self.row_offset(row + 1)?;
+        if end > self.header.row_data_offset - self.header.header_size {
+            return Err(Error::InvalidData);
+        }
         let start = self
             .header
             .header_size
-            .checked_add(start)
+            .checked_add(offset)
             .ok_or(Error::SizeOverflow)?;
-        FlatRow::parse(checked_slice(
+        let row = FlatRow::parse(checked_slice(
             self.bytes,
             start,
-            end.checked_sub(self.row_offset(row)?)
-                .ok_or(Error::InvalidData)?,
-        )?)
+            end.checked_sub(offset).ok_or(Error::InvalidData)?,
+        )?)?;
+        if row.info.column_count != self.column_count() {
+            return Err(Error::InvalidData);
+        }
+        Ok(row)
     }
 
     pub fn row_info(&self, row: usize) -> Result<FlatRowInfo> {
@@ -157,6 +172,82 @@ impl<'a> FlatBlock<'a> {
             return Ok(Cell::Nop);
         }
         parsed.cell(column)
+    }
+
+    pub(crate) fn read_rowkey(
+        &self,
+        row: usize,
+        column_count: usize,
+        key: &mut RowkeyCells<'a>,
+    ) -> Result<()> {
+        let parsed = self.row(row)?;
+        if column_count == 0 || column_count > parsed.info.rowkey_column_count {
+            return Err(Error::InvalidArgument);
+        }
+        key.cells.clear();
+        for column in 0..column_count {
+            key.cells.push(ProjectionCell::Borrowed(parsed.cell(column)?));
+        }
+        Ok(())
+    }
+
+    pub fn compare_rowkey_by<E: From<Error>>(
+        &self,
+        row: usize,
+        column_count: usize,
+        compare: impl FnOnce(&RowkeyCells<'_>) -> core::result::Result<core::cmp::Ordering, E>,
+    ) -> core::result::Result<core::cmp::Ordering, E> {
+        if column_count == 0 || column_count > self.header.rowkey_column_count {
+            return Err(Error::InvalidArgument.into());
+        }
+        let mut key = RowkeyCells::new(column_count)?;
+        self.read_rowkey(row, column_count, &mut key)?;
+        compare(&key)
+    }
+
+    /// Return the first row in the range that differs from the query.
+    pub fn find_equal_run_end_by<E: From<Error>>(
+        &self,
+        column_count: usize,
+        range: RowRange,
+        mut compare: impl FnMut(&RowkeyCells<'_>) -> core::result::Result<core::cmp::Ordering, E>,
+    ) -> core::result::Result<usize, E> {
+        if range.start > range.end
+            || range.end > self.row_count()
+            || column_count == 0
+            || column_count > self.header.rowkey_column_count
+        {
+            return Err(Error::InvalidArgument.into());
+        }
+        let mut key = RowkeyCells::new(column_count)?;
+        for row in range.start..range.end {
+            self.read_rowkey(row, column_count, &mut key)?;
+            if compare(&key)? != core::cmp::Ordering::Equal {
+                return Ok(row);
+            }
+        }
+        Ok(range.end)
+    }
+
+    pub fn find_rowkey_bound_by<E: From<Error>>(
+        &self,
+        column_count: usize,
+        lower_bound: bool,
+        range: RowRange,
+        mut compare: impl FnMut(&RowkeyCells<'_>) -> core::result::Result<core::cmp::Ordering, E>,
+    ) -> core::result::Result<RowkeyBound, E> {
+        if range.start > range.end
+            || range.end > self.row_count()
+            || column_count == 0
+            || column_count > self.header.rowkey_column_count
+        {
+            return Err(Error::InvalidArgument.into());
+        }
+        let mut key = RowkeyCells::new(column_count)?;
+        crate::rowkey::search_bound(lower_bound, range, |row| {
+            self.read_rowkey(row, column_count, &mut key)?;
+            compare(&key)
+        })
     }
 
     pub fn find_rowkey_bound(

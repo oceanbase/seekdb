@@ -94,8 +94,7 @@ private:
       const char *src_buf,
       const int64_t src_buf_len,
       char *dst_buf,
-      const int64_t dst_buf_len,
-      bool need_deserialize_header = true) const;
+      const int64_t dst_buf_len) const;
 
 private:
   storage::ObMetaDiskAddr addr_;

@@ -318,12 +318,6 @@ int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
       rust_block_->bytes = std::move(result.block);
       buf = reinterpret_cast<char *>(rust_block_->bytes.data());
       size = static_cast<int64_t>(rust_block_->bytes.size());
-      ObMicroBlockHeader *micro_header = reinterpret_cast<ObMicroBlockHeader *>(buf);
-      if (micro_header->has_column_checksum_) {
-        micro_header->column_checksums_ = reinterpret_cast<int64_t *>(
-            buf + ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET);
-      }
-      STORAGE_LOG(DEBUG, "built micro block with Rust", K(size), K(result.accepted_rows));
     }
   }
   return ret;

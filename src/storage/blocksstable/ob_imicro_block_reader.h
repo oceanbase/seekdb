@@ -26,7 +26,6 @@
 #include "storage/access/ob_table_read_info.h"
 #include "ob_block_sstable_struct.h"
 #include "ob_datum_range.h"
-#include "ob_micro_block_hash_index.h"
 #include "ob_micro_block_header.h"
 
 namespace oceanbase
@@ -53,7 +52,18 @@ class ObIMvccCtx;
 namespace blocksstable
 {
 struct ObMicroIndexInfo;
-struct ObRowHeader;
+struct MicroBlockRowMeta
+{
+  ObDmlRowFlag row_flag_;
+  ObMultiVersionRowFlag mvcc_flag_;
+  int64_t trans_id_ = 0;
+
+  ObDmlRowFlag get_row_flag() const { return row_flag_; }
+  uint8_t get_mvcc_row_flag() const { return mvcc_flag_.flag_; }
+  ObMultiVersionRowFlag get_row_multi_version_flag() const { return mvcc_flag_; }
+  int64_t get_trans_id() const { return trans_id_; }
+  TO_STRING_KV(K_(row_flag), K_(mvcc_flag), K_(trans_id));
+};
 
 #define FREE_PTR_FROM_CONTEXT(ctx, ptr, T)                                  \
   do {                                                                      \
@@ -145,20 +155,20 @@ public:
   bool is_index_block() const { return INDEX_BLOCK == type_ || DDL_BLOCK_TREE == type_ || DDL_MERGE_INDEX_BLOCK == type_;}
 
   void reset() { *this = ObMicroBlockData(); }
-  OB_INLINE const ObMicroBlockHeader *get_micro_header() const
+  int get_micro_header(ObMicroBlockHeader &header) const
   {
-    const ObMicroBlockHeader *micro_header = reinterpret_cast<const ObMicroBlockHeader *>(buf_);
-    const bool is_valid_micro_header =
-        size_ >= ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET  && micro_header->is_valid();
-    return is_valid_micro_header ? micro_header : nullptr;
+    int64_t pos = 0;
+    return header.deserialize(buf_, size_, pos);
   }
-  OB_INLINE ObRowStoreType get_store_type() const
+  int get_expanded_micro_header(ObMicroBlockHeader &header) const
   {
-    const ObMicroBlockHeader *micro_header = reinterpret_cast<const ObMicroBlockHeader *>(buf_);
-    const bool is_valid_micro_header =
-        size_ >= ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET && micro_header->is_valid();
-    return is_valid_micro_header
-      ? static_cast<ObRowStoreType>(micro_header->row_store_type_)
+    return header.deserialize_expanded_record(buf_, size_);
+  }
+  ObRowStoreType get_store_type() const
+  {
+    ObMicroBlockHeader header;
+    return OB_SUCCESS == get_micro_header(header)
+      ? static_cast<ObRowStoreType>(header.row_store_type_)
       : MAX_ROW_STORE;
   }
 
@@ -227,21 +237,6 @@ public:
   const ObStorageDatumUtils *datum_utils_;
 };
 
-int try_locate_rowkey_bound(
-    const char *block_data,
-    const int64_t block_size,
-    const ObMicroBlockHeader *header,
-    const ObColumnHeader *col_header,
-    const ObDatumRowkey &rowkey,
-    const ObITableReadInfo *read_info,
-    const bool require_full_rowkey,
-    const bool lower_bound,
-    const int64_t begin_idx,
-    const int64_t end_idx,
-    bool &located_by_rust,
-    int64_t &row_idx,
-    bool &equal);
-
 class ObIMicroBlockGetReader : public ObIMicroBlockReaderInfo
 {
 public:
@@ -271,19 +266,7 @@ public:
       const ObDatumRowkey &rowkey,
       const ObITableReadInfo &read_info,
       int64_t &row_id) = 0;
-protected:
-  OB_INLINE static int init_hash_index(
-      const ObMicroBlockData &block_data,
-      ObMicroBlockHashIndex &hash_index,
-      const ObMicroBlockHeader *header)
-  {
-    int ret = OB_SUCCESS;
-    hash_index.reset();
-    if (header->is_contain_hash_index() && OB_FAIL(hash_index.init(block_data))) {
-      STORAGE_LOG(WARN, "failed to init micro block hash index", K(ret), K(block_data));
-    }
-    return ret;
-  }
+
 };
 
 class ObIMicroBlockReader : public ObIMicroBlockReaderInfo
@@ -307,14 +290,14 @@ public:
   //when the incoming datum_utils is nullptr, it indicates not calling locate_range or find_bound
   virtual int init(const ObMicroBlockData &block_data, const ObStorageDatumUtils *datum_utils) {return OB_NOT_SUPPORTED; }
   virtual int get_row(const int64_t index, ObDatumRow &row) = 0;
-  virtual int get_row_header(
+  virtual int get_row_metadata(
       const int64_t row_idx,
-      const ObRowHeader *&row_header) { return OB_NOT_SUPPORTED; }
+      MicroBlockRowMeta &row_meta) { return OB_NOT_SUPPORTED; }
   virtual int get_row_count(int64_t &row_count) { return OB_NOT_SUPPORTED; }
   virtual int get_multi_version_info(
       const int64_t row_idx,
       const int64_t schema_rowkey_cnt,
-      const ObRowHeader *&row_header,
+      MicroBlockRowMeta &row_meta,
       int64_t &trans_version,
       int64_t &sql_sequence) { return OB_NOT_SUPPORTED; }
   int locate_range(

@@ -18,7 +18,6 @@
 #define OB_STORAGE_BLOCKSSTABLE_OB_MICRO_BLOCK_READER_H_
 
 #include "ob_imicro_block_reader.h"
-#include "ob_micro_block_hash_index.h"
 #include "ob_row_reader.h"
 #include "query/engine/basic/ob_pushdown_filter.h"
 
@@ -45,7 +44,6 @@ protected:
                          const int64_t begin_idx,
                          const int64_t end_idx,
                          const ObStorageDatumUtils &datum_utils,
-                         const ObITableReadInfo *read_info,
                          int64_t &row_idx,
                          bool &equal);
   OB_INLINE int init(const ObMicroBlockData &block_data);
@@ -73,13 +71,10 @@ protected:
       const RustFlatBatch &batch,
       const int64_t row_idx,
       ObDatumRow &row_buf);
-  const ObMicroBlockHeader *header_;
-  const char *data_begin_;
-  const char *data_end_;
-  const int32_t *index_data_;
+  ObMicroBlockHeader metadata_;
+  ObMicroBlockData block_data_;
   // TODO: remove allocator
   ObBlockReaderAllocator allocator_;
-  ObRowReader flat_row_reader_;
 };
 
 class ObMicroBlockReader : public ObIMicroBlockFlatReader, public ObIMicroBlockReader
@@ -104,9 +99,9 @@ public:
       const ObMicroBlockData &block_data,
 	  const ObStorageDatumUtils *datum_utils) override;
   virtual int get_row(const int64_t index, ObDatumRow &row) override;
-  virtual int get_row_header(
+  virtual int get_row_metadata(
       const int64_t row_idx,
-      const ObRowHeader *&row_header) override;
+      MicroBlockRowMeta &row_meta) override;
   int get_logical_row_cnt(
       const int64_t last,
       int64_t &row_idx,
@@ -115,7 +110,7 @@ public:
   int get_multi_version_info(
       const int64_t row_idx,
       const int64_t schema_rowkey_cnt,
-      const ObRowHeader *&row_header,
+      MicroBlockRowMeta &row_meta,
       int64_t &trans_version,
       int64_t &sql_sequence);
   // Filter interface for filter pushdown
@@ -146,8 +141,8 @@ public:
       int64_t &count) override final;
   virtual int64_t get_column_count() const override
   {
-    OB_ASSERT(nullptr != header_);
-    return header_->column_count_;
+    OB_ASSERT(block_data_.is_valid());
+    return metadata_.column_count_;
   }
   virtual int get_aggregate_result(
       const ObTableIterParam &iter_param,
@@ -186,8 +181,8 @@ public:
       const ObDatumRowkey &rowkey,
       const int64_t begin_idx,
       int64_t &row_idx) override;
-  OB_INLINE bool single_version_rows() { return nullptr != header_ && header_->single_version_rows_; }
-  OB_INLINE bool committed_single_version_rows() { return single_version_rows() && !header_->contain_uncommitted_rows(); }
+  OB_INLINE bool single_version_rows() { return block_data_.is_valid() && metadata_.single_version_rows_; }
+  OB_INLINE bool committed_single_version_rows() { return single_version_rows() && !metadata_.contain_uncommitted_rows(); }
 
   virtual int find_bound(
       const ObDatumRowkey &key,
@@ -199,7 +194,7 @@ public:
   virtual void reserve_reader_memory(bool reserve) override
   { allocator_.set_reserve_memory(reserve); }
   virtual bool has_lob_out_row() const override final
-  { return nullptr != header_ && header_->has_lob_out_row(); }
+  { return block_data_.is_valid() && metadata_.has_lob_out_row(); }
 
 protected:
   virtual int find_bound(
@@ -216,8 +211,7 @@ class ObMicroBlockGetReader : public ObIMicroBlockFlatReader, public ObIMicroBlo
 public:
   ObMicroBlockGetReader()
       : ObIMicroBlockFlatReader(),
-        ObIMicroBlockGetReader(),
-        hash_index_()
+        ObIMicroBlockGetReader()
   {}
   virtual ~ObMicroBlockGetReader() {}
   virtual int get_row(
@@ -252,7 +246,6 @@ private:
                               bool &need_binary_search,
                               bool &found);
 private:
-  ObMicroBlockHashIndex hash_index_;
 };
 
 } //end namespace blocksstable

@@ -18,7 +18,6 @@ pub use config as parameter_config;
 pub use crypto;
 #[cfg(feature = "native-http")]
 pub use http_client;
-pub use config as parameter_config;
 pub use file_io;
 pub use in_process;
 pub use json;

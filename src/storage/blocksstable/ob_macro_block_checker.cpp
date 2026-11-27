@@ -232,9 +232,7 @@ int ObSSTableMacroBlockChecker::check_logical_checksum(
     while (OB_SUCC(ret) && OB_SUCC(micro_iter.get_next_micro_block_data(raw_micro_data))) {
       bool is_compressed = false;
       ObIMicroBlockReader *micro_reader = nullptr;
-      if (OB_FAIL(ObMicroBlockHeader::deserialize_and_check_record(raw_micro_data.get_buf(),
-          raw_micro_data.get_buf_size(), MICRO_BLOCK_HEADER_MAGIC))) {
-      } else if (OB_FAIL(reader.decompress_data(sstable_header,
+      if (OB_FAIL(reader.decompress_data(sstable_header,
           raw_micro_data.get_buf(), raw_micro_data.get_buf_size(), false,
           micro_data.get_buf(), micro_data.get_buf_size(), is_compressed))) {
       } else if (OB_UNLIKELY(!micro_data.is_valid())) {

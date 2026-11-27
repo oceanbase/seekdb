@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::checksum::crc32c;
 use crate::format::{
-    checked_slice, header_checksum, integer_store_size, is_signed_store_type, parse_column_header,
-    parse_header, read_uint, stored_header_checksum, u16_at, u32_at, ColumnHeader, Header,
+    checked_slice, integer_store_size, is_signed_store_type, parse_column_header, parse_header,
+    read_uint, u16_at, u32_at, ColumnHeader, Header,
     COLUMN_HEADER_SIZE,
 };
 use crate::{Error, Result};
@@ -238,13 +237,7 @@ impl<'a> StringDiffMeta<'a> {
 impl<'a> Block<'a> {
     pub fn new(bytes: &'a [u8]) -> Result<Self> {
         let header = parse_header(bytes)?;
-        if stored_header_checksum(bytes)? != header_checksum(bytes, &header) {
-            return Err(Error::ChecksumMismatch);
-        }
-        let payload = checked_slice(bytes, header.header_size, header.data_length)?;
-        if header.data_zlength == header.data_length && crc32c(0, payload) != header.data_checksum {
-            return Err(Error::ChecksumMismatch);
-        }
+        header.check_expanded_record(bytes)?;
         let column_headers_len = header
             .column_count
             .checked_mul(COLUMN_HEADER_SIZE)
@@ -328,6 +321,13 @@ impl<'a> Block<'a> {
 
     pub fn rowkey_column_count(&self) -> usize {
         self.header.rowkey_column_count
+    }
+
+    pub(crate) fn column_obj_type(&self, column: usize) -> Result<u8> {
+        self.columns
+            .get(column)
+            .map(|header| header.obj_type)
+            .ok_or(Error::InvalidArgument)
     }
 
     pub fn copied_input_bytes(&self) -> usize {
@@ -1770,6 +1770,48 @@ impl<'a> Block<'a> {
         let bound =
             self.find_rowkey_bound(keys, kinds, uca, true, RowRange::new(0, self.row_count())?)?;
         Ok(bound.equal.then_some(bound.row as u32))
+    }
+
+    pub(crate) fn read_rowkey(
+        &self,
+        row: usize,
+        column_count: usize,
+        key: &mut crate::RowkeyCells<'a>,
+    ) -> Result<()> {
+        if column_count == 0 || column_count > self.rowkey_column_count() {
+            return Err(Error::InvalidArgument);
+        }
+        key.cells.clear();
+        key.decoded.clear();
+        let mut visiting = Vec::new();
+        for column in 0..column_count {
+            let cell = match self.columns[column].kind {
+                COLUMN_EQUAL | COLUMN_SUBSTR => {
+                    self.project_cell_nested(row, column, &mut key.decoded, &mut visiting, column)?
+                }
+                _ => self.project_cell_inner(row, column, &mut key.decoded, &mut visiting, column)?,
+            };
+            key.cells.push(cell);
+        }
+        Ok(())
+    }
+
+    pub fn find_rowkey_bound_by<E: From<Error>>(
+        &self,
+        column_count: usize,
+        lower_bound: bool,
+        range: RowRange,
+        mut compare: impl FnMut(&crate::RowkeyCells<'_>) -> core::result::Result<core::cmp::Ordering, E>,
+    ) -> core::result::Result<RowkeyBound, E> {
+        self.check_range(range)?;
+        if column_count == 0 || column_count > self.rowkey_column_count() {
+            return Err(Error::InvalidArgument.into());
+        }
+        let mut key = crate::RowkeyCells::new(column_count)?;
+        crate::rowkey::search_bound(lower_bound, range, |row| {
+            self.read_rowkey(row, column_count, &mut key)?;
+            compare(&key)
+        })
     }
 
     pub fn find_rowkey_bound(

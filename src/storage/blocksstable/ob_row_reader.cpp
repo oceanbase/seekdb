@@ -604,50 +604,5 @@ int ObRowReader::read_specific_column_in_cluster(
 }
 
 
-// called by ObIMicroBlockFlatReader::find_bound_::PreciseCompare
-int ObRowReader::compare_meta_rowkey(
-    const ObDatumRowkey &rhs,
-    const ObStorageDatumUtils &datum_utils,
-    const char *buf,
-    const int64_t row_len,
-    int32_t &cmp_result)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!rhs.is_valid() || !datum_utils.is_valid() || nullptr == buf || row_len <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    cmp_result = 0;
-    const int64_t compare_column_count = rhs.get_datum_cnt();
-    if (OB_UNLIKELY(datum_utils.get_rowkey_count() < compare_column_count)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(setup_row(buf, row_len))) {
-    } else if (OB_UNLIKELY(row_header_->get_rowkey_count() < compare_column_count)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObStorageDatum datum;
-      int64_t cluster_col_cnt = 0;
-      int64_t idx = 0;
-      for (int64_t cluster_idx = 0;
-          OB_SUCC(ret) && cmp_result == 0 && cluster_idx < row_header_->get_cluster_cnt() && idx < compare_column_count;
-          ++cluster_idx) {
-        if (OB_FAIL(analyze_info_and_init_reader(cluster_idx))) {
-        } else {
-          cluster_col_cnt = cluster_reader_.get_column_count();
-          for (int64_t i = 0;
-              OB_SUCC(ret) && cmp_result == 0 && i < cluster_col_cnt && idx < compare_column_count;
-              ++idx, ++i) {
-            if (OB_FAIL(cluster_reader_.sequence_read_datum(i, datum))) {
-            } else if (OB_FAIL(datum_utils.get_cmp_funcs().at(idx).compare(datum, rhs.datums_[idx], cmp_result))) {
-            }
-          }
-        }
-      }
-    }
-  }
-  reset();
-  return ret;
-}
-
-
 }//end namespace blocksstable
 }//end namespace oceanbase

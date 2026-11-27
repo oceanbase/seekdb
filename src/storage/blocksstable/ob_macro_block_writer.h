@@ -251,7 +251,7 @@ private:
   int check_order(const ObDatumRow &row);
   int init_macro_seq_generator(const blocksstable::ObMacroSeqParam &macro_seq_param);
   int init_hash_index_builder();
-  int append_row_and_hash_index(const ObDatumRow &row);
+  int append_row_to_micro_block(const ObDatumRow &row);
   int append_batch_to_micro_block(const ObBatchDatumRows &datum_rows, const int64_t start, const int64_t write_row_count);
   int init_pre_agg_util(const ObDataStoreDesc &data_store_desc);
   void release_pre_agg_util();

@@ -30,75 +30,214 @@ using namespace common;
 using namespace storage;
 namespace blocksstable
 {
-
-
-template<typename ReaderType>
-class PreciseCompare
+namespace
 {
-public:
-  PreciseCompare(
-      int &ret,
-      bool &equal,
-      ReaderType *reader,
-      const char *data_begin,
-      const int32_t *index_data,
-      const ObStorageDatumUtils *datum_utils)
-      : ret_(ret),
-      equal_(equal),
-      reader_(reader),
-      data_begin_(data_begin),
-      index_data_(index_data),
-      datum_utils_(datum_utils) {}
-  ~PreciseCompare() {}
-  inline bool operator() (const int64_t row_idx, const ObDatumRowkey &rowkey)
-  {
-    return compare(row_idx, rowkey, true);
+int flat_reader_status(micro_block::Code code)
+{
+  switch (code) {
+    case micro_block::Code::Ok:
+      return OB_SUCCESS;
+    case micro_block::Code::InvalidArgument:
+      return OB_INVALID_ARGUMENT;
+    case micro_block::Code::InvalidData:
+      return OB_INVALID_DATA;
+    case micro_block::Code::ChecksumMismatch:
+      return OB_CHECKSUM_ERROR;
+    case micro_block::Code::OutputTooSmall:
+      return OB_BUF_NOT_ENOUGH;
+    case micro_block::Code::SizeOverflow:
+      return OB_SIZE_OVERFLOW;
+    case micro_block::Code::Unsupported:
+      return OB_NOT_SUPPORTED;
+    default:
+      return OB_ERR_UNEXPECTED;
   }
-  inline bool operator() (const ObDatumRowkey &rowkey, const int64_t row_idx)
-  {
-    return compare(row_idx, rowkey, false);
+}
+
+rust::Slice<const uint8_t> flat_block_bytes(const ObMicroBlockData &block)
+{
+  return {reinterpret_cast<const uint8_t *>(block.get_buf()),
+          static_cast<size_t>(block.get_buf_size())};
+}
+
+int read_flat_row_metadata(
+    const ObMicroBlockHeader &header,
+    const ObMicroBlockData &block_data,
+    int64_t row_idx,
+    MicroBlockRowMeta &row_meta)
+{
+  if (OB_UNLIKELY(!block_data.is_valid() || row_idx < 0 || row_idx >= header.row_count_)) {
+    return OB_INVALID_ARGUMENT;
   }
-private:
-  inline bool compare(const int64_t row_idx, const ObDatumRowkey &rowkey, const bool lower_bound)
-  {
-    bool bret = false;
-    int &ret = ret_;
-    int32_t compare_result = 0;
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_FAIL(reader_->compare_meta_rowkey(
-                rowkey,
-                *datum_utils_,
-                data_begin_ + index_data_[row_idx],
-                index_data_[row_idx + 1] - index_data_[row_idx],
-                compare_result))) {
+  const auto result = micro_block::read_flat_row_meta(flat_block_bytes(block_data), row_idx);
+  const int ret = flat_reader_status(result.code);
+  if (OB_SUCCESS == ret) {
+    row_meta.row_flag_ = ObDmlRowFlag(result.meta.row_flag);
+    row_meta.mvcc_flag_ = ObMultiVersionRowFlag(result.meta.multi_version_flag);
+    row_meta.trans_id_ = result.meta.trans_id;
+  }
+  return ret;
+}
+
+int materialize_flat_cell(
+    rust::Slice<const uint8_t> block,
+    const micro_block::CellDesc &cell,
+    ObStorageDatum &datum)
+{
+  int ret = OB_SUCCESS;
+  datum.reuse();
+  switch (cell.kind) {
+    case micro_block::CellKind::Null:
+      datum.set_null();
+      break;
+    case micro_block::CellKind::Nop:
+      datum.set_nop();
+      break;
+    case micro_block::CellKind::UInt:
+      datum.set_uint(cell.value);
+      break;
+    case micro_block::CellKind::Borrowed:
+    case micro_block::CellKind::Outrow:
+      if (cell.offset > block.size() || cell.length > block.size() - cell.offset) {
+        ret = OB_INVALID_DATA;
+      } else if (OB_FAIL(datum.from_buf_enhance(
+                     reinterpret_cast<const char *>(block.data() + cell.offset), cell.length))) {
+      } else if (micro_block::CellKind::Outrow == cell.kind) {
+        datum.set_outrow();
+      }
+      break;
+    default:
+      ret = OB_INVALID_DATA;
+      break;
+  }
+  return ret;
+}
+
+int read_flat_column(
+    const ObMicroBlockHeader &header,
+    const ObMicroBlockData &block_data,
+    int64_t row_idx,
+    int64_t column_idx,
+    ObStorageDatum &datum)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(row_idx < 0 || row_idx >= header.row_count_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (column_idx < 0 || column_idx >= header.column_count_) {
+    datum.set_nop();
+  } else {
+    const auto block = flat_block_bytes(block_data);
+    const auto result = micro_block::read_flat_cell(block, row_idx, column_idx);
+    if (OB_FAIL(flat_reader_status(result.code))) {
     } else {
-      bret = lower_bound ? compare_result < 0 : compare_result > 0;
-      // binary search will keep searching after find the first equal item,
-      // if we need the equal reuslt, must prevent it from being modified again
-      if (0 == compare_result && !equal_) {
-        equal_ = true;
+      ret = materialize_flat_cell(block, result.cell, datum);
+    }
+  }
+  return ret;
+}
+
+struct FlatRowkeyComparison
+{
+  static int32_t compare(
+      void *context,
+      rust::Slice<const micro_block::CellDesc> cells,
+      rust::Slice<const uint8_t> decoded,
+      int32_t &ordering) noexcept
+  {
+    auto &self = *static_cast<FlatRowkeyComparison *>(context);
+    if (cells.size() != self.key_.get_datum_cnt() || !decoded.empty()) {
+      return OB_INVALID_DATA;
+    }
+    int ret = OB_SUCCESS;
+    int32_t stored_ordering = 0;
+    for (size_t i = 0; OB_SUCC(ret) && stored_ordering == 0 && i < cells.size(); ++i) {
+      const auto &cell = cells[i];
+      ObStorageDatum datum;
+      switch (cell.kind) {
+        case micro_block::CellKind::Null:
+          datum.set_null();
+          break;
+        case micro_block::CellKind::Nop:
+          datum.set_nop();
+          break;
+        case micro_block::CellKind::UInt:
+          datum.set_uint(cell.value);
+          break;
+        case micro_block::CellKind::Borrowed:
+          if (cell.offset > self.block_size_ || cell.length > self.block_size_ - cell.offset) {
+            ret = OB_INVALID_DATA;
+          } else {
+            ret = datum.from_buf_enhance(self.block_ + cell.offset, cell.length);
+          }
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+          break;
+      }
+      if (OB_SUCC(ret)) {
+        ret = self.datum_utils_.get_cmp_funcs().at(i).compare(
+            datum, self.key_.datums_[i], stored_ordering);
       }
     }
-    return bret;
+    ordering = (stored_ordering < 0) - (stored_ordering > 0);
+    return ret;
   }
 
-private:
-  int &ret_;
-  bool &equal_;
-  ReaderType *reader_;
-  const char *data_begin_;
-  const int32_t *index_data_;
-  const ObStorageDatumUtils *datum_utils_;
+  const char *block_;
+  size_t block_size_;
+  const ObDatumRowkey &key_;
+  const ObStorageDatumUtils &datum_utils_;
 };
+int search_flat_rowkey(
+    const ObMicroBlockHeader &header,
+    const ObMicroBlockData &block_data,
+    const ObDatumRowkey &key,
+    const ObStorageDatumUtils &datum_utils,
+    micro_block::RowkeySearch search,
+    int64_t begin_idx,
+    int64_t end_idx,
+    micro_block::LocateResult &result)
+{
+  if (OB_UNLIKELY(!block_data.is_valid())) {
+    return OB_NOT_INIT;
+  } else if (OB_UNLIKELY(!key.is_valid() || !datum_utils.is_valid()
+                         || key.get_datum_cnt() > datum_utils.get_rowkey_count()
+                         || begin_idx < 0 || begin_idx > end_idx || end_idx > header.row_count_)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  FlatRowkeyComparison context{
+      block_data.get_buf(), static_cast<size_t>(block_data.get_buf_size()), key, datum_utils};
+  const micro_block::RowkeyComparator comparator(&context, FlatRowkeyComparison::compare);
+  result = micro_block::locate_rowkey_by(
+      flat_block_bytes(block_data),
+      header.row_store_type_, key.get_datum_cnt(), search, begin_idx, end_idx, comparator);
+  if (OB_SUCCESS != result.compare_error) {
+    return result.compare_error;
+  }
+  return flat_reader_status(result.code);
+}
+
+int compare_flat_rowkey(
+    const ObMicroBlockHeader &header,
+    const ObMicroBlockData &block_data,
+    const ObDatumRowkey &rowkey,
+    const ObStorageDatumUtils &datum_utils,
+    int64_t row_idx,
+    int32_t &ordering)
+{
+  micro_block::LocateResult result;
+  const int ret = search_flat_rowkey(
+      header, block_data, rowkey, datum_utils, micro_block::RowkeySearch::Compare,
+      row_idx, row_idx + 1, result);
+  if (OB_SUCCESS == ret) {
+    ordering = -result.ordering;
+  }
+  return ret;
+}
+} // namespace
 
 ObIMicroBlockFlatReader::ObIMicroBlockFlatReader()
-  : header_(nullptr),
-    data_begin_(nullptr),
-    data_end_(nullptr),
-    index_data_(nullptr),
-    allocator_(ObModIds::OB_STORE_ROW_GETTER),
-    flat_row_reader_()
+  : allocator_(ObModIds::OB_STORE_ROW_GETTER)
 {
 }
 
@@ -109,11 +248,8 @@ ObIMicroBlockFlatReader::~ObIMicroBlockFlatReader()
 
 void ObIMicroBlockFlatReader::reset()
 {
-  header_ = nullptr;
-  data_begin_ = nullptr;
-  data_end_ = nullptr;
-  index_data_ = nullptr;
-  flat_row_reader_.reset();
+  metadata_.reset();
+  block_data_.reset();
 }
 
 int ObIMicroBlockFlatReader::find_bound_(
@@ -122,67 +258,36 @@ int ObIMicroBlockFlatReader::find_bound_(
     const int64_t begin_idx,
     const int64_t end_idx,
     const ObStorageDatumUtils &datum_utils,
-    const ObITableReadInfo *read_info,
     int64_t &row_idx,
     bool &equal)
 {
-  int ret = OB_SUCCESS;
-  bool located_by_rust = false;
   equal = false;
   row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
-  if (OB_UNLIKELY(nullptr == data_begin_ || nullptr == index_data_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(try_locate_rowkey_bound(
-          reinterpret_cast<const char *>(header_),
-          header_->header_size_ + header_->data_length_,
-          header_,
-          nullptr,
-          key,
-          read_info,
-          false,
-          lower_bound,
-          begin_idx,
-          end_idx,
-          located_by_rust,
-          row_idx,
-          equal))) {
-  } else if (!located_by_rust) {
-    PreciseCompare<ObRowReader> flat_compare(
-        ret,
-        equal,
-        &flat_row_reader_,
-        data_begin_,
-        index_data_,
-        &datum_utils);
-    ObRowIndexIterator begin_iter(begin_idx);
-    ObRowIndexIterator end_iter(end_idx);
-    ObRowIndexIterator found_iter;
-    if (lower_bound) {
-      found_iter = std::lower_bound(begin_iter, end_iter, key, flat_compare);
-    } else {
-      found_iter = std::upper_bound(begin_iter, end_iter, key, flat_compare);
-    }
-    if (OB_FAIL(ret)) {
-    } else {
-      row_idx = *found_iter;
-    }
+  micro_block::LocateResult result;
+  const auto search = lower_bound
+      ? micro_block::RowkeySearch::LowerBound
+      : micro_block::RowkeySearch::UpperBound;
+  const int ret = search_flat_rowkey(
+      metadata_, block_data_, key, datum_utils, search, begin_idx, end_idx, result);
+  if (OB_SUCCESS == ret) {
+    row_idx = result.row;
+    equal = result.equal;
   }
   return ret;
 }
 
 int ObIMicroBlockFlatReader::init(const ObMicroBlockData &block_data)
 {
-  int ret = OB_SUCCESS;
-  if(OB_UNLIKELY(!block_data.is_valid())){
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const char *buf = block_data.get_buf();
-    header_ = reinterpret_cast<const ObMicroBlockHeader*>(buf);
-    data_begin_ = buf + header_->header_size_;
-    data_end_ = buf + header_->row_index_offset_;
-    index_data_ = reinterpret_cast<const int32_t *>(buf + header_->row_index_offset_);
+  ObIMicroBlockFlatReader::reset();
+  if (OB_UNLIKELY(!block_data.is_valid())) {
+    return OB_INVALID_ARGUMENT;
   }
-  return ret;
+  if (OB_UNLIKELY(OB_SUCCESS != block_data.get_expanded_micro_header(metadata_)
+                  || FLAT_ROW_STORE != metadata_.row_store_type_)) {
+    return OB_INVALID_DATA;
+  }
+  block_data_ = block_data;
+  return OB_SUCCESS;
 }
 
 /*
@@ -196,14 +301,9 @@ int ObMicroBlockGetReader::inner_init(
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIMicroBlockFlatReader::init(block_data))) {
   } else {
-    row_count_ = header_->row_count_;
-    original_data_length_ = header_->original_length_;
+    row_count_ = metadata_.row_count_;
+    original_data_length_ = metadata_.original_length_;
     read_info_ = &read_info;
-    // Fail to init hash index means the reader can not use it, but reader can still work
-    if (OB_FAIL(ObIMicroBlockGetReader::init_hash_index(block_data, hash_index_, header_))) {
-      ret = OB_SUCCESS;
-      hash_index_.reset();
-    }
     is_inited_ = true;
   }
   return ret;
@@ -249,10 +349,12 @@ int ObMicroBlockGetReader::exist_row(
         ret = OB_SUCCESS;
       }
     } else {
-      const ObRowHeader *row_header =
-          reinterpret_cast<const ObRowHeader*>(data_begin_ + index_data_[row_idx]);
-      exist = !row_header->get_row_flag().is_delete();
-      found = true;
+      MicroBlockRowMeta row_meta;
+      if (OB_FAIL(read_flat_row_metadata(metadata_, block_data_, row_idx, row_meta))) {
+      } else {
+        exist = !row_meta.get_row_flag().is_delete();
+        found = true;
+      }
     }
   }
   return ret;
@@ -269,14 +371,14 @@ int ObMicroBlockGetReader::locate_rowkey(const ObDatumRowkey &rowkey, int64_t &r
   } else if (need_binary_search) {
     bool is_equal = false;
     if (OB_FAIL(ObIMicroBlockFlatReader::find_bound_(rowkey, true/*lower_bound*/, 0, row_count_,
-        read_info_->get_datum_utils(), read_info_, row_idx, is_equal))) {
+        read_info_->get_datum_utils(), row_idx, is_equal))) {
     } else if (row_count_ == row_idx || !is_equal) {
       row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
       ret = OB_BEYOND_THE_RANGE;
     } else {
-      const ObRowHeader *row_header =
-          reinterpret_cast<const ObRowHeader*>(data_begin_ + index_data_[row_idx]);
-      if (row_header->get_row_multi_version_flag().is_ghost_row()) {
+      MicroBlockRowMeta row_meta;
+      if (OB_FAIL(read_flat_row_metadata(metadata_, block_data_, row_idx, row_meta))) {
+      } else if (row_meta.get_row_multi_version_flag().is_ghost_row()) {
         row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
         ret = OB_BEYOND_THE_RANGE;
       }
@@ -294,38 +396,39 @@ int ObMicroBlockGetReader::locate_rowkey_fast_path(const ObDatumRowkey &rowkey,
 {
   int ret = OB_SUCCESS;
   need_binary_search = false;
-  if (hash_index_.is_inited()) {
+  if (!metadata_.is_contain_hash_index()) {
+    need_binary_search = true;
+  } else {
     uint64_t hash_value = 0;
-    const blocksstable::ObStorageDatumUtils &datum_utils = read_info_->get_datum_utils();
+    const auto &datum_utils = read_info_->get_datum_utils();
     if (OB_FAIL(rowkey.murmurhash(0, datum_utils, hash_value))) {
-    } else  {
-      const uint8_t tmp_row_idx = hash_index_.find(hash_value);
-      if (tmp_row_idx == ObMicroBlockHashIndex::NO_ENTRY) {
-        row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
-        found = false;
-      } else if (tmp_row_idx == ObMicroBlockHashIndex::COLLISION) {
-        need_binary_search = true;
+    } else {
+      const auto bucket = micro_block::lookup_flat_hash(flat_block_bytes(block_data_), hash_value);
+      if (OB_FAIL(flat_reader_status(bucket.code))) {
       } else {
-        int32_t compare_result = 0;
-        if (OB_UNLIKELY(tmp_row_idx >= row_count_)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(flat_row_reader_.compare_meta_rowkey(
-                      rowkey,
-                      read_info_->get_datum_utils(),
-                      data_begin_ + index_data_[tmp_row_idx],
-                      index_data_[tmp_row_idx + 1] - index_data_[tmp_row_idx],
-                      compare_result))) {
-        } else if (0 != compare_result) {
-          row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
-          found = false;
-        } else {
-          row_idx = tmp_row_idx;
-          found = true;
+        switch (bucket.kind) {
+          case micro_block::FlatHashKind::Vacant:
+            row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
+            found = false;
+            break;
+          case micro_block::FlatHashKind::Row: {
+            int32_t compare_result = 0;
+            if (OB_FAIL(compare_flat_rowkey(metadata_, block_data_, rowkey, datum_utils, bucket.row, compare_result))) {
+            } else {
+              found = compare_result == 0;
+              row_idx = found ? bucket.row : ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
+            }
+            break;
+          }
+          case micro_block::FlatHashKind::Collision:
+            need_binary_search = true;
+            break;
+          default:
+            ret = OB_ERR_UNEXPECTED;
+            break;
         }
       }
     }
-  } else {
-    need_binary_search = true;
   }
   return ret;
 }
@@ -341,7 +444,7 @@ int ObMicroBlockGetReader::get_row(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObIMicroBlockFlatReader::init(block_data))) {
   } else {
-    row_count_ = header_->row_count_;
+    row_count_ = metadata_.row_count_;
     read_info_ = &read_info;
     is_inited_ = true;
 
@@ -377,11 +480,6 @@ void ObMicroBlockReader::reset()
 {
   ObIMicroBlockFlatReader::reset();
   ObIMicroBlockReader::reset();
-  header_ = NULL;
-  data_begin_ = NULL;
-  data_end_ = NULL;
-  index_data_ = NULL;
-  flat_row_reader_.reset();
   allocator_.reuse();
 }
 
@@ -397,8 +495,8 @@ int ObMicroBlockReader::init(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObIMicroBlockFlatReader::init(block_data))) {
   } else {
-    row_count_ = header_->row_count_;
-    original_data_length_ = header_->original_length_;
+    row_count_ = metadata_.row_count_;
+    original_data_length_ = metadata_.original_length_;
     read_info_ = &read_info;
     datum_utils_ = &(read_info.get_datum_utils());
     is_inited_ = true;
@@ -420,8 +518,8 @@ int ObMicroBlockReader::init(
   }
   if (OB_FAIL(ObIMicroBlockFlatReader::init(block_data))) {
   } else {
-    row_count_ = header_->row_count_;
-    original_data_length_ = header_->original_length_;
+    row_count_ = metadata_.row_count_;
+    original_data_length_ = metadata_.original_length_;
     read_info_ = nullptr;
     datum_utils_ = datum_utils;
     is_inited_ = true;
@@ -443,11 +541,10 @@ int ObMicroBlockReader::compare_rowkey(
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!rowkey.is_valid() || idx < 0 || idx >= row_count_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(flat_row_reader_.compare_meta_rowkey(rowkey,
-                                                          *datum_utils_,
-                                                          data_begin_ + index_data_[idx],
-                                                          index_data_[idx + 1] - index_data_[idx],
-                                                          compare_result))) {
+  } else if (OB_UNLIKELY(nullptr == datum_utils_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ret = compare_flat_rowkey(metadata_, block_data_, rowkey, *datum_utils_, idx, compare_result);
   }
   return ret;
 }
@@ -471,7 +568,6 @@ int ObMicroBlockReader::find_bound(
           begin_idx,
           end_idx,
           *datum_utils_,
-          read_info_,
           row_idx,
           equal))) {
   }
@@ -496,7 +592,6 @@ int ObMicroBlockReader::find_bound(
           begin_idx,
           row_count_,
           *datum_utils_,
-          read_info_,
           row_idx,
           equal))) {
   }
@@ -511,22 +606,17 @@ int ObMicroBlockReader::find_bound_through_linear_search(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!rowkey.is_valid())) {
+  } else if (OB_UNLIKELY(!rowkey.is_valid() || nullptr == datum_utils_
+                         || begin_idx < -1 || begin_idx >= row_count_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    int32_t cmp_result = 0;
-    int64_t idx = begin_idx + 1;
-    for (; OB_SUCC(ret) && idx < row_count_; ++idx) {
-      if (OB_FAIL(flat_row_reader_.compare_meta_rowkey(rowkey,
-                                                       *datum_utils_,
-                                                       data_begin_ + index_data_[idx],
-                                                       index_data_[idx + 1] - index_data_[idx],
-                                                       cmp_result))) {
-      } else if (cmp_result != 0) {
-        break;
-      }
+    micro_block::LocateResult result;
+    if (OB_FAIL(search_flat_rowkey(
+            metadata_, block_data_, rowkey, *datum_utils_, micro_block::RowkeySearch::EqualRunEnd,
+            begin_idx + 1, row_count_, result))) {
+    } else {
+      row_idx = static_cast<int64_t>(result.row) - 1;
     }
-    row_idx = idx - 1;
   }
   return ret;
 }
@@ -548,8 +638,8 @@ int ObMicroBlockReader::get_row(const int64_t index, ObDatumRow &row)
   int ret = OB_SUCCESS;
   if(IS_NOT_INIT){
     ret = OB_NOT_INIT;
-  } else if(OB_UNLIKELY(nullptr == header_ ||
-                        index < 0 || index >= header_->row_count_ ||
+  } else if(OB_UNLIKELY(!block_data_.is_valid() ||
+                        index < 0 || index >= metadata_.row_count_ ||
                         !row.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(read_row(read_info_, index, row))) {
@@ -559,19 +649,15 @@ int ObMicroBlockReader::get_row(const int64_t index, ObDatumRow &row)
   return ret;
 }
 
-int ObMicroBlockReader::get_row_header(
+int ObMicroBlockReader::get_row_metadata(
     const int64_t row_idx,
-    const ObRowHeader *&row_header)
+    MicroBlockRowMeta &row_meta)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(nullptr == header_ || row_idx >= header_->row_count_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(flat_row_reader_.read_row_header(
-              data_begin_ + index_data_[row_idx],
-              index_data_[row_idx + 1] - index_data_[row_idx],
-              row_header))) {
+  } else {
+    ret = read_flat_row_metadata(metadata_, block_data_, row_idx, row_meta);
   }
   return ret;
 }
@@ -582,17 +668,16 @@ int ObMicroBlockReader::get_logical_row_cnt(
     int64_t &row_cnt) const
 {
   int ret = OB_SUCCESS;
-  const ObRowHeader *row_header = nullptr;
+  MicroBlockRowMeta row_meta;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(nullptr == header_ || last >= header_->row_count_)) {
+  } else if (OB_UNLIKELY(!block_data_.is_valid() || last >= metadata_.row_count_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     while (OB_SUCC(ret) && row_idx <= last) {
-      if (OB_ISNULL(row_header = reinterpret_cast<const ObRowHeader*>(data_begin_ + index_data_[row_idx]))) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (row_header->get_row_multi_version_flag().is_first_multi_version_row()) {
-        row_cnt += row_header->get_row_flag().get_delta();
+      if (OB_FAIL(read_flat_row_metadata(metadata_, block_data_, row_idx, row_meta))) {
+      } else if (row_meta.get_row_multi_version_flag().is_first_multi_version_row()) {
+        row_cnt += row_meta.get_row_flag().get_delta();
       }
       row_idx++;
     }
@@ -606,7 +691,7 @@ int ObMicroBlockReader::get_row_count(int64_t &row_count)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    row_count = header_->row_count_;
+    row_count = metadata_.row_count_;
   }
   return ret;
 }
@@ -615,46 +700,32 @@ int ObMicroBlockReader::get_row_count(int64_t &row_count)
 int ObMicroBlockReader::get_multi_version_info(
     const int64_t row_idx,
     const int64_t schema_rowkey_cnt,
-    const ObRowHeader *&row_header,
+    MicroBlockRowMeta &row_meta,
     int64_t &trans_version,
     int64_t &sql_sequence)
 {
   int ret = OB_SUCCESS;
-  row_header = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(nullptr == header_ ||
+  } else if (OB_UNLIKELY(!block_data_.is_valid() ||
                          row_idx < 0 || row_idx >= row_count_ ||
                          0 > schema_rowkey_cnt ||
-                         header_->column_count_ < schema_rowkey_cnt + 2)) {
+                         metadata_.column_count_ < schema_rowkey_cnt + 2)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(flat_row_reader_.read_row_header(
-              data_begin_ + index_data_[row_idx],
-              index_data_[row_idx + 1] - index_data_[row_idx],
-              row_header))) {
+  } else if (OB_FAIL(read_flat_row_metadata(metadata_, block_data_, row_idx, row_meta))) {
   } else {
     ObStorageDatum datum;
-    const int64_t read_col_idx =
-      row_header->get_row_multi_version_flag().is_uncommitted_row()
-      ? schema_rowkey_cnt + 1 : schema_rowkey_cnt;
-    if (OB_FAIL(flat_row_reader_.read_column(
-                data_begin_ + index_data_[row_idx],
-                index_data_[row_idx + 1] - index_data_[row_idx],
-                read_col_idx,
-                datum))) {
+    const auto flags = row_meta.get_row_multi_version_flag();
+    const int64_t column_idx = schema_rowkey_cnt + flags.is_uncommitted_row();
+    if (OB_FAIL(read_flat_column(metadata_, block_data_, row_idx, column_idx, datum))) {
+    } else if (flags.is_uncommitted_row()) {
+      trans_version = INT64_MAX;
+      sql_sequence = -datum.get_int();
     } else {
-      if (!row_header->get_row_multi_version_flag().is_uncommitted_row()) {
-        // get trans_version for committed row
-        sql_sequence = 0;
-        trans_version = row_header->get_row_multi_version_flag().is_ghost_row() ? 0 : -datum.get_int();
-      } else {
-        // get sql_sequence for uncommitted row
-        trans_version = INT64_MAX;
-        sql_sequence = -datum.get_int();
-      }
+      trans_version = flags.is_ghost_row() ? 0 : -datum.get_int();
+      sql_sequence = 0;
     }
   }
-
   return ret;
 }
 
@@ -677,7 +748,7 @@ int ObMicroBlockReader::filter_truncate_evaluator(
   if (OB_UNLIKELY(start < 0 || count <= 0 || start + count > row_count_ ||
                   !evaluator.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(nullptr == read_info_ || nullptr == header_)) {
+  } else if (OB_UNLIKELY(nullptr == read_info_ || !block_data_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     const int64_t column_count = evaluator.referenced_column_count();
@@ -704,7 +775,6 @@ int ObMicroBlockReader::filter_truncate_evaluator(
       }
     }
     RustFlatBatch rust_batch;
-    bool read_by_rust = false;
     if (OB_SUCC(ret) && !row_ids.empty()) {
       rust_batch.columns.reserve(column_count);
       for (int64_t i = 0; i < column_count; ++i) {
@@ -717,11 +787,6 @@ int ObMicroBlockReader::filter_truncate_evaluator(
       }
       if (OB_SUCC(ret)) {
         ret = try_project_rust(row_ids.data(), row_ids.size(), rust_batch);
-        if (OB_NOT_SUPPORTED == ret) {
-          ret = OB_SUCCESS;
-        } else if (OB_SUCC(ret)) {
-          read_by_rust = true;
-        }
       }
     }
     for (int64_t row = 0; OB_SUCC(ret) && row < row_ids.size(); ++row) {
@@ -731,18 +796,8 @@ int ObMicroBlockReader::filter_truncate_evaluator(
         const int64_t column_index = evaluator.referenced_column(i);
         datum.reuse();
         tmp_datum.reuse();
-        if (read_by_rust) {
-          ret = read_rust_cell(rust_batch, row, i, tmp_datum);
-        } else {
-          const int64_t row_idx = row_ids[row];
-          ret = flat_row_reader_.read_column(
-              data_begin_ + index_data_[row_idx],
-              index_data_[row_idx + 1] - index_data_[row_idx],
-              column_index,
-              tmp_datum);
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_UNLIKELY(header_->is_trans_version_column_idx(column_index))) {
+        if (OB_FAIL(read_rust_cell(rust_batch, row, i, tmp_datum))) {
+        } else if (OB_UNLIKELY(metadata_.is_trans_version_column_idx(column_index))) {
           datum.set_int(-tmp_datum.get_int());
         } else {
           const ObObjType obj_type = cols_desc.at(column_index).col_type_.get_type();
@@ -761,7 +816,7 @@ int ObMicroBlockReader::filter_truncate_evaluator(
       }
     }
     LOG_TRACE("[TRUNCATE INFO] flat micro block truncate filter", K(ret), K(start), K(count),
-              K(result_bitmap.popcnt()), K(result_bitmap), KPC_(header));
+              K(result_bitmap.popcnt()), K(result_bitmap), K_(metadata));
   }
   return ret;
 }
@@ -772,34 +827,30 @@ int ObIMicroBlockFlatReader::read_row(
     ObDatumRow &row)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == header_ || index < 0 || index >= header_->row_count_)) {
+  if (OB_UNLIKELY(!block_data_.is_valid() || index < 0 || index >= metadata_.row_count_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (nullptr != read_info && read_info->is_valid()) {
+  } else if (nullptr != read_info && !read_info->is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
     const int32_t row_id = static_cast<int32_t>(index);
     RustFlatBatch batch;
-    ret = try_get_rows_rust(*read_info, &row_id, 1, batch);
-    if (OB_NOT_SUPPORTED == ret) {
-      ret = flat_row_reader_.read_row(
-          data_begin_ + index_data_[index],
-          index_data_[index + 1] - index_data_[index],
-          read_info,
-          row);
-    } else if (OB_SUCC(ret)) {
-      if (row.is_valid()) {
-        ret = row.reserve(read_info->get_request_count());
-      } else {
-        ret = row.init(read_info->get_request_count());
+    const int64_t column_count = nullptr == read_info
+        ? metadata_.column_count_ : read_info->get_request_count();
+    if (nullptr != read_info) {
+      ret = try_get_rows_rust(*read_info, &row_id, 1, batch);
+    } else {
+      batch.columns.reserve(column_count);
+      for (int64_t column = 0; column < column_count; ++column) {
+        batch.columns.push_back(static_cast<uint32_t>(column));
       }
+      ret = try_project_rust(&row_id, 1, batch);
+    }
+    if (OB_SUCC(ret)) {
+      ret = row.is_valid() ? row.reserve(column_count) : row.init(column_count);
       if (OB_SUCC(ret)) {
         ret = read_rust_row(batch, 0, row);
       }
     }
-  } else {
-    ret = flat_row_reader_.read_row(
-        data_begin_ + index_data_[index],
-        index_data_[index + 1] - index_data_[index],
-        read_info,
-        row);
   }
   return ret;
 }
@@ -820,33 +871,22 @@ int ObMicroBlockReader::get_rows(
   int ret = OB_SUCCESS;
   int64_t row_idx = common::OB_INVALID_INDEX;
   allocator_.reuse();
-  if (OB_UNLIKELY(nullptr == header_ ||
+  if (OB_UNLIKELY(!block_data_.is_valid() ||
                   nullptr == read_info_ ||
-                  row_cap > header_->row_count_ ||
+                  row_cap > metadata_.row_count_ ||
                   !row_buf.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(row_buf.reserve(read_info_->get_request_count()))) {
   } else {
-    bool read_by_rust = false;
     RustFlatBatch rust_batch;
-    const int64_t trans_col_idx = header_->rowkey_column_count_ > 0 ? read_info_->get_schema_rowkey_count() : INT32_MIN;
+    const int64_t trans_col_idx = metadata_.rowkey_column_count_ > 0 ? read_info_->get_schema_rowkey_count() : INT32_MIN;
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
     ret = try_get_rows_rust(*read_info_, row_ids, row_cap, rust_batch);
-    if (OB_NOT_SUPPORTED == ret) {
-      ret = OB_SUCCESS;
-    } else if (OB_SUCC(ret)) {
-      read_by_rust = true;
-    }
     for (int64_t idx = 0; OB_SUCC(ret) && idx < row_cap; ++idx) {
       row_idx = row_ids[idx];
-      if (OB_UNLIKELY(row_idx < 0 || row_idx >= header_->row_count_)) {
+      if (OB_UNLIKELY(row_idx < 0 || row_idx >= metadata_.row_count_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (read_by_rust && OB_FAIL(read_rust_row(rust_batch, idx, row_buf))) {
-      } else if (!read_by_rust && OB_FAIL(flat_row_reader_.read_row(
-          data_begin_ + index_data_[row_idx],
-          index_data_[row_idx + 1] - index_data_[row_idx],
-          read_info_,
-          row_buf))) {
+      } else if (OB_FAIL(read_rust_row(rust_batch, idx, row_buf))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < cols_projector.count(); ++i) {
           common::ObDatum &datum = datum_infos.at(i).datum_ptr_[idx + datum_offset];
@@ -917,44 +957,26 @@ int ObIMicroBlockFlatReader::try_project_rust(
     RustFlatBatch &batch)
 {
   int ret = OB_NOT_SUPPORTED;
-  if ((nullptr == row_ids && row_cap > 0) || row_cap < 0 || row_cap > UINT32_MAX
-      || row_cap > header_->row_count_ || header_->data_length_ < 0) {
+  if (!block_data_.is_valid() || (nullptr == row_ids && row_cap > 0) || row_cap < 0 || row_cap > UINT32_MAX
+      || row_cap > metadata_.row_count_) {
     return OB_INVALID_ARGUMENT;
   }
   if (0 == row_cap) {
     return OB_SUCCESS;
   }
-  const int64_t block_size = header_->header_size_ + header_->data_length_;
   batch.rows.reserve(row_cap);
   for (int64_t i = 0; i < row_cap; ++i) {
-    if (row_ids[i] < 0 || row_ids[i] >= header_->row_count_) {
+    if (row_ids[i] < 0 || row_ids[i] >= metadata_.row_count_) {
       return OB_ERR_UNEXPECTED;
     }
     batch.rows.push_back(static_cast<uint32_t>(row_ids[i]));
   }
-  const rust::Slice<const uint8_t> block(
-      reinterpret_cast<const uint8_t *>(header_), static_cast<std::size_t>(block_size));
+  const auto block = flat_block_bytes(block_data_);
   const rust::Slice<const uint32_t> rows(batch.rows.data(), batch.rows.size());
   const rust::Slice<const uint32_t> columns(batch.columns.data(), batch.columns.size());
   batch.result.emplace(micro_block::project_flat_block(block, rows, columns));
-  switch (batch.result->code) {
-    case micro_block::Code::Ok:
-      ret = OB_SUCCESS;
-      break;
-    case micro_block::Code::Unsupported:
-      return OB_NOT_SUPPORTED;
-    case micro_block::Code::InvalidArgument:
-      return OB_INVALID_ARGUMENT;
-    case micro_block::Code::InvalidData:
-      return OB_INVALID_DATA;
-    case micro_block::Code::ChecksumMismatch:
-      return OB_CHECKSUM_ERROR;
-    case micro_block::Code::OutputTooSmall:
-      return OB_BUF_NOT_ENOUGH;
-    case micro_block::Code::SizeOverflow:
-      return OB_SIZE_OVERFLOW;
-    default:
-      return OB_ERR_UNEXPECTED;
+  if (OB_FAIL(flat_reader_status(batch.result->code))) {
+    return ret;
   }
   if (batch.result->rows.size() != batch.rows.size()
       || batch.result->cells.size() != batch.rows.size() * batch.columns.size()
@@ -970,33 +992,13 @@ int ObIMicroBlockFlatReader::read_rust_cell(
     const int64_t col_idx,
     ObStorageDatum &datum)
 {
-  int ret = OB_SUCCESS;
   if (!batch.result.has_value() || row_idx < 0 || row_idx >= batch.rows.size()
       || col_idx < 0 || col_idx >= batch.columns.size()
       || batch.result->rows[row_idx] != batch.rows[row_idx]) {
     return OB_INVALID_DATA;
   }
-  const int64_t block_size = header_->header_size_ + header_->data_length_;
-  const micro_block::CellDesc &cell =
-      batch.result->cells[row_idx * batch.columns.size() + col_idx];
-  datum.reuse();
-  if (micro_block::CellKind::Null == cell.kind) {
-    datum.set_null();
-  } else if (micro_block::CellKind::Nop == cell.kind) {
-    datum.set_nop();
-  } else if (micro_block::CellKind::UInt == cell.kind) {
-    datum.set_uint(cell.value);
-  } else if ((micro_block::CellKind::Borrowed != cell.kind
-              && micro_block::CellKind::Outrow != cell.kind)
-             || cell.offset > static_cast<uint64_t>(block_size)
-             || cell.length > static_cast<uint64_t>(block_size) - cell.offset) {
-    ret = OB_INVALID_DATA;
-  } else if (OB_FAIL(datum.from_buf_enhance(
-      reinterpret_cast<const char *>(header_) + cell.offset, cell.length))) {
-  } else if (micro_block::CellKind::Outrow == cell.kind) {
-    datum.set_outrow();
-  }
-  return ret;
+  const auto &cell = batch.result->cells[row_idx * batch.columns.size() + col_idx];
+  return materialize_flat_cell(flat_block_bytes(block_data_), cell, datum);
 }
 
 int ObIMicroBlockFlatReader::read_rust_row(
@@ -1033,9 +1035,9 @@ int ObMicroBlockReader::get_row_count(
     int64_t &count)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == header_ ||
+  if (OB_UNLIKELY(!block_data_.is_valid() ||
                   nullptr == read_info_ ||
-                  row_cap > header_->row_count_)) {
+                  row_cap > metadata_.row_count_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (contains_null) {
     count = row_cap;
@@ -1045,27 +1047,14 @@ int ObMicroBlockReader::get_row_count(
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
     int64_t col_idx = cols_index.at(col);
     ObStorageDatum datum;
-    bool read_by_rust = false;
     RustFlatBatch rust_batch;
-    if (col_idx >= 0) {
-      rust_batch.columns.push_back(static_cast<uint32_t>(col_idx));
-      ret = try_project_rust(row_ids, row_cap, rust_batch);
-      if (OB_NOT_SUPPORTED == ret) {
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        read_by_rust = true;
-      }
-    }
+    rust_batch.columns.push_back(static_cast<uint32_t>(col_idx));
+    ret = try_project_rust(row_ids, row_cap, rust_batch);
     for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
       row_idx = row_ids[i];
-      if (OB_UNLIKELY(row_idx < 0 || row_idx >= header_->row_count_)) {
+      if (OB_UNLIKELY(row_idx < 0 || row_idx >= metadata_.row_count_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (read_by_rust && OB_FAIL(read_rust_cell(rust_batch, i, 0, datum))) {
-      } else if (!read_by_rust && OB_FAIL(flat_row_reader_.read_column(
-          data_begin_ + index_data_[row_idx],
-          index_data_[row_idx + 1] - index_data_[row_idx],
-          col_idx,
-          datum))) {
+      } else if (OB_FAIL(read_rust_cell(rust_batch, i, 0, datum))) {
       } else if (datum.is_nop()) {
         if (OB_UNLIKELY(nullptr == col_param || col_param->get_orig_default_value().is_nop_value())) {
           ret = OB_ERR_UNEXPECTED;
@@ -1094,9 +1083,9 @@ int ObMicroBlockReader::get_aggregate_result(
 {
   UNUSED(agg_datum_buf);
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == header_ ||
+  if (OB_UNLIKELY(!block_data_.is_valid() ||
                   nullptr == read_info_ ||
-                  row_cap > header_->row_count_)) {
+                  row_cap > metadata_.row_count_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t row_idx = common::OB_INVALID_INDEX;
@@ -1107,30 +1096,17 @@ int ObMicroBlockReader::get_aggregate_result(
     const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
     ObStorageDatum datum;
     ObStorageDatum tmp_datum; // used for deep copy decimalint
-    const bool has_lob_out_row = col_param.get_meta_type().is_lob_storage() && header_->has_lob_out_row();
+    const bool has_lob_out_row = col_param.get_meta_type().is_lob_storage() && metadata_.has_lob_out_row();
     bool need_reuse_lob_locator = false;
-    bool read_by_rust = false;
     RustFlatBatch rust_batch;
-    if (col_idx >= 0) {
-      rust_batch.columns.push_back(static_cast<uint32_t>(col_idx));
-      ret = try_project_rust(row_ids, row_cap, rust_batch);
-      if (OB_NOT_SUPPORTED == ret) {
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        read_by_rust = true;
-      }
-    }
+    rust_batch.columns.push_back(static_cast<uint32_t>(col_idx));
+    ret = try_project_rust(row_ids, row_cap, rust_batch);
     for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
       row_idx = row_ids[i];
       datum.set_nop();
-      if (OB_UNLIKELY(row_idx < 0 || row_idx >= header_->row_count_)) {
+      if (OB_UNLIKELY(row_idx < 0 || row_idx >= metadata_.row_count_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (read_by_rust && OB_FAIL(read_rust_cell(rust_batch, i, 0, tmp_datum))) {
-      } else if (!read_by_rust && OB_FAIL(flat_row_reader_.read_column(
-          data_begin_ + index_data_[row_idx],
-          index_data_[row_idx + 1] - index_data_[row_idx],
-          col_idx,
-          tmp_datum))) {
+      } else if (OB_FAIL(read_rust_cell(rust_batch, i, 0, tmp_datum))) {
       } else if (!tmp_datum.is_nop() && OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
       } else if (has_lob_out_row && !datum.is_nop() && !datum.is_null() && !datum.get_lob_data().in_row_) {
         if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
@@ -1160,9 +1136,9 @@ int ObMicroBlockReader::get_aggregate_result(
     common::ObIArray<storage::ObAggCell*> &agg_cells)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == header_ ||
+  if (OB_UNLIKELY(!block_data_.is_valid() ||
                   nullptr == read_info_ ||
-                  row_cap > header_->row_count_ ||
+                  row_cap > metadata_.row_count_ ||
                   !row_buf.is_valid() ||
                   agg_cells.empty())) {
     ret = OB_INVALID_ARGUMENT;
@@ -1172,30 +1148,19 @@ int ObMicroBlockReader::get_aggregate_result(
     ObStorageDatum tmp_datum; // used for deep copy decimalint
     int64_t row_idx = common::OB_INVALID_INDEX;
     const common::ObIArray<ObColumnParam *> *col_params = read_info_->get_columns();
-    const bool has_lob_out_row = iter_param.has_lob_column_out() && header_->has_lob_out_row();
+    const bool has_lob_out_row = iter_param.has_lob_column_out() && metadata_.has_lob_out_row();
     bool need_reuse_lob_locator = false;
-    bool read_by_rust = false;
     RustFlatBatch rust_batch;
     if (OB_ISNULL(col_params)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       ret = try_get_rows_rust(*read_info_, row_ids, row_cap, rust_batch);
-      if (OB_NOT_SUPPORTED == ret) {
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        read_by_rust = true;
-      }
     }
     for (int64_t idx = 0; OB_SUCC(ret) && idx < row_cap; ++idx) {
       row_idx = row_ids[idx];
-      if (OB_UNLIKELY(row_idx < 0 || row_idx >= header_->row_count_)) {
+      if (OB_UNLIKELY(row_idx < 0 || row_idx >= metadata_.row_count_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (read_by_rust && OB_FAIL(read_rust_row(rust_batch, idx, row_buf))) {
-      } else if (!read_by_rust && OB_FAIL(flat_row_reader_.read_row(
-          data_begin_ + index_data_[row_idx],
-          index_data_[row_idx + 1] - index_data_[row_idx],
-          read_info_,
-          row_buf))) {
+      } else if (OB_FAIL(read_rust_row(rust_batch, idx, row_buf))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells.count(); ++i) {
           const int32_t col_offset = agg_cells.at(i)->get_col_offset();
@@ -1245,10 +1210,10 @@ int ObMicroBlockReader::get_column_datum(
   int ret = OB_SUCCESS;
   if(IS_NOT_INIT){
     ret = OB_NOT_INIT;
-  } else if(OB_UNLIKELY(nullptr == header_ ||
+  } else if(OB_UNLIKELY(!block_data_.is_valid() ||
                         nullptr == read_info_ ||
                         col_offset >= read_info_->get_columns_index().count() ||
-                        row_index < 0 || row_index >= header_->row_count_)) {
+                        row_index < 0 || row_index >= metadata_.row_count_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
@@ -1257,28 +1222,10 @@ int ObMicroBlockReader::get_column_datum(
     const ObObjType obj_type = cols_desc.at(col_offset).col_type_.get_type();
     const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
     ObStorageDatum tmp_datum; // used for deep copy decimalint
-    if (OB_UNLIKELY(col_idx >= header_->column_count_)) {
+    if (OB_UNLIKELY(col_idx >= metadata_.column_count_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (col_idx >= 0) {
-      const int32_t row_id = static_cast<int32_t>(row_index);
-      RustFlatBatch rust_batch;
-      rust_batch.columns.push_back(static_cast<uint32_t>(col_idx));
-      ret = try_project_rust(&row_id, 1, rust_batch);
-      if (OB_NOT_SUPPORTED == ret) {
-        ret = flat_row_reader_.read_column(
-            data_begin_ + index_data_[row_index],
-            index_data_[row_index + 1] - index_data_[row_index],
-            col_idx,
-            tmp_datum);
-      } else if (OB_SUCC(ret)) {
-        ret = read_rust_cell(rust_batch, 0, 0, tmp_datum);
-      }
     } else {
-      ret = flat_row_reader_.read_column(
-          data_begin_ + index_data_[row_index],
-          index_data_[row_index + 1] - index_data_[row_index],
-          col_idx,
-          tmp_datum);
+      ret = read_flat_column(metadata_, block_data_, row_index, col_idx, tmp_datum);
     }
     if (OB_FAIL(ret)) {
     } else if (tmp_datum.is_nop()) {

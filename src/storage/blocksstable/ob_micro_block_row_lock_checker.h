@@ -52,7 +52,7 @@ protected:
       ObStoreRowLockState *&lock_state);
   virtual int check_row(
       const transaction::ObTransID &trans_id,
-      const ObRowHeader *row_header,
+      const MicroBlockRowMeta &row_meta,
       const ObStoreRowLockState &lock_state,
       bool &need_stop);
   virtual void check_row_in_major_sstable(bool &need_stop);
@@ -81,7 +81,7 @@ protected:
       ObStoreRowLockState *&lock_state);
   virtual int check_row(
       const transaction::ObTransID &trans_id,
-      const ObRowHeader *row_header,
+      const MicroBlockRowMeta &row_meta,
       const ObStoreRowLockState &lock_state,
       bool &need_stop);
   virtual void check_row_in_major_sstable(bool &need_stop);

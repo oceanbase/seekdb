@@ -109,27 +109,25 @@ int ObIndexBlockDataTransformer::transform(
   char *block_buf = nullptr; // transformed block buf
   int64_t pos = 0;
   ObIMicroBlockReader *micro_reader = nullptr;
-  ObMicroBlockHeader *new_micro_header = nullptr;
-  const ObMicroBlockHeader *micro_block_header =
-      reinterpret_cast<const ObMicroBlockHeader *>(block_data.get_buf());
-  const int64_t col_cnt = micro_block_header->column_count_;
-  const int64_t row_cnt = micro_block_header->row_count_;
+  ObMicroBlockHeader micro_header;
   int64_t mem_limit = 0;
-  if (OB_UNLIKELY(nullptr != table_read_info && col_cnt - 1 > table_read_info->get_rowkey_count())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(!block_data.is_valid() || !micro_block_header->is_valid())) {
+  if (OB_UNLIKELY(!block_data.is_valid() || OB_SUCCESS != block_data.get_micro_header(micro_header))) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(get_reader(block_data.get_store_type(), micro_reader))) {
-  } else if (OB_FAIL(micro_reader->init(block_data, nullptr))) {
-  } else if (OB_FAIL(row.init(allocator, col_cnt))) {
-  } else if (OB_FAIL(get_transformed_upper_mem_size(table_read_info, block_data.get_buf(), mem_limit))) {
-    } else if (OB_ISNULL(block_buf = static_cast<char *>(allocator.alloc(mem_limit)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(micro_block_header->deep_copy(block_buf, mem_limit, pos, new_micro_header))) {
-  } else if (OB_UNLIKELY(!new_micro_header->is_valid())) {
+  } else if (OB_UNLIKELY(nullptr != table_read_info
+                        && micro_header.column_count_ - 1 > table_read_info->get_rowkey_count())) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(get_reader(static_cast<ObRowStoreType>(micro_header.row_store_type_), micro_reader))) {
+  } else if (OB_FAIL(micro_reader->init(block_data, nullptr))) {
+  } else if (OB_FAIL(row.init(allocator, micro_header.column_count_))) {
+  } else if (OB_FAIL(get_transformed_upper_mem_size(table_read_info, micro_header, mem_limit))) {
+  } else if (OB_ISNULL(block_buf = static_cast<char *>(allocator.alloc(mem_limit)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    const int64_t micro_header_size = pos;
+    const int64_t col_cnt = micro_header.column_count_;
+    const int64_t row_cnt = micro_header.row_count_;
+    const int64_t micro_header_size = micro_header.get_serialize_size();
+    MEMCPY(block_buf, block_data.get_buf(), micro_header_size);
+    pos = micro_header_size;
     ObIndexBlockDataHeader *idx_header = new (block_buf + pos) ObIndexBlockDataHeader();
     pos += sizeof(ObIndexBlockDataHeader);
     ObStorageDatum *index_datum_array = new (block_buf + pos) ObStorageDatum [row_cnt];
@@ -197,30 +195,23 @@ int ObIndexBlockDataTransformer::transform(
 
 int ObIndexBlockDataTransformer::get_transformed_upper_mem_size(
     const ObITableReadInfo *table_read_info,
-    const char *raw_block_data,
+    const ObMicroBlockHeader &micro_header,
     int64_t &mem_limit)
 {
   int ret = OB_SUCCESS;
-  mem_limit = 0;
-  const ObMicroBlockHeader *micro_header =
-      reinterpret_cast<const ObMicroBlockHeader *>(raw_block_data);
-  if (OB_ISNULL(raw_block_data) || OB_UNLIKELY(!micro_header->is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
+  int64_t rowkey_vector_size = 0;
+  mem_limit = micro_header.get_serialize_size()
+      + sizeof(ObIndexBlockDataHeader)
+      + micro_header.row_count_ * sizeof(ObStorageDatum)
+      + micro_header.row_count_ * sizeof(common::ObPointerSwizzleNode);
+  if (OB_FAIL(ObRowkeyVector::get_occupied_size(micro_header.row_count_,
+                                               micro_header.column_count_ - 1,
+                                               table_read_info,
+                                               rowkey_vector_size))) {
   } else {
-    int64_t rowkey_vector_size = 0;
-    mem_limit += micro_header->get_serialize_size();
-    mem_limit += sizeof(ObIndexBlockDataHeader);
-    mem_limit += micro_header->row_count_ * sizeof(ObStorageDatum);
-    mem_limit += micro_header->row_count_ * sizeof(common::ObPointerSwizzleNode);
-    if (OB_FAIL(ObRowkeyVector::get_occupied_size(micro_header->row_count_,
-                                                  micro_header->column_count_ - 1,
-                                                  table_read_info,
-                                                  rowkey_vector_size))) {
-    } else {
-      mem_limit += rowkey_vector_size;
-      mem_limit += micro_header->original_length_;
-      mem_limit += ObMicroBlockData::ALIGN_REDUNDANCY_SIZE;
-    }
+    mem_limit += rowkey_vector_size;
+    mem_limit += micro_header.original_length_;
+    mem_limit += ObMicroBlockData::ALIGN_REDUNDANCY_SIZE;
   }
   return ret;
 }

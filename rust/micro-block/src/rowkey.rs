@@ -14,7 +14,46 @@
 
 use core::cmp::Ordering;
 
+use crate::format::checked_slice;
+use crate::read::ProjectionCell;
 use crate::{Cell, Error, Result};
+
+/// The decoded key columns of one candidate row. Variable-length cells
+/// borrow either the block or the scratch bytes for the current comparison.
+pub struct RowkeyCells<'a> {
+    pub(crate) cells: Vec<ProjectionCell<'a>>,
+    pub(crate) decoded: Vec<u8>,
+}
+
+impl<'a> RowkeyCells<'a> {
+    pub(crate) fn new(column_count: usize) -> Result<Self> {
+        let mut cells = Vec::new();
+        cells
+            .try_reserve_exact(column_count)
+            .map_err(|_| Error::SizeOverflow)?;
+        Ok(Self {
+            cells,
+            decoded: Vec::new(),
+        })
+    }
+
+    pub fn len(&self) -> usize {
+        self.cells.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.cells.is_empty()
+    }
+
+    pub fn get(&self, column: usize) -> Result<Cell<'_>> {
+        match self.cells.get(column).ok_or(Error::InvalidArgument)? {
+            ProjectionCell::Borrowed(cell) => Ok(*cell),
+            ProjectionCell::Decoded { offset, length } => {
+                Ok(Cell::Bytes(checked_slice(&self.decoded, *offset, *length)?))
+            }
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RowkeyKind {
@@ -38,7 +77,7 @@ pub trait UcaTable {
     fn page(&self, page: usize) -> Option<&[u16]>;
 }
 
-pub(crate) fn find_bound<'a>(
+pub(crate) fn find_bound(
     keys: &[RowkeyValue<'_>],
     kinds: &[RowkeyKind],
     lower_bound: bool,
@@ -49,19 +88,30 @@ pub(crate) fn find_bound<'a>(
     if keys.is_empty() || keys.len() != kinds.len() || keys.len() > column_count {
         return Err(Error::InvalidArgument);
     }
+    search_bound(lower_bound, range, |row| {
+        for (column, (&query, &kind)) in keys.iter().zip(kinds).enumerate() {
+            let ordering = compare(row, column, query, kind)?;
+            if ordering != Ordering::Equal {
+                return Ok(ordering);
+            }
+        }
+        Ok(Ordering::Equal)
+    })
+}
+
+/// Search a validated range. The comparator orders the query against the
+/// stored row and may fail while decoding or comparing a candidate.
+pub(crate) fn search_bound<E>(
+    lower_bound: bool,
+    range: crate::RowRange,
+    mut compare: impl FnMut(usize) -> core::result::Result<Ordering, E>,
+) -> core::result::Result<crate::RowkeyBound, E> {
     let mut low = range.start;
     let mut high = range.end;
     let mut equal = false;
     while low < high {
         let middle = low + (high - low) / 2;
-        let mut ordering = Ordering::Equal;
-        for (index, (&query, &kind)) in keys.iter().zip(kinds).enumerate() {
-            ordering = compare(middle, index, query, kind)?;
-            if ordering != Ordering::Equal {
-                break;
-            }
-        }
-        match ordering {
+        match compare(middle)? {
             Ordering::Less => high = middle,
             Ordering::Greater => low = middle + 1,
             Ordering::Equal => {

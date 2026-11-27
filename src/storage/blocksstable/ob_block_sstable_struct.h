@@ -45,10 +45,8 @@ extern const char *BLOCK_SSTBALE_FILE_NAME;
 typedef common::ObArray<ObConstDatumRow> ObConstDatumRowArray;
 
 //block sstable header magic number;
-const int64_t MICRO_BLOCK_HEADER_MAGIC = 1005;
 const int64_t LINKED_MACRO_BLOCK_HEADER_MAGIC = 1019;
 
-const int64_t MICRO_BLOCK_HEADER_VERSION = 3;
 const int64_t LINKED_MACRO_BLOCK_HEADER_VERSION = 1;
 
 struct ObPosition
@@ -706,67 +704,6 @@ public:
   int64_t last_end_time_;
   ObSimpleMacroBlockInfo hold_info_;
   bool mark_finished_;
-};
-
-/****************************** following codes are inline functions ****************************/
-enum ObRecordHeaderVersion
-{
-  RECORD_HEADER_VERSION_V3 = 3
-};
-
-struct ObRecordHeaderV3
-{
-public:
-  ObRecordHeaderV3();
-  ~ObRecordHeaderV3() = default;
-  static int deserialize_and_check_record(const char *ptr, const int64_t size,
-      const int16_t magic, const char *&payload_ptr, int64_t &payload_size);
-  static int deserialize_and_check_record(const char *ptr, const int64_t size, const int16_t magic);
-  int check_and_get_record(const char *ptr, const int64_t size, const int16_t magic, const char *&payload_ptr, int64_t &payload_size) const;
-  void set_header_checksum();
-  int check_header_checksum() const;
-  inline bool is_compressed_data() const { return data_length_ != data_zlength_; }
-  NEED_SERIALIZE_AND_DESERIALIZE;
-
-private:
-  int check_payload_checksum(const char *buf, const int64_t len) const;
-
-public:
-  struct ObRecordCommonHeader
-  {
-  public:
-    ObRecordCommonHeader() = default;
-    ~ObRecordCommonHeader() = default;
-    inline bool is_compressed() const { return data_length_ != data_zlength_; }
-    int16_t magic_;
-    int8_t header_length_;
-    int8_t version_;
-    int16_t header_checksum_;
-    int16_t reserved16_;
-    int64_t data_length_;
-    int64_t data_zlength_;
-    int64_t data_checksum_;
-    int32_t data_encoding_length_;
-    uint16_t row_count_;
-    uint16_t column_cnt_;
-  };
-  int16_t magic_;
-  int8_t header_length_; ///  column_checksum is not contained is header_length_
-  int8_t version_;
-  int16_t header_checksum_;
-  int16_t reserved16_;
-  int64_t data_length_;
-  int64_t data_zlength_;
-  int64_t data_checksum_;
-  // add since 2.2
-  int32_t data_encoding_length_;
-  uint16_t row_count_;
-  uint16_t column_cnt_;
-  int64_t *column_checksums_;
-
-  TO_STRING_KV(K_(magic), K_(header_length), K_(version), K_(header_checksum),
-      K_(reserved16), K_(data_length), K_(data_zlength), K_(data_checksum),
-      K_(data_encoding_length), K_(row_count), K_(column_cnt), KP(column_checksums_));
 };
 
 struct ObMicroBlockDesMeta

@@ -277,9 +277,7 @@ int ObMacroBlock::write_micro_block(const ObMicroBlockDesc &micro_block_desc,
         set_contain_uncommitted_row();
       }
       if (header->has_column_checksum_) {
-        if (OB_FAIL(add_column_checksum(header->column_checksums_,
-                                        header->column_count_,
-                                        macro_header_.column_checksum_))) {
+        if (OB_FAIL(header->accumulate_column_checksums(macro_header_.column_checksum_))) {
         }
       }
     }
@@ -500,24 +498,6 @@ int ObMacroBlock::get_macro_block_meta(ObDataMacroBlockMeta &macro_meta)
   if (OB_SUCC(ret) && OB_UNLIKELY(!macro_meta.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "build invalid macro meta", K(ret), K(macro_meta), K(macro_meta.is_valid()));
-  }
-  return ret;
-}
-
-int ObMacroBlock::add_column_checksum(
-    const int64_t *to_add_checksum,
-    const int64_t column_cnt,
-    int64_t *column_checksum)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == to_add_checksum || column_cnt <= 0 || NULL == column_checksum)) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(to_add_checksum), K(column_cnt),
-                KP(column_checksum));
-  } else {
-    for (int64_t i = 0; i < column_cnt; ++i) {
-      column_checksum[i] += to_add_checksum[i];
-    }
   }
   return ret;
 }

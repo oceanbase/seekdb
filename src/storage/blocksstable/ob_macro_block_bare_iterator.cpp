@@ -208,6 +208,22 @@ int ObMicroBlockBareIterator::open(
   return ret;
 }
 
+int ObMicroBlockBareIterator::read_stored_record(const int64_t offset, ObMicroBlockHeader &header) const
+{
+  return offset < 0 || offset >= macro_block_buf_size_ ? OB_INVALID_DATA
+      : header.deserialize_and_check_record_prefix(macro_block_buf_ + offset, macro_block_buf_size_ - offset);
+}
+
+int ObMicroBlockBareIterator::expand_record(ObMacroBlockReader &reader, const ObMicroBlockHeader &header,
+    const char *buf, const int64_t size, const bool need_copy, ObMicroBlockData &block)
+{
+  const ObMicroBlockDesMeta meta(macro_block_header_.get_compressor_type(),
+      static_cast<ObRowStoreType>(header.row_store_type_));
+  bool is_compressed = false;
+  return reader.do_decompress_data(header, meta, buf, size,
+      block.get_buf(), block.get_buf_size(), is_compressed, need_copy, nullptr);
+}
+
 int ObMicroBlockBareIterator::get_next_micro_block_data_and_offset(ObMicroBlockData &micro_block, int64_t &offset)
 {
   int ret = OB_SUCCESS;
@@ -218,29 +234,20 @@ int ObMicroBlockBareIterator::get_next_micro_block_data_and_offset(ObMicroBlockD
   } else {
     offset = read_pos_;
     ObMicroBlockHeader header;
-    const char *micro_buf = macro_block_buf_ + read_pos_;
-    int64_t pos = 0;
-    int64_t micro_buf_size = 0;
-    bool is_compressed = false;
-    if (OB_FAIL(header.deserialize(micro_buf, macro_block_buf_size_ - read_pos_, pos))) {
-    } else if (FALSE_IT(micro_buf_size = header.header_size_ + header.data_zlength_)) {
-    } else if (OB_FAIL(header.check_record(micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC))) {
-    } else if (!need_deserialize_) {
-      micro_block.get_buf() = micro_buf;
-      micro_block.get_buf_size() = micro_buf_size;
-    } else if (OB_FAIL(macro_reader_.decompress_data(
-        macro_block_header_,
-        micro_buf,
-        micro_buf_size,
-        false,
-        micro_block.get_buf(),
-        micro_block.get_buf_size(),
-        is_compressed))) {
+    if (OB_FAIL(read_stored_record(read_pos_, header))) {
+    } else {
+      const char *micro_buf = macro_block_buf_ + read_pos_;
+      const int64_t micro_buf_size = header.get_stored_size();
+      if (!need_deserialize_) {
+        micro_block.get_buf() = micro_buf;
+        micro_block.get_buf_size() = micro_buf_size;
+      } else if (OB_FAIL(expand_record(macro_reader_, header, micro_buf, micro_buf_size, false, micro_block))) {
+      }
     }
 
     if (OB_SUCC(ret)) {
       ++iter_idx_;
-      read_pos_ += micro_buf_size;
+      read_pos_ += header.get_stored_size();
     }
   }
   return ret;
@@ -262,7 +269,8 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
   ObDatumRowkey rowkey;
   ObMicroBlockData micro_block;
   ObIndexBlockRowParser row_parser;
-  ObMicroBlockHeader *header = nullptr;
+  ObMicroBlockHeader logical_header;
+  const ObMicroBlockHeader *header = &logical_header;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -279,14 +287,14 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(rowkey.assign(index_row.storage_datums_, index_rowkey_cnt_))) {
   } else if (OB_FAIL(rowkey.deep_copy(micro_block_desc.last_rowkey_, rowkey_allocator))) {
-  } else if (OB_FAIL(get_micro_block_header(micro_block.get_buf(), micro_block.get_buf_size(), header))) {
+  } else if (OB_FAIL(micro_block.get_micro_header(logical_header))) {
   } else {
-    micro_block_desc.header_ = header;
+    micro_block_desc.set_header(*header, micro_block.get_buf());
     micro_block_desc.data_size_ = header->data_length_;
     micro_block_desc.column_count_ = header->column_count_;
     micro_block_desc.row_count_ = header->row_count_;
     micro_block_desc.buf_ = micro_block.get_buf() + header->header_size_;
-    micro_block_desc.buf_size_ = header->data_zlength_;
+    micro_block_desc.buf_size_ = micro_block.get_buf_size() - header->header_size_;
     micro_block_desc.max_merged_trans_version_ = header->max_merged_trans_version_; // do not get from index
     micro_block_desc.is_last_row_last_flag_ = header->is_last_row_last_flag_;
     micro_block_desc.original_size_ = header->original_length_;
@@ -316,28 +324,17 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
     ret = OB_ITER_END;
   } else {
     micro_block_desc.reset();
-    ObMicroBlockHeader *header = nullptr;
-    const char *micro_buf = macro_block_buf_ + read_pos_;
-    int64_t pos = 0;
+    ObMicroBlockHeader logical_header;
+    const ObMicroBlockHeader *header = &logical_header;
+    const char *micro_buf = nullptr;
     int64_t micro_buf_size = 0;
-    bool is_compressed = false;
     ObDatumRow last_row;
     ObDatumRowkey rowkey;
     ObMicroBlockData micro_block;
-    if (OB_ISNULL(header = static_cast<ObMicroBlockHeader *>(allocator.alloc(sizeof(ObMicroBlockHeader))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "fail to alloc micro header", K(ret));
-    } else if (OB_FAIL(header->deserialize(micro_buf, macro_block_buf_size_ - read_pos_, pos))) {
-    } else if (FALSE_IT(micro_buf_size = header->header_size_ + header->data_zlength_)) {
-    } else if (OB_FAIL(header->check_record(micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC))) {
-    } else if (OB_FAIL(macro_reader_.decompress_data(
-        macro_block_header_,
-        micro_buf,
-        micro_buf_size,
-        false,
-        micro_block.get_buf(),
-        micro_block.get_buf_size(),
-        is_compressed))) {
+    if (OB_FAIL(read_stored_record(read_pos_, logical_header))) {
+    } else if (FALSE_IT(micro_buf = macro_block_buf_ + read_pos_)) {
+    } else if (FALSE_IT(micro_buf_size = header->get_stored_size())) {
+    } else if (OB_FAIL(expand_record(macro_reader_, *header, micro_buf, micro_buf_size, false, micro_block))) {
     } else if (OB_FAIL(last_row.init(allocator, column_cnt_ + 1))) {
     } else if (OB_UNLIKELY(!micro_block.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -360,13 +357,8 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
       micro_block_desc.block_checksum_ = checksum_helper.get_row_checksum();
     }
 
-    if (OB_FAIL(ret)) {
-      if (OB_NOT_NULL(header)) {
-        allocator.free(header);
-        header = nullptr;
-      }
-    } else {
-      micro_block_desc.header_ = header;
+    if (OB_SUCC(ret)) {
+      micro_block_desc.set_header(*header, need_check_sum ? micro_block.get_buf() : micro_buf);
       if (need_check_sum) {
         // use decompress
         micro_block_desc.buf_ = micro_block.get_buf() + header->header_size_;
@@ -406,7 +398,7 @@ int ObMicroBlockBareIterator::generate_uncompressed_micro_block(
   int ret = OB_SUCCESS;
   if (OB_FAIL(generate_basic_micro_block_desc(rowkey, header, allocator, micro_block_desc))) {
   } else {
-    micro_block_desc.header_ = reinterpret_cast<const ObMicroBlockHeader *>(micro_block.get_buf());
+    micro_block_desc.set_header(*header, micro_block.get_buf());
     micro_block_desc.buf_ = micro_block.get_buf() + header->header_size_;
     micro_block_desc.buf_size_ = micro_block.get_buf_size() - header->header_size_;
     micro_block_desc.data_size_ = micro_block_desc.buf_size_;
@@ -428,7 +420,7 @@ int ObMicroBlockBareIterator::generate_micro_block(
   int ret = OB_SUCCESS;
   if (OB_FAIL(generate_basic_micro_block_desc(rowkey, header, allocator, micro_block_desc))) {
   } else {
-    micro_block_desc.header_ = header;
+    micro_block_desc.set_header(*header, micro_buf);
     micro_block_desc.block_offset_ = block_offset;
     micro_block_desc.buf_ = micro_buf + header->header_size_;
     micro_block_desc.buf_size_ = header->data_zlength_;
@@ -473,28 +465,17 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
   } else {
     uncompressed_micro_block_desc.reset();
     micro_block_desc.reset();
-    ObMicroBlockHeader *header = nullptr;
-    const char *micro_buf = macro_block_buf_ + read_pos_;
-    int64_t pos = 0;
+    ObMicroBlockHeader logical_header;
+    const ObMicroBlockHeader *header = &logical_header;
+    const char *micro_buf = nullptr;
     int64_t micro_buf_size = 0;
-    bool is_compressed = false;
     ObDatumRow last_row;
     ObDatumRowkey rowkey;
     ObMicroBlockData micro_block;
-    if (OB_ISNULL(header = static_cast<ObMicroBlockHeader *>(allocator.alloc(sizeof(ObMicroBlockHeader))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "fail to alloc micro header", K(ret));
-    } else if (OB_FAIL(header->deserialize(micro_buf, macro_block_buf_size_ - read_pos_, pos))) {
-    } else if (FALSE_IT(micro_buf_size = header->header_size_ + header->data_zlength_)) {
-    } else if (OB_FAIL(header->check_record(micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC))) {
-    } else if (OB_FAIL(macro_reader_.decompress_data(
-        macro_block_header_,
-        micro_buf,
-        micro_buf_size,
-        true,
-        micro_block.get_buf(),
-        micro_block.get_buf_size(),
-        is_compressed))) {
+    if (OB_FAIL(read_stored_record(read_pos_, logical_header))) {
+    } else if (FALSE_IT(micro_buf = macro_block_buf_ + read_pos_)) {
+    } else if (FALSE_IT(micro_buf_size = header->get_stored_size())) {
+    } else if (OB_FAIL(expand_record(macro_reader_, *header, micro_buf, micro_buf_size, true, micro_block))) {
     } else if (OB_FAIL(last_row.init(allocator, column_cnt_ + 1))) {
     } else if (OB_UNLIKELY(!micro_block.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -507,12 +488,7 @@ int ObMicroBlockBareIterator::get_next_micro_block_desc(
     } else if (OB_FAIL(generate_micro_block(rowkey, header, read_pos_, micro_buf, allocator, micro_block_desc))) {
     }
 
-    if (OB_FAIL(ret)) {
-      if (OB_NOT_NULL(header)) {
-        allocator.free(header);
-        header = nullptr;
-      }
-    } else {
+    if (OB_SUCC(ret)) {
       ++iter_idx_;
       read_pos_ += micro_buf_size;
     }
@@ -531,26 +507,6 @@ int ObMicroBlockBareIterator::get_macro_block_header(ObSSTableMacroBlockHeader &
   return ret;
 }
 
-int ObMicroBlockBareIterator::get_micro_block_header(const char *buf,
-                                                     int64_t buf_len,
-                                                     ObMicroBlockHeader *&header) const
-{
-  int ret = OB_SUCCESS;
-  char *micro_block_buf = nullptr;
-  if (OB_ISNULL(buf) || buf_len < ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (FALSE_IT(micro_block_buf = const_cast<char *>(buf))) {
-  } else {
-    header = reinterpret_cast<ObMicroBlockHeader *>(micro_block_buf);
-    if (header->has_column_checksum_) {
-      header->column_checksums_ = reinterpret_cast<int64_t *>(micro_block_buf + ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET);
-    } else if (!header->has_min_merged_trans_version_) {
-      header->column_checksums_ = nullptr;
-    }
-  }
-  return ret;
-}
-
 int ObMicroBlockBareIterator::get_micro_block_count(int64_t &micro_block_count)
 {
   int ret = OB_SUCCESS;
@@ -563,8 +519,7 @@ int ObMicroBlockBareIterator::get_micro_block_count(int64_t &micro_block_count)
 }
 
 int ObMicroBlockBareIterator::get_index_block(ObMicroBlockData &micro_block,
-                                              const bool force_deserialize,
-                                              const bool is_macro_meta_block)
+                                              const bool force_deserialize)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!macro_block_header_.is_valid())) {
@@ -573,27 +528,16 @@ int ObMicroBlockBareIterator::get_index_block(ObMicroBlockData &micro_block,
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObMicroBlockHeader header;
-    const int64_t index_block_offset = is_macro_meta_block ? macro_block_header_.fixed_header_.meta_block_offset_
-        : macro_block_header_.fixed_header_.idx_block_offset_;
-    int64_t micro_buf_size = is_macro_meta_block ? macro_block_header_.fixed_header_.meta_block_size_
-        : macro_block_header_.fixed_header_.idx_block_size_;
-    const char *micro_buf = macro_block_buf_ + index_block_offset;
-    int64_t pos = 0;
-    bool is_compressed = false;
-    if (OB_FAIL(header.deserialize(micro_buf, macro_block_buf_size_ - index_block_offset, pos))) {
-    } else if (FALSE_IT(micro_buf_size = header.header_size_ + header.data_zlength_)) {
-    } else if (OB_FAIL(header.check_record(micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC))) {
-    } else if (!need_deserialize_ && !force_deserialize) {
-      micro_block.get_buf() = micro_buf;
-      micro_block.get_buf_size() = micro_buf_size;
-    } else if (OB_FAIL(index_reader_.decompress_data(
-        macro_block_header_,
-        micro_buf,
-        micro_buf_size,
-        false,
-        micro_block.get_buf(),
-        micro_block.get_buf_size(),
-        is_compressed))) {
+    const int64_t index_block_offset = macro_block_header_.fixed_header_.idx_block_offset_;
+    if (OB_FAIL(read_stored_record(index_block_offset, header))) {
+    } else {
+      const char *micro_buf = macro_block_buf_ + index_block_offset;
+      const int64_t micro_buf_size = header.get_stored_size();
+      if (!need_deserialize_ && !force_deserialize) {
+        micro_block.get_buf() = micro_buf;
+        micro_block.get_buf_size() = micro_buf_size;
+      } else if (OB_FAIL(expand_record(index_reader_, header, micro_buf, micro_buf_size, false, micro_block))) {
+      }
     }
   }
   return ret;
@@ -692,11 +636,9 @@ int ObMicroBlockBareIterator::locate_range(
   } else {
     ObMicroBlockHeader header;
     for (int64_t i = 0; OB_SUCC(ret) && i < begin_idx_; ++i) {
-      const char *micro_buf = macro_block_buf_ + read_pos_;
-      int64_t pos = 0;
-      if (OB_FAIL(header.deserialize(micro_buf, macro_block_buf_size_ - read_pos_, pos))) {
+      if (OB_FAIL(read_stored_record(read_pos_, header))) {
       } else {
-        read_pos_ += (header.header_size_ + header.data_zlength_);
+        read_pos_ += header.get_stored_size();
       }
     }
   }
@@ -812,7 +754,7 @@ int ObMacroBlockRowBareIterator::get_next_row(const ObDatumRow *&row)
   return ret;
 }
 
-int ObMacroBlockRowBareIterator::open_leaf_index_micro_block(const bool is_macro_meta)
+int ObMacroBlockRowBareIterator::open_leaf_index_micro_block()
 {
   int ret = OB_SUCCESS;
   ObMicroBlockHeader header;
@@ -821,7 +763,7 @@ int ObMacroBlockRowBareIterator::open_leaf_index_micro_block(const bool is_macro
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(curr_block_row_idx_ != curr_block_row_cnt_)) {
     ret = OB_ITER_STOP;
-  } else if (OB_FAIL(micro_iter_.get_index_block(curr_micro_block_data_, false, is_macro_meta))) {
+  } else if (OB_FAIL(micro_iter_.get_index_block(curr_micro_block_data_, false))) {
   } else if (OB_UNLIKELY(!curr_micro_block_data_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(header.deserialize(curr_micro_block_data_.get_buf(), curr_micro_block_data_.get_buf_size(), pos))) {

@@ -299,6 +299,7 @@ int ObMacroMetaTempStore::get_macro_meta_from_block_buf(const ObSSTableMacroBloc
   ObIMicroBlockReader *micro_reader = nullptr;
   ObMicroBlockReaderHelper micro_reader_helper;
   ObDatumRow tmp_datum_row;
+  ObMicroBlockHeader micro_header;
   allocator_.reuse();
   if (OB_UNLIKELY(buf == nullptr || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -311,14 +312,15 @@ int ObMacroMetaTempStore::get_macro_meta_from_block_buf(const ObSSTableMacroBloc
                                                               is_compressed))) {
   } else if (OB_UNLIKELY(!meta_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(meta_block.get_micro_header(micro_header))) {
   } else if (OB_FAIL(micro_reader_helper.init(allocator_))) {
-  } else if (OB_FAIL(micro_reader_helper.get_reader(meta_block.get_store_type(), micro_reader))) {
+  } else if (OB_FAIL(micro_reader_helper.get_reader(static_cast<ObRowStoreType>(micro_header.row_store_type_), micro_reader))) {
   } else if (OB_FAIL(micro_reader->init(meta_block, nullptr))) {
-  } else if (OB_FAIL(tmp_datum_row.init(allocator_, meta_block.get_micro_header()->column_count_))) {
-  } else if (datum_row_.get_column_count() != meta_block.get_micro_header()->column_count_) {
+  } else if (OB_FAIL(tmp_datum_row.init(allocator_, micro_header.column_count_))) {
+  } else if (datum_row_.get_column_count() != micro_header.column_count_) {
     datum_row_.reset();
     macro_meta_allocator_.reuse();
-    if (OB_FAIL(datum_row_.init(macro_meta_allocator_, meta_block.get_micro_header()->column_count_))) {
+    if (OB_FAIL(datum_row_.init(macro_meta_allocator_, micro_header.column_count_))) {
     }
   } else {
     datum_row_.reuse();

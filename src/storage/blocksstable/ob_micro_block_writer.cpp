@@ -64,9 +64,8 @@ ObMicroBlockWriter::ObMicroBlockWriter()
    row_count_(0),
    rust_block_(),
    column_checksums_(),
-   index_buffer_(DEFAULT_INDEX_BUFFER_SIZE),
-   hash_index_builder_(),
-   reuse_hash_index_builder_(false),
+   hash_index_store_desc_(nullptr),
+   previous_row_ended_key_(false),
    is_major_(false),
    is_inited_(false)
 {
@@ -135,7 +134,7 @@ int ObMicroBlockWriter::init(const ObDataStoreDesc *data_store_desc)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(init_hash_index_builder(data_store_desc))) {
+      if (OB_FAIL(init_hash_index_policy(*data_store_desc))) {
       } else {
         is_inited_ = true;
       }
@@ -165,7 +164,7 @@ int ObMicroBlockWriter::inner_init()
           static_cast<uint32_t>(rowkey_column_count_),
           static_cast<uint64_t>(micro_block_size_limit_),
           static_cast<uint64_t>(block_size_upper_bound_),
-          is_major_)))) {
+          is_major_, nullptr != hash_index_store_desc_)))) {
       } else if (is_major_ && OB_FAIL(column_checksums_.reserve(column_count_))) {
       } else if (is_major_) {
         for (int64_t i = 0; OB_SUCC(ret) && i < column_count_; ++i) {
@@ -256,12 +255,10 @@ int ObMicroBlockWriter::append_row(const ObDatumRow &row)
     row_meta.row_flag = row.row_flag_.get_serialize_flag();
     row_meta.multi_version_flag = row.mvcc_row_flag_.flag_;
     row_meta.trans_id = row.trans_id_.get_id();
-    const std::size_t hash_index_size = hash_index_builder_.is_valid()
-        ? hash_index_builder_.estimate_size(true) : 0;
     const rust::Slice<const micro_block::InputCell> input(cells.begin(), cells.count());
-    micro_block::AppendResult result = micro_block::append_flat_row(
+    micro_block::FlatAppendResult result = micro_block::append_flat_row(
         *rust_block_->writer, input, row_meta,
-        static_cast<uint32_t>(rowkey_column_count_), hash_index_size,
+        static_cast<uint32_t>(rowkey_column_count_),
         static_cast<uint64_t>(block_size_upper_bound_));
     if (OB_FAIL(rust_code_to_ret(result.code))) {
     } else if (OB_UNLIKELY(result.accepted_rows != static_cast<std::size_t>(row_count_)
@@ -270,7 +267,9 @@ int ObMicroBlockWriter::append_row(const ObDatumRow &row)
     } else if (result.is_full) {
       ret = OB_BUF_NOT_ENOUGH;
     } else if (FALSE_IT(++row_count_)) {
-    } else if (OB_FAIL(append_row_to_hash_index(row))) {
+    } else if (micro_block::FlatHashWriteState::Disabled != result.hash_state
+               && OB_FAIL(append_row_to_hash_index(
+                   row, micro_block::FlatHashWriteState::Empty == result.hash_state))) {
     } else if (is_major_ && OB_FAIL(checksum_helper_.cal_column_checksum(
         row, &column_checksums_[0]))) {
       STORAGE_LOG(WARN, "fail to cal column chksum", K(ret), K(row));
@@ -294,10 +293,8 @@ int ObMicroBlockWriter::build_block(char *&buf, int64_t &size)
   } else if (OB_UNLIKELY(!rust_block_ || 0 == row_count_)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected empty block", K(ret));
-  } else if (OB_FAIL(build_hash_index_block())) {
   } else {
     static const uint64_t empty_checksum = 0;
-    static const uint8_t empty_hash_index = 0;
     micro_block::FlatFinishOptionsDesc options;
     options.single_version_rows = last_rows_count_ == row_count_;
     options.contain_uncommitted_rows = contain_uncommitted_row_;
@@ -309,12 +306,9 @@ int ObMicroBlockWriter::build_block(char *&buf, int64_t &size)
     options.max_merged_trans_version = max_merged_trans_version_;
     const uint64_t *checksums = is_major_
         ? reinterpret_cast<const uint64_t *>(&column_checksums_[0]) : &empty_checksum;
-    const uint8_t *hash_index = index_buffer_.length() > 0
-        ? reinterpret_cast<const uint8_t *>(index_buffer_.data()) : &empty_hash_index;
     micro_block::BuildResult result = micro_block::finish_flat_writer(
         *rust_block_->writer, options,
-        rust::Slice<const uint64_t>(checksums, column_checksums_.count()),
-        rust::Slice<const uint8_t>(hash_index, index_buffer_.length()));
+        rust::Slice<const uint64_t>(checksums, column_checksums_.count()));
     if (OB_FAIL(rust_code_to_ret(result.code))) {
     } else if (OB_UNLIKELY(result.accepted_rows != static_cast<std::size_t>(row_count_)
                            || result.block.empty()
@@ -324,28 +318,6 @@ int ObMicroBlockWriter::build_block(char *&buf, int64_t &size)
       rust_block_->bytes = std::move(result.block);
       buf = reinterpret_cast<char *>(rust_block_->bytes.data());
       size = rust_block_->bytes.size();
-      ObMicroBlockHeader *header = reinterpret_cast<ObMicroBlockHeader *>(buf);
-      if (header->has_column_checksum_) {
-        header->column_checksums_ = reinterpret_cast<int64_t *>(
-            buf + ObMicroBlockHeader::COLUMN_CHECKSUM_PTR_OFFSET);
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockWriter::append_hash_index(ObMicroBlockHashIndexBuilder& hash_index_builder)
-{
-  int ret = OB_SUCCESS;
-  if (hash_index_builder.is_valid()) {
-    if (is_contain_uncommitted_row()) {
-      ret = OB_NOT_SUPPORTED;
-    } else if (!index_buffer_.is_inited()
-               && OB_FAIL(index_buffer_.init(DEFAULT_INDEX_BUFFER_SIZE, DEFAULT_INDEX_BUFFER_SIZE))) {
-    } else if (OB_FAIL(hash_index_builder.build_block(index_buffer_))) {
-      if (ret != OB_NOT_SUPPORTED) {
-        STORAGE_LOG(WARN, "data buffer fail to write hash index.", K(ret));
-      }
     }
   }
   return ret;
@@ -361,8 +333,8 @@ void ObMicroBlockWriter::reset()
   is_major_ = false;
   rust_block_.reset();
   column_checksums_.reset();
-  index_buffer_.reset();
-  hash_index_builder_.reset();
+  hash_index_store_desc_ = nullptr;
+  previous_row_ended_key_ = false;
   col_desc_array_ = nullptr;
   is_inited_ = false;
 }
@@ -374,23 +346,20 @@ void ObMicroBlockWriter::reuse()
     rust_block_->bytes = rust::Vec<uint8_t>();
   }
   column_checksums_.reuse();
-  index_buffer_.reuse();
-  if (hash_index_builder_.is_valid() || reuse_hash_index_builder_) {
-    reuse_hash_index_builder_ = false;
-    hash_index_builder_.reuse();
-  }
+  previous_row_ended_key_ = false;
   row_count_ = 0;
 }
 
 int64_t ObMicroBlockWriter::get_block_size() const
 {
-  int64_t size = ObMicroBlockHeader::get_serialize_size(column_count_, is_major_) + INDEX_ENTRY_SIZE;
-  if (rust_block_) {
-    const std::size_t hash_index_size = index_buffer_.length() > 0
-        ? index_buffer_.length()
-        : (hash_index_builder_.is_valid() ? hash_index_builder_.estimate_size() : 0);
-    const micro_block::WriterStatsResult stats = micro_block::flat_writer_stats(
-        *rust_block_->writer, hash_index_size);
+  int64_t size = 0;
+  if (0 == row_count_) {
+    const uint64_t empty_size = micro_block::flat_writer_empty_size(column_count_, is_major_);
+    if (empty_size <= static_cast<uint64_t>(INT64_MAX)) {
+      size = empty_size;
+    }
+  } else if (rust_block_) {
+    const micro_block::WriterStatsResult stats = micro_block::flat_writer_stats(*rust_block_->writer);
     if (micro_block::Code::Ok == stats.code && stats.block_size <= static_cast<uint64_t>(INT64_MAX)) {
       size = stats.block_size;
     }
@@ -401,12 +370,8 @@ int64_t ObMicroBlockWriter::get_block_size() const
 int64_t ObMicroBlockWriter::get_original_size() const
 {
   int64_t size = 0;
-  if (rust_block_) {
-    const std::size_t hash_index_size = index_buffer_.length() > 0
-        ? index_buffer_.length()
-        : (hash_index_builder_.is_valid() ? hash_index_builder_.estimate_size() : 0);
-    const micro_block::WriterStatsResult stats = micro_block::flat_writer_stats(
-        *rust_block_->writer, hash_index_size);
+  if (row_count_ > 0 && rust_block_) {
+    const micro_block::WriterStatsResult stats = micro_block::flat_writer_stats(*rust_block_->writer);
     if (micro_block::Code::Ok == stats.code && stats.original_size <= static_cast<uint64_t>(INT64_MAX)) {
       size = stats.original_size;
     }
@@ -414,51 +379,52 @@ int64_t ObMicroBlockWriter::get_original_size() const
   return size;
 }
 
-int ObMicroBlockWriter::init_hash_index_builder(const ObDataStoreDesc *data_store_desc)
+int ObMicroBlockWriter::init_hash_index_policy(const ObDataStoreDesc &data_store_desc)
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(data_store_desc) && data_store_desc->get_tablet_id().is_user_tablet()
-      && !data_store_desc->is_major_or_meta_merge_type()
-      && !data_store_desc->is_for_index_or_meta()) {
-    // only build hash index for data block in minor
-    if (OB_FAIL(hash_index_builder_.init_if_needed(data_store_desc))) {
+  if (data_store_desc.get_tablet_id().is_user_tablet()
+      && !data_store_desc.is_major_or_meta_merge_type()
+      && !data_store_desc.is_for_index_or_meta()) {
+    const auto &rowkey_cols = data_store_desc.get_rowkey_col_descs();
+    const int64_t rowkey_count = data_store_desc.get_schema_rowkey_col_cnt();
+    if (OB_UNLIKELY(rowkey_count > rowkey_cols.count())) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(WARN, "unexpected schema rowkey column count", K(ret), K(rowkey_count), K(rowkey_cols));
+    } else {
+      constexpr int64_t MIN_INTEGER_COLUMNS_FOR_HASH_INDEX = 3;
+      bool should_index = rowkey_count >= MIN_INTEGER_COLUMNS_FOR_HASH_INDEX;
+      for (int64_t i = 0; !should_index && i < rowkey_count; ++i) {
+        should_index = !rowkey_cols.at(i).col_type_.is_integer_type();
+      }
+      if (should_index) {
+        hash_index_store_desc_ = &data_store_desc;
+      }
     }
   }
   return ret;
 }
 
-int ObMicroBlockWriter::append_row_to_hash_index(const ObDatumRow &row)
+int ObMicroBlockWriter::append_row_to_hash_index(const ObDatumRow &row, bool hash_index_empty)
 {
   int ret = OB_SUCCESS;
-  if (hash_index_builder_.is_valid()) {
-    if (OB_FAIL(hash_index_builder_.add(row))) {
-      if (ret != OB_NOT_SUPPORTED) {
-        STORAGE_LOG(WARN, "Fail to append hash index", KR(ret), K(row));
-      } else {
-        // hash index is not supported for this micro block data
-        // but the hash index builder can be reuse if we call micro_block->reuse()
-        reuse_hash_index_builder_ = true;
-        ret = OB_SUCCESS;
-      }
-      hash_index_builder_.reset();
+  const int64_t rowkey_count = hash_index_store_desc_->get_schema_rowkey_col_cnt();
+  if (OB_UNLIKELY(!row.is_valid() || row.get_column_count() < rowkey_count)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!row.is_ghost_row() && (previous_row_ended_key_ || hash_index_empty)) {
+    ObDatumRowkey rowkey;
+    uint64_t hash = 0;
+    if (OB_FAIL(rowkey.assign(row.storage_datums_, rowkey_count))) {
+    } else if (OB_FAIL(rowkey.murmurhash(0, hash_index_store_desc_->get_datum_utils(), hash))) {
+    } else if (OB_FAIL(rust_code_to_ret(micro_block::add_flat_hash_entry(
+        *rust_block_->writer, static_cast<std::size_t>(row_count_ - 1), hash)))) {
     }
   }
-  return ret;
-}
-
-int ObMicroBlockWriter::build_hash_index_block()
-{
-  int ret = OB_SUCCESS;
-  if (hash_index_builder_.is_valid()) {
-    if (OB_FAIL(append_hash_index(hash_index_builder_))) {
-      if (ret != OB_NOT_SUPPORTED) {
-        STORAGE_LOG(WARN, "Fail to append hash index to micro block writer", KR(ret));
-      } else {
-        reuse_hash_index_builder_ = true;
-        ret = OB_SUCCESS;
-      }
-      hash_index_builder_.reset();
-    }
+  if (OB_SUCC(ret)) {
+    previous_row_ended_key_ = row.mvcc_row_flag_.is_last_multi_version_row();
+  } else {
+    micro_block::disable_flat_hash_index(*rust_block_->writer);
+    hash_index_store_desc_ = nullptr;
+    STORAGE_LOG(WARN, "failed to add row to flat hash index", KR(ret), K(row));
   }
   return ret;
 }

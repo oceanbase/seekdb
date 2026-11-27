@@ -15,7 +15,6 @@
  */
 
 #include "ob_imicro_block_writer.h"
-#include  "ob_row_writer.h"
 #include "storage/blocksstable/index_block/ob_index_block_aggregator.h"
 namespace oceanbase
 {
@@ -38,7 +37,10 @@ void ObMicroBlockDesc::reset()
 {
   last_rowkey_.reset();
   buf_ = NULL;
-  header_ = NULL;
+  header_ = nullptr;
+  header_storage_.reset();
+  serialized_header_ = nullptr;
+  writable_header_ = nullptr;
   aggregated_row_ = NULL;
   buf_size_ = 0;
   data_size_ = 0;
@@ -58,23 +60,61 @@ void ObMicroBlockDesc::reset()
   is_last_row_last_flag_ = false;
 }
 
-/**
- * Check if the header in ObMicroBlockDesc points to a complete micro block memory
- * @param micro_block_desc The micro block descriptor to check
- * @return true if the header points to complete micro block memory, false otherwise
- */
 bool ObMicroBlockDesc::is_complete_micro_block_memory() const
 {
-  bool is_complete = false;
-  const char *header_buf = get_block_buf();
-  const char *micro_data_buf = nullptr;
-  if (OB_ISNULL(header_buf) || OB_ISNULL(buf_)) {
-    is_complete = false;
-  } else if (FALSE_IT(micro_data_buf = header_buf + header_->header_size_)) {
-  } else if (micro_data_buf == buf_) {
-    is_complete = true;
+  return nullptr != header_ && nullptr != serialized_header_
+      && serialized_header_ + header_->header_size_ == buf_;
+}
+
+void ObMicroBlockDesc::set_header(const ObMicroBlockHeader &header, const char *serialized_header)
+{
+  header_storage_ = header;
+  header_ = &header_storage_;
+  serialized_header_ = serialized_header;
+  writable_header_ = nullptr;
+}
+
+int ObMicroBlockDesc::init_header(const char *block, const int64_t size)
+{
+  ObMicroBlockHeader header;
+  const int ret = header.deserialize_and_check_header(block, size);
+  if (OB_SUCCESS == ret) {
+    set_header(header, block);
   }
-  return is_complete;
+  return ret;
+}
+
+int ObMicroBlockDesc::init_writable_header(char *block, const int64_t size)
+{
+  const int ret = init_header(block, size);
+  if (OB_SUCCESS == ret) {
+    writable_header_ = block;
+  }
+  return ret;
+}
+
+int ObMicroBlockDesc::seal(const char *payload, const int64_t size, common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  ObMicroBlockHeader final_header = header_storage_;
+  char *prefix = writable_header_;
+  if (nullptr == prefix) {
+    int64_t pos = 0;
+    if (OB_ISNULL(prefix = static_cast<char *>(allocator.alloc(final_header.header_size_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(header_storage_.serialize(prefix, final_header.header_size_, pos))) {
+    } else if (OB_FAIL(final_header.deserialize_and_check_header(prefix, pos))) {
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(final_header.seal(prefix, payload, size))) {
+  } else {
+    set_header(final_header, prefix);
+    writable_header_ = prefix;
+    buf_ = payload;
+    buf_size_ = size;
+  }
+  return ret;
 }
 
 int ObMicroBlockDesc::deep_copy(
@@ -85,7 +125,6 @@ int ObMicroBlockDesc::deep_copy(
   if (this != &dst) {
     dst.reset();
     char * block_buffer = nullptr;
-    ObMicroBlockHeader *micro_header = nullptr;
     void * row_buffer = nullptr;
     ObSkipIndexAggResult *agg_row = nullptr;
 
@@ -102,15 +141,11 @@ int ObMicroBlockDesc::deep_copy(
       } else if (OB_ISNULL(block_buffer = (char *)allocator.alloc(block_size))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_LOG(WARN, "failed to alloc micro block buf", K(ret));
-      } else if (FALSE_IT(micro_header = reinterpret_cast<ObMicroBlockHeader *>(block_buffer))) {
-      } else if (OB_FAIL(header_->deep_copy(block_buffer, block_size, pos, micro_header))) {
-      } else if (OB_UNLIKELY(pos != micro_header->header_size_)) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "header deep copy size mismatch", K(ret), K(*micro_header), K(pos));
+      } else if (OB_FAIL(header_->serialize(block_buffer, block_size, pos))) {
+      } else if (OB_FAIL(dst.init_header(block_buffer, pos))) {
       } else {
         MEMCPY(block_buffer + pos, buf_, buf_size_);
         dst.buf_ = block_buffer + pos;
-        dst.header_ = micro_header;
         dst.buf_size_ = buf_size_;
         dst.data_size_ = data_size_;
         dst.original_size_ = original_size_;
@@ -159,36 +194,6 @@ int ObMicroBlockDesc::deep_copy(
 }
 
  /**
- * -------------------------------------------------------------------ObMicroBufferWriter-------------------------------------------------------------------
- */
-int ObMicroBufferWriter::write_row(const ObDatumRow &row, const int64_t rowkey_cnt, int64_t &size)
-{
-  int ret = OB_SUCCESS;
-  ObRowWriter row_writer;
-
-  if (remain_buffer_size() <= 0 && OB_FAIL(expand(ObCompactionBuffer::size()))) {
-    STORAGE_LOG(WARN, "failed to reserve", K(ret));
-  }
-
-  while (OB_SUCC(ret)) {
-    if (OB_SUCC(row_writer.write(rowkey_cnt, row, current(), remain_buffer_size(), size))) {
-      break;
-    } else {
-      if (OB_UNLIKELY(ret != OB_BUF_NOT_ENOUGH)) {
-        STORAGE_LOG(WARN, "failed to write row", K(ret), KPC(this));
-      } else if (!check_could_expand()) { //break
-      } else if (OB_FAIL(expand(ObCompactionBuffer::size()))) {
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    write_nop(size);
-  }
-  return ret;
-}
-
- /**
  * -------------------------------------------------------------------ObIMicroBlockWriter-------------------------------------------------------------------
  */
 int ObIMicroBlockWriter::build_micro_block_desc(ObMicroBlockDesc &micro_block_desc)
@@ -199,9 +204,8 @@ int ObIMicroBlockWriter::build_micro_block_desc(ObMicroBlockDesc &micro_block_de
   char *block_buffer = NULL;
   int64_t block_size = 0;
   if (OB_FAIL(build_block(block_buffer, block_size))) {
+  } else if (OB_FAIL(micro_block_desc.init_writable_header(block_buffer, block_size))) {
   } else {
-    ObMicroBlockHeader *micro_header = reinterpret_cast<ObMicroBlockHeader *>(block_buffer);
-    micro_block_desc.header_ = micro_header;
     micro_block_desc.buf_ = block_buffer + micro_block_desc.header_->header_size_;
     micro_block_desc.buf_size_ = block_size - micro_block_desc.header_->header_size_;
     micro_block_desc.data_size_ = micro_block_desc.buf_size_;
@@ -213,15 +217,8 @@ int ObIMicroBlockWriter::build_micro_block_desc(ObMicroBlockDesc &micro_block_de
     micro_block_desc.block_checksum_ = get_micro_block_checksum();
     micro_block_desc.has_string_out_row_ = has_string_out_row_;
     micro_block_desc.has_lob_out_row_ = has_lob_out_row_;
-    micro_block_desc.original_size_ = get_original_size();
+    micro_block_desc.original_size_ = micro_block_desc.header_->original_length_;
     micro_block_desc.is_last_row_last_flag_ = is_last_row_last_flag();
-    // fill micro header for bugfix on micro block that bypasses compression
-    // since these fields will be only filled on compression in current implementation
-    micro_header->data_length_ = micro_block_desc.buf_size_;
-    micro_header->data_zlength_ = micro_block_desc.buf_size_;
-    micro_header->data_checksum_ = ob_crc64_sse42(0, micro_block_desc.buf_, micro_block_desc.buf_size_);
-    micro_header->original_length_ = micro_block_desc.original_size_;
-    micro_header->set_header_checksum();
   }
   // do not reuse micro writer here
   return ret;
