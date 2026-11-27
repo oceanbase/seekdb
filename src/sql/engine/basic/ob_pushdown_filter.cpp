@@ -31,8 +31,6 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
 #include "sql/engine/expr/ob_expr_topn_filter.h"
-#include "sql/engine/expr/ob_json_param_type.h"
-#include "sql/engine/expr/ob_expr_json_func_helper.h"
 
 namespace oceanbase
 {
@@ -53,7 +51,7 @@ ObPushdownFilterFactory::PDFilterAllocFunc ObPushdownFilterFactory::PD_FILTER_AL
   nullptr,
   nullptr,
   nullptr,
-  ObPushdownFilterFactory::alloc<ObSemiStructWhiteFilterNode, SEMISTRUCT_FILTER>,
+  nullptr,
   nullptr // external filters are runtime-only and have no serializable node
 };
 
@@ -70,7 +68,7 @@ ObPushdownFilterFactory::FilterExecutorAllocFunc ObPushdownFilterFactory::FILTER
   nullptr,
   nullptr,
   nullptr,
-  ObPushdownFilterFactory::alloc<ObSemiStructWhiteFilterExecutor, ObSemiStructWhiteFilterNode, SEMISTRUCT_FILTER_EXECUTOR>,
+  nullptr,
   nullptr // allocated by create_external_pushdown_filter_runtime()
 };
 
@@ -332,8 +330,6 @@ OB_SERIALIZE_MEMBER((ObPushdownDynamicFilterNode, ObPushdownWhiteFilterNode), co
                     dynamic_filter_type_ // FARM COMPAT WHITELIST for prepare_data_func_type_
 );
 
-OB_SERIALIZE_MEMBER((ObSemiStructWhiteFilterNode, ObPushdownWhiteFilterNode), sub_col_path_);
-
 int ObPushdownBlackFilterNode::merge(ObIArray<ObPushdownFilterNode*> &merged_node)
 {
   int ret = OB_SUCCESS;
@@ -459,11 +455,6 @@ int ObPushdownDynamicFilterNode::set_op_type(const ObRawExpr &raw_expr)
   return ret;
 }
 
-int ObSemiStructWhiteFilterNode::set_op_type(const ObRawExpr &raw_expr)
-{
-  return ObPushdownWhiteFilterNode::set_op_type(raw_expr);
-}
-
 int ObPushdownWhiteFilterNode::get_filter_val_meta(common::ObObjMeta &obj_meta) const
 {
   int ret = OB_SUCCESS;
@@ -510,16 +501,7 @@ int ObPushdownWhiteFilterNode::get_filter_in_val_meta(int64_t arg_idx, common::O
   return ret;
 }
 
-bool ObPushdownFilterConstructor::can_pushdown_json_expr(const ObRawExpr &json_expr) const
-{
-  bool res = false;
-  if (enable_semistruct_pushdown_) {
-    res = ObJsonExprHelper::check_json_expr_can_pushdown(json_expr);
-  }
-  return res;
-}
-
-int ObPushdownFilterConstructor::is_white_mode(const ObRawExpr* raw_expr, bool &is_white, bool &is_semistruct_white)
+int ObPushdownFilterConstructor::is_white_mode(const ObRawExpr* raw_expr, bool &is_white)
 {
   int ret = OB_SUCCESS;
   bool need_check = true;
@@ -532,7 +514,7 @@ int ObPushdownFilterConstructor::is_white_mode(const ObRawExpr* raw_expr, bool &
     need_check = false;
   } else if (OB_ISNULL(child = raw_expr->get_param_expr(0))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ObRawExpr::EXPR_COLUMN_REF != child->get_expr_class() && ! (is_semistruct_white = can_pushdown_json_expr(*child))) {
+  } else if (ObRawExpr::EXPR_COLUMN_REF != child->get_expr_class()) {
     need_check = false;
   } else if (T_OP_IS == item_type || T_OP_IS_NOT == item_type) {
     if (2 == raw_expr->get_param_count()
@@ -682,7 +664,6 @@ int ObPushdownFilterConstructor::create_white_or_dynamic_filter_node(
   } else if (FALSE_IT(white_filter_node = static_cast<ClassT *>(filter_node))) {
   } else if (OB_FAIL(white_filter_node->set_op_type(*raw_expr))) {
   } else if (OB_FAIL(white_filter_node->column_exprs_.init(column_exprs.count()))) {
-  } else if (SEMISTRUCT_FILTER == type && OB_FAIL(init_semistruct_filter_node(filter_node, raw_expr))) {
   } else {
     if (DYNAMIC_FILTER == type) {
       ObPushdownDynamicFilterNode *dynamic_node =
@@ -702,28 +683,6 @@ int ObPushdownFilterConstructor::create_white_or_dynamic_filter_node(
 
   if (OB_SUCC(ret)) {
     white_filter_node->expr_ = expr;
-  }
-  return ret;
-}
-
-int ObPushdownFilterConstructor::init_semistruct_filter_node(ObPushdownFilterNode* filter_node, ObRawExpr *raw_expr)
-{
-  int ret = OB_SUCCESS;
-  const ObRawExpr *child = nullptr;
-  if (OB_ISNULL(filter_node) || OB_ISNULL(raw_expr)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (! filter_node->is_semistruct_filter_node()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (1 >= raw_expr->get_param_count()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(child = raw_expr->get_param_expr(0))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (! is_support_pushdown_json_expr(child->get_expr_type())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObSemiStructWhiteFilterNode* semistruct_node = static_cast<ObSemiStructWhiteFilterNode *>(filter_node);
-    if (OB_FAIL(ObJsonExprHelper::get_sub_column_path_from_json_expr(*alloc_, *child, semistruct_node->get_sub_col_path()))) {
-    }
   }
   return ret;
 }
@@ -916,7 +875,6 @@ int ObPushdownFilterConstructor::generate(ObRawExpr *raw_expr, ObPushdownFilterN
 {
   int ret = OB_SUCCESS;
   bool is_white = false;
-  bool is_semistruct_white = false;
   ObItemType op_type = T_INVALID;
   ObPushdownFilterNode *filter_node = nullptr;
   if (OB_ISNULL(raw_expr) || OB_ISNULL(alloc_)) {
@@ -933,13 +891,9 @@ int ObPushdownFilterConstructor::generate(ObRawExpr *raw_expr, ObPushdownFilterN
     } else {
       static_cast<ObPushdownDynamicFilterNode *>(filter_node)->set_last_child(true);
     }
-  } else if (OB_FAIL(is_white_mode(raw_expr, is_white, is_semistruct_white))) {
+  } else if (OB_FAIL(is_white_mode(raw_expr, is_white))) {
   } else if (is_white) {
-    if (is_semistruct_white) {
-      if (OB_FAIL((create_white_or_dynamic_filter_node<ObSemiStructWhiteFilterNode, PushdownFilterType::SEMISTRUCT_FILTER>(
-        raw_expr, filter_node)))) {
-      }
-    } else if (OB_FAIL((create_white_or_dynamic_filter_node<ObPushdownWhiteFilterNode, PushdownFilterType::WHITE_FILTER>(
+    if (OB_FAIL((create_white_or_dynamic_filter_node<ObPushdownWhiteFilterNode, PushdownFilterType::WHITE_FILTER>(
         raw_expr, filter_node)))) {
     }
   } else if (FALSE_IT(op_type = raw_expr->get_expr_type())) {
@@ -1889,10 +1843,6 @@ int ObWhiteFilterExecutor::init_compare_eval_datums(bool &is_valid)
         col_obj_meta = filter_.expr_->args_[i]->obj_meta_;
         // skip column reference expr
         continue;
-      } else if (is_support_pushdown_json_expr(filter_.expr_->args_[i]->type_)) {
-        is_ref_column_found = true;
-        col_obj_meta = filter_.expr_->args_[i]->obj_meta_;
-        continue;
       } else {
         ObDatum *datum = NULL;
         if (OB_FAIL(filter_.expr_->args_[i]->eval(eval_ctx, datum))) {
@@ -1927,7 +1877,7 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
   } else if (OB_UNLIKELY(filter_.expr_->arg_cnt_ != 2)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(nullptr == filter_.expr_->args_[0] ||
-                         (T_REF_COLUMN != filter_.expr_->args_[0]->type_ && ! (is_semistruct_filter_node() && is_support_pushdown_json_expr(filter_.expr_->args_[0]->type_)))||
+                         T_REF_COLUMN != filter_.expr_->args_[0]->type_ ||
                          nullptr == filter_.expr_->args_[1] ||
                          0 >= filter_.expr_->inner_func_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2647,12 +2597,6 @@ int ObFilterExecutorConstructor::apply(
       }
       case OR_FILTER: {
         ret = create_filter_executor<ObOrFilterExecutor, OR_FILTER_EXECUTOR>(filter_tree, filter_executor, op);
-        if (OB_FAIL(ret)) {
-        }
-        break;
-      }
-      case SEMISTRUCT_FILTER: {
-        ret = create_filter_executor<ObSemiStructWhiteFilterExecutor, SEMISTRUCT_FILTER_EXECUTOR>(filter_tree, filter_executor, op);
         if (OB_FAIL(ret)) {
         }
         break;

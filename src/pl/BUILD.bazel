@@ -124,7 +124,6 @@ _PL_RUNTIME_SHARE_HEADER_DEPS = [
     "//src/share:schema_registry",
     "//src/share:schema_transaction_control",
     "//src/share:scn_interface",
-    "//src/share:semistruct",
     "//src/share:sequence_option",
     "//src/share:sequence_runtime",
     "//src/share:session_state",

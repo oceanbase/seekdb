@@ -372,13 +372,6 @@ SHARE_UNITY_GROUPS = [
         ],
     ),
     struct(
-        name = "ob_share_semistruct_0",
-        language = "c++",
-        srcs = [
-            "src/share/semistruct/ob_sub_column_path.cpp",
-        ],
-    ),
-    struct(
         name = "ob_share_tablet_0",
         language = "c++",
         srcs = [

@@ -5770,20 +5770,6 @@ static const _error _error_OB_ERR_INVALID_IDENTIFIER_JSON_TABLE = {
       .str_error             = "invalid identifier used for path expression in JSON_TABLE",
       .str_user_error        = "invalid identifier used for path expression in JSON_TABLE"
 };
-static const _error _error_OB_SEMISTRUCT_SCHEMA_NOT_MATCH = {
-      .error_name            = "OB_SEMISTRUCT_SCHEMA_NOT_MATCH",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Cannot match semistruct schema.",
-      .str_user_error        = "Cannot match semistruct schema."
-};
-static const _error _error_OB_NOT_SUPPORT_SEMISTRUCT_ENCODE = {
-      .error_name            = "OB_NOT_SUPPORT_SEMISTRUCT_ENCODE",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "not support semistruct encoding.",
-      .str_user_error        = "not support semistruct encoding."
-};
 static const _error _error_OB_ERR_SESSION_VAR_CHANGED = {
       .error_name            = "OB_ERR_SESSION_VAR_CHANGED",
       .mysql_errno           = -1,
@@ -11652,8 +11638,6 @@ struct ObStrErrorInit
     _errors[-OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX] = &_error_OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX;
     _errors[-OB_ERR_JSON_CONTAINER_CAST_SCALAR] = &_error_OB_ERR_JSON_CONTAINER_CAST_SCALAR;
     _errors[-OB_ERR_INVALID_IDENTIFIER_JSON_TABLE] = &_error_OB_ERR_INVALID_IDENTIFIER_JSON_TABLE;
-    _errors[-OB_SEMISTRUCT_SCHEMA_NOT_MATCH] = &_error_OB_SEMISTRUCT_SCHEMA_NOT_MATCH;
-    _errors[-OB_NOT_SUPPORT_SEMISTRUCT_ENCODE] = &_error_OB_NOT_SUPPORT_SEMISTRUCT_ENCODE;
     _errors[-OB_ERR_SESSION_VAR_CHANGED] = &_error_OB_ERR_SESSION_VAR_CHANGED;
     _errors[-OB_ERR_SP_ALREADY_EXISTS] = &_error_OB_ERR_SP_ALREADY_EXISTS;
     _errors[-OB_ERR_SP_DOES_NOT_EXIST] = &_error_OB_ERR_SP_DOES_NOT_EXIST;

@@ -1123,7 +1123,7 @@ public:
        TABLE_DOP,
        LOB_INROW_THRESHOLD,
        INCREMENT_CACHE_SIZE,
-       SEMISTRUCT_ENCODING_TYPE,
+       RESERVED_OPTION_21 = 21,
        MAX_OPTION = 1000
   };
   enum AlterPartitionType

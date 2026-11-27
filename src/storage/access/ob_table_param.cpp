@@ -534,7 +534,6 @@ ObTableParam::ObTableParam(ObIAllocator &allocator)
     is_multivalue_index_(false),
     is_vec_index_(false),
     is_partition_table_(false),
-    is_enable_semistruct_encoding_(false),
     access_virtual_col_cnt_(0)
 {
   main_read_info_ = OB_NEWx(storage::ObTableReadInfo, &allocator_);
@@ -576,13 +575,13 @@ void ObTableParam::reset()
   is_multivalue_index_ = false;
   is_vec_index_ = false;
   is_partition_table_ = false;
-  is_enable_semistruct_encoding_ = false;
   access_virtual_col_cnt_ = 0;
 }
 
 OB_DEF_SERIALIZE(ObTableParam)
 {
   int ret = OB_SUCCESS;
+  bool reserved_semistruct_encoding = false;
 
   if (OB_ISNULL(main_read_info_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -618,7 +617,7 @@ OB_DEF_SERIALIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ENCODE,
-                is_enable_semistruct_encoding_,
+                reserved_semistruct_encoding,
                 access_virtual_col_cnt_);
   }
   return ret;
@@ -627,6 +626,7 @@ OB_DEF_SERIALIZE(ObTableParam)
 OB_DEF_DESERIALIZE(ObTableParam)
 {
   int ret = OB_SUCCESS;
+  bool reserved_semistruct_encoding = false;
 
   LST_DO_CODE(OB_UNIS_DECODE,
               table_id_,
@@ -683,7 +683,7 @@ OB_DEF_DESERIALIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_DECODE,
-                is_enable_semistruct_encoding_,
+                reserved_semistruct_encoding,
                 access_virtual_col_cnt_);
   }
   return ret;
@@ -693,6 +693,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableParam)
 {
   int ret = OB_SUCCESS;
   int64_t len = 0;
+  bool reserved_semistruct_encoding = false;
 
   if (OB_ISNULL(main_read_info_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -733,7 +734,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
-                is_enable_semistruct_encoding_,
+                reserved_semistruct_encoding,
                 access_virtual_col_cnt_);
   }
   return len;
@@ -1288,7 +1289,6 @@ int64_t ObTableParam::to_string(char *buf, const int64_t buf_len) const
        K_(parser_name),
        K_(parser_properties),
        K_(is_vec_index),
-       K_(is_enable_semistruct_encoding),
        K_(access_virtual_col_cnt));
   J_OBJ_END();
 

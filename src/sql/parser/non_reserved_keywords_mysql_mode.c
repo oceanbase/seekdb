@@ -708,7 +708,6 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"second_microsecond", SECOND_MICROSECOND},
   {"security", SECURITY},
   {"seed", SEED},
-  {"semistruct_encoding_type", SEMISTRUCT_ENCODING_TYPE},
   {"sensitive", SENSITIVE},
   {"sequence", SEQUENCE},
   {"serial", SERIAL},

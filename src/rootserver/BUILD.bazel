@@ -406,7 +406,6 @@ grouped_unity_cc_library(
         "//src/share:schema_transaction_control",
         "//src/share:scn_interface",
         "//src/share:runtime_foundation",
-        "//src/share:semistruct",
         "//src/share:sequence_runtime",
         "//src/share:session_state",
         "//src/share:sql_persistence_support",

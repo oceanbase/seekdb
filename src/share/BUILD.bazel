@@ -1199,32 +1199,6 @@ grouped_unity_cc_library(
     ],
 )
 
-_SEMISTRUCT_UNITY_GROUP = select_unity_sources(
-    SHARE_UNITY_GROUPS,
-    "semistruct",
-    ["src/share/semistruct/ob_sub_column_path.cpp"],
-)
-
-grouped_unity_cc_library(
-    name = "semistruct",
-    unity_groups = [_SEMISTRUCT_UNITY_GROUP],
-    public_hdrs = ["semistruct/ob_sub_column_path.h"],
-    deps = [
-        "//src/oblib:oblib_foundation",
-    ],
-    implementation_deps = [
-        ":tenant_runtime",
-        "//src/oblib:oblib_base",
-        "//src/oblib:oblib_common",
-    ],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = [
-        "//src:__subpackages__",
-        "//unittest:__subpackages__",
-    ],
-)
-
 cc_library(
     name = "lob_read_service",
     hdrs = ["ob_i_lob_read_service.h"],
@@ -1517,7 +1491,6 @@ _SHARE_NATIVE_UNITY_SOURCES = unity_group_sources(
     _JSON_ACCESS_UNITY_GROUP,
     _OBJECT_CAST_UNITY_GROUP,
     _TEXT_ANALYSIS_UNITY_GROUP,
-    _SEMISTRUCT_UNITY_GROUP,
     _LOB_RUNTIME_UNITY_GROUP,
     _DATUM_CMP_UNITY_GROUP,
     ],
@@ -1568,7 +1541,6 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     ":schema_storage_cache_policy_persistence_interface",
     ":scn_interface",
     ":runtime_foundation",
-    ":semistruct",
     ":sequence_option",
     ":local_storage_interface",
     ":storage_cache_policy",

@@ -24,7 +24,6 @@
 #include "common/object/ob_obj_compare.h"
 #include "common/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
-#include "share/semistruct/ob_sub_column_path.h"
 #include "query/engine/expr/ob_expr.h"
 #include "query/engine/expr/ob_expr_in.h"
 #include "query/engine/ob_operator.h"
@@ -108,7 +107,7 @@ enum PushdownFilterType //FARM COMPAT WHITELIST
   RESERVED_FILTER_7,
   RESERVED_FILTER_8,
   RESERVED_FILTER_9,
-  SEMISTRUCT_FILTER,
+  RESERVED_FILTER_10,
   EXTERNAL_FILTER,
   MAX_FILTER_TYPE
 };
@@ -126,7 +125,7 @@ enum PushdownExecutorType //FARM COMPAT WHITELIST
   RESERVED_FILTER_EXECUTOR_8,
   RESERVED_FILTER_EXECUTOR_9,
   RESERVED_FILTER_EXECUTOR_10,
-  SEMISTRUCT_FILTER_EXECUTOR,
+  RESERVED_FILTER_EXECUTOR_11,
   EXTERNAL_FILTER_EXECUTOR,
   MAX_EXECUTOR_TYPE
 };
@@ -315,7 +314,6 @@ public:
     return common::OB_SUCCESS;
   }
   virtual int postprocess() { return common::OB_SUCCESS; }
-  virtual bool is_semistruct_filter_node() const { return false; }
   virtual bool is_topn_filter() const { return false; }
   OB_INLINE bool is_logic_op_node() const
   {
@@ -516,29 +514,6 @@ private:
   DynamicFilterType dynamic_filter_type_; // FARM COMPAT WHITELIST for prepare_data_func_type_
 };
 
-class ObSemiStructWhiteFilterNode : public ObPushdownWhiteFilterNode
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObSemiStructWhiteFilterNode(common::ObIAllocator &alloc)
-      : ObPushdownWhiteFilterNode(alloc),
-        sub_col_path_()
-  {
-  }
-  ~ObSemiStructWhiteFilterNode() {}
-
-  virtual int set_op_type(const ObRawExpr &raw_expr) override;
-  virtual bool is_semistruct_filter_node() const { return true; }
-  share::ObSubColumnPath& get_sub_col_path() { return sub_col_path_; }
-  const share::ObSubColumnPath& get_sub_col_path() const { return sub_col_path_; }
-
-  INHERIT_TO_STRING_KV("ObSemiStructWhiteFilterNode", ObPushdownWhiteFilterNode,
-                      K_(sub_col_path));
-private:
-  share::ObSubColumnPath sub_col_path_;
-
-};
-
 class ObPushdownFilterExecutor;
 class ObPushdownFilterNode;
 class ObPushdownFilterFactory
@@ -582,15 +557,13 @@ class ObPushdownFilterConstructor
 public:
   ObPushdownFilterConstructor(common::ObIAllocator *alloc,
                               ObStaticEngineCG &static_cg,
-                              const ObLogTableScan *op,
-                              bool enable_semistruct_pushdown = false)
-      : alloc_(alloc), factory_(alloc), static_cg_(static_cg), op_(op),
-        enable_semistruct_pushdown_(enable_semistruct_pushdown)
+                              const ObLogTableScan *op)
+      : alloc_(alloc), factory_(alloc), static_cg_(static_cg), op_(op)
   {}
   int apply(common::ObIArray<ObRawExpr*> &exprs, ObPushdownFilterNode *&filter_tree);
 
 private:
-  int is_white_mode(const ObRawExpr* raw_expr, bool &is_white, bool &is_semistruct_white);
+  int is_white_mode(const ObRawExpr* raw_expr, bool &is_white);
   int create_black_filter_node(ObRawExpr *raw_expr, ObPushdownFilterNode *&filter_tree);
   int get_black_filter_monotonicity(const ObRawExpr *raw_expr,
                                    common::ObIArray<ObRawExpr *> &column_exprs,
@@ -612,14 +585,11 @@ private:
   int split_multi_cols_runtime_filter(ObOpRawExpr *raw_expr, ObPushdownFilterNode *&filter_tree);
   int remove_runtime_filter_root_node(ObArray<ObPushdownFilterNode *> &filter_nodes,
                                 uint32_t &valid_nodes);
-  bool can_pushdown_json_expr(const ObRawExpr &child) const;
-  int init_semistruct_filter_node(ObPushdownFilterNode* filter_node, ObRawExpr *raw_expr);
 private:
   common::ObIAllocator *alloc_;
   ObPushdownFilterFactory factory_;
   ObStaticEngineCG &static_cg_;
   const ObLogTableScan *op_;
-  bool enable_semistruct_pushdown_;
 };
 
 // wrapper for PushdownFilterNode to support serilize
@@ -704,10 +674,9 @@ public:
   }
   virtual OB_INLINE bool is_filter_white_node() const
   {
-    return type_ == WHITE_FILTER_EXECUTOR || type_ == DYNAMIC_FILTER_EXECUTOR || type_ == SEMISTRUCT_FILTER_EXECUTOR;
+    return type_ == WHITE_FILTER_EXECUTOR || type_ == DYNAMIC_FILTER_EXECUTOR;
   }
   virtual OB_INLINE bool is_sample_node() const { return type_ == HYBRID_SAMPLE_FILTER_EXECUTOR || type_ == TRIVAL_SAMPLE_FILTER_EXECUTOR; }
-  virtual OB_INLINE bool is_semistruct_filter_node() const { return type_ == SEMISTRUCT_FILTER_EXECUTOR; }
   virtual OB_INLINE bool is_external_filter_node() const { return type_ == EXTERNAL_FILTER_EXECUTOR; }
   virtual OB_INLINE bool is_filter_node() const { return is_filter_black_node() || is_filter_white_node() || is_sample_node(); }
   virtual OB_INLINE bool is_logic_and_node() const { return type_ == AND_FILTER_EXECUTOR; }
@@ -1186,20 +1155,6 @@ protected:
   common::ObFixedArray<common::ObDatum, common::ObIAllocator> datum_params_;
   ObWhiteFilterParamHashSet param_set_;
   ObPushdownWhiteFilterNode &filter_;
-};
-
-class ObSemiStructWhiteFilterExecutor : public ObWhiteFilterExecutor
-{
-public:
-  ObSemiStructWhiteFilterExecutor(common::ObIAllocator &alloc,
-                        ObSemiStructWhiteFilterNode &filter,
-                        ObPushdownOperator &op)
-      : ObWhiteFilterExecutor(alloc, filter, op)
-      {}
-  virtual ~ObSemiStructWhiteFilterExecutor()
-  {
-  }
-
 };
 
 class ObAndFilterExecutor : public ObPushdownFilterExecutor

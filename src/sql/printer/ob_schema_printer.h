@@ -378,10 +378,6 @@ public:
                                char* buf,
                                const int64_t& buf_len,
                                int64_t& pos) const;
-  int print_semistruct_encodng_options(const ObTableSchema &table_schema,
-                                       char* buf,
-                                       const int64_t& buf_len,
-                                       int64_t& pos) const;
   void set_sql_schema_guard(sql::ObSqlSchemaGuard *sql_schema_guard);
 private:
   static bool is_subpartition_valid_in_mysql(const ObTableSchema &table_schema)

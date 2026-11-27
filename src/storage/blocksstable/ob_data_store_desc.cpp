@@ -68,7 +68,6 @@ int ObStaticDataStoreDesc::assign(const ObStaticDataStoreDesc &desc)
   micro_index_clustered_ = desc.micro_index_clustered_;
   need_submit_io_ = desc.need_submit_io_;
   encoding_granularity_ = desc.encoding_granularity_;
-  semistruct_encoding_type_ = desc.semistruct_encoding_type_;
   concurrent_cnt_ = desc.concurrent_cnt_;
   return ret;
 }
@@ -129,7 +128,6 @@ int ObStaticDataStoreDesc::init(
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(merge_schema.get_semistruct_encoding_type(semistruct_encoding_type_))) {
     } else {
       schema_version_ = merge_schema.get_schema_version();
       snapshot_version_ = snapshot_version;
