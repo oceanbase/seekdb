@@ -34,6 +34,7 @@ pub(crate) mod ffi {
         filter_hints: bool,
         format: bool,
         batch_statement: bool,
+        preserve_case: bool,
     }
 
     enum OdbcAction {

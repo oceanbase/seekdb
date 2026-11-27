@@ -247,17 +247,12 @@ int report_parse_error(const common::ObString &sql, const peg::ParseDiagnostic &
   }
   std::string description = ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX);
   if (offset == static_cast<size_t>(sql.length())) description += "; unexpected end of input";
-  if (!diagnostic.detail.empty()) {
-    description += "; ";
-    description.append(diagnostic.detail.data(), diagnostic.detail.size());
-  }
   if (offset < static_cast<size_t>(sql.length())) {
     description += " near '";
     for (size_t i = 0; i < length; ++i) {
       if (sql.ptr()[offset + i] == '\0') description += "\\0";
       else description.push_back(sql.ptr()[offset + i]);
     }
-    if (length < sql.length() - offset) description += "...";
     description += "'";
   }
   description += " at line " + std::to_string(line);

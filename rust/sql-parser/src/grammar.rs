@@ -322,18 +322,17 @@ peg::parser! {
                 if mode.ansi_quotes { "unterminated quoted identifier" } else { "unterminated string literal" }
             }
             / "`" ("``" / !"`" [_])* ![_] { "unterminated quoted identifier" }
-        rule quoted_binary_diagnostic() -> &'static str
-            = [b'x'|b'X'] "'" text:$((!"'" [_])*) "'" {
-                if text.len()%2==0 && text.iter().all(u8::is_ascii_hexdigit) { "" }
-                else { "invalid hexadecimal literal" }
-            }
-            / [b'b'|b'B'] "'" text:$((!"'" [_])*) "'" {
+        rule quoted_hex_token() = [b'x'|b'X'] "'" (!"'" [_])* "'"
+        rule quoted_bit_diagnostic() -> &'static str
+            = [b'b'|b'B'] "'" text:$((!"'" [_])*) "'" {
                 if text.iter().all(|byte| matches!(byte,b'0'|b'1')) { "" }
                 else { "invalid binary literal" }
             }
         pub rule diagnostic_token(offset: usize) -> (crate::Span, &'static str) = tokens:(space()* span:(
             value:(temporal_literal() / number()) { (crate::Span { start:value.start,end:value.end },"") }
-            / start:position!() detail:(quoted_binary_diagnostic() / unterminated_token()) end:position!() { (crate::Span { start,end },detail) }
+            / start:position!() detail:(quoted_hex_token() { "" } / quoted_bit_diagnostic() / unterminated_token()) end:position!() {
+                (crate::Span { start,end },detail)
+            }
             / start:position!() (opaque_comment_token() / cont()+ ("." (cont()+ / opaque_comment_token()))*
                 / "<=>" / "<=" / ">=" / "<>" / "!=" / ":=" / "<<" / ">>" / "||" / "&&" / [_]) end:position!() {
                     (crate::Span { start,end },"")
@@ -455,9 +454,8 @@ peg::parser! {
             }
         rule hex_digit() = [b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F']
         rule binary_literal() -> Node
-            = start:position!() [b'x'|b'X'] "'" text:syntax_text(<$(hex_digit()*)>) "'" end:position!() _ failure:position!() {?
-                if text.len()%2!=0 { Err(diagnostics.record("even number of hexadecimal digits",crate::Span { start,end },failure)) }
-                else { Node::new(Kind::HexString,vec![]).text(text.into()).expression(start,end) }
+            = start:position!() [b'x'|b'X'] "'" text:syntax_text(<$((hex_digit() hex_digit())*)>) "'" end:position!() _ {?
+                Node::new(Kind::HexString,vec![]).text(text.into()).expression(start,end)
             }
             / start:position!() "0x" text:syntax_text(<$(hex_digit()+)>) !cont() end:position!() _ {?
                 Node::new(Kind::HexString,vec![]).text(text.into()).expression(start,end)
@@ -562,9 +560,10 @@ peg::parser! {
                 if names.len()!=2 { return Err("table and column name"); }
                 let end=names[1].end;Node::column(names,false,start,end)
             }
-            / depth(level) start:position!() !([b'x'|b'X'] "'" hex_digit()* "'") parts:expression_name() tail:("." _ "*" end:position!() _ { (None, end) }
+            / depth(level) start:position!() !([b'x'|b'X'] "'") parts:expression_name() tail:("." _ "*" end:position!() _ { (None, end) }
                 / enabled(parts.len()!=1 || parts[0].quoted || !["row","match","score","point","json_query","json_value","trim","position","weight_string","char","character","array","map","array_agg",
-                    "array_map","array_filter","array_first","array_sortby","vector_distance","vector_similarity","group_concat","listagg","get_format","cast","convert"]
+                    "array_map","array_filter","array_first","array_sortby","vector_distance","vector_similarity","group_concat","listagg","get_format","cast","convert",
+                    "date_add","date_sub","adddate","subdate","timestampadd","timestampdiff","extract"]
                     .iter().any(|name| parts[0].text.eq_ignore_ascii_case(name)))
                     &"(" valid_function(parts.as_slice(),start)
                     "(" _ modifier:(distinct_keyword() { Kind::Distinct } / kw("all") { Kind::All })?
@@ -741,13 +740,15 @@ peg::parser! {
             ) ")" end:position!() _ {?
                 Node::named_call(Kind::Function,Node::new(Kind::Ident,vec![]).text(function.0.into()),function.1).expression(start,end)
             }
-        rule date_unit() -> Node = start:position!() name:syntax_text(<$(word())>) end:position!() _ failure:position!() {?
-            let name=name.to_ascii_lowercase();
-            if ["microsecond","second","minute","hour","day","week","month","quarter","year",
-                "second_microsecond","minute_microsecond","minute_second","hour_microsecond","hour_second","hour_minute",
-                "day_microsecond","day_second","day_minute","day_hour","year_month"].contains(&name.as_str()) {
-                Ok(Node::new(Kind::DateUnit,vec![]).text(name).at(start,end))
-            } else { Err(diagnostics.record("invalid date unit",crate::Span { start,end },failure)) }
+        rule date_unit() -> Node = start:position!() name:syntax_text(<$(
+            keyword("microsecond") / keyword("second") / keyword("minute") / keyword("hour") / keyword("day")
+            / keyword("week") / keyword("month") / keyword("quarter") / keyword("year")
+            / keyword("second_microsecond") / keyword("minute_microsecond") / keyword("minute_second")
+            / keyword("hour_microsecond") / keyword("hour_second") / keyword("hour_minute")
+            / keyword("day_microsecond") / keyword("day_second") / keyword("day_minute") / keyword("day_hour")
+            / keyword("year_month")
+        )>) end:position!() _ {
+            Node::new(Kind::DateUnit,vec![]).text(name.to_ascii_lowercase()).at(start,end)
         }
         rule date_function(level: usize) -> Node
             = start:position!() function:(kw("date_add") { ("date_add",false) } / kw("date_sub") { ("date_sub",false) }
@@ -1684,22 +1685,24 @@ peg::parser! {
             / kw("comment") value:string() { Node::new(Kind::ColumnComment, vec![value]) }
             / kw("srid") value:type_size() { Node::new(Kind::Srid,vec![value]) }
             / check_constraint()
-        rule current_timestamp(message: &'static str) -> Node = value:atom(0) failure:position!() {?
-            if value.kind==Kind::CurrentTimestamp { Ok(value) }
-            else { Err(diagnostics.record(message,crate::Span { start:value.start,end:value.end },failure)) }
-        }
+        rule current_timestamp() -> Node
+            = &(keyword("current_timestamp") / keyword("now") / keyword("localtime") / keyword("localtimestamp"))
+                value:atom(0) {?
+                    if value.kind==Kind::CurrentTimestamp { Ok(value) }
+                    else { Err("CURRENT_TIMESTAMP") }
+                }
         rule column_default_value(timestamp: bool) -> Node
             = start:position!() "(" _ value:expr(0) ")" end:position!() _ {?
                 Node::new(Kind::Parenthesized,vec![value]).expression(start,end)
             }
             / signed_literal()
-            / enabled(timestamp) value:current_timestamp("nonconstant DEFAULT expressions require parentheses") { value }
+            / enabled(timestamp) value:current_timestamp() { value }
         rule column_attribute() -> Node
             = generated_column_attribute()
             / storage_chunk()
             / kw("auto_increment") { Node::new(Kind::AutoIncrement, vec![]) }
             / kw("default") value:column_default_value(true) { Node::new(Kind::ColumnDefault, vec![value]) }
-            / kw("on") kw("update") value:current_timestamp("ON UPDATE requires CURRENT_TIMESTAMP") { Node::new(Kind::OnUpdate,vec![value]) }
+            / kw("on") kw("update") value:current_timestamp() { Node::new(Kind::OnUpdate,vec![value]) }
             / kw("collate") value:collation_name() { value.with_kind(Kind::Collation) }
             / kw("column_format") (kw("default") / kw("fixed") / kw("dynamic")) { Node::missing() }
             / kw("storage") (kw("default") / kw("disk") / kw("memory")) { Node::missing() }

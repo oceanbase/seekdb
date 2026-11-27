@@ -171,7 +171,8 @@ public:
                                       bool is_transform_outline,
                                       ObPlanCacheCtx &pc_ctx,
                                       const ParsedSql &parsed,
-                                      ParamStore &params);
+                                      ParamStore &params,
+                                      bool preserve_case_in_format = false);
   static int gen_special_param_info(SqlInfo &sql_info, ObPlanCacheCtx &pc_ctx);
   static int gen_ps_not_param_var(const ObIArray<int64_t> &offsets,
                                   ParamStore &params,

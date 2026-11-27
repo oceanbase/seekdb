@@ -2609,7 +2609,7 @@ int ObDMLResolver::resolve_hybrid_search_item(const peg::Node &table_node, Table
   const auto &source = peg::table_source(table_node);
   const ParamStore empty_parameters;
   const ParamStore &parameters = params_.param_list_ == nullptr ? empty_parameters : *params_.param_list_;
-  const auto argument_text = [&](const peg::Node &node, ObString &text) {
+  const auto argument_text = [&](const peg::Node &node, ObString &text, const char *type_requirement) {
     int ret = OB_SUCCESS;
     ObRawExpr *expression = nullptr;
     ObObj value;
@@ -2635,14 +2635,17 @@ int ObDMLResolver::resolve_hybrid_search_item(const peg::Node &table_node, Table
     }
     if (OB_SUCC(ret) && !value.is_null() && !value.is_string_type()) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, type_requirement);
     }
     OZ(value.get_string(text));
     return ret;
   };
   ObString table_name;
   ObString search_parameters;
-  OZ(argument_text(peg::hybrid_search_table(source), table_name));
-  OZ(argument_text(peg::hybrid_search_parameters(source), search_parameters));
+  OZ(argument_text(peg::hybrid_search_table(source), table_name,
+                   "HYBRID_SEARCH (the first argument must be a table name)"));
+  OZ(argument_text(peg::hybrid_search_parameters(source), search_parameters,
+                   "HYBRID_SEARCH (the second argument must be JSON text)"));
   share::ObHybridSearchExecutor executor;
   share::ObHybridSearchArg argument;
   argument.table_name_ = table_name;

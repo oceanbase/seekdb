@@ -16,10 +16,10 @@ use crate::{budget::Budget, grammar, ParseDiagnostic, ParseErrorKind, Span, SqlM
 use std::cell::Cell;
 
 #[derive(Default)]
-pub(crate) struct Diagnostics(Cell<Option<SemanticFailure>>);
+pub(crate) struct Diagnostics(Cell<Option<RuleFailure>>);
 
 #[derive(Clone, Copy)]
-struct SemanticFailure {
+struct RuleFailure {
     offset: usize,
     span: Span,
     message: &'static str,
@@ -31,7 +31,7 @@ impl Diagnostics {
     pub(crate) fn record(&self, message: &'static str, span: Span, offset: usize) -> &'static str {
         let failure = self.0.get();
         if failure.as_ref().is_none_or(|previous| previous.offset < offset) {
-            self.0.set(Some(SemanticFailure { offset, span, message }));
+            self.0.set(Some(RuleFailure { offset, span, message }));
         }
         message
     }
