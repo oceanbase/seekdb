@@ -14,7 +14,6 @@ permissions:
 
 env:
   SEEKDB_BINARY_PATH: build/bin/src/observer/seekdb
-  SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
   SEEKDB_CACHE_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb/_cache
 
 jobs:
@@ -97,13 +96,37 @@ jobs:
           git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" clean -ffdx
 
-      - name: Configure shared cache paths
+      - name: Configure cache paths
         shell: bash
         run: |
           set -euo pipefail
-          CACHE_ROOT="$SEEKDB_CACHE_NFS_ROOT/shared"
           RUST_CONFIG=$(sha256sum rust-toolchain.toml | cut -d ' ' -f 1)
-          mkdir -p "$CACHE_ROOT/deps" "$CACHE_ROOT/bazel" "$CACHE_ROOT/cargo" "$CACHE_ROOT/rustup/$RUST_CONFIG"
+          CACHE_ROOT="$SEEKDB_CACHE_NFS_ROOT/shared"
+
+          prepare_cache() {
+            local root="$1" dir probe
+            for dir in "$root/deps" "$root/bazel" "$root/cargo" "$root/rustup/$RUST_CONFIG"; do
+              mkdir -p "$dir" || return 1
+              probe=$(mktemp "$dir/.seekdb-write.XXXXXX") || return 1
+              rm -- "$probe" || return 1
+            done
+          }
+
+          # An unmounted NFS path can resolve to the container filesystem.
+          # Look at the nearest existing ancestor before creating anything.
+          mount_path="$CACHE_ROOT"
+          while [[ ! -d "$mount_path" && "$mount_path" != / ]]; do
+            mount_path=$(dirname -- "$mount_path")
+          done
+          fs_type=$(findmnt --noheadings --output FSTYPE --target "$mount_path") || fs_type=unknown
+          if [[ "$fs_type" == nfs || "$fs_type" == nfs4 ]] && prepare_cache "$CACHE_ROOT"; then
+            echo "Using shared NFS cache: $CACHE_ROOT"
+          else
+            echo "::warning::Shared NFS cache is unavailable or not writable; using runner-local cache for this job."
+            CACHE_ROOT=$(mktemp -d "${RUNNER_TEMP:?}/seekdb-cache.XXXXXX")
+            prepare_cache "$CACHE_ROOT"
+            echo "Using runner-local cache: $CACHE_ROOT"
+          fi
           {
             echo "DEP_CACHE_DIR=$CACHE_ROOT/deps"
             echo "BAZEL_DISK_CACHE=$CACHE_ROOT/bazel"
@@ -123,23 +146,32 @@ jobs:
           .github/script/seekdb/compile.sh
 
       - name: Test
+        id: test
         shell: bash
         run: |
           set -euo pipefail
           RUN_DIR=$(mktemp -d "${RUNNER_TEMP:?}/sqltest.XXXXXX")
-          DEST_DIR="$SEEKDB_RESULT_NFS_ROOT/$GITHUB_RUN_ID/attempt-$GITHUB_RUN_ATTEMPT/sqltest"
-          mkdir -p "$DEST_DIR"
+          DEST_DIR=$(mktemp -d "${RUNNER_TEMP:?}/seekdb-test-logs.XXXXXX")
+          echo "log_dir=$DEST_DIR" >> "$GITHUB_OUTPUT"
           TEST_ROOT="$GITHUB_WORKSPACE/tests/mysqltest"
           RESULT=0
           "$GITHUB_WORKSPACE/tools/sqltest/bin/linux-amd64/sqltest" --seekdb "$GITHUB_WORKSPACE/$SEEKDB_BINARY_PATH" \
             --test-root "$TEST_ROOT" --run-dir "$RUN_DIR" -j 24 --case-timeout 1h \
             2>&1 | tee "$DEST_DIR/sqltest.log" || RESULT=$?
-          echo "SQL regression log saved to $DEST_DIR/sqltest.log" >> "$GITHUB_STEP_SUMMARY"
+          echo "SQL regression output: seekdb-sqltest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT artifact." >> "$GITHUB_STEP_SUMMARY"
           if [[ -d "$TEST_ROOT/rejects" ]]; then
-            cp -a "$TEST_ROOT/rejects" "$DEST_DIR/"
+            (cd "$TEST_ROOT" && find rejects -type f -exec cp --parents -t "$DEST_DIR" -- {} +)
           fi
           if [[ "$RESULT" -ne 0 ]]; then
-            cd "$RUN_DIR"
-            find . -type f -name console.log -exec cp --parents -t "$DEST_DIR" {} +
+            (cd "$RUN_DIR" && find . -type f -name console.log -exec cp --parents -t "$DEST_DIR" -- {} +)
           fi
           exit "$RESULT"
+
+      - name: Upload seekdb test logs
+        if: ${{ !cancelled() && steps.test.outputs.log_dir != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: seekdb-sqltest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.test.outputs.log_dir }}
+          if-no-files-found: error
