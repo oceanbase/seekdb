@@ -1,0 +1,46 @@
+# Regression for issue #1469: keep identifier escaping below the SQL layer.
+# Populated ENUM/SET indexes exercise shared DDL's unsigned-cast formatter.
+--disable_query_log
+--disable_result_log
+connection default;
+--disable_warnings
+DROP TABLE IF EXISTS ddl_quote_enum, ddl_quote_set, ddl_quote_plain;
+--enable_warnings
+
+CREATE TABLE ddl_quote_plain (id INT PRIMARY KEY, plain_enum ENUM('a','b'));
+INSERT INTO ddl_quote_plain VALUES (1,'a'), (2,'b');
+CREATE UNIQUE INDEX uk_plain ON ddl_quote_plain(plain_enum);
+
+CREATE TABLE ddl_quote_enum (id INT PRIMARY KEY, `e``n` ENUM('a','b'));
+INSERT INTO ddl_quote_enum VALUES (1,'a'), (2,'b');
+CREATE UNIQUE INDEX uk_enum ON ddl_quote_enum(`e``n`);
+--error 1062
+INSERT INTO ddl_quote_enum VALUES (3,'a');
+INSERT INTO ddl_quote_enum VALUES (4,NULL), (5,NULL);
+let $enum_rows = query_get_value(SELECT COUNT(*) AS n FROM ddl_quote_enum FORCE INDEX (uk_enum) WHERE `e``n` IS NOT NULL, n, 1);
+if ($enum_rows != 2)
+{
+  die Unexpected indexed ENUM row count;
+}
+
+CREATE TABLE ddl_quote_set (`pk``id` INT PRIMARY KEY, ```s````n``` SET('a','b'));
+INSERT INTO ddl_quote_set VALUES (1,'a'), (2,'b');
+CREATE UNIQUE INDEX uk_set ON ddl_quote_set(```s````n```);
+--error 1062
+INSERT INTO ddl_quote_set VALUES (3,'a');
+let $set_rows = query_get_value(SELECT COUNT(*) AS n FROM ddl_quote_set FORCE INDEX (uk_set) WHERE ```s````n``` IS NOT NULL, n, 1);
+if ($set_rows != 2)
+{
+  die Unexpected indexed SET row count;
+}
+CREATE INDEX idx_pk ON ddl_quote_set(`pk``id`);
+let $pk_rows = query_get_value(SELECT COUNT(*) AS n FROM ddl_quote_set FORCE INDEX (idx_pk) WHERE `pk``id` > 0, n, 1);
+if ($pk_rows != 2)
+{
+  die Unexpected indexed primary-key row count;
+}
+
+DROP TABLE ddl_quote_enum, ddl_quote_set, ddl_quote_plain;
+--enable_result_log
+--enable_query_log
+--echo Shared DDL identifier escaping: OK
