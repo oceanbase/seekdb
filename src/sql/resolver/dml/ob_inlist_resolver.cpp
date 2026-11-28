@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include <unordered_set>
 
 namespace oceanbase
 {
@@ -308,6 +309,36 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       } else {
         is_enable = true;
       }
+    }
+  }
+  // A long scalar integer list can have very few distinct values. Retain the
+  // native IN expression in that case, rather than materializing thousands of
+  // rows and adding DISTINCT/subplan operators solely because of duplicates.
+  // This changes only the choice of an equivalent rewrite: all original
+  // expressions and bind parameters remain in the plan, including their types.
+  if (OB_SUCC(ret) && is_enable && !is_prepare_stmt &&
+      T_OP_ROW != left_expr.get_expr_type() && threshold > 0) {
+    std::unordered_set<int64_t> distinct_values;
+    bool integer_list = true;
+    for (int64_t i = 0; integer_list && i < in_list.num_child_ &&
+                        distinct_values.size() < static_cast<uint64_t>(threshold); ++i) {
+      const ParseNode *node = in_list.children_[i];
+      if (nullptr == node) {
+        integer_list = false;
+      } else if (node->type_ == T_INT) {
+        distinct_values.insert(node->value_);
+      } else if (node->type_ == T_QUESTIONMARK && nullptr != param_store &&
+                 node->value_ >= 0 && node->value_ < param_store->count() &&
+                 param_store->at(node->value_).is_int()) {
+        distinct_values.insert(param_store->at(node->value_).get_int());
+      } else {
+        // Leave strings, coercions, row values, NULL and unknown binds on the
+        // existing path. No cross-type or collation-sensitive deduplication.
+        integer_list = false;
+      }
+    }
+    if (integer_list && distinct_values.size() < static_cast<uint64_t>(threshold)) {
+      is_enable = false;
     }
   }
   // 2. check same node type requests
