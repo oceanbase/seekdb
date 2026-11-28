@@ -1,0 +1,30 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_testonly = True)
+
+_RS_TIMEOUT_POLICY_DEPS = [
+    "//src/share:rs_timeout_policy",
+    "//bazel/third_party:gtest",
+]
+
+cc_test(
+    name = "test_rs_timeout_policy",
+    srcs = [
+        "rs_timeout_policy_cases.h",
+        "test_rs_timeout_policy.cpp",
+    ],
+    linkstatic = True,
+    deps = _RS_TIMEOUT_POLICY_DEPS,
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+cc_test(
+    name = "test_rs_timeout_policy_windows",
+    srcs = [
+        "rs_timeout_policy_cases.h",
+        "test_rs_timeout_policy_windows.cpp",
+    ],
+    linkstatic = True,
+    deps = _RS_TIMEOUT_POLICY_DEPS,
+    target_compatible_with = ["@platforms//os:linux"],
+)
