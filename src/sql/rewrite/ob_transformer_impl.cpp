@@ -536,8 +536,19 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // An approximate vector index query is recognized by the resolver through its
+      // ordering expression, so most rewrites have to stay disabled to keep that
+      // expression matchable against the vector index. Expression simplification is
+      // different: it only canonicalizes the filter predicates (identity constants,
+      // duplicated operands, NOT-IN expanded into conjunctive negations) and never
+      // rewrites the ANN ordering expression, while the expanded filter lets the
+      // optimizer use index range scans instead of a whole-table pre-filter scan.
+      uint64_t vec_approx_enable_list = 0;
+      ObTransformRule::add_trans_type(vec_approx_enable_list, SIMPLIFY_EXPR);
+      disable_list |= (~vec_approx_enable_list);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
