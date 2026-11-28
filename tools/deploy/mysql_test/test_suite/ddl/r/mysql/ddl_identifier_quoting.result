@@ -1,0 +1,29 @@
+SET ob_query_timeout = 20000000;
+SET ob_trx_timeout = 60000000;
+CREATE TABLE ddl_identifier_quoting (
+id INT PRIMARY KEY,
+plain_col INT,
+`key``id` INT,
+`enum``value` ENUM('a', 'b'),
+`set````value` SET('x', 'y')
+);
+INSERT INTO ddl_identifier_quoting VALUES
+(1, 10, 100, 'a', 'x'),
+(2, 20, 200, 'b', 'x,y'),
+(3, 30, NULL, NULL, NULL),
+(4, 40, NULL, NULL, NULL);
+CREATE INDEX plain_idx ON ddl_identifier_quoting(plain_col);
+CREATE UNIQUE INDEX quoted_idx ON ddl_identifier_quoting(`key``id`, `enum``value`, `set````value`);
+SELECT /*+ INDEX(t quoted_idx) */ id, `key``id`, `enum``value`, `set````value`
+FROM ddl_identifier_quoting t ORDER BY id;
+id	key`id	enum`value	set``value
+1	100	a	x
+2	200	b	x,y
+3	NULL	NULL	NULL
+4	NULL	NULL	NULL
+INSERT INTO ddl_identifier_quoting VALUES (5, 50, 300, 'a', 'y');
+SELECT /*+ INDEX(t quoted_idx) */ id, `enum``value`, `set````value`
+FROM ddl_identifier_quoting t WHERE `key``id` = 300;
+id	enum`value	set``value
+5	a	y
+DROP TABLE ddl_identifier_quoting;
