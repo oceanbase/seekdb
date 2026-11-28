@@ -267,7 +267,6 @@ def main(arguments: List[str]) -> int:
     )
     lines = [
         "common --downloader_config=" + _quote((root / "bazel/downloader.cfg").as_posix()),
-        "build --disk_cache=" + _quote((_cache_directory() / "disk-cache").as_posix()),
         "build --symlink_prefix=" + _quote(output_base.as_posix() + "/"),
         "build --workspace_status_command=" + _quote(status_command),
     ]

@@ -86,13 +86,15 @@ Run `./build.py info output_base` to locate the working directory and `./build.p
 
 ## Reuse build caches
 
-Bazel binaries and the default action cache are shared between checkouts. Their base directory is `~/.cache/bazel` on Linux, `~/Library/Caches/bazel` on macOS, or `%LOCALAPPDATA%/bazel` on Windows. Linux honors `XDG_CACHE_HOME`. Bazel manages its shared repository download cache separately.
+The launcher shares downloaded Bazel binaries between checkouts. Its cache root is `~/.cache/bazel` on Linux, `~/Library/Caches/bazel` on macOS, or `%LOCALAPPDATA%/bazel` on Windows. On Linux, `XDG_CACHE_HOME` replaces `~/.cache`. Use `--launcher_cache_dir PATH` after the command to override the launcher cache root.
 
-Use `--launcher_cache_dir PATH` for the Bazel binary cache, `--disk_cache=PATH` for build actions, or `--repository_cache=PATH` for downloaded dependencies. All go after the command. For example:
+To share build action results between checkouts, enable the disk cache in your user `~/.bazelrc`:
 
-```bash
-./build.py build --launcher_cache_dir=/data/bazel --disk_cache=/data/bazel-actions seekdb
+```bazelrc
+build --disk_cache=/absolute/path/to/bazel-actions
 ```
+
+You can override that path for one invocation with `./build.py build --disk_cache=PATH seekdb`. Each checkout can build incrementally using its own output directory. Bazel manages the repository download cache separately. Set `--repository_cache=PATH` to change its location.
 
 To change dependency download settings, use Bazel's `--registry=URL` or `--downloader_config=PATH` after the command.
 
