@@ -634,7 +634,7 @@ bool ObExprJsonValue::try_set_error_val(const ObExpr &expr,
 
 
 
-int ObExprJsonValue::get_default_value(ObExpr *expr,
+int ObExprJsonValue::get_default_value(const ObExpr *expr,
                                       ObEvalCtx &ctx,
                                       const ObAccuracy &accuracy,
                                       ObDatum **default_value)
@@ -642,14 +642,11 @@ int ObExprJsonValue::get_default_value(ObExpr *expr,
   INIT_SUCC(ret);
   ObObjType val_type = expr->datum_meta_.type_;
   ObDatum *json_datum = NULL;
-  {
-    expr->extra_ &= ~CM_WARN_ON_FAIL; // make cast return error when fail
-    expr->extra_ &= ~CM_NO_RANGE_CHECK; // make cast check range
-    expr->extra_ &= ~CM_STRING_INTEGER_TRUNC; // make cast check range when string to uint
-    expr->extra_ |= CM_ERROR_ON_SCALE_OVER; // make cast check presion and scale
-    expr->extra_ |= CM_EXPLICIT_CAST; // make cast json fail return error
-  }
-  if (OB_FAIL(expr->eval(ctx, json_datum))) {
+  // Keep the stricter cast mode local while evaluating into the same frame slot.
+  ObExpr default_expr = *expr;
+  default_expr.extra_ &= ~(CM_WARN_ON_FAIL | CM_NO_RANGE_CHECK | CM_STRING_INTEGER_TRUNC);
+  default_expr.extra_ |= CM_ERROR_ON_SCALE_OVER | CM_EXPLICIT_CAST;
+  if (OB_FAIL(default_expr.eval(ctx, json_datum))) {
   } else if (val_type == ObNullType || json_datum->is_null()) {
   } else if (OB_FAIL(check_default_val_accuracy<ObDatum>(accuracy, val_type, json_datum))) {
   } else {
