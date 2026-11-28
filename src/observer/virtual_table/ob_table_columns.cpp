@@ -819,9 +819,6 @@ int ObTableColumns::deduce_column_attributes(
     bool skip_type_str,
     ObIAllocator &allocator) {
   int ret = OB_SUCCESS;
-  // nullable = YES:  if some binaryref expr is nullable
-  // nullable = NO, other cases
-  // that's to say, only if all binaryref expr are NOT nullable, result is NOT nullable
   bool nullable = false;
 
   // default = NULL: if some binaryref expr has no default
@@ -877,6 +874,7 @@ int ObTableColumns::deduce_column_attributes(
           }// end switch
         }
       }// end for
+      nullable = nullable && !expr->get_result_type().is_not_null_for_read();
     }
   }
 
@@ -1042,6 +1040,8 @@ int ObTableColumns::set_col_attrs_according_binary_expr(const ObSelectStmt *sele
         || NULL == table_schema) {
       // reset return code to success: view_2.test
       ret = OB_SUCCESS;
+    } else if (table_schema->is_view_table()) {
+      nullable |= !bexpr->get_result_type().is_not_null_for_read();
     } else if (table_schema->is_table()) {
       if (OB_UNLIKELY(NULL == (column_schema =
             table_schema->get_column_schema(bexpr->get_column_id())))) {
