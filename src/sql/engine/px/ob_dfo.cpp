@@ -554,47 +554,16 @@ int ObPxInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t d
 OB_DEF_SERIALIZE(ObPxInitTaskArgs)
 {
   int ret = OB_SUCCESS;
-
-
-  if (OB_ISNULL(op_spec_root_) || OB_ISNULL(exec_ctx_) || OB_ISNULL(ser_phy_plan_)) {
+  if (OB_ISNULL(op_spec_root_) || OB_ISNULL(exec_ctx_) || OB_ISNULL(phy_plan_)) {
     ret = OB_NOT_INIT;
-  }
-  uint64_t sqc_task_ptr_val = reinterpret_cast<uint64_t>(sqc_task_ptr_);
-  uint64_t sqc_handler_ptr_val = reinterpret_cast<uint64_t>(sqc_handler_);
-  bool use_share_plan = ser_phy_plan_->px_worker_share_plan_enabled();
-  LST_DO_CODE(OB_UNIS_ENCODE, use_share_plan);
-  if (!use_share_plan) {
-    LST_DO_CODE(OB_UNIS_ENCODE, *ser_phy_plan_);
-    LST_DO_CODE(OB_UNIS_ENCODE, *exec_ctx_);
-    LST_DO_CODE(OB_UNIS_ENCODE, task_);
-    LST_DO_CODE(OB_UNIS_ENCODE, sqc_task_ptr_val);
-    LST_DO_CODE(OB_UNIS_ENCODE, sqc_handler_ptr_val);
-
-    // Serialize the core part of Task to the execution end: sub plan tree
-    if (OB_SUCC(ret)) {
-      const ObExprFrameInfo *frame_info = &ser_phy_plan_->get_expr_frame_info();
-      if (OB_ISNULL(op_spec_root_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
-          buf, buf_len, pos, *exec_ctx_, *frame_info))) {
-      } else if (OB_FAIL(ObPxTreeSerializer::serialize_tree(
-                  buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */))) {
-      } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
-          buf, buf_len, pos, *op_spec_root_, exec_ctx_->get_kit_store()))) {
-      }
-    }
   } else {
-    LST_DO_CODE(OB_UNIS_ENCODE, *exec_ctx_);
-    LST_DO_CODE(OB_UNIS_ENCODE, task_);
-    LST_DO_CODE(OB_UNIS_ENCODE, sqc_task_ptr_val);
-    LST_DO_CODE(OB_UNIS_ENCODE, sqc_handler_ptr_val);
+    const uint64_t sqc_task_ptr_val = reinterpret_cast<uint64_t>(sqc_task_ptr_);
+    const uint64_t sqc_handler_ptr_val = reinterpret_cast<uint64_t>(sqc_handler_);
+    LST_DO_CODE(OB_UNIS_ENCODE, *exec_ctx_, task_, sqc_task_ptr_val, sqc_handler_ptr_val);
 
-    // Serialize the core part of Task to the execution end: sub plan tree
+    const ObExprFrameInfo &frame_info = phy_plan_->get_expr_frame_info();
     if (OB_SUCC(ret)) {
-      const ObExprFrameInfo &frame_info = ser_phy_plan_->get_expr_frame_info();
-      if (OB_ISNULL(op_spec_root_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<false>(
+      if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<false>(
           buf, buf_len, pos, *exec_ctx_, frame_info))) {
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
           buf, buf_len, pos, *op_spec_root_, exec_ctx_->get_kit_store()))) {
@@ -607,80 +576,33 @@ OB_DEF_SERIALIZE(ObPxInitTaskArgs)
 OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(exec_ctx_) || OB_ISNULL(inner_phy_plan_) || OB_ISNULL(des_allocator_)) {
+  char *tmp_buf = nullptr;
+  if (OB_ISNULL(exec_ctx_) || OB_ISNULL(phy_plan_) || OB_ISNULL(des_allocator_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(NULL != op_spec_root_)) {
-    // if op_root_ is not NULL, just reset it
-    op_spec_root_ = NULL;
-  }
-
-  // The asynchronous worker may outlive the launcher's input buffer, so keep a
-  // private copy for the remainder of task initialization.
-
-  pos = 0;
-  char *tmp_buf = (char *)des_allocator_->alloc(data_len);
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(tmp_buf)) {
+  } else if (OB_ISNULL(op_spec_root_ = phy_plan_->get_root_op_spec())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(tmp_buf = static_cast<char *>(des_allocator_->alloc(data_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
+    // Decoded execution state can reference this buffer for the lifetime of the task.
     MEMCPY(tmp_buf, buf, data_len);
     buf = tmp_buf;
-  }
-  bool use_share_plan = false;
-  LST_DO_CODE(OB_UNIS_DECODE, use_share_plan);
-  if (OB_FAIL(ret)) {
-  } else if (!use_share_plan) {
-    LST_DO_CODE(OB_UNIS_DECODE, *inner_phy_plan_);
-    LST_DO_CODE(OB_UNIS_DECODE, *exec_ctx_);
-    LST_DO_CODE(OB_UNIS_DECODE, task_);
+    pos = 0;
 
     uint64_t sqc_task_ptr_val = 0;
     uint64_t sqc_handler_ptr_val = 0;
-    LST_DO_CODE(OB_UNIS_DECODE, sqc_task_ptr_val);
-    LST_DO_CODE(OB_UNIS_DECODE, sqc_handler_ptr_val);
+    LST_DO_CODE(OB_UNIS_DECODE, *exec_ctx_, task_, sqc_task_ptr_val, sqc_handler_ptr_val);
     sqc_task_ptr_ = reinterpret_cast<ObPxTask *>(sqc_task_ptr_val);
     sqc_handler_ = reinterpret_cast<ObPxSqcHandler *>(sqc_handler_ptr_val);
 
-
     if (OB_SUCC(ret)) {
-      const ObExprFrameInfo *expr_frame_info = &inner_phy_plan_->get_expr_frame_info();
-      if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<true>(
-          buf, data_len, pos, *exec_ctx_, *const_cast<ObExprFrameInfo*>(expr_frame_info)))) {
-      } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
-                  buf, data_len, pos, *inner_phy_plan_, inner_op_spec_root_))) {
-      } else if (OB_FAIL(inner_op_spec_root_->create_op_input(*exec_ctx_))) {
-      } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(buf, data_len, pos, exec_ctx_->get_kit_store()))) {
-      } else {
-        inner_phy_plan_->set_root_op_spec(inner_op_spec_root_);
-        exec_ctx_->reference_my_plan(inner_phy_plan_);
-        des_phy_plan_ = inner_phy_plan_;
-        op_spec_root_ = inner_op_spec_root_;
-      }
-    }
-  } else if (OB_ISNULL(des_phy_plan_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    op_spec_root_ = des_phy_plan_->get_root_op_spec();
-    LST_DO_CODE(OB_UNIS_DECODE, *exec_ctx_);
-    LST_DO_CODE(OB_UNIS_DECODE, task_);
-
-    uint64_t sqc_task_ptr_val = 0;
-    uint64_t sqc_handler_ptr_val = 0;
-    LST_DO_CODE(OB_UNIS_DECODE, sqc_task_ptr_val);
-    LST_DO_CODE(OB_UNIS_DECODE, sqc_handler_ptr_val);
-    sqc_task_ptr_ = reinterpret_cast<ObPxTask *>(sqc_task_ptr_val);
-    sqc_handler_ = reinterpret_cast<ObPxSqcHandler *>(sqc_handler_ptr_val);
-
-
-    if (OB_SUCC(ret)) {
-      const ObExprFrameInfo &expr_frame_info = des_phy_plan_->get_expr_frame_info();
+      const ObExprFrameInfo &frame_info = phy_plan_->get_expr_frame_info();
       if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<false>(
-          buf, data_len, pos, *exec_ctx_, expr_frame_info))) {
+          buf, data_len, pos, *exec_ctx_, frame_info))) {
       } else if (OB_FAIL(op_spec_root_->create_op_input(*exec_ctx_))) {
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(buf, data_len, pos, exec_ctx_->get_kit_store()))) {
       } else {
-        exec_ctx_->reference_my_plan(des_phy_plan_);
+        exec_ctx_->reference_my_plan(phy_plan_);
       }
     }
   }
@@ -691,107 +613,62 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitTaskArgs)
 {
   int ret = OB_SUCCESS;
   int64_t len = 0;
-  if (OB_ISNULL(exec_ctx_) || OB_ISNULL(ser_phy_plan_) || OB_ISNULL(op_spec_root_)) {
+  if (OB_ISNULL(exec_ctx_) || OB_ISNULL(phy_plan_) || OB_ISNULL(op_spec_root_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("task not init", K_(exec_ctx), K_(ser_phy_plan));
+    LOG_ERROR("task not init", K(ret), K_(exec_ctx), K_(phy_plan), K_(op_spec_root));
   } else {
-    uint64_t sqc_task_ptr_val = reinterpret_cast<uint64_t>(sqc_task_ptr_);
-    uint64_t sqc_handler_ptr_val = reinterpret_cast<uint64_t>(sqc_handler_);
-    bool use_share_plan = ser_phy_plan_->px_worker_share_plan_enabled();
-    LST_DO_CODE(OB_UNIS_ADD_LEN, use_share_plan);
-    if (!use_share_plan) {
-      LST_DO_CODE(OB_UNIS_ADD_LEN, *ser_phy_plan_);
-      LST_DO_CODE(OB_UNIS_ADD_LEN, *exec_ctx_);
-      LST_DO_CODE(OB_UNIS_ADD_LEN, task_);
-      LST_DO_CODE(OB_UNIS_ADD_LEN, sqc_task_ptr_val);
-      LST_DO_CODE(OB_UNIS_ADD_LEN, sqc_handler_ptr_val);
-      if (OB_ISNULL(op_spec_root_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("unexpected status: op root is null", K(ret));
-      } else {
-        const ObExprFrameInfo *frame_info = &ser_phy_plan_->get_expr_frame_info();
-        len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(*exec_ctx_, *frame_info);
-        len += ObPxTreeSerializer::get_tree_serialize_size(*op_spec_root_, false /* is_fulltree */);
-        len += ObPxTreeSerializer::get_serialize_op_input_size(
-          *op_spec_root_, exec_ctx_->get_kit_store());
-      }
-    } else {
-      LST_DO_CODE(OB_UNIS_ADD_LEN, *exec_ctx_);
-      LST_DO_CODE(OB_UNIS_ADD_LEN, task_);
-      LST_DO_CODE(OB_UNIS_ADD_LEN, sqc_task_ptr_val);
-      LST_DO_CODE(OB_UNIS_ADD_LEN, sqc_handler_ptr_val);
-      if (OB_ISNULL(op_spec_root_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("unexpected status: op root is null", K(ret));
-      } else {
-        const ObExprFrameInfo &frame_info = ser_phy_plan_->get_expr_frame_info();
-        len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<false>(*exec_ctx_, frame_info);
-        len += ObPxTreeSerializer::get_serialize_op_input_size(
-          *op_spec_root_, exec_ctx_->get_kit_store());
-      }
-    }
+    const uint64_t sqc_task_ptr_val = reinterpret_cast<uint64_t>(sqc_task_ptr_);
+    const uint64_t sqc_handler_ptr_val = reinterpret_cast<uint64_t>(sqc_handler_);
+    LST_DO_CODE(OB_UNIS_ADD_LEN, *exec_ctx_, task_, sqc_task_ptr_val, sqc_handler_ptr_val);
+    const ObExprFrameInfo &frame_info = phy_plan_->get_expr_frame_info();
+    len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<false>(*exec_ctx_, frame_info);
+    len += ObPxTreeSerializer::get_serialize_op_input_size(
+        *op_spec_root_, exec_ctx_->get_kit_store());
   }
   return len;
 }
 
-
 void ObPxInitTaskArgs::set_serialize_param(ObExecContext &exec_ctx,
-                                              ObOpSpec &op_spec_root,
-                                              const ObPhysicalPlan &ser_phy_plan)
+                                           const ObOpSpec &op_spec_root,
+                                           const ObPhysicalPlan &phy_plan)
 {
   exec_ctx_ = &exec_ctx;
   op_spec_root_ = &op_spec_root;
-  ser_phy_plan_ = &ser_phy_plan;
+  phy_plan_ = &phy_plan;
 }
 
-void ObPxInitTaskArgs::set_deserialize_param(ObExecContext &exec_ctx,
-                                                ObPhysicalPlan &des_phy_plan,
-                                                ObIAllocator *des_allocator)
-{
-  exec_ctx_ = &exec_ctx;
-  des_phy_plan_ = &des_phy_plan;
-  des_allocator_ = des_allocator;
-}
-
-int ObPxInitTaskArgs::init_deserialize_param(const ObPxInitTaskArgs &arg, lib::MemoryContext &mem_context, const share::ObGlobalContext &gctx)
+int ObPxInitTaskArgs::init_deserialize_param(const ObPxInitTaskArgs &arg,
+                                             lib::MemoryContext &mem_context)
 {
   int ret = OB_SUCCESS;
-  void *plan_buf = NULL;
-  void *ctx_buf = NULL;
-  des_phy_plan_ = arg.ser_phy_plan_;
-  if (OB_ISNULL(plan_buf = mem_context->get_arena_allocator().alloc(sizeof(ObPhysicalPlan)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(ctx_buf = mem_context->get_arena_allocator().alloc(sizeof(ObDesExecContext)))) {
+  ObIAllocator &allocator = mem_context->get_arena_allocator();
+  void *ctx_buf = allocator.alloc(sizeof(ObDesExecContext));
+  if (OB_ISNULL(ctx_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    inner_phy_plan_ = new (plan_buf) ObPhysicalPlan(mem_context);
     exec_ctx_ = new (ctx_buf) ObDesExecContext(
-        mem_context->get_arena_allocator(),
-        share::server_service<ObSQLSessionMgr>());
-    des_allocator_ = &mem_context->get_arena_allocator();
+        allocator, share::server_service<ObSQLSessionMgr>());
+    phy_plan_ = arg.phy_plan_;
+    des_allocator_ = &allocator;
   }
   return ret;
 }
 
-
 int ObPxInitTaskArgs::deep_copy_assign(ObPxInitTaskArgs &src,
-                                          ObIAllocator &alloc)
+                                      ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
   UNIS_VERSION_GUARD(lib::get_unis_global_compat_version());
-  // Deep copy all elements in arg, into session, op tree etc.
-  // Temporarily complete through serialization+deserialization
+  // Copy the worker's execution state while borrowing the SQC's plan.
   int64_t ser_pos = 0;
   int64_t des_pos = 0;
   void *ser_ptr = NULL;
   int64_t ser_arg_len = src.get_serialize_size();
 
-  if (OB_ISNULL(ser_ptr = alloc.alloc(ser_arg_len))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(des_allocator_)
-             || OB_ISNULL(inner_phy_plan_)
-             || OB_ISNULL(exec_ctx_)) {
+  if (OB_ISNULL(des_allocator_) || OB_ISNULL(phy_plan_) || OB_ISNULL(exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(ser_ptr = alloc.alloc(ser_arg_len))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(src.serialize(static_cast<char *>(ser_ptr), ser_arg_len, ser_pos))) {
   } else if (OB_FAIL(deserialize(static_cast<const char *>(ser_ptr), ser_pos, des_pos))) {
   } else if (ser_pos != des_pos) {

@@ -35,30 +35,6 @@ public:
   virtual int run(ObPxInitTaskArgs &arg) = 0;
 };
 
-// Use coroutine as Px Worker execution container
-class ObPxCoroWorker : public ObPxWorkerRunnable
-{
-public:
-  ObPxCoroWorker(const share::ObGlobalContext &gctx,
-                 common::ObIAllocator &alloc);
-  virtual ~ObPxCoroWorker() = default;
-  int run(ObPxInitTaskArgs &arg);
-  int exit();
-  uint64_t get_task_co_id() { return task_co_id_; }
-  TO_STRING_KV(K_(task_co_id));
-private:
-  int deep_copy_assign(const ObPxInitTaskArgs &src,
-                       ObPxInitTaskArgs &dest);
-  /* variables */
-  const share::ObGlobalContext &gctx_;
-  common::ObIAllocator &alloc_;
-  sql::ObDesExecContext exec_ctx_;
-  sql::ObPhysicalPlan phy_plan_;
-  ObPxInitTaskArgs task_arg_;
-  ObPxTaskProcess task_proc_;
-  uint64_t task_co_id_;
-  DISALLOW_COPY_AND_ASSIGN(ObPxCoroWorker);
-};
 // Px Worker's execution container
 class ObPxThreadWorker : public ObPxWorkerRunnable
 {
@@ -107,24 +83,6 @@ private:
   const share::ObGlobalContext &gctx_;
   common::ObIAllocator &alloc_;
   common::ObSEArray<ObPxThreadWorker *, 64> workers_;
-};
-
-class ObPxCoroWorkerFactory
-{
-public:
-  ObPxCoroWorkerFactory(const share::ObGlobalContext &gctx,
-                        common::ObIAllocator &alloc,
-                        ObSQLSessionMgr *session_mgr)
-      : gctx_(gctx), alloc_(alloc), session_mgr_(session_mgr)
-  {}
-  virtual ~ObPxCoroWorkerFactory();
-private:
-  void destroy();
-private:
-  const share::ObGlobalContext &gctx_;
-  common::ObIAllocator &alloc_;
-  ObSQLSessionMgr *session_mgr_;
-  common::ObSEArray<ObPxCoroWorker *, 64> workers_;
 };
 
 class ObPxLocalWorkerFactory

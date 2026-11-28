@@ -116,9 +116,9 @@ int ObPxTaskProcess::process()
     ObWorkerSessionGuard worker_session_guard(session);
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     session->set_current_trace_id(ObCurTraceId::get_trace_id());
-    session->set_cur_phy_plan(arg_.des_phy_plan_);
+    session->set_cur_phy_plan(arg_.phy_plan_);
     session->set_thread_id(GETTID());
-    arg_.exec_ctx_->reference_my_plan(arg_.des_phy_plan_);
+    arg_.exec_ctx_->reference_my_plan(arg_.phy_plan_);
     arg_.exec_ctx_->set_sqc_handler(arg_.sqc_handler_);
     arg_.exec_ctx_->set_px_task_id(arg_.task_.get_task_id());
     arg_.exec_ctx_->set_px_sqc_id(arg_.task_.get_sqc_id());
@@ -175,7 +175,7 @@ int ObPxTaskProcess::process()
     if (enable_sqlstat && OB_NOT_NULL(arg_.exec_ctx_->get_sql_ctx())) {
       sqlstat_record.record_sqlstat_end_value(
           *arg_.exec_ctx_->get_query_runtime_environment());
-      const ObPhysicalPlan *phy_plan = arg_.des_phy_plan_;
+      const ObPhysicalPlan *phy_plan = arg_.phy_plan_;
       ObString sql = ObString::make_string("");
       sqlstat_record.set_is_plan_cache_hit(arg_.exec_ctx_->get_sql_ctx()->plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(
@@ -187,7 +187,7 @@ int ObPxTaskProcess::process()
     }
 
     {
-      const ObPhysicalPlan *phy_plan = arg_.des_phy_plan_;
+      const ObPhysicalPlan *phy_plan = arg_.phy_plan_;
       if ( OB_ISNULL(phy_plan)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -259,7 +259,7 @@ int ObPxTaskProcess::execute(const ObOpSpec &root_spec)
       if (need_fill_batch_info) {
         if (OB_FAIL(ctx.fill_px_batch_info(arg_.get_sqc_handler()->
           get_sqc_init_arg().sqc_.get_rescan_batch_params(), i,
-          arg_.des_phy_plan_->get_expr_frame_info().rt_exprs_))) {
+          arg_.phy_plan_->get_expr_frame_info().rt_exprs_))) {
         } else if (OB_FAIL(arg_.get_sqc_handler()->get_sub_coord().
           get_sqc_ctx().gi_pump_.regenerate_gi_task())) {
         }

@@ -1752,13 +1752,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "Specifies Whether to allow global indexes to be preserved when truncating/dropping the main table partition."
 
-- name: _px_worker_share_plan_enabled
-  type: BOOL
-  default: "True"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "Enable parallel execution optimization by sharing plan and only serializing necessary expressions."
-
 - name: _enable_drop_column_instant
   type: BOOL
   default: "True"

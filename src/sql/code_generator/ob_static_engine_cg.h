@@ -202,7 +202,6 @@ private:
   };
 
 
-  int set_properties_pre(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan);
   int set_properties_post(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan);
 
   // Post order visit logic plan and generate operator specification.

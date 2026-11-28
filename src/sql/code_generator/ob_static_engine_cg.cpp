@@ -139,7 +139,6 @@ int ObStaticEngineCG::generate(const ObLogPlan &log_plan, ObPhysicalPlan &phy_pl
   PartialExprFrameInfoGen partial_frame_gen;
   if (OB_ISNULL(log_plan.get_plan_root())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(set_properties_pre(log_plan, phy_plan))) {
   } else if (OB_FAIL(get_query_compress_type(log_plan, compress_type))) {
   } else if (OB_FAIL(postorder_generate_op(
               *log_plan.get_plan_root(), root_spec, in_root_job, is_subplan,
@@ -266,7 +265,7 @@ int ObStaticEngineCG::postorder_generate_op(ObLogicalOperator &op,
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (NULL != partial_frame_gen.dfo_raw_exprs_ && phy_plan_->px_worker_share_plan_enabled()) {
+  } else if (NULL != partial_frame_gen.dfo_raw_exprs_) {
     if (OB_FAIL(partial_frame_gen.dfo_raw_exprs_->reserve(partial_frame_gen.dfo_raw_exprs_->count() + cur_op_exprs_.count()))) {
     } else {
       FOREACH_CNT_X(raw_expr, cur_op_exprs_, OB_SUCC(ret)) {
@@ -5642,13 +5641,6 @@ int ObStaticEngineCG::generate_spec(ObLogStatCollector &op,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected type", K(spec.type_));
   }
-  return ret;
-}
-
-int ObStaticEngineCG::set_properties_pre(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan)
-{
-  int ret = OB_SUCCESS;
-  phy_plan.set_px_worker_share_plan_enabled(config::_px_worker_share_plan_enabled());
   return ret;
 }
 

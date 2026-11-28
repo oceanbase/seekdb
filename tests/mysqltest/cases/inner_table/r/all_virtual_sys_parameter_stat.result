@@ -240,7 +240,6 @@ _px_max_message_pool_pct
 _px_max_pipeline_depth
 _px_object_sampling
 _px_task_rebalance_trigger_time
-_px_worker_share_plan_enabled
 _query_record_size_limit
 _recyclebin_object_purge_frequency
 _rowsets_max_rows

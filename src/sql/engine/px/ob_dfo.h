@@ -944,10 +944,7 @@ public:
   ObPxInitTaskArgs()
         : task_(),
           exec_ctx_(NULL),
-          ser_phy_plan_(NULL),
-          inner_phy_plan_(NULL),
-          des_phy_plan_(NULL),
-          inner_op_spec_root_(nullptr),
+          phy_plan_(nullptr),
           op_spec_root_(nullptr),
           static_engine_root_(nullptr),
           sqc_task_ptr_(NULL),
@@ -956,32 +953,20 @@ public:
   {}
 
   void set_serialize_param(ObExecContext &exec_ctx,
-                           ObOpSpec &op_spec_root,
-                           const ObPhysicalPlan &ser_phy_plan);
-  void set_deserialize_param(ObExecContext &exec_ctx,
-                             ObPhysicalPlan &des_phy_plan,
-                             ObIAllocator *des_allocator);
+                           const ObOpSpec &op_spec_root,
+                           const ObPhysicalPlan &phy_plan);
   int init_deserialize_param(const ObPxInitTaskArgs &arg,
-                           lib::MemoryContext &mem_context,
-                           const share::ObGlobalContext &gctx);
+                             lib::MemoryContext &mem_context);
   int deep_copy_assign(ObPxInitTaskArgs &src,
                       common::ObIAllocator &alloc);
 
   void destroy() {
-    // worker completes execution, immediately release the physical plan, exec ctx, etc. resources held by the current worker
-    // Contains various operator contexts and memory etc
-    if (nullptr != inner_phy_plan_) {
-      inner_phy_plan_->~ObPhysicalPlan();
-      inner_phy_plan_ = NULL;
-    }
     if (nullptr != exec_ctx_) {
       exec_ctx_->~ObExecContext();
       exec_ctx_ = NULL;
     }
-    inner_op_spec_root_ = NULL;
     op_spec_root_ = NULL;
-    ser_phy_plan_ = NULL;
-    des_phy_plan_ = NULL;
+    phy_plan_ = nullptr;
     sqc_task_ptr_ = NULL;
     des_allocator_ = NULL;
     sqc_handler_ = NULL;
@@ -995,10 +980,7 @@ public:
     if (&other != this) {
       task_ = other.task_;
       exec_ctx_ = other.exec_ctx_;
-      ser_phy_plan_ = other.ser_phy_plan_;
-      inner_phy_plan_ = other.inner_phy_plan_;
-      des_phy_plan_ = other.des_phy_plan_;
-      inner_op_spec_root_ = other.inner_op_spec_root_;
+      phy_plan_ = other.phy_plan_;
       op_spec_root_ = other.op_spec_root_;
       sqc_task_ptr_ = other.sqc_task_ptr_;
       des_allocator_ = other.des_allocator_;
@@ -1008,19 +990,13 @@ public:
   }
   bool is_invalid()
   {
-    return OB_ISNULL(des_phy_plan_) || OB_ISNULL(op_spec_root_);
+    return OB_ISNULL(phy_plan_) || OB_ISNULL(op_spec_root_);
   }
   TO_STRING_KV(K_(task));
 public:
   ObPxTask task_;
   ObExecContext *exec_ctx_;
-  const ObPhysicalPlan *ser_phy_plan_;
-  // When disable share plan between px workers in one sqc,
-  //  inner_phy_plan_ is created and owned by a px worker and des_phy_plan_ points to inner_phy_plan_.
-  // Otherwise, inner_phy_plan_ is NULL and des_phy_plan_ points to the plan owned by sqc.
-  ObPhysicalPlan *inner_phy_plan_;
-  const ObPhysicalPlan *des_phy_plan_;
-  ObOpSpec *inner_op_spec_root_;
+  const ObPhysicalPlan *phy_plan_; // Owned by the SQC handler.
   const ObOpSpec *op_spec_root_;
   ObOperator *static_engine_root_;
   ObPxTask *sqc_task_ptr_; // pointer to the corresponding task in the SQC Ctx task array

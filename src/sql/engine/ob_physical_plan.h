@@ -366,8 +366,6 @@ public:
   inline void set_insertup_can_do_gts_opt(bool v) { insertup_can_do_gts_opt_ = v; }
   void set_is_use_auto_dop(bool use_auto_dop)  { stat_.is_use_auto_dop_ = use_auto_dop; }
   bool get_is_use_auto_dop() const { return stat_.is_use_auto_dop_; }
-  bool px_worker_share_plan_enabled() const { return px_worker_share_plan_enabled_; }
-  void set_px_worker_share_plan_enabled(bool v) { px_worker_share_plan_enabled_ = v; }
 
 public:
   static const int64_t MAX_PRINTABLE_SIZE = 2 * 1024 * 1024;
@@ -522,7 +520,6 @@ private:
   bool data_complement_gen_doc_id_;
 private:
   bool insertup_can_do_gts_opt_;
-  int64_t px_worker_share_plan_enabled_;
 };
 
 inline void ObPhysicalPlan::set_affected_last_insert_id(bool affected_last_insert_id)
