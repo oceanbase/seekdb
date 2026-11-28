@@ -1,0 +1,78 @@
+# NOT (c IN (...)) and c NOT IN (...) filters get compact scalar index ranges,
+# also in approximate vector search, which skips the expression rewrite rules (issue #1513).
+--disable_warnings
+DROP DATABASE IF EXISTS vector_index_not_in_filter;
+--enable_warnings
+CREATE DATABASE vector_index_not_in_filter;
+USE vector_index_not_in_filter;
+
+CREATE TABLE t_ann (id INT PRIMARY KEY, age INT NOT NULL, v VECTOR(3), KEY idx_age(age),
+  VECTOR INDEX idx_v(v) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=immediate)) ORGANIZATION HEAP;
+INSERT INTO t_ann VALUES (1,1,'[1,0,0]'), (2,2,'[2,0,0]'), (3,3,'[3,0,0]'), (4,4,'[4,0,0]'),
+  (5,5,'[5,0,0]'), (6,6,'[6,0,0]'), (7,7,'[7,0,0]'), (8,8,'[8,0,0]'), (9,9,'[9,0,0]'),
+  (10,10,'[10,0,0]'), (11,11,'[11,0,0]'), (12,12,'[12,0,0]');
+
+--echo # the complement of age IN (1, 2, 3) over the ages 1..12 selects the same rows
+EXPLAIN BASIC SELECT /*+ INDEX(t_ann idx_age) */ id FROM t_ann WHERE age IN (1, 2, 3)
+  ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+EXPLAIN BASIC SELECT /*+ INDEX(t_ann idx_age) */ id FROM t_ann WHERE NOT (age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))
+  ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+EXPLAIN BASIC SELECT /*+ INDEX(t_ann idx_age) */ id FROM t_ann WHERE age NOT IN (4, 5, 6, 7, 8, 9, 10, 11, 12)
+  ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+SELECT id FROM t_ann WHERE age IN (1, 2, 3)
+  ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+SELECT id FROM t_ann WHERE NOT (age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))
+  ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+SELECT id FROM t_ann WHERE age NOT IN (4, 5, 6, 7, 8, 9, 10, 11, 12)
+  ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+SELECT /*+ INDEX(t_ann idx_age) */ id FROM t_ann WHERE NOT (age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))
+  ORDER BY l2_distance(v, '[2.9,0,0]') APPROXIMATE LIMIT 3;
+SELECT id FROM t_ann WHERE NOT (age IN (4, 5, 6, 7, 8, 9, 10, 11, 12))
+  ORDER BY l2_distance(v, '[2.9,0,0]') LIMIT 3;
+
+--echo # NOT (c IN (...)) also gets ranges when the rewrite is disabled by hint
+EXPLAIN BASIC SELECT /*+ NO_REWRITE INDEX(t_ann idx_age) */ id FROM t_ann WHERE NOT (age IN (2, 4, 5, 6)) ORDER BY id;
+SELECT /*+ NO_REWRITE INDEX(t_ann idx_age) */ id FROM t_ann WHERE NOT (age IN (2, 4, 5, 6)) ORDER BY id;
+
+--echo # empty ranges between adjacent excluded integers are skipped, other ranges are kept
+CREATE TABLE t_int (id INT PRIMARY KEY, a INT, b BIGINT, u BIGINT UNSIGNED, d DECIMAL(10,1),
+  KEY idx_a(a), KEY idx_b(b), KEY idx_u(u), KEY idx_d(d));
+INSERT INTO t_int VALUES
+  (1, 1, -9223372036854775808, 0, 1.0),
+  (2, 2, -9223372036854775807, 1, 1.5),
+  (3, 3, -9223372036854775806, 2, 2.0),
+  (4, 4, 0, 18446744073709551613, 2.5),
+  (5, 5, 9223372036854775806, 18446744073709551614, 3.0),
+  (6, NULL, 9223372036854775807, 18446744073709551615, NULL);
+
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 3, 4);
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 3, 4) ORDER BY id;
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 4);
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 4) ORDER BY id;
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (4, 2, 3, 3);
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (4, 2, 3, 3) ORDER BY id;
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 2.5, 3) ORDER BY id;
+SELECT /*+ INDEX(t_int idx_a) */ id FROM t_int WHERE a NOT IN (2, 3, NULL) ORDER BY id;
+
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_b) */ id FROM t_int WHERE b NOT IN (9223372036854775806, 9223372036854775807);
+SELECT /*+ INDEX(t_int idx_b) */ id FROM t_int WHERE b NOT IN (9223372036854775806, 9223372036854775807) ORDER BY id;
+SELECT /*+ INDEX(t_int idx_b) */ id FROM t_int WHERE b NOT IN (-9223372036854775808, -9223372036854775807) ORDER BY id;
+SELECT /*+ INDEX(t_int idx_b) */ id FROM t_int WHERE b NOT IN (-9223372036854775808, 9223372036854775807) ORDER BY id;
+
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_u) */ id FROM t_int WHERE u NOT IN (18446744073709551614, 18446744073709551615);
+SELECT /*+ INDEX(t_int idx_u) */ id FROM t_int WHERE u NOT IN (18446744073709551614, 18446744073709551615) ORDER BY id;
+SELECT /*+ INDEX(t_int idx_u) */ id FROM t_int WHERE u NOT IN (0, 1) ORDER BY id;
+
+--echo # a decimal column keeps the range between adjacent integers
+EXPLAIN BASIC SELECT /*+ INDEX(t_int idx_d) */ id FROM t_int WHERE d NOT IN (1, 2);
+SELECT /*+ INDEX(t_int idx_d) */ id FROM t_int WHERE d NOT IN (1, 2) ORDER BY id;
+
+--echo # NOT IN on a later column of a composite index
+CREATE TABLE t_ab (id INT PRIMARY KEY, a INT, b INT, KEY idx_ab(a, b));
+INSERT INTO t_ab VALUES (1,1,1), (2,1,2), (3,1,3), (4,1,4), (5,2,1), (6,2,2), (7,2,3), (8,2,4);
+EXPLAIN BASIC SELECT /*+ INDEX(t_ab idx_ab) */ id FROM t_ab WHERE a = 1 AND b NOT IN (2, 3);
+SELECT /*+ INDEX(t_ab idx_ab) */ id FROM t_ab WHERE a = 1 AND b NOT IN (2, 3) ORDER BY id;
+SELECT /*+ INDEX(t_ab idx_ab) */ id FROM t_ab WHERE a IN (1, 2) AND b NOT IN (2, 3) ORDER BY id;
+SELECT /*+ INDEX(t_ab idx_ab) */ id FROM t_ab WHERE a > 1 AND b NOT IN (2, 3) ORDER BY id;
+
+DROP DATABASE vector_index_not_in_filter;
