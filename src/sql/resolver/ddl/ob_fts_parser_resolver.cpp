@@ -26,159 +26,126 @@ namespace sql
 {
 
 int ObFTParserResolverHelper::resolve_parser_properties(
-    const ParseNode &parse_tree,
+    const peg::Node &options,
     common::ObIAllocator &allocator,
     common::ObString &parser_property)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(parse_tree.num_child_ <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    storage::ObFTParserJsonProps property;
-    if (OB_FAIL(property.init())) {
-    }
-
-    for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
-      if (OB_ISNULL(parse_tree.children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i], property))) {
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(property.to_format_json(allocator, parser_property))) {
-    }
+  storage::ObFTParserJsonProps property;
+  const auto properties = peg::table_option_properties(options);
+  OZ(property.init());
+  for (size_t i = 0; OB_SUCC(ret) && i < properties.size(); ++i) {
+    OZ(resolve_fts_index_parser_properties(properties[i], property));
   }
+  OZ(property.to_format_json(allocator, parser_property));
   return ret;
 }
 
 int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
-    const ParseNode *node,
+    const peg::Node &node,
     storage::ObFTParserJsonProps &property)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || node->num_child_ != 1 || OB_ISNULL(node->children_[0])){
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    switch (node->type_) {
-      case T_PARSER_MIN_TOKEN_SIZE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(!property.is_valid_min_token_size(node->children_[0]->value_))) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR);
-        } else if (OB_FAIL(property.config_set_min_token_size(node->children_[0]->value_))) {
-        }
-        break;
-      }
-      case T_PARSER_MAX_TOKEN_SIZE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(!property.is_valid_max_token_size(node->children_[0]->value_))) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR);
-        } else if (OB_FAIL(property.config_set_max_token_size(node->children_[0]->value_))) {
-        }
-        break;
-      }
-      case T_PARSER_NGRAM_TOKEN_SIZE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(!property.is_valid_ngram_token_size(node->children_[0]->value_))) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::NGRAM_TOKEN_SIZE_SCOPE_STR);
-        } else if OB_FAIL (property.config_set_ngram_token_size(node->children_[0]->value_)) {
-        }
-        break;
-      }
-      case T_PARSER_STOPWORD_TABLE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the stopword table is empty");
-        } else {
-          int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_stopword_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
-          }
-        }
-        break;
-      }
-      case T_PARSER_DICT_TABLE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the dict table is empty");
-        } else {
-          int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_dict_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
-          }
-        }
-        break;
-      }
-      case T_PARSER_QUANTIFIER_TABLE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quanitfier table is empty");
-        } else {
-          int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_quantifier_table(
-                  common::ObString(str_len, node->children_[0]->str_value_)))) {
-          }
-        }
-        break;
-      }
-      case T_IK_MODE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(node->children_[0]->str_len_ <= 0)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the mode str is empty");
-        } else {
-          ObString ik_mode_str(static_cast<int32_t>(node->children_[0]->str_len_),
-                               (char *)(node->children_[0]->str_value_));
-          if (0 == ik_mode_str.case_compare(storage::ObFTSLiteral::FT_IK_MODE_MAX_WORD)) {
-            if (OB_FAIL(property.config_set_ik_mode(storage::ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
-            }
-          } else if (0 == ik_mode_str.case_compare(storage::ObFTSLiteral::FT_IK_MODE_SMART)) {
-            if (OB_FAIL(property.config_set_ik_mode(storage::ObFTSLiteral::FT_IK_MODE_SMART))) {
-            }
-          } else {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::IK_MODE_SCOPE_STR);
-          }
-        }
-        break;
-      }
-      case T_PARSER_MIN_NGRAM_SIZE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(!property.is_valid_min_ngram_token_size(node->children_[0]->value_))) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MIN_NGRAM_SIZE_SCOPE_STR);
-        } else if (OB_FAIL(property.config_set_min_ngram_token_size(node->children_[0]->value_))) {
-        }
-        break;
-      }
-      case T_PARSER_MAX_NGRAM_SIZE: {
-        if (OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(
-                       !property.is_valid_max_ngram_token_size(node->children_[0]->value_))) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MAX_NGRAM_SIZE_SCOPE_STR);
-        } else if (OB_FAIL(property.config_set_max_ngram_token_size(node->children_[0]->value_))) {
-        }
-        break;
-      }
-
-      default: {
+  switch (node.kind()) {
+    case peg::NodeKind::ParserMinTokenSize: {
+      const int64_t value = peg::table_option_number(node);
+      if (!property.is_valid_min_token_size(value)) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR);
+      } else {
+        OZ(property.config_set_min_token_size(value));
       }
+      break;
+    }
+    case peg::NodeKind::ParserMaxTokenSize: {
+      const int64_t value = peg::table_option_number(node);
+      if (!property.is_valid_max_token_size(value)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR);
+      } else {
+        OZ(property.config_set_max_token_size(value));
+      }
+      break;
+    }
+    case peg::NodeKind::ParserNgramTokenSize: {
+      const int64_t value = peg::table_option_number(node);
+      if (!property.is_valid_ngram_token_size(value)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::NGRAM_TOKEN_SIZE_SCOPE_STR);
+      } else {
+        OZ(property.config_set_ngram_token_size(value));
+      }
+      break;
+    }
+    case peg::NodeKind::ParserMinNgramSize: {
+      const int64_t value = peg::table_option_number(node);
+      if (!property.is_valid_min_ngram_token_size(value)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MIN_NGRAM_SIZE_SCOPE_STR);
+      } else {
+        OZ(property.config_set_min_ngram_token_size(value));
+      }
+      break;
+    }
+    case peg::NodeKind::ParserMaxNgramSize: {
+      const int64_t value = peg::table_option_number(node);
+      if (!property.is_valid_max_ngram_token_size(value)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MAX_NGRAM_SIZE_SCOPE_STR);
+      } else {
+        OZ(property.config_set_max_ngram_token_size(value));
+      }
+      break;
+    }
+    case peg::NodeKind::ParserStopwordTable: {
+      const auto text = peg::table_option_text(node);
+      if (text.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the stopword table is empty");
+      } else {
+        OZ(property.config_set_stopword_table(syntax_text(text)));
+      }
+      break;
+    }
+    case peg::NodeKind::ParserDictTable: {
+      const auto text = peg::table_option_text(node);
+      if (text.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the dict table is empty");
+      } else {
+        OZ(property.config_set_dict_table(syntax_text(text)));
+      }
+      break;
+    }
+    case peg::NodeKind::ParserQuantifierTable: {
+      const auto text = peg::table_option_text(node);
+      if (text.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quanitfier table is empty");
+      } else {
+        OZ(property.config_set_quantifier_table(syntax_text(text)));
+      }
+      break;
+    }
+    case peg::NodeKind::ParserIkMode: {
+      const auto text = peg::table_option_text(node);
+      const ObString mode(syntax_text(text));
+      if (mode.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the mode str is empty");
+      } else if (0 == mode.case_compare(storage::ObFTSLiteral::FT_IK_MODE_MAX_WORD)) {
+        OZ(property.config_set_ik_mode(storage::ObFTSLiteral::FT_IK_MODE_MAX_WORD));
+      } else if (0 == mode.case_compare(storage::ObFTSLiteral::FT_IK_MODE_SMART)) {
+        OZ(property.config_set_ik_mode(storage::ObFTSLiteral::FT_IK_MODE_SMART));
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::IK_MODE_SCOPE_STR);
+      }
+      break;
+    }
+    default: {
+      ret = OB_INVALID_ARGUMENT;
+      break;
     }
   }
   return ret;

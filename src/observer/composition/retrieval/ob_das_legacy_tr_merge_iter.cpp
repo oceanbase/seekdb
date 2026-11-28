@@ -18,6 +18,7 @@
 #include "observer/composition/retrieval/ob_das_legacy_tr_merge_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
+#include "rust/sql_parser.h"
 #include "sql/das/iter/sparse_retrieval/ob_das_text_retrieval_engine.h"
 #include "sql/das/ob_das_ir_define.h"
 
@@ -1060,44 +1061,20 @@ int ObDASLegacyTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
     } else if (OB_FAIL(ObCharset::tolower(cs_type, search_text_string, str_dest, alloc))){
     }
 
-    void *buf = nullptr;
-    FtsParserResult *fts_parser;
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(buf = (&alloc)->alloc(sizeof(FtsParserResult)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      fts_parser = static_cast<FtsParserResult *>(buf);
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(buf = (&alloc)->alloc(str_dest.length() + 1))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      MEMSET(buf, 0, str_dest.length() + 1);
-      MEMCPY(buf, str_dest.ptr(), str_dest.length());
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (FALSE_IT(fts_parse_docment(static_cast<char *>(buf), str_dest.length(), &alloc, fts_parser))) {
-    } else if (FTS_OK != fts_parser->ret_) {
-      if (FTS_ERROR_MEMORY == fts_parser->ret_) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (FTS_ERROR_SYNTAX == fts_parser->ret_) {
+    if (OB_SUCC(ret)) {
+      const auto parsed = peg::parse_search_query(rust::Slice<const uint8_t>(
+          reinterpret_cast<const uint8_t *>(str_dest.ptr()), str_dest.length()));
+      if (!parsed->error().empty()) {
         ret = OB_ERR_PARSER_SYNTAX;
-      } else if (FTS_ERROR_OTHER == fts_parser->ret_) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    } else if (OB_ISNULL(fts_parser->root_)) {
-      // do nothing
-    } else {
-      FtsNode *node = fts_parser->root_;
-      ObFtsEvalNode *parant_node =nullptr;
-      hash::ObHashMap<ObString, int32_t> tokens_map;
-      const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
-      if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-      } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_node_create(parant_node, node, cs_type, alloc, query_tokens, tokens_map, has_duplicate_boolean_tokens))) {
-      } else {
-        root_node = parant_node;
+      } else if (!parsed->root().children().empty()) {
+        ObFtsEvalNode *parant_node =nullptr;
+        hash::ObHashMap<ObString, int32_t> tokens_map;
+        const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
+        if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+        } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_node_create(parant_node, parsed->root(), cs_type, alloc, query_tokens, tokens_map, has_duplicate_boolean_tokens))) {
+        } else {
+          root_node = parant_node;
+        }
       }
     }
   } else {

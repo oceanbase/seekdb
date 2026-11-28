@@ -43,22 +43,22 @@ public:
   explicit ObCallProcedureResolver(ObResolverParams &params) : ObCMDResolver(params), expr_resolver_(NULL) {}
   virtual ~ObCallProcedureResolver() {}
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
-  int resolve_cparams(const ParseNode* params_node,
+  int resolve_cparams(rust::Slice<const peg::Node> arguments,
                       const share::schema::ObRoutineInfo *routien_info,
                       ObCallProcedureInfo *call_proc_info,
                       ObIArray<ObRawExpr*> &params,
                       pl::ObPLDependencyTable &deps);
-  int resolve_cparam_without_assign(const ParseNode *param_node,
+  int resolve_cparam_without_assign(const peg::Node *param_node,
                       const int64_t position,
                       common::ObIArray<ObRawExpr*> &params,
                       pl::ObPLDependencyTable &deps);
-  int resolve_cparam_with_assign(const ParseNode *param_node,
+  int resolve_cparam_with_assign(const peg::Node *param_node,
                       const share::schema::ObRoutineInfo *routine_info,
                       common::ObIArray<ObRawExpr*> &params,
                       pl::ObPLDependencyTable &deps);
-  int resolve_param_exprs(const ParseNode *params_node,
+  int resolve_param_exprs(rust::Slice<const peg::Node> arguments,
                       ObIArray<ObRawExpr*> &expr_params,
                       pl::ObPLDependencyTable &deps);
   int check_param_expr_legal(ObRawExpr *param);

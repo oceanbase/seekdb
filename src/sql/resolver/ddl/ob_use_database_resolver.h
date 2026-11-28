@@ -27,7 +27,7 @@ class ObUseDatabaseResolver: public ObDDLResolver
 public:
   explicit ObUseDatabaseResolver(ObResolverParams &params);
   virtual ~ObUseDatabaseResolver();
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObUseDatabaseResolver);

@@ -27,7 +27,8 @@
 #include "common/object/ob_object.h"
 #include "sql/ob_sql_define.h"
 #include "sql/ob_sql_utils.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
+#include "sql/plan_cache/literal_token.h"
 #include "sql/plan_cache/ob_pre_calc_expr_handler.h"
 #include "sql/das/ob_das_define.h"
 #include "lib/utility/serialization.h"
@@ -246,13 +247,12 @@ enum ParamProperty
 
 struct ObPCParam
 {
-  ParseNode *node_;
-  ParamProperty flag_;
+  const LiteralToken *literal_ = nullptr;
+  int64_t source_offset_ = 0;
+  int64_t sql_position_ = 0;
+  ParamProperty flag_ = INVALID_PARAM;
 
-  ObPCParam() : node_(NULL), flag_(INVALID_PARAM)
-  {
-  }
-  TO_STRING_KV(KP_(node), K_(flag));
+  TO_STRING_KV(KP_(literal), K_(source_offset), K_(sql_position), K_(flag));
 };
 
 struct ObPCParseInfo

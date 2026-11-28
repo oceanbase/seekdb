@@ -27,16 +27,10 @@ namespace sql
 class ObForkDatabaseResolver : public ObDDLResolver
 {
 public:
-  enum node_type {
-    DST_DATABASE_NODE = 0,
-    SRC_DATABASE_NODE,
-    MAX_NODE
-  };
-public:
   explicit ObForkDatabaseResolver(ObResolverParams &params);
   virtual ~ObForkDatabaseResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObForkDatabaseResolver);
 };

@@ -75,7 +75,7 @@ int ObMPStmtPrepare::multiple_query_check(ObSQLSessionInfo &session,
   if (OB_UNLIKELY(1 == session.get_capability().cap_flags_.OB_CLIENT_MULTI_STATEMENTS)) {
     ObSEArray<ObString, 1> queries;
     ObParser parser(THIS_WORKER.get_allocator(),
-                    session.get_sql_mode(), session.get_charsets4parser());
+                    session.get_sql_mode());
     bool parse_fail = false;
     ObMPParseStat parse_stat;
     force_sync_resp = true;
@@ -94,7 +94,7 @@ int ObMPStmtPrepare::multiple_query_check(ObSQLSessionInfo &session,
       * In the above example, neither ` nor ' form closed string tokens, the token parser will report a syntax error
       * In the above example, the queries.count() equals 2, which are select 1 and `select 2; select 3;
       */
-    ret = parser.split_multiple_stmt(sql, queries, parse_stat, false, true);
+    ret = parser.split_multiple_stmt(sql, queries, parse_stat);
     if (OB_SUCC(ret)) { // ret=SUCC does not necessarily mean that parse was successful, the last query may have failed to parse
       if (OB_UNLIKELY(queries.count() <= 0)) {
         LOG_ERROR("emtpy query count. client would have suspended. never be here!",
@@ -171,7 +171,7 @@ int ObMPStmtPrepare::process()
       need_disconnect = false;
       need_response_error = false;
       if (OB_FAIL(multiple_query_check(session, sql_, force_sync_resp, need_response_error))) {
-        need_disconnect = OB_NOT_SUPPORTED == ret ? false : true;
+        need_disconnect = OB_NOT_SUPPORTED != ret && OB_SIZE_OVERFLOW != ret;
       } else {
         ret = process_prepare_stmt(ObMultiStmtItem(false, 0, sql_), session, has_more, force_sync_resp, async_resp_used);
       }

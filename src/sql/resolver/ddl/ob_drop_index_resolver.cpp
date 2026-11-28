@@ -34,13 +34,12 @@ ObDropIndexResolver::~ObDropIndexResolver()
 {
 }
 
-int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
+int ObDropIndexResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
-  ParseNode *index_node = NULL;
+  const auto &index_node = peg::drop_index_name(parse_tree);
 
-  if (OB_UNLIKELY((parse_tree.type_ != T_DROP_INDEX || 2 != parse_tree.num_child_))
-      || OB_ISNULL(parse_tree.children_)) { // mysql mode
+  if (parse_tree.kind() != peg::NodeKind::DropIndex) { // mysql mode
     ret = OB_ERR_UNEXPECTED;
   }
   
@@ -60,13 +59,10 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
     }
 
     if (OB_SUCC(ret)) {
-      index_node = parse_tree.children_[0];
-      ParseNode *relation_node = parse_tree.children_[1];
+      const auto *relation_node = &peg::drop_index_relation(parse_tree);
       ObString table_name;
       ObString database_name;
-      if (OB_ISNULL(relation_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(resolve_table_relation_node(relation_node, table_name, database_name))) {
+      if (OB_FAIL(resolve_table_relation_node(relation_node, table_name, database_name))) {
       } else {
         drop_index_stmt->set_table_name(table_name);
         drop_index_stmt->set_database_name(database_name);
@@ -75,14 +71,14 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(index_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        int32_t len = static_cast<int32_t>(index_node->str_len_);
-        ObString index_name(len, len, index_node->str_value_);
+      {
+        ObString index_name;
+        const auto index_node_text = index_node.text();
+        OZ (ob_write_string(*allocator_, syntax_text(index_node_text), index_name));
         // Check if the index is created on a foreign key column, if so, then do not allow the index to be deleted
         const ObTableSchema *table_schema = NULL;
-        if (OB_FAIL(schema_checker_->get_table_schema(
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(schema_checker_->get_table_schema(
             drop_index_stmt->get_database_name(),
             drop_index_stmt->get_table_name(),
             false /* not index table */,

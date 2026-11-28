@@ -30,33 +30,29 @@ class ObCreateIndexStmt;
 class ObCreateIndexResolver : public ObDDLResolver
 {
 public:
-  static const int64_t CREATE_INDEX_CHILD_NUM = 9;
   explicit ObCreateIndexResolver(ObResolverParams &params);
   virtual ~ObCreateIndexResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &statement);
   ObCreateIndexStmt *get_create_index_stmt() { return static_cast<ObCreateIndexStmt*>(stmt_); };
 protected:
   int resolve_index_name_node(
-      ParseNode *index_name_node,
+      const peg::Node &name,
       ObCreateIndexStmt *crt_idx_stmt);
   int resolve_index_table_name_node(
-      ParseNode *index_table_name_node,
+      const peg::Node &relation,
       ObCreateIndexStmt *crt_idx_stmt);
   int resolve_index_column_node(
-      ParseNode *index_column_node,
+      rust::Slice<const peg::Node> columns,
       const int64_t index_keyname_value,
-      ParseNode *table_option_node,
+      rust::Slice<const peg::Node> options,
       ObCreateIndexStmt *crt_idx_stmt,
       const share::schema::ObTableSchema *tbl_schema);
   int resolve_index_option_node(
-      ParseNode *index_option_node,
+      rust::Slice<const peg::Node> options,
       ObCreateIndexStmt *crt_idx_stmt,
       const share::schema::ObTableSchema *tbl_schema,
       bool is_partitioned);
-  int resolve_index_method_node(
-      ParseNode *index_method_node,
-      ObCreateIndexStmt *crt_idx_stmt);
   int check_generated_partition_column(
       share::schema::ObTableSchema &index_schema);
   int add_sort_column(const obcall::ObColumnSortItem &sort_column);

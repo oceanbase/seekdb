@@ -39,15 +39,6 @@
 #include "lib/string/ob_sql_string.h"
 #include "share/schema/ob_list_row_values.h" // ObListRowValues
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-struct _ParseNode;
-typedef struct _ParseNode ParseNode;
-#ifdef __cplusplus
-}
-#endif
-
 namespace oceanbase
 {
 namespace common

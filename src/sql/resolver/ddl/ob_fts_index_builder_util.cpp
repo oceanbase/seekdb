@@ -20,6 +20,7 @@
 #include "ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "sql/syntax.h"
 #include "data_plane/fts/dict/ob_gen_dic_loader.h"
 #include "data_plane/fts/dict/ob_dic_lock_service.h"
 #include "share/ob_server_struct.h"
@@ -2578,10 +2579,37 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column(
     ObColumnSchemaV2 *&gen_col,
     ObColumnSchemaV2 *&budy_col)
 {
+  int ret = OB_SUCCESS;
+  sql::ParsedSql syntax;
+  if (OB_FAIL(ObRawExprUtils::parse_expr_node_from_str(sort_item.column_name_, expr_factory.get_allocator(), syntax))) {
+  } else if (OB_ISNULL(syntax.statement())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ret = build_and_generate_multivalue_column(allocator, sort_item, *syntax.statement(),
+        syntax.source(), expr_factory, session_info, table_schema, schema_checker,
+        force_rebuild, gen_col, budy_col);
+  }
+  return ret;
+}
+
+int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column(
+    ObIAllocator &allocator,
+    ObColumnSortItem &sort_item,
+    const sql::peg::Node &expression,
+    const ObString &source,
+    ObRawExprFactory &expr_factory,
+    const ObSQLSessionInfo &session_info,
+    ObTableSchema &table_schema,
+    sql::ObSchemaChecker *schema_checker,
+    bool force_rebuild,
+    ObColumnSchemaV2 *&gen_col,
+    ObColumnSchemaV2 *&budy_col)
+{
   INIT_SUCC(ret);
   ObRawExpr *expr = nullptr;
   if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(nullptr,
-                                                   sort_item.column_name_,
+                                                   expression,
+                                                   source,
                                                    expr_factory,
                                                    session_info,
                                                    table_schema,

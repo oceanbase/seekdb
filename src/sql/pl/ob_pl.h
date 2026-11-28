@@ -28,8 +28,7 @@
 #include "share/ob_errno.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/session/ob_basic_session_info.h"
-#include "sql/parser/parse_node.h"
-#include "sql/pl/parser/parse_stmt_node.h"
+#include "sql/syntax.h"
 #include "sql/pl/ob_pl_type.h"
 #include "sql/pl/ob_pl_package_manager.h"
 #include "sql/pl/ob_pl_interface_pragma.h"
@@ -875,7 +874,7 @@ public:
   // for anonymous
   int execute(sql::ObExecContext &ctx,
               ParamStore &params,
-              const ObStmtNodeTree *block);
+              const sql::ParsedSql &syntax);
 
   // for normal routine or package routine
   int execute(sql::ObExecContext &ctx,
@@ -915,7 +914,6 @@ private:
   int generate_pl_function(sql::ObExecContext &ctx,
                            const ObString &anonymouse_sql,
                            ParamStore &params,
-                           ParseNode &node,
                            ObCacheObjGuard& cacheobj_guard,
                            const uint64_t stmt_id,
                            bool is_anonymous_text = false);

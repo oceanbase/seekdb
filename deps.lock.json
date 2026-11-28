@@ -71,10 +71,6 @@
       }
     },
     "linux-aarch64-glibc217": {
-      "bison-flex": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/bison-flex-2.4.1-2.5.35/bison-flex-2.4.1-2.5.35-bin-linux-aarch64-glibc217-20261125T024724%2B0000-7cee11d9a9d1.tar.gz",
-        "sha256": "987bfecd14837fc5c81323832f6ceaa31e0fd2ac0ad49b5e7ba33ab0f59b788f"
-      },
       "boost": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-linux-aarch64-glibc217-20261124T113146%2B0000-68177a7d117d.tar.gz",
         "sha256": "8fa11735a9bd296efd20e5dcb15d8c3a01ccd3be98ad92c0d1e5cf2077f945ce"
@@ -125,10 +121,6 @@
       }
     },
     "linux-x86_64-glibc217": {
-      "bison-flex": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/bison-flex-2.4.1-2.5.35/bison-flex-2.4.1-2.5.35-bin-linux-x86_64-glibc217-20261125T024724%2B0000-7cee11d9a9d1.tar.gz",
-        "sha256": "03c635ef5025df58aa5e7950e129df7399f0dd56f94cab2dbdbb52e9b1eed649"
-      },
       "boost": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-linux-x86_64-glibc217-20261124T113146%2B0000-68177a7d117d.tar.gz",
         "sha256": "547dd84a450bab7e4d9cd1d22ad2a70f67ee0eb57f37604ca5a809b2b9686aec"
@@ -179,10 +171,6 @@
       }
     },
     "macos-arm64-min13": {
-      "bison-flex": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/bison-flex-2.4.1-2.5.35/bison-flex-2.4.1-2.5.35-bin-macos-arm64-min13-20261125T024724%2B0000-7cee11d9a9d1.tar.gz",
-        "sha256": "2480454449d83f0e1326a4ef999c06deb3cdf5046e316df6b1fba8222ce267cc"
-      },
       "boost": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-macos-arm64-min13-20261124T113146%2B0000-68177a7d117d.tar.gz",
         "sha256": "c8b881cd1a7b2cb83be675bdae96e127dd6c1998c6ac9ab80a9f2555d69a8aae"
@@ -231,10 +219,6 @@
       }
     },
     "windows-x86_64-md": {
-      "bison-flex": {
-        "url": "https://github.com/oceanbase/seekdb-deps/releases/download/bison-flex-2.5.25/bison-flex-2.5.25-bin-windows-x86_64-mt-20261125T024724%2B0000-7cee11d9a9d1.tar.gz",
-        "sha256": "c71f78271bb26028cadd5d14d04c78402bc59e355c7a352a40ca5f96d87093f9"
-      },
       "boost": {
         "url": "https://github.com/oceanbase/seekdb-deps/releases/download/boost-1.74.0/boost-1.74.0-bin-windows-x86_64-md-20261124T113146%2B0000-68177a7d117d.tar.gz",
         "sha256": "c3e60bbfd8e138aca3a343d0b0f880e424356675bd60cde6d55a10cb3fff1050"

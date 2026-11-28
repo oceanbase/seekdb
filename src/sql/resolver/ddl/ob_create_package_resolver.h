@@ -28,15 +28,13 @@ namespace sql
 class ObCreatePackageResolver: public ObDDLResolver
 {
 public:
-  static const int64_t CREATE_PACKAGE_NODE_CHILD_COUNT = 1;
-  static const int64_t PACKAGE_BLOCK_NODE_CHILD_COUNT = 4;
   static const int64_t NO_OVERLOAD_IDX = 0;
   static const int64_t OVERLOAD_START_IDX = 1;
 
   explicit ObCreatePackageResolver(ObResolverParams &params) : ObDDLResolver(params) {}
   virtual ~ObCreatePackageResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-  static int resolve_invoke_accessible(const ParseNode *package_clause_node,
+  virtual int resolve(const peg::Node &parse_tree);
+  static int resolve_invoke_accessible(rust::Slice<const peg::Node> clauses,
                                        bool &is_invoker_right,
                                        bool &has_accessible_by);
   static int resolve_functions_spec(const share::schema::ObPackageInfo &package_info,
@@ -50,12 +48,10 @@ private:
 class ObCreatePackageBodyResolver: public ObDDLResolver
 {
 public:
-  static const int64_t CREATE_PACKAGE_BODY_NODE_CHILD_COUNT = 1;
-  static const int64_t PACKAGE_BODY_BLOCK_NODE_CHILD_COUNT = 4;
 
   explicit ObCreatePackageBodyResolver(ObResolverParams &params) : ObDDLResolver(params) {}
   virtual ~ObCreatePackageBodyResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
   static int update_routine_route_sql(ObIAllocator &allocator,
                                       const ObSQLSessionInfo &session_info,
                                       ObIArray<ObRoutineInfo> &public_routine_list,
