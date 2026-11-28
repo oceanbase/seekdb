@@ -16,15 +16,14 @@
 
 #define USING_LOG_PREFIX BOOTSTRAP
 
-#if defined(__EMSCRIPTEN__)
 #include "common/ob_timeout_ctx.h"
-#endif
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_share_util.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/ob_local_management_service.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
@@ -670,9 +669,19 @@ int ObBootstrap::check_is_already_bootstrap(bool &is_bootstrap)
 int ObBootstrap::init_global_stat()
 {
   int ret = OB_SUCCESS;
+  // Initializing the core table can exceed the normal RPC timeout on a fresh
+  // instance. Keep one deadline through transaction start, writes and commit;
+  // nested global-stat proxy calls inherit it instead of selecting rpc_timeout.
+  const int64_t bootstrap_timeout_us = 5LL * 60 * 1000000;
+  ObTimeoutCtx bootstrap_ctx;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
   if (OB_FAIL(check_inner_stat())) {
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(bootstrap_ctx, bootstrap_timeout_us))) {
+    LOG_WARN("failed to set global stat bootstrap deadline", KR(ret));
+  } else if (!bootstrap_ctx.is_trx_timeout_set()
+             && OB_FAIL(bootstrap_ctx.set_trx_timeout_us(bootstrap_ctx.get_timeout()))) {
+    LOG_WARN("failed to set global stat bootstrap transaction timeout", KR(ret));
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
