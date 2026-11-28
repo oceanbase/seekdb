@@ -267,6 +267,18 @@ int ObDomainIdUtils::get_domain_tid_table_by_cid(
       }
       case ObDomainIDType::VID: {
         if (OB_FAIL(data_table->get_rowkey_vid_tid(tid))) {
+          if (OB_ERR_INDEX_KEY_NOT_FOUND == ret && nullptr != sql_schema_guard->get_schema_guard()) {
+            // DROP can remove the mapping before removing the hidden VID column.  The
+            // expressions in the current plan may still reference that column, so it is
+            // unsafe to continue this execution without the domain table.  Ask the SQL
+            // retry controller to acquire a fresh schema and rebuild the plan instead.
+            bool all_deleted = false;
+            const int check_ret = ObVectorIndexUtil::check_vec_aux_index_deleted(
+                *sql_schema_guard->get_schema_guard(), *data_table, all_deleted);
+            if (OB_SUCCESS == check_ret && all_deleted) {
+              ret = OB_SCHEMA_EAGAIN;
+            }
+          }
         }
         break;
       }
