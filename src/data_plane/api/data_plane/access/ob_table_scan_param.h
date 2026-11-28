@@ -44,45 +44,7 @@ class ObTableParam;
 namespace storage
 {
 
-class ObITableReadInfo;
 struct ObMdsReadInfoCollector;
-
-class ScanResumePoint
-{
-public:
-  int init(bool *is_paused);
-  void destroy()
-  {
-    reset_ranges();
-    allocator_.reset();
-  }
-  bool is_paused() const
-  {
-    return nullptr != is_paused_ && ATOMIC_LOAD(is_paused_);
-  }
-  void set_paused()
-  {
-    if (nullptr != is_paused_) {
-      ATOMIC_STORE(is_paused_, true);
-    }
-  }
-  void clear_paused()
-  {
-    if (nullptr != is_paused_) {
-      ATOMIC_STORE(is_paused_, false);
-    }
-  }
-  bool empty() const { return ranges_.empty(); }
-  int add_range(const ObITableReadInfo &read_info,
-                const blocksstable::ObDatumRange &datum_range);
-  void reset_ranges() { ranges_.reset(); }
-  common::ObSEArray<common::ObNewRange, 1> &get_ranges() { return ranges_; }
-
-private:
-  bool *is_paused_{nullptr};
-  common::ObSEArray<common::ObNewRange, 1> ranges_;
-  common::ObArenaAllocator allocator_;
-};
 
 // A point key already in the storage representation. The producer owns both
 // the cells and their payloads until the scan iterator is reused or released.
@@ -117,7 +79,6 @@ public:
       read_version_range_(),
       need_update_tablet_param_(false),
       in_row_cache_threshold_(common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM),
-      scan_resume_point_(nullptr),
       mds_collector_(nullptr),
       row_scan_cnt_(nullptr),
       enable_new_false_range_(false),
@@ -152,7 +113,6 @@ public:
   common::ObVersionRange read_version_range_;
   bool need_update_tablet_param_;
   int64_t in_row_cache_threshold_;
-  ScanResumePoint *scan_resume_point_;
   ObMdsReadInfoCollector *mds_collector_;
   uint64_t *row_scan_cnt_;
   bool enable_new_false_range_;

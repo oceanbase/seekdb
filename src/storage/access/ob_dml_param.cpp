@@ -258,20 +258,6 @@ DEF_TO_STRING(ObRow2ExprsProjector::Item)
   return pos;
 }
 
-int ScanResumePoint::init(bool *is_paused)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(is_paused)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    is_paused_ = is_paused;
-    ATOMIC_STORE(is_paused_, false);
-    
-    allocator_.set_label("ScanResumePoint");
-  }
-  return ret;
-}
-
 DEF_TO_STRING(ObTableScanParam)
 {
   int64_t pos = 0;
@@ -307,33 +293,6 @@ DEF_TO_STRING(ObTableScanParam)
        KPC_(mds_collector));
   J_OBJ_END();
   return pos;
-}
-
-int ScanResumePoint::add_range(const ObITableReadInfo& read_info, const blocksstable::ObDatumRange& datum_range)
-{  
-  INIT_SUCC(ret);
-  ObObjMeta* obj_metas;
-  ObDatumRange tmp_range;
-  ObNewRange new_range;
-  int rowkey_cnt = read_info.get_schema_rowkey_count();
-
-  if (OB_ISNULL(obj_metas = (ObObjMeta*)allocator_.alloc(rowkey_cnt * sizeof(ObObjMeta)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for obj_metas", K(rowkey_cnt));
-  } else {
-    const common::ObIArray<ObColDesc>& col_desc = read_info.get_columns_desc();
-    for (int i = 0; i < rowkey_cnt; ++i) {
-      obj_metas[i] = col_desc.at(i).col_type_;
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(tmp_range.deep_copy(datum_range, allocator_))) {
-  } else if (OB_FAIL(tmp_range.to_new_range(new_range, obj_metas, allocator_))) {
-  } else if (OB_FAIL(ranges_.push_back(new_range))) {
-  }
-
-  return ret;
 }
 
 }

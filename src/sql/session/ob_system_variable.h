@@ -532,18 +532,32 @@ public:
   virtual ~ObIntSysVar() {}
   virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
 
+protected:
+  virtual int do_convert(sql::ObExecContext &ctx,
+                         const common::ObObj &in_val,
+                         common::ObObj &out_val,
+                         bool &is_converted);
+
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
                                    const common::ObObj &in_val,
                                    common::ObObj &out_val);
-  virtual int do_convert(sql::ObExecContext &ctx,
-                         const common::ObObj &in_val,
-                         common::ObObj &out_val,
-                         bool &is_converted);
-private:
   DISALLOW_COPY_AND_ASSIGN(ObIntSysVar);
 };
+
+class AggregationOptimizationSettingsSysVar : public ObIntSysVar
+{
+public:
+  using ObIntSysVar::ObIntSysVar;
+
+private:
+  int do_check_and_convert(sql::ObExecContext &ctx,
+                           const ObSetVar &set_var,
+                           const common::ObObj &in_val,
+                           common::ObObj &out_val) override;
+};
+
 // Strict range int, this class will throw an error when the value set by a set statement is out of range, rather than truncating like ObIntSysVar
 class ObStrictRangeIntSysVar : public ObIntSysVar
 {

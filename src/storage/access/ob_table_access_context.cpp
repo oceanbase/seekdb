@@ -77,7 +77,6 @@ ObTableAccessContext::ObTableAccessContext()
     block_row_store_(nullptr),
     sample_filter_(nullptr),
     trans_state_mgr_(nullptr),
-    scan_resume_point_(nullptr),
     truncate_part_filter_(nullptr),
     mds_collector_(nullptr),
     row_scan_cnt_(nullptr)
@@ -206,7 +205,6 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
                 (nullptr != scan_param.table_param_ && OB_INVALID_INDEX != scan_param.table_param_->get_read_info().get_trans_col_index());
     range_array_pos_ = &scan_param.range_array_pos_;
     use_fuse_row_cache_ = false;
-    scan_resume_point_ = scan_param.scan_resume_point_;
     mds_collector_ = scan_param.mds_collector_;
     row_scan_cnt_ = scan_param.row_scan_cnt_;
     if(OB_FAIL(build_lob_locator_helper(scan_param, ctx, trans_version_range))) {
@@ -352,7 +350,6 @@ int ObTableAccessContext::init_for_fork(ObTableAccessContext &other,
   block_row_store_ = other.block_row_store_;
   sample_filter_ = other.sample_filter_;
   trans_state_mgr_ = other.trans_state_mgr_;
-  scan_resume_point_ = other.scan_resume_point_;
   truncate_part_filter_ = other.truncate_part_filter_;
   // fork ctx shallow-copies these shared pointers, should not release them
   need_release_truncate_part_filter_ = false;
@@ -454,7 +451,6 @@ void ObTableAccessContext::reset()
   } else {
     sample_filter_ = nullptr;
   }
-  scan_resume_point_ = nullptr;
   row_scan_cnt_ = nullptr;
 }
 
@@ -499,7 +495,6 @@ void ObTableAccessContext::reuse()
   if (nullptr != sample_filter_) {
     sample_filter_->reuse();
   }
-  scan_resume_point_ = nullptr;
   row_scan_cnt_ = nullptr;
 }
 

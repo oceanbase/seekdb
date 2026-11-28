@@ -105,13 +105,7 @@ public :
 
   int assign(const ObGranulePumpArgs &rhs);
 
-  int64_t get_pump_version() const { return ATOMIC_LOAD(&pump_version_); }
   int64_t inc_pump_version() { return ATOMIC_FAA(&pump_version_, 1); }
-
-  int64_t try_inc_pump_version(int64_t old_version)
-  {
-    return ATOMIC_CAS(&pump_version_, old_version, old_version + 1);
-  }
 
   ObExecContext *ctx_;
   ObGranulePumpOpInfo op_info_;
@@ -187,7 +181,6 @@ public:
                         const common::ObIArray<ObNewRange> &taskset_ranges,
                         const common::ObIArray<int64_t> &taskset_idxs,
                         ObGIRandomType random_type);
-  int append_taskset(ObGITaskSet &other);
 public:
   common::ObArray<ObGITaskInfo> gi_task_set_;
   int64_t cur_pos_;
@@ -269,10 +262,6 @@ public :
                     bool check_task_exist,
                     ObGITaskSet::ObGIRandomType random_type,
                     bool partition_granule = true);
-  int split_granule(ObIAllocator &allocator, ObGranuleIteratorOp *gi_op, ObGranulePumpArgs &args,
-                    const ObTableScanSpec *tsc, int64_t op_id, ObGITaskSet &task_set,
-                    ObGITaskSet::ObGIRandomType random_type, DASRuntimeTabletAccess *tablet_access,
-                    const ObIArray<ObNewRange> &ranges);
 
 private:
 };
@@ -434,9 +423,6 @@ public:
   int regenerate_gi_task();
   int regenerate_gi_task(ObGranulePumpArgs &args);
 
-  int split_granule(ObGranuleIteratorOp *gi_op, int64_t scan_op_id, DASRuntimeTabletAccess *tablet_access,
-                    const ObIArray<ObNewRange> &ranges);
-
   int reset_gi_task();
 
   common::ObIArray<ObGranulePumpArgs> &get_pump_args() { return pump_args_; }
@@ -493,7 +479,6 @@ private:
 
   int check_can_randomize(ObGranulePumpArgs &args, bool &can_randomize);
 
-  int fill_shared_pool(ObGITaskSet &new_task_set, GITaskArrayItem &taskset_array_item);
 
 private:
   //TODO::muhang spin lock or blocking lock, or divide tasks statically to avoid lock contention?

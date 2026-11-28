@@ -393,55 +393,6 @@ ObDataStoreDesc::~ObDataStoreDesc()
 }
 
 
-int ObDataStoreDesc::get_emergency_row_store_type()
-{
-  int ret = OB_SUCCESS;
-
-  const rust::String partition_id = config::_force_skip_encoding_partition_id();
-  if (partition_id.empty()) {
-    // no need check emergency row store type
-  } else {
-    char partition_key[OB_TMP_BUF_SIZE_256];
-    if (partition_id.size() >= sizeof(partition_key)) {
-      ret = OB_BUF_NOT_ENOUGH;
-    } else {
-      MEMCPY(partition_key, partition_id.data(), partition_id.size());
-      partition_key[partition_id.size()] = '\0';
-      char *endptr = nullptr;
-      ObTabletID emergency_tablet_id(std::strtoull(partition_key, &endptr, 0));
-      
-      if (OB_ISNULL(endptr)) {
-        ret = OB_INVALID_ARGUMENT;
-        STORAGE_LOG(WARN, "Invalid emergency tablet_id for skiping encoding", K(ret), K(partition_key));
-      } else {
-        // Skip spaces before tenant id.
-        while ('\0' != *endptr && isspace(*endptr)) {
-          endptr++;
-        }
-        if ('@' != *endptr) {
-          ret = OB_INVALID_ARGUMENT;
-          STORAGE_LOG(WARN, "Invalid emergency partition key for skiping encoding", K(ret), K(partition_key));
-        } else {
-          endptr++;
-          (void)(std::strtoull(endptr, &endptr, 0));
-          if (OB_SUCC(ret)) {
-            if (get_tablet_id() == emergency_tablet_id) {
-              STORAGE_LOG(INFO, "Succ to find specified emergency partition to skip encoding",
-                  K(emergency_tablet_id), K(*this));
-              row_store_type_ = FLAT_ROW_STORE;
-            } else {
-              STORAGE_LOG(INFO, "this partition is not the emergency partition to skip encoding",
-                  K(emergency_tablet_id), K(*this));
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObDataStoreDesc::cal_row_store_type(const ObRowStoreType row_store_type,
                                         const compaction::ObMergeType merge_type)
 {
@@ -453,9 +404,13 @@ int ObDataStoreDesc::cal_row_store_type(const ObRowStoreType row_store_type,
     if (!ObStoreFormat::is_row_store_type_valid(row_store_type_)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "Unexpected row store type", K(row_store_type_), K_(row_store_type), K(ret));
-    } else if (OB_FAIL(get_emergency_row_store_type())) {
-    }
-    if (OB_SUCC(ret)) {
+    } else {
+      const int64_t skip_encoding_tablet_id = config::_force_skip_encoding_partition_id();
+      if (skip_encoding_tablet_id > 0 &&
+          get_tablet_id().id() == static_cast<uint64_t>(skip_encoding_tablet_id)) {
+        row_store_type_ = FLAT_ROW_STORE;
+        STORAGE_LOG(INFO, "skip row store encoding for configured tablet", K(skip_encoding_tablet_id));
+      }
       if (ObStoreFormat::is_row_store_type_with_encoding(row_store_type_)) {
         encoder_opt_.set_store_type(row_store_type_);
       }

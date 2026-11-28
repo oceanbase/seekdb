@@ -575,10 +575,6 @@ public:
   int check_row_lock(
       const blocksstable::ObMicroIndexInfo &index_info,
       bool &is_prefetch_end);
-  OB_INLINE const blocksstable::ObDatumRowkey& get_border_rowkey()
-  {
-    return border_rowkey_;
-  }
   OB_INLINE int16_t get_index_tree_height() const
   {
     return index_tree_height_;

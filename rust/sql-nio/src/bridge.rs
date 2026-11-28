@@ -173,8 +173,6 @@ pub mod ffi {
     #[repr(u8)]
     enum TlsVersion {
         None = 0,
-        Tlsv1 = 1,
-        Tlsv11 = 2,
         Tlsv12 = 3,
         Tlsv13 = 4,
     }

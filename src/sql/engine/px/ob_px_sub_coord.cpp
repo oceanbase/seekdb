@@ -201,8 +201,6 @@ int ObPxSubCoord::setup_gi_op_input(ObExecContext &ctx,
           ret = OB_ERR_UNEXPECTED;
         } else {
           ObGIOpInput *gi_input = static_cast<ObGIOpInput*>(kit->input_);
-          int64_t parallelism = sqc.get_task_count();
-          int64_t split_gi_task_start = ObTimeUtil::current_time();
           if (OB_FAIL(sqc_ctx.gi_pump_.init_pump_args(&ctx, sqc, gi_op, scan_ops, dml_op,
                                                       tablets_array, sqc_ctx.partitions_info_))) {
           } else {
@@ -210,23 +208,6 @@ int ObPxSubCoord::setup_gi_op_input(ObExecContext &ctx,
             gi_input->add_tablet_access_keys(scan_ops);
             LOG_TRACE("setup gi op input", K(gi_input), K(&sqc_ctx.gi_pump_), K(gi_op->id_),
                       K(sqc_ctx.gi_pump_.get_task_array_map()), K(sqc.get_tablet_access_order()));
-          }
-          if (OB_FAIL(ret)) {
-          } else if (gi_op->enable_adaptive_task_splitting_ && parallelism > 1) {
-            int64_t split_gi_task_cost = ObTimeUtil::current_time() - split_gi_task_start;
-            int64_t tsc_id = scan_ops.at(0)->id_;
-            const GITaskArrayMap &array_map = sqc_ctx.gi_pump_.get_task_array_map();
-            int64_t initial_task_count = 0;
-            for (int64_t i = 0; i < array_map.count() && OB_SUCC(ret); ++i) {
-              if (array_map.at(i).tsc_op_id_ == tsc_id) {
-                initial_task_count = array_map.at(i).taskset_array_.at(0).task_count_;
-              }
-            }
-            if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(sqc_ctx.create_gi_task_rebalancer(ctx, parallelism, split_gi_task_cost,
-                                                               initial_task_count, gi_op->get_id(),
-                                                               gi_input->task_balancer_))) {
-            }
           }
         }
       }
@@ -323,10 +304,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
       // dop may changed after dop auto scaling, we should modify the dop in gi
       gi_input->set_parallelism(sqc.get_task_count());
       sqc_ctx.gi_pump_.set_parallelism(sqc.get_task_count());
-      if (gi_op->enable_adaptive_task_splitting_ && gi_input->task_balancer_ != nullptr) {
-        gi_input->task_balancer_->scale_total_worker_count(sqc.get_task_count());
-      }
-
     }
   } else if (IS_PX_JOIN_FILTER(root.get_type())) {
     ObPxSqcMeta &sqc = sqc_arg_.sqc_;

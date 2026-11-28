@@ -104,9 +104,6 @@ protected:
   void dump_tx_statistic_for_4377(ObStoreCtx *store_ctx);
   void dump_table_statistic_for_4377();
   void set_base_version() const;
-  int is_paused(bool& do_pause) const;
-  virtual int pause(bool& do_pause) = 0;
-  ScanState get_scan_state() const { return scan_state_; }
   int save_curr_rowkey();
   virtual int get_range_count() const { return 1; }
   int build_extra_access_ctx();

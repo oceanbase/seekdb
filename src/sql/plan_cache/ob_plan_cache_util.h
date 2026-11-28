@@ -970,7 +970,6 @@ public:
     is_strict_defensive_check_(true),
     px_join_skew_minfreq_(30),
     enable_spf_batch_rescan_(false),
-    enable_distributed_das_scan_(false),
     enable_das_batch_rescan_flag_(0),
     enable_var_assign_use_das_(false),
     enable_das_keep_order_(false),
@@ -981,7 +980,6 @@ public:
     hash_rollup_policy_(0),
     ndv_runtime_bloom_filter_size_(false),
     enable_topn_runtime_filter_(false),
-    enable_px_task_rebalance_(false),
     min_const_integer_precision_(1),
     cluster_config_version_(-1),
     runtime_config_version_(-1)
@@ -1021,7 +1019,6 @@ public:
   bool is_strict_defensive_check_;
   int8_t px_join_skew_minfreq_;
   bool enable_spf_batch_rescan_;
-  bool enable_distributed_das_scan_;
   int64_t enable_das_batch_rescan_flag_;
   bool enable_var_assign_use_das_;
   bool enable_das_keep_order_;
@@ -1032,7 +1029,6 @@ public:
   int hash_rollup_policy_;
   bool ndv_runtime_bloom_filter_size_;
   bool enable_topn_runtime_filter_;
-  bool enable_px_task_rebalance_;
   int8_t min_const_integer_precision_;
 
 private:

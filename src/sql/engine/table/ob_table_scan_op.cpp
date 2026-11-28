@@ -29,7 +29,6 @@
 #include "share/ob_ddl_checksum.h"
 #include "share/geo/ob_srs_provider.h"
 #include "sql/das/iter/ob_das_iter_utils.h"
-#include "sql/engine/px/ob_granule_iterator_op.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
 namespace oceanbase
@@ -1151,24 +1150,6 @@ OB_INLINE int ObTableScanOp::init_das_scan_rtdef(const ObDASScanCtDef &das_ctdef
       }
     }
   }
-  if (OB_SUCC(ret) && MY_SPEC.is_scan_resumable_) {
-    bool find = false;
-    ObOperator *cur_op = get_parent();
-    while (cur_op != nullptr) {
-      if (cur_op->get_spec().get_type() == PHY_GRANULE_ITERATOR) {
-        ObGranuleIteratorOp *gi_op = static_cast<ObGranuleIteratorOp *>(cur_op);
-        das_rtdef.scan_resume_point_ = &gi_op->get_resume_point();
-        find = true;
-        break;
-      } else {
-        cur_op = cur_op->get_parent();
-      }
-    }
-    if (!find) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("this scan is resumable, but gi not found");
-    }
-  }
   return ret;
 }
 
@@ -2014,12 +1995,7 @@ int ObTableScanOp::get_next_batch_with_das(int64_t &count, int64_t capacity)
     // ObNewIterIterator::get_next_rows() may return rows too when got OB_ITER_END.
     // It's hard to use, we split it into two calls here since get_next_rows() is reentrant
     // when got OB_ITER_END.
-    if (is_resume_point_saved()) {
-      // If resume point is saved, we should return OB_ITER_END to prevent scan again.
-      ret = OB_ITER_END;
-    } else {
-      ret = output_->get_next_rows(count, batch_size);
-    }
+    ret = output_->get_next_rows(count, batch_size);
     if (OB_ITER_END == ret && count > 0) {
       ret = OB_SUCCESS;
     }
@@ -2065,13 +2041,8 @@ int ObTableScanOp::get_next_batch_with_das(int64_t &count, int64_t capacity)
     // ObNewIterIterator::get_next_rows() may return rows too when got OB_ITER_END.
     // It's hard to use, we split it into two calls here since get_next_rows() is reentrant
     // when got OB_ITER_END.
-    if (is_resume_point_saved()) {
-      // If resume point is saved, we should return OB_ITER_END to prevent scan again.
-      ret = OB_ITER_END;
-    } else {
-      ret = output_->get_next_rows(count, batch_size);
-      brs_.all_rows_active_ = true;
-    }
+    ret = output_->get_next_rows(count, batch_size);
+    brs_.all_rows_active_ = true;
     if (OB_ITER_END == ret && count > 0) {
       ret = OB_SUCCESS;
     }
@@ -3744,14 +3715,6 @@ int ObTableScanOp::get_output_fts_col_expr_by_type(
     ret = OB_ERR_UNEXPECTED;
   }
   return ret;
-}
-
-bool ObTableScanOp::is_resume_point_saved()
-{
-  // Like resumable downloads, px adaptive task spltting will save the remain scan range as the
-  // resume point.
-  return MY_SPEC.is_scan_resumable_ && OB_NOT_NULL(tsc_rtdef_.scan_rtdef_.scan_resume_point_)
-         && !tsc_rtdef_.scan_rtdef_.scan_resume_point_->empty();
 }
 
 int ObRandScanProcessor::init(const ObTableScanSpec *tsc_spec,

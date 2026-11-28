@@ -2124,10 +2124,11 @@ static struct VarsInit{
 
     [&] (){
       ObSysVars[143].default_value_ = "0" ;
-      ObSysVars[143].info_ = "Manually control some behaviors of aggregation" ;
+      ObSysVars[143].info_ = "Aggregation pushdown setting for GROUP BY and DISTINCT. 0 uses the default behavior. 256 (0x100) disables adaptive bypass." ;
       ObSysVars[143].name_ = "_aggregation_optimization_settings" ;
       ObSysVars[143].data_type_ = ObUInt64Type ;
       ObSysVars[143].flags_ = ObSysVarFlag::GLOBAL_SCOPE | ObSysVarFlag::SESSION_SCOPE ;
+      ObSysVars[143].base_class_ = "AggregationOptimizationSettingsSysVar" ;
       ObSysVars[143].id_ = SYS_VAR__AGGREGATION_OPTIMIZATION_SETTINGS ;
       cur_max_var_id = MAX(cur_max_var_id, static_cast<int64_t>(SYS_VAR__AGGREGATION_OPTIMIZATION_SETTINGS)) ;
       ObSysVarsIdToArrayIdx[SYS_VAR__AGGREGATION_OPTIMIZATION_SETTINGS] = 143 ;

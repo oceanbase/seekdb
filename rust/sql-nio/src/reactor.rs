@@ -918,9 +918,7 @@ fn build_tls_server_config(
         CertificateDer::pem_file_iter(path_of(tls.cert_file)?)?.collect::<Result<_, _>>()?;
     let key = PrivateKeyDer::from_pem_file(path_of(tls.key_file)?)?;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
-    // rustls supports TLS 1.2 and TLS 1.3.  TLSv1/TLSv1.1 remain accepted
-    // configuration values for compatibility, but cannot lower rustls below
-    // its TLS 1.2 floor.  TLSv1.3 is the only value that narrows the set.
+    // TLS 1.2 and 1.3 are enabled by default. TLSv1.3 restricts the listener to TLS 1.3.
     let builder = rustls::ServerConfig::builder_with_provider(provider.clone());
     let builder = if tls.min_tls_version == NIO_TLS_MIN_TLSV1_3 {
         builder.with_protocol_versions(&[&rustls::version::TLS13])?

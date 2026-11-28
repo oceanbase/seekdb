@@ -171,7 +171,6 @@ public:
       scan_op_id_(common::OB_INVALID_ID),
       scan_rows_size_(common::OB_INVALID_ID),
       in_row_cache_threshold_(common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM),
-      scan_resume_point_(nullptr),
       row_scan_cnt_(0)
   { }
 
@@ -218,7 +217,6 @@ public:
   uint64_t scan_op_id_;
   int64_t scan_rows_size_;
   int64_t in_row_cache_threshold_;
-  storage::ScanResumePoint *scan_resume_point_;
   // row_scan_cnt_ indicates the total rows scanned during a table scan, for multi-partition tables, it sums rows
   // from all local partitions and retains its value even after rescan.
   uint64_t row_scan_cnt_;

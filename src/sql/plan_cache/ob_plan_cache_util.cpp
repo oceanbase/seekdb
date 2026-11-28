@@ -191,11 +191,9 @@ int ObConfigInfoInPC::load_influence_plan_config()
   hash_rollup_policy_ = rollup_policy.case_compare("auto") == 0 ?
                           0 :
                           (rollup_policy.case_compare("forced") == 0 ? 1 : 2);
-  enable_distributed_das_scan_ = config::_enable_distributed_das_scan();
   enable_das_batch_rescan_flag_ = config::_enable_das_batch_rescan_flag();
   enable_topn_runtime_filter_ = config::_enable_topn_runtime_filter();
   min_const_integer_precision_ = static_cast<int8_t>(config::_min_const_integer_precision());
-  enable_px_task_rebalance_ = config::_enable_px_task_rebalance();
 
 
   return ret;
@@ -242,13 +240,10 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_index_merge_))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                              "%d,", enable_distributed_das_scan_))) {
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%" PRId64 ",", enable_das_batch_rescan_flag_))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_topn_runtime_filter_))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", min_const_integer_precision_))) {
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", enable_px_task_rebalance_))) {
   } else {
     // do nothing
   }

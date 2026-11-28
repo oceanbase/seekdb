@@ -21,6 +21,7 @@
 #include "share/config/ob_config_helper.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "share/system_variable/ob_sys_var_meta.h"
+#include "sql/engine/aggregate/ob_adaptive_bypass_ctrl.h"
 #include "sql/engine/ob_exec_context.h"
 #include "share/ob_version.h"
 #include "share/ob_timezone_mgr.h"
@@ -1101,6 +1102,22 @@ int ObIntSysVar::do_convert(ObExecContext &ctx,
   return ret;
 }
 #undef CHECK_DECIMAL_INT_VALID
+
+int AggregationOptimizationSettingsSysVar::do_check_and_convert(ObExecContext &ctx,
+                                                              const ObSetVar &set_var,
+                                                              const ObObj &in_val,
+                                                              ObObj &out_val)
+{
+  int ret = OB_SUCCESS;
+  bool is_converted = false;
+  if (set_var.is_set_default_) {
+  } else if (OB_FAIL(do_convert(ctx, in_val, out_val, is_converted))) {
+  } else if (is_converted || (0 != out_val.get_uint64() && FORCE_GPD != out_val.get_uint64())) {
+    ret = OB_ERR_WRONG_VALUE_FOR_VAR;
+    (void)log_err_wrong_value_for_var(ret, in_val);
+  }
+  return ret;
+}
 
 int ObStrictRangeIntSysVar::do_check_and_convert(ObExecContext &ctx,
                                                  const ObSetVar &set_var,

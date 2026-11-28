@@ -75,20 +75,20 @@ void ob_sql_sock_handler_on_close(ObSqlSockHandler* handler, ObSqlSockSession* s
   handler->on_close(sess, err);
 }
 
-static uint8_t nio_tls_min_version(const char *value)
+static int nio_tls_min_version(const char *value, oceanbase::nio::TlsVersion &result)
 {
+  int ret = OB_SUCCESS;
   const ObString version(NULL == value ? "none" : value);
-  uint8_t result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::None);
-  if (0 == version.case_compare("TLSV1")) {
-    result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::Tlsv1);
-  } else if (0 == version.case_compare("TLSV1.1")) {
-    result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::Tlsv11);
+  if (0 == version.case_compare("NONE")) {
+    result = oceanbase::nio::TlsVersion::None;
   } else if (0 == version.case_compare("TLSV1.2")) {
-    result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::Tlsv12);
+    result = oceanbase::nio::TlsVersion::Tlsv12;
   } else if (0 == version.case_compare("TLSV1.3")) {
-    result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::Tlsv13);
+    result = oceanbase::nio::TlsVersion::Tlsv13;
+  } else {
+    ret = OB_INVALID_ARGUMENT;
   }
-  return result;
+  return ret;
 }
 
 // Free function declared in rpc/ob_request.h. The accepted descriptor is
@@ -105,7 +105,10 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
                 "Rust embedded session storage must satisfy C++ alignment");
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(reactor_lock_);
-  if (OB_FAIL(io_handler_.init(deliver))) {
+  oceanbase::nio::TlsVersion tls_min_version = oceanbase::nio::TlsVersion::None;
+  if (OB_FAIL(nio_tls_min_version(min_tls_version, tls_min_version))) {
+    LOG_ERROR("invalid sql_protocol_min_tls_version", KR(ret), K(min_tls_version));
+  } else if (OB_FAIL(io_handler_.init(deliver))) {
   } else {
     char addr[64];
     const bool disable_tcp = port < 0;
@@ -130,7 +133,7 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
     tls_cfg.ca_file = OB_SSL_CA_FILE;
     tls_cfg.cert_file = OB_SSL_CERT_FILE;
     tls_cfg.key_file = OB_SSL_KEY_FILE;
-    tls_cfg.min_tls_version = nio_tls_min_version(min_tls_version);
+    tls_cfg.min_tls_version = static_cast<uint8_t>(tls_min_version);
     const oceanbase::nio::NioTlsConfig *tls = use_tls ? &tls_cfg : NULL;
     int32_t start_err = static_cast<int32_t>(oceanbase::nio::StartStatus::Ok);
     reactor_ = oceanbase::nio::start(addr, &io_handler_,

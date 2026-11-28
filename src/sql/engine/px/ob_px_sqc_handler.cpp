@@ -283,7 +283,6 @@ int ObPxSqcHandler::destroy_sqc(int &report_ret)
   end_ret = end_ret_;
 
   // All worker references are gone; release shared GI handles before reporting to QC.
-  get_sqc_ctx().destroy_gi_task_rebalancers();
 
   // clean up ddl context if needed
   int tmp_ret = OB_SUCCESS;

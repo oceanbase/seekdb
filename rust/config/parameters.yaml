@@ -968,11 +968,12 @@
   description: "enable compaction diagnose functionValue:  True:turned on;  False: turned off"
 
 - name: _force_skip_encoding_partition_id
-  type: STR
-  default: ""
+  type: INT
+  default: "0"
+  range: "[0,)"
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
-  description: "force the specified partition to major without encoding row store, only for emergency!"
+  description: "Tablet ID to skip row-store encoding during major or meta compaction in an emergency. 0 disables the override."
 
 - name: _private_buffer_size
   type: CAP
@@ -1232,13 +1233,6 @@
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
   description: "enable index merge optimization"
-
-- name: _enable_distributed_das_scan
-  type: BOOL
-  default: "True"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "enable distributed DAS scan"
 
 - name: _enable_das_batch_rescan_flag
   type: INT
@@ -1565,7 +1559,7 @@
   default: "none"
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
-  description: "SQL SSL control options, used to specify the minimum SSL/TLS version number. values: none, TLSv1, TLSv1.1, TLSv1.2, TLSv1.3"
+  description: "Minimum TLS version for the SQL listener. none and TLSv1.2 allow TLS 1.2 and 1.3. TLSv1.3 allows only TLS 1.3."
   checker: "common::ObConfigSQLTlsVersionChecker"
 
 - name: _enable_optimizer_qualify_filter
@@ -1729,21 +1723,6 @@
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
   description: "Enable topn runtime filter."
-
-- name: _enable_px_task_rebalance
-  type: BOOL
-  default: "False"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "Enable or disable px task rebalance."
-
-- name: _px_task_rebalance_trigger_time
-  type: TIME
-  default: "10ms"
-  range: "[1us, 1h]"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "Control the trigger time of px task rebalance. Range: [1us, 1h]"
 
 - name: _ob_enable_truncate_partition_preserve_global_index
   type: BOOL

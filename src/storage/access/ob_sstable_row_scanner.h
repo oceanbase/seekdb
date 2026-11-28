@@ -51,11 +51,6 @@ public:
   virtual int advance_scan(const blocksstable::ObDatumRange &range) override;
   virtual bool can_blockscan() const override;
   virtual bool can_batch_scan() const override;
-  virtual int get_next_rowkey(const bool need_set_border_rowkey,
-                              int64_t &curr_scan_index,
-                              blocksstable::ObDatumRowkey& rowkey,
-                              blocksstable::ObDatumRowkey &border_rowkey,
-                              common::ObIAllocator &allocator) final;
   OB_INLINE bool is_end_of_scan() const
   {
     return prefetcher_.is_prefetch_end_ &&

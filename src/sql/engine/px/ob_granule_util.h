@@ -340,12 +340,6 @@ public:
                                 common::ObIArray<common::ObNewRange> &ranges,
                                 bool &only_empty_range);
 
-  static bool can_resplit_gi_task(uint64_t gi_attri_flag)
-  {
-    return !is_partition_granule_flag(gi_attri_flag) && !asc_order(gi_attri_flag)
-           && !desc_order(gi_attri_flag);
-  }
-
 public:
   /**
    * split tasks by block granule method
