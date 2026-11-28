@@ -58,7 +58,7 @@ int ObStaticEngineExprCG::generate(const ObRawExprUniqueSet &all_raw_exprs,
 {
   int ret = OB_SUCCESS;
   ObRawExprUniqueSet flattened_raw_exprs(true);
-  ObRawExprFactory expr_factory(allocator_);
+  ObRawExprFactory expr_factory(compile_allocator_);
   flattened_raw_exprs.set_expr_factory(&expr_factory);
   flattened_raw_exprs.set_session_info(op_cg_ctx_.session_);
   if (all_raw_exprs.count() <= 0) {
@@ -80,7 +80,7 @@ int ObStaticEngineExprCG::generate(ObRawExpr *expr,
                                    ObExprFrameInfo &expr_info)
 {
   int ret = OB_SUCCESS;
-  ObRawExprFactory expr_factory(allocator_);
+  ObRawExprFactory expr_factory(compile_allocator_);
   flattened_raw_exprs.set_expr_factory(&expr_factory);
   flattened_raw_exprs.set_session_info(op_cg_ctx_.session_);
   if (OB_FAIL(flattened_raw_exprs.flatten_temp_expr(expr))) {
