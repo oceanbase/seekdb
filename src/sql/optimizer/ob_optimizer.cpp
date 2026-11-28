@@ -19,6 +19,8 @@
 #include "ob_optimizer.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/ob_explain_note.h"
+#include "sql/optimizer/ob_optimizer_util.h"
+#include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/optimizer/ob_select_log_plan.h"
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
@@ -130,6 +132,7 @@ int ObOptimizer::optimize(ObDMLStmt &stmt, ObLogPlan *&logical_plan)
       OB_ISNULL(target_stmt)|| OB_ISNULL(task_exec_ctx)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(init_env_info(*target_stmt))) {
+  } else if (OB_FAIL(convert_vec_approx_or_to_in(*target_stmt, const_cast<ObSQLSessionInfo *>(session)))) {
   } else if (OB_FAIL(generate_plan_for_temp_table(*target_stmt))) {
   } else if (OB_ISNULL(plan = ctx_.get_log_plan_factory().create(ctx_, stmt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -680,6 +683,74 @@ int ObOptimizer::check_is_heap_table(const ObDMLStmt &stmt)
                                                     table_schema))) {
   } else if(OB_NOT_NULL(table_schema) && table_schema->is_table_without_pk()) {
     ctx_.set_is_pdml_heap_table(true);
+  }
+  return ret;
+}
+
+
+namespace
+{
+// 递归处理语句树：向量近似查询可能出现在派生表或标量子查询里，
+// 这种情况下根语句的 has_vec_approx() 为 false，但 rewrite 阶段已经为整棵树禁用了变换规则。
+int inner_convert_vec_approx_or_to_in(ObDMLStmt &stmt,
+                                      ObRawExprFactory &expr_factory,
+                                      ObSQLSessionInfo *session_info,
+                                      bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool self_happened = false;
+  trans_happened = false;
+  if (stmt.is_select_stmt() && static_cast<ObSelectStmt &>(stmt).has_vec_approx()) {
+    if (OB_FAIL(ObOptimizerUtil::convert_or_to_in(expr_factory,
+                                                  session_info,
+                                                  stmt.get_condition_exprs(),
+                                                  self_happened))) {
+      LOG_WARN("failed to convert or to in", K(ret));
+    } else if (self_happened) {
+      // 新生成的 IN 表达式需要重新推导 relation id，否则连接/冲突检测可能把它挂到错误的关系上
+      if (OB_FAIL(stmt.formalize_relation_exprs(session_info))) {
+        LOG_WARN("failed to formalize relation exprs", K(ret));
+      }
+    }
+    trans_happened |= self_happened;
+  }
+  if (OB_SUCC(ret)) {
+    ObSEArray<ObSelectStmt *, 8> child_stmts;
+    if (OB_FAIL(stmt.get_child_stmts(child_stmts))) {
+      LOG_WARN("failed to get child stmts", K(ret));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
+      ObSelectStmt *child_stmt = child_stmts.at(i);
+      bool child_happened = false;
+      if (OB_ISNULL(child_stmt)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get null child stmt", K(ret));
+      } else if (OB_FAIL(SMART_CALL(inner_convert_vec_approx_or_to_in(*child_stmt, expr_factory,
+                                                                     session_info, child_happened)))) {
+        LOG_WARN("failed to convert child stmt", K(ret), K(i));
+      } else {
+        trans_happened |= child_happened;
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+
+int ObOptimizer::convert_vec_approx_or_to_in(ObDMLStmt &stmt, ObSQLSessionInfo *session_info)
+{
+  int ret = OB_SUCCESS;
+  bool trans_happened = false;
+  // 向量近似查询在 rewrite 阶段整体禁用了变换规则，这里补一次 OR -> IN 的改写，
+  // 避免大 OR 链在向量索引的 pre-filter 中逐行求值。
+  if (OB_ISNULL(session_info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null session info", K(ret));
+  } else if (OB_FAIL(inner_convert_vec_approx_or_to_in(stmt, ctx_.get_expr_factory(),
+                                                       session_info, trans_happened))) {
+    LOG_WARN("failed to convert or to in for vector approximate query", K(ret));
+  } else if (trans_happened) {
+    OPT_TRACE("convert or to in for vector approximate query:", trans_happened);
   }
   return ret;
 }
